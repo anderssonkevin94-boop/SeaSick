@@ -78,6 +78,12 @@ namespace SeaSick.UI.Sheets
         CardKit.Now opens;
         CardKit.Tile food;
         Button overviewBtn, raiseBtn;
+
+        /// **The fix for a short raise (2026-09-30, island UI rule 2):** one
+        /// button under the have/need tiles for the item the pile lacks most
+        /// ("Gather Timber", "Make Boards"...). Built once in `Build`, shown,
+        /// hidden and re-labelled by `FillRaise` on every refresh.
+        ShortFix.Slot fixSlot;
         long costKey = long.MinValue;
 
         public VisualElement Build()
@@ -93,6 +99,8 @@ namespace SeaSick.UI.Sheets
 
             raiseEye = CardKit.Eye(col, "RAISE", "have / need");
             costGrid = CardKit.Grid(col);
+            fixSlot = new ShortFix.Slot(() => { costKey = long.MinValue; Refresh(); });
+            col.Add(fixSlot.button);
             opens = new CardKit.Now(col, CardKit.GlyphIcon("fire"));
 
             CardKit.Eye(col, "FOOD", "tap for the larder");
@@ -145,6 +153,16 @@ namespace SeaSick.UI.Sheets
             raiseBtn.SetEnabled(can);
             raiseBtn.text = next != null ? $"Raise to {RecipeGraph.Roman(next.level)}" : "Top level";
             CardKit.Primary(raiseBtn, next != null);
+
+            // The item the raise is most short of, a gatherable first.
+            if (fixSlot != null)
+            {
+                var most = new ShortFix.Most();
+                if (next != null)
+                    foreach (var line in next.cost)
+                        most.Add(line.res, line.n - l.SpendableOf(line.res));
+                fixSlot.Bind(outpost, most.Res);
+            }
             if (key == costKey) return;
             costKey = key;
 

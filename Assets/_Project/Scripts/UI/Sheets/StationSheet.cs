@@ -184,6 +184,7 @@ namespace SeaSick.UI.Sheets
         public VisualElement Build()
         {
             cards.Clear();
+            orderFix = null;
             storeLines = null; stallLine = null; worker = null; upgrade = null;
 
             root = StationPage.Root("st-page");
@@ -249,7 +250,7 @@ namespace SeaSick.UI.Sheets
 
             if (hasUpgrade)
             {
-                upgrade = new StationPage.UpgradeCard(DoUpgrade, TogglePin);
+                upgrade = new StationPage.UpgradeCard(DoUpgrade, TogglePin, outpost);
                 if (first) upgrade.Root.style.marginTop = 0f;
                 col.Add(upgrade.Root);
             }
@@ -545,6 +546,8 @@ namespace SeaSick.UI.Sheets
             stopBtn.AddToClassList("st-seg-btn--stop");
             seg.Add(stopBtn);
             s.Add(seg);
+            orderFix = new ShortFix.Slot(() => Refresh());
+            s.Add(orderFix.button);
 
             // **Keep in stock (2026-09-27, food rework phase 2)**: queue the
             // selected recipe as "keep 10"; the queue below is worked
@@ -560,6 +563,12 @@ namespace SeaSick.UI.Sheets
             queueList = new VisualElement();
             s.Add(queueList);
         }
+
+        /// **The fix for the selected recipe's shortfall (2026-09-30, island UI
+        /// rule 2):** one button under the amount row -- "Gather Timber",
+        /// "Make Boards", or "Raise Campfire to II" when the recipe is locked
+        /// by the fire. Built once in `BuildOrder`, bound by `FillOrder`.
+        ShortFix.Slot orderFix;
 
         Button keepBtn;
         Label queueEyebrow;
@@ -694,6 +703,30 @@ namespace SeaSick.UI.Sheets
                 amountBtns[i].SetEnabled(canOrder);
             }
             stopBtn.SetEnabled(active);
+            BindOrderFix(l, st, sel);
+        }
+
+        /// The one fix for the selected recipe: locked by the fire -> raise
+        /// it; locked for want of a tool -> make the tool; otherwise the
+        /// input the pile (store + this bench's bay, as the card counts it)
+        /// lacks most, a gatherable first. Hidden when nothing is short.
+        void BindOrderFix(OutpostLedger l, StationStock st, Recipe sel)
+        {
+            if (orderFix == null) return;
+            var fix = default(ShortFix.Fix);
+            if (sel != null && st != null)
+            {
+                if (l.CampfireLevel < sel.campfireLevel) fix = ShortFix.RaiseFire(outpost, sel.makes);
+                else if (sel.tool != null && l.CountOf(sel.tool) <= 0) fix = ShortFix.For(outpost, sel.tool);
+                else
+                {
+                    var most = new ShortFix.Most();
+                    foreach (var line in sel.takes)
+                        most.Add(line.res, line.n - (l.StoreCountOf(line.res) + st.BayCount(line.res)));
+                    if (most.Res != null) fix = ShortFix.For(outpost, most.Res);
+                }
+            }
+            orderFix.Bind(outpost, fix);
         }
 
         // --- 5. in and out ------------------------------------------------------
@@ -1245,9 +1278,15 @@ namespace SeaSick.UI.Sheets
             readonly Button pinBtn;
             readonly List<(Label label, string res, int n)> lines = new List<(Label, string, int)>();
             int builtLevel = -1;
+            /// **The fix for a short upgrade (2026-09-30, island UI rule 2):**
+            /// one button under the price for the item lacking most, or the
+            /// fire when it is too low. Only when the caller passes its camp.
+            readonly ShortFix.Slot fixSlot;
+            readonly Outpost camp;
 
-            public UpgradeCard(System.Action upgrade, System.Action pin = null)
+            public UpgradeCard(System.Action upgrade, System.Action pin = null, Outpost camp = null)
             {
+                this.camp = camp;
                 Root = Card();
                 Root.AddToClassList("st-upgrade");
                 var words = new VisualElement(); words.AddToClassList("st-upgrade-words");
@@ -1262,6 +1301,11 @@ namespace SeaSick.UI.Sheets
                     pinBtn.style.display = DisplayStyle.None;
                     words.Add(pinBtn);
                 }
+                if (camp != null)
+                {
+                    fixSlot = new ShortFix.Slot();
+                    words.Add(fixSlot.button);
+                }
                 Root.Add(words);
                 btn = new Button(upgrade) { text = "Upgrade" };
                 btn.AddToClassList("st-btn");
@@ -1274,6 +1318,7 @@ namespace SeaSick.UI.Sheets
                 var next = l.NextUpgradeAt(raisedIndex, planId);
                 if (next == null)
                 {
+                    fixSlot?.Bind(camp, default(ShortFix.Fix));
                     if (pinBtn != null) pinBtn.style.display = DisplayStyle.None;
                     title.text = $"Level {level} · top level";
                     if (builtLevel != level) { cost.Clear(); lines.Clear(); builtLevel = level; }
@@ -1303,6 +1348,21 @@ namespace SeaSick.UI.Sheets
                 }
 
                 bool can = l.CanUpgradeAt(raisedIndex, planId, out string why);
+                if (fixSlot != null)
+                {
+                    var fix = default(ShortFix.Fix);
+                    if (!can)
+                    {
+                        if (l.CampfireLevel < next.campfireLevel) fix = ShortFix.RaiseFire(camp);
+                        else
+                        {
+                            var most = new ShortFix.Most();
+                            foreach (var (_, res, n) in lines) most.Add(res, n - l.SpendableOf(res));
+                            if (most.Res != null) fix = ShortFix.For(camp, most.Res);
+                        }
+                    }
+                    fixSlot.Bind(camp, fix);
+                }
                 btn.style.display = DisplayStyle.Flex;
                 btn.text = can ? "Upgrade" : Short(l, next, why);
                 btn.SetEnabled(can);

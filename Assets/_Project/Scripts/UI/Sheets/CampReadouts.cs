@@ -530,14 +530,25 @@ namespace SeaSick.UI.Sheets
             if (e.style.display != d) e.style.display = d;
         }
 
-        /// **A non-tappable reason line**: a short value on the left
-        /// ("−50%", "+2.5", "4 d") and the words beside it, with an optional
-        /// muted hint under them ("build a hut near the fire").
+        /// **A reason line**: a short value on the left ("−50%", "+2.5",
+        /// "4 d") and the words beside it, with an optional muted hint under
+        /// them ("build a hut near the fire"). Since 2026-09-30 (island UI
+        /// phase 3, rule 2: every problem shows its fix as a button) a row can
+        /// also carry a fix button on its right, 44 px tall, that runs an
+        /// action; without one the row is plain text and not tappable.
         public sealed class Lines
         {
+            sealed class Row
+            {
+                public VisualElement row;
+                public Label val, text, hint;
+                public Button fixBtn;
+                public System.Action fix;
+                public readonly string[] last = new string[5];
+            }
+
             public readonly VisualElement root;
-            readonly List<(VisualElement row, Label val, Label text, Label hint, string[] last)> rows
-                = new List<(VisualElement, Label, Label, Label, string[])>();
+            readonly List<Row> rows = new List<Row>();
             int used;
 
             public Lines(VisualElement parent)
@@ -550,7 +561,11 @@ namespace SeaSick.UI.Sheets
 
             public void Begin() { used = 0; }
 
-            public void Add(string value, string tone, string text, string hint = null)
+            /// `fixLabel` + `fix` together make the button; either missing,
+            /// none. The row keeps ONE button and swaps its label and action,
+            /// so a refresh never rebuilds it (a tap in flight lands).
+            public void Add(string value, string tone, string text, string hint = null,
+                            string fixLabel = null, System.Action fix = null)
             {
                 if (used >= rows.Count) rows.Add(Make());
                 var r = rows[used++];
@@ -565,17 +580,27 @@ namespace SeaSick.UI.Sheets
                     r.hint.text = hint ?? "";
                     Show(r.hint, !string.IsNullOrEmpty(hint));
                 }
+                bool has = fix != null && !string.IsNullOrEmpty(fixLabel);
+                r.fix = has ? fix : null;
+                string label = has ? fixLabel : null;
+                if (r.last[4] != label)
+                {
+                    r.last[4] = label;
+                    r.fixBtn.text = label ?? "";
+                    Show(r.fixBtn, has);
+                }
             }
 
             public void End()
             {
-                for (int i = used; i < rows.Count; i++) Show(rows[i].row, false);
+                for (int i = used; i < rows.Count; i++) { Show(rows[i].row, false); rows[i].fix = null; }
             }
 
             public int Count => used;
 
-            (VisualElement, Label, Label, Label, string[]) Make()
+            Row Make()
             {
+                var r = new Row();
                 var row = new VisualElement { pickingMode = PickingMode.Ignore };
                 row.style.flexDirection = FlexDirection.Row;
                 row.style.alignItems = Align.FlexStart;
@@ -597,10 +622,15 @@ namespace SeaSick.UI.Sheets
                 hint.style.display = DisplayStyle.None;
                 words.Add(text);
                 words.Add(hint);
+                var btn = new Button(() => r.fix?.Invoke()) { text = "" };
+                btn.AddToClassList("cp-fix");
+                btn.style.display = DisplayStyle.None;
                 row.Add(val);
                 row.Add(words);
+                row.Add(btn);
                 root.Add(row);
-                return (row, val, text, hint, new string[4]);
+                r.row = row; r.val = val; r.text = text; r.hint = hint; r.fixBtn = btn;
+                return r;
             }
         }
 

@@ -144,3 +144,12 @@
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
 .cp-root .cp-stall--warn { color: rgb(240, 195, 106); }
+
+/* --- Reason lines with a fix button (island UI phase 3, 2026-09-30): matches .bs-fix-btn --- */
+.cp-fix {
+    min-width: 104px; min-height: 44px; margin: 0 0 0 8px; padding: 0 10px; flex-shrink: 0; align-self: center;
+    border-width: 0; border-radius: 10px; font-size: 14px; white-space: normal;
+    background-color: rgb(164, 210, 232); color: rgb(11, 23, 32); -unity-text-align: middle-center;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.cp-fix:active { background-color: rgb(120, 176, 204); }

@@ -266,7 +266,7 @@ namespace SeaSick.UI.Sheets
             // 6. upgrade
             if (hasUpgrade)
             {
-                upgrade = new StationPage.UpgradeCard(DoUpgrade);
+                upgrade = new StationPage.UpgradeCard(DoUpgrade, null, outpost);
                 col.Add(upgrade.Root);
             }
 

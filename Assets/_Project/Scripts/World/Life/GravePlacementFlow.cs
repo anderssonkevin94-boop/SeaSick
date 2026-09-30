@@ -18,9 +18,16 @@ namespace SeaSick.World.Life
     /// registration order) goes first, and finishing one immediately picks
     /// up the next on the very next frame.
     ///
-    /// **IMGUI stand-in, not real UI** (Astra owns `Scripts/UI/**`) -- same
-    /// reasoning as `LifeDevPanel`: this is a throwaway placeholder for the
-    /// blocking flow and the story card, restyled later.
+    /// **On-screen controls (2026-09-30, island UI phase 3):** the placement
+    /// prompt and the confirm button are the bottom `ThumbBar`'s placement
+    /// mode, the same one walls, roads and the first fire use -- with NO
+    /// Cancel (`onCancel` null), because the burial is forced. World taps
+    /// never fall through: `UIBlocker.SheetBlocked` reads `ThumbBar.Blocks`
+    /// (bar + instruction card), and `IslandInput` routes every other tap
+    /// ashore to `HandleTap` while `GraveGate.Blocking`.
+    ///
+    /// **Still IMGUI stand-in** (like `LifeDevPanel`): the story card and the
+    /// "All graves" list, restyled later.
     public class GravePlacementFlow : MonoBehaviour
     {
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -70,13 +77,27 @@ namespace SeaSick.World.Life
         bool ghostValid;
         string ghostWhy = "";
 
+        // --- the thumb bar's placement mode ---------------------------------
+        /// True while WE put the placement up (so we only ever hide our own).
+        bool barShown;
+        /// The verdict last pushed to the bar; the status is only re-sent
+        /// when one of these changes, so a frame allocates nothing.
+        bool barValid;
+        string barWhy;
+
         // --- the story-card stand-in ----------------------------------------
         GraveRecord storyShown;
         bool showingAllGraves;
         Vector2 allGravesScroll;
 
         void Awake() => instance = this;
-        void OnDestroy() { if (instance == this) instance = null; }
+        void OnDestroy()
+        {
+            // The bar and `GraveGate` outlive this component (domain reload
+            // is off): never leave a placement nobody is running.
+            HideBar();
+            if (instance == this) instance = null;
+        }
 
         void Update()
         {
@@ -87,6 +108,57 @@ namespace SeaSick.World.Life
                 return;
             }
             Revalidate();
+            SyncBar();
+        }
+
+        // --- the bar -----------------------------------------------------------
+
+        /// **2026-09-30.** One bar, one placement at a time: while
+        /// `CampSiting` has the bar (it cannot begin under a pending grave
+        /// -- `Outpost.Raise` refuses -- but a placement already up when the
+        /// death lands can), we leave it alone and take it back the frame
+        /// it lets go. Shown with or without a camp, like the first fire.
+        void SyncBar()
+        {
+            if (grave == null) return;
+            if (SeaSick.UI.CampSiting.Placing) { barShown = false; return; }
+            if (!barShown || !SeaSick.UI.Sheets.ThumbBar.PlacementActive) ShowBar();
+
+            string why = ghostValid ? "" : (ghostWhy ?? "");
+            if (barValid == ghostValid && barWhy == why) return;
+            barValid = ghostValid; barWhy = why;
+            PushStatus();
+        }
+
+        void ShowBar()
+        {
+            // No Cancel: the tombstone is forced (`onCancel` null), and no
+            // Turn: a stone always faces the fire.
+            SeaSick.UI.Sheets.ThumbBar.ShowPlacement(
+                "Place " + grave.name + "'s grave",
+                "Tap the ground to move it. Somewhere quiet, off the paths.",
+                null, null, Confirm, "Lay to rest");
+            barShown = true;
+            barValid = ghostValid;
+            barWhy = ghostValid ? "" : (ghostWhy ?? "");
+            PushStatus();
+        }
+
+        void PushStatus()
+        {
+            if (ghostValid)
+                SeaSick.UI.Sheets.ThumbBar.SetPlacementStatus("Good spot", true, true);
+            else
+                SeaSick.UI.Sheets.ThumbBar.SetPlacementStatus(
+                    string.IsNullOrEmpty(ghostWhy) ? "Not here"
+                        : char.ToUpperInvariant(ghostWhy[0]) + ghostWhy.Substring(1), false, false);
+        }
+
+        void HideBar()
+        {
+            if (!barShown) return;
+            barShown = false;
+            if (!SeaSick.UI.CampSiting.Placing) SeaSick.UI.Sheets.ThumbBar.HidePlacement();
         }
 
         // --- finding the queue ----------------------------------------------
@@ -157,6 +229,7 @@ namespace SeaSick.World.Life
                 LifeStory.Fnv32(grave.name), out ghostMat);
             ghost.transform.SetPositionAndRotation(ghostAt, Quaternion.Euler(0f, ghostYaw, 0f));
             Revalidate();
+            SyncBar();
         }
 
         float FacingFireYaw(Vector3 p)
@@ -254,6 +327,7 @@ namespace SeaSick.World.Life
             stones[grave.name] = stone;
             campOutpost.Reserve(ghostAt, GraveReserveRadius);
 
+            HideBar();
             var placed = grave;
             grave = null;
             campOutpost = null;
@@ -346,7 +420,7 @@ namespace SeaSick.World.Life
             _ => "downed, nobody came in time",
         };
 
-        // --- IMGUI ---------------------------------------------------------------
+        // --- IMGUI (the story card and the graves list only; the placement is the ThumbBar's) ---
 
         void OnGUI()
         {
@@ -356,7 +430,6 @@ namespace SeaSick.World.Life
             float w = Screen.width / scale;
             float h = Screen.height / scale;
 
-            if (grave != null) DrawPlacementBar(w, h);
             if (showingAllGraves) DrawAllGraves(w, h);
             else if (storyShown != null) DrawStoryCard(w, h);
 
@@ -364,22 +437,6 @@ namespace SeaSick.World.Life
         }
 
         const float RowH = 44f; // Apple's own minimum touch target.
-
-        void DrawPlacementBar(float w, float h)
-        {
-            var header = new Rect(8, h - 150, w - 16, 40);
-            GUI.Box(header, "");
-            GUI.Label(new Rect(header.x + 8, header.y + 4, header.width - 16, header.height - 8),
-                ghostValid || string.IsNullOrEmpty(ghostWhy)
-                    ? grave.name + " has died — tap the ground to choose a place for the grave"
-                    : "Not here: " + ghostWhy);
-
-            var confirm = new Rect(8, h - 100, w - 16, 64);
-            bool was = GUI.enabled;
-            GUI.enabled = ghostValid;
-            if (GUI.Button(confirm, "Lay " + grave.name + " to rest")) Confirm();
-            GUI.enabled = was;
-        }
 
         void DrawStoryCard(float w, float h)
         {

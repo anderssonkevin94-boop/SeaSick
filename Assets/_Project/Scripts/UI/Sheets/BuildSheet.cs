@@ -616,23 +616,18 @@ namespace SeaSick.UI.Sheets
         // --- the fix row -----------------------------------------------------------
 
         string fixRes;
-        bool fixCanGather;
+        ShortFix.Fix fix;
 
         void BindFix(OutpostLedger l)
         {
             // The resource the short plans lack most; a gatherable one wins a tie
-            // over boards/brick, which no hand can simply go and gather.
-            string best = null;
-            int bestN = 0;
-            bool bestGatherable = false;
-            foreach (var kv in missing)
-            {
-                bool g = Res.IsGatherable(kv.Key);
-                if (best == null || (g && !bestGatherable) || (g == bestGatherable && kv.Value > bestN))
-                { best = kv.Key; bestN = kv.Value; bestGatherable = g; }
-            }
+            // over boards/brick, which no hand can simply go and gather
+            // (`ShortFix.Most`, the one rule every sheet's fix button uses).
+            var most = new ShortFix.Most();
+            foreach (var kv in missing) most.Add(kv.Key, kv.Value);
+            string best = most.Res;
             fixRes = best;
-            fixCanGather = best != null && bestGatherable;
+            fix = ShortFix.For(outpost, best);
 
             var want = best != null ? DisplayStyle.Flex : DisplayStyle.None;
             if (fixRow.style.display != want) fixRow.style.display = want;
@@ -640,7 +635,7 @@ namespace SeaSick.UI.Sheets
 
             string label = ResDefs.Label(best);
             string line;
-            if (fixCanGather)
+            if (Res.IsGatherable(best))
             {
                 int n = l.HandsOn(OutpostOrder.Gather, best);
                 string who = n == 0 ? "Nobody is gathering." : n == 1 ? "1 hand is gathering." : $"{n} hands are gathering.";
@@ -649,28 +644,22 @@ namespace SeaSick.UI.Sheets
             else line = $"{Cap(label)} is what's short. It is made at a station, not gathered.";
             if (fixText.text != line) fixText.text = line;
 
-            string btn = fixCanGather ? "Gather " + Cap(label) : null;
-            fixBtn.style.display = fixCanGather ? DisplayStyle.Flex : DisplayStyle.None;
-            if (btn != null && fixBtn.text != btn) fixBtn.text = btn;
+            // "Gather X", or (2026-09-30, island UI rule 2) "Make X" / "Build
+            // <station>" for a made good -- the recipe system's answer.
+            fixBtn.style.display = fix.Valid ? DisplayStyle.Flex : DisplayStyle.None;
+            if (fix.Valid && fixBtn.text != fix.label) fixBtn.text = fix.label;
         }
 
-        /// **"Gather <resource>"**: send the first idle hand after it (the
-        /// call `GatherSheet`'s send button makes); when nobody is idle, or
-        /// the order is refused, open that resource's own page, which says
-        /// who is on it and why.
+        /// **The fix button**: `ShortFix.Run` -- "Gather <resource>" sends the
+        /// first idle hand after it (the call `GatherSheet`'s send button
+        /// makes); when nobody is idle, or the order is refused, that
+        /// resource's own page opens, which says who is on it and why. A made
+        /// good opens its station, or the Build sheet on the station.
         void Fix()
         {
             var l = L;
-            if (outpost == null || l == null || string.IsNullOrEmpty(fixRes) || !fixCanGather) return;
-            var idle = SheetBits.FirstIdle(l);
-            var stock = l.Stock(fixRes);
-            bool workedOut = fixRes != Res.Game && stock != null && stock.standing < 1f;
-            if (idle != null && !workedOut && outpost.OrderGather(idle, fixRes))
-            {
-                Refresh();
-                return;
-            }
-            Sheets.Open(new GatherSheet(outpost, fixRes));
+            if (outpost == null || l == null || string.IsNullOrEmpty(fixRes) || !fix.Valid) return;
+            if (fix.Run(outpost)) Refresh();
         }
 
         // --- drawn bits --------------------------------------------------------------

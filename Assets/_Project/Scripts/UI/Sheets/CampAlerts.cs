@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using SeaSick.World.Economy;
 using SeaSick.World;
+using UnityEngine;
 
 namespace SeaSick.UI.Sheets
 {
@@ -12,7 +13,8 @@ namespace SeaSick.UI.Sheets
     /// the food clock, each carrying WHERE it gets fixed. `AlertStrip` shows
     /// the first three under the resource bar; the ledger drawer's Overview
     /// row counts them. Ordered by how soon it hurts: a raid on the sand,
-    /// then an empty food pile, then the watch, then single hands.
+    /// then an empty food pile, then the watch, then single hands, then
+    /// the camp's missing places (no beds, store full), then angry hands.
     public static class CampAlerts
     {
         public enum Tone { Raid, Bad, Warn }
@@ -64,6 +66,29 @@ namespace SeaSick.UI.Sheets
                     into.Add(new Alert { text = "Food · under a day", tone = Tone.Bad, open = () => Larder(camp) });
             }
 
+            // **Walled off (2026-09-30)**: Kevin's catch-up closed a palisade
+            // ring with no gate -- store inside, pier and three hands outside --
+            // and every hand starved with 30 fish in the store while the strip
+            // showed "Nobody on watch". One camp chip, not one per hand; the
+            // fix is the wall piece nearest the first stuck hand, whose sheet
+            // has Make gate.
+            OutpostHand walled = null;
+            foreach (var h in l.hands)
+                if (h != null && IsWalledOff(h)) { walled = h; break; }
+            if (walled != null)
+            {
+                var at = l.HandAt(walled);
+                into.Add(new Alert
+                {
+                    text = "Walled off · needs a gate", tone = Tone.Bad,
+                    open = () =>
+                    {
+                        var seg = camp.NearestWall(at);
+                        return seg != null ? new WallSheet(camp, seg) : (ISheet)new HandSheet(camp, walled.name);
+                    },
+                });
+            }
+
             // Nobody ASSIGNED (2026-09-27), not "guard below full": a posted
             // lookout in low spirits guards at under full strength
             // (`OutpostLedger.Guard`), and the alert said "Nobody on watch"
@@ -78,7 +103,7 @@ namespace SeaSick.UI.Sheets
             string firstIdle = null;
             foreach (var h in l.hands)
             {
-                if (h == null) continue;
+                if (h == null || IsWalledOff(h)) continue;
                 if (h.order == OutpostOrder.Idle) { idle++; if (firstIdle == null) firstIdle = h.name; continue; }
                 if (h.walkingIn) continue;
                 if (h.order == OutpostOrder.Gather && h.target == Res.Game && l.HunterBlocker() != null)
@@ -108,10 +133,81 @@ namespace SeaSick.UI.Sheets
                     text = "Builders short of " + (l.TimberStarved ? "timber" : "stone"),
                     tone = Tone.Warn, open = () => ShortSite(camp),
                 });
+            // Two more "the camp is short of a place" chips (2026-09-30, island
+            // UI phase 3, rule 2: every problem carries its fix). Both open the
+            // Build list on the plan that fixes them.
+            int bedless = BedlessHands(l);
+            if (bedless > 0)
+                into.Add(new Alert
+                {
+                    text = $"{bedless} hand{(bedless == 1 ? "" : "s")} {(bedless == 1 ? "has" : "have")} no bed",
+                    tone = Tone.Warn, open = () => BuildList(camp, BuildPlans.Hut.id),
+                });
+            if (StoreFullText(l, out string full))
+                into.Add(new Alert { text = full, tone = Tone.Warn, open = () => BuildList(camp, BuildPlans.Storage.id) });
             int angry = l.AngryCount;
             if (angry > 0)
                 into.Add(new Alert { text = $"{angry} hand{(angry == 1 ? "" : "s")} angry", tone = Tone.Warn, open = () => People(camp, PeopleSheet.Filter.Unhappy) });
         }
+
+        /// Living hands past the camp's beds (`HousingCapacity`); 0 when
+        /// everyone has one. A downed hand needs no bed until he is up.
+        internal static int BedlessHands(OutpostLedger l)
+        {
+            if (l == null) return 0;
+            int living = 0;
+            foreach (var h in l.hands) if (h != null && !h.downed) living++;
+            return Mathf.Max(0, living - l.HousingCapacity);
+        }
+
+        /// **"Store full" (2026-09-30)**: a pile sits at the store's ceiling
+        /// (`ceilingPer`, what the fire and the store huts keep of EACH
+        /// thing) AND a hand is trying to add to it -- gathering it, or
+        /// stalled with a "full" reason (a station's pile, a farm's harvest).
+        /// A full pile nobody is feeding is a saving, not a problem, so it
+        /// is not an alert. "Store full · timber" for one pile, "Store full"
+        /// for several or when only a stall says so. The fix is a store hut
+        /// (Build): it keeps 20 more of each thing at once, where raising an
+        /// existing one needs fire II and gives 10.
+        internal static bool StoreFullText(OutpostLedger l, out string text)
+        {
+            text = null;
+            if (l == null || l.ceilingPer <= 0) return false;
+            string only = null;
+            int piles = 0;
+            foreach (var st in l.stores)
+            {
+                if (st == null || st.whole < l.ceilingPer) continue;
+                bool fed = false;
+                foreach (var h in l.hands)
+                {
+                    if (h == null || h.order != OutpostOrder.Gather) continue;
+                    string into = h.target == Res.Game ? Res.Meat : h.target;
+                    if (into == st.resource) { fed = true; break; }
+                }
+                if (!fed) continue;
+                piles++;
+                only = st.resource;
+            }
+            if (piles == 1) { text = "Store full · " + ResDefs.Label(only); return true; }
+            if (piles > 1) { text = "Store full"; return true; }
+            foreach (var h in l.hands)
+            {
+                if (h == null || h.walkingIn || !l.Stalled(h)) continue;
+                string why = l.StallReason(h);
+                if (!string.IsNullOrEmpty(why) && why.IndexOf("full", StringComparison.Ordinal) >= 0)
+                {
+                    text = "Store full";
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// The body's "walled off — no way round, needs a gate"
+        /// (`CampWorker`), which the walled-off camp chip covers.
+        static bool IsWalledOff(OutpostHand h) =>
+            h.bodyBlocked != null && h.bodyBlocked.StartsWith("walled off", StringComparison.Ordinal);
 
         /// A stall reason cut down to chip length. "waiting for stone: none
         /// left here" -> "no stone left"; anything else keeps its head.
@@ -160,6 +256,18 @@ namespace SeaSick.UI.Sheets
         /// Camp › Build (2026-09-27; was the campfire sheet's build tab).
         internal static ISheet BuildList(Outpost camp, string focusPlanId = null) =>
             camp != null ? new BuildSheet(camp, focusPlanId) : null;
+
+        /// The kitchen's own page if the camp has one, else the build list
+        /// (where the kitchen is put up). The mood sheet's "Cook at the
+        /// kitchen" (2026-09-30).
+        internal static ISheet Kitchen(Outpost camp)
+        {
+            if (camp != null)
+                foreach (var b in camp.Built)
+                    if (b != null && b.Id == BuildPlans.Kitchen.id)
+                        return Sheets.TryCreateFor(b) ?? new StationSheet(camp, b);
+            return BuildList(camp, BuildPlans.Kitchen.id);
+        }
 
         /// The forge's own page if the camp has one, else the build list
         /// (where the forge is put up).

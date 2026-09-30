@@ -97,12 +97,18 @@ namespace SeaSick.UI.Sheets
         VisualElement chips;
         Button addHand;
 
+        /// **The fix for what this drawing is short of (2026-09-30, island UI
+        /// rule 2).** One button under the have/need chips for the material
+        /// the CAMP cannot cover -- built once in `Build`, shown/hidden and
+        /// re-labelled by `Refresh`, never rebuilt with the chips.
+        ShortFix.Slot fixSlot;
+
         long chipsKey = long.MinValue;
         int ringKey = -99;
 
         public VisualElement Build()
         {
-            big = null; who = null; ring = null; chips = null;
+            big = null; who = null; ring = null; chips = null; fixSlot = null;
             chipsKey = long.MinValue;
             ringKey = -99;
 
@@ -135,6 +141,9 @@ namespace SeaSick.UI.Sheets
 
             chips = SheetBits.Holder();
             root.Add(chips);
+
+            fixSlot = new ShortFix.Slot(Refresh);
+            root.Add(fixSlot.button);
 
             Refresh();
             return root;
@@ -257,6 +266,21 @@ namespace SeaSick.UI.Sheets
 
             if (addHand != null)
                 addHand.SetEnabled(SheetBits.FirstIdle(l) != null);
+
+            // The material the camp's own pile cannot cover, most missing
+            // first (a gatherable wins a tie): what is in the pile the
+            // builders will carry over, so only a real shortfall is a problem.
+            if (fixSlot != null)
+            {
+                var most = new ShortFix.Most();
+                if (!p.Stocked)
+                {
+                    most.Add(Res.Timber, timberLeft - l.SpendableOf(Res.Timber));
+                    most.Add(Res.Stone, stoneLeft - l.SpendableOf(Res.Stone));
+                    most.Add(Res.Brick, brickLeft - l.SpendableOf(Res.Brick));
+                }
+                fixSlot.Bind(outpost, most.Res);
+            }
         }
 
         /// "Gale is fetching timber (2 in her arms). Tam is building." --

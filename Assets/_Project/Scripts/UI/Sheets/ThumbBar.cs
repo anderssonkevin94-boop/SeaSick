@@ -115,6 +115,12 @@ namespace SeaSick.UI.Sheets
         /// Replaces Camp·Build·Ship with [Cancel] [Turn] [confirmLabel]
         /// (Turn hidden when `onTurn` is null; confirm is the primary,
         /// rightmost) and shows the instruction card at the top.
+        ///
+        /// **`onCancel == null` is the one forced placement (2026-09-30):**
+        /// the tombstone after a death (`GravePlacementFlow`) has no way
+        /// out, so the Cancel button is hidden and the confirm button takes
+        /// the whole bar. Every other caller passes a Cancel and is
+        /// unchanged -- the GDD's "always a Cancel" has this one exception.
         public static void ShowPlacement(string title, string hint, Action onCancel, Action onTurn,
                                          Action onConfirm, string confirmLabel = "Build here")
         {
@@ -316,7 +322,9 @@ namespace SeaSick.UI.Sheets
                 shownPlacing = placing;
                 var on = DisplayStyle.Flex; var off = DisplayStyle.None;
                 camp.style.display = build.style.display = ship.style.display = placing ? off : on;
-                cancel.style.display = confirm.style.display = placing ? on : off;
+                confirm.style.display = placing ? on : off;
+                // No Cancel when the caller gave none (the forced grave).
+                cancel.style.display = placing && onCancel != null ? on : off;
                 turn.style.display = placing && onTurn != null ? on : off;
                 card.style.display = placing ? on : off;
                 if (!placing) return;

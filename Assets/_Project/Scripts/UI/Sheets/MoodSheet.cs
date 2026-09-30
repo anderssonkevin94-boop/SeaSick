@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using SeaSick.World;
 using SeaSick.World.Economy;
@@ -17,6 +18,13 @@ namespace SeaSick.UI.Sheets
     /// (no bed, a cold bed) next, what is helping last -- each with the fix.
     /// Then a row per unhappy hand (under 95 %); a tap goes to him.
     ///
+    /// **Every reason with a real fix carries it as a button (2026-09-30,
+    /// island UI phase 3, rule 2)**: no bed / a cold bed -> Build a hut,
+    /// rations short -> Full rations (sets it, as the Larder's switch does),
+    /// ate raw -> Cook at the kitchen, nothing to eat -> Gather food. Reasons
+    /// with nothing to do ("fed, recovering", "pouting", "on its way") stay
+    /// plain text.
+    ///
     /// Not shown: a raid's one-off hit (`RaidMoodHit`) -- the ledger keeps
     /// no time of the last raid, only a count, so "raided recently" cannot
     /// be said truthfully yet.
@@ -24,7 +32,43 @@ namespace SeaSick.UI.Sheets
     {
         readonly Outpost outpost;
 
-        public MoodSheet(Outpost camp) { outpost = camp; }
+        public MoodSheet(Outpost camp)
+        {
+            outpost = camp;
+            // Made once: `Refresh` runs all the time and must not allocate a
+            // closure per reason per pass.
+            fixHut = () => { if (outpost != null) Sheets.Open(CampAlerts.BuildList(outpost, BuildPlans.Hut.id)); };
+            fixRations = () =>
+            {
+                var l = L;
+                if (l == null) return;
+                l.rations = Rations.Full;   // LarderSheet's own switch
+                Refresh();
+            };
+            fixCook = () => { if (outpost != null) Sheets.Open(CampAlerts.Kitchen(outpost)); };
+            fixFood = GatherFood;
+        }
+
+        readonly Action fixHut, fixRations, fixCook, fixFood;
+
+        /// "Gather food": the first idle hand goes after the island's wild
+        /// forage (the call `GatherSheet`'s send button and `BuildSheet.Fix`
+        /// make); with nobody idle, or the forage worked out, the Food
+        /// gather page, which says who is on it and why.
+        void GatherFood()
+        {
+            var l = L;
+            if (outpost == null || l == null) return;
+            var idle = SheetBits.FirstIdle(l);
+            var stock = l.Stock(Res.Food);
+            bool workedOut = stock != null && stock.standing < 1f;
+            if (idle != null && !workedOut && outpost.OrderGather(idle, Res.Food))
+            {
+                Refresh();
+                return;
+            }
+            Sheets.Open(new GatherSheet(outpost, Res.Food));
+        }
 
         OutpostLedger L => outpost != null ? outpost.Ledger : null;
 
@@ -80,7 +124,8 @@ namespace SeaSick.UI.Sheets
         // One term of `EatStep`, summed over the hands it applies to.
         struct Reason
         {
-            public string key, text, hint;
+            public string key, text, hint, fixLabel;
+            public Action fix;
             public float perHand;   // mood a sky day for each hand it applies to
             public int n;
             public float Impact => perHand * n;
@@ -90,10 +135,11 @@ namespace SeaSick.UI.Sheets
         readonly List<Reason> sorted = new List<Reason>();
         readonly List<int> unhappy = new List<int>();
 
-        void Count(string key, float perHand, string text, string hint)
+        void Count(string key, float perHand, string text, string hint,
+                   string fixLabel = null, Action fix = null)
         {
             if (reasons.TryGetValue(key, out var r)) { r.n++; reasons[key] = r; return; }
-            reasons[key] = new Reason { key = key, perHand = perHand, text = text, hint = hint, n = 1 };
+            reasons[key] = new Reason { key = key, perHand = perHand, text = text, hint = hint, fixLabel = fixLabel, fix = fix, n = 1 };
         }
 
         public void Refresh()
@@ -141,36 +187,38 @@ namespace SeaSick.UI.Sheets
                 if (h.downed) continue;
 
                 if (l.rations == Rations.None)
-                    Count("none", -drop, "on no rations", "set rations to full in the larder");
+                    Count("none", -drop, "on no rations", null, "Full rations", fixRations);
                 else if (h.full <= 0f)
                     Count("empty", -drop, "starving, nothing eaten",
-                        storeEmpty ? "the store is empty: fish, hunt or farm" : "food is on its way to them");
+                        storeEmpty ? "the store is empty" : "food is on its way to them",
+                        storeEmpty ? "Gather food" : null, storeEmpty ? fixFood : null);
                 else
                 {
                     if (l.rations == Rations.Half)
-                        Count("half", -drop * 0.5f, "on half rations", "set rations to full in the larder");
+                        Count("half", -drop * 0.5f, "on half rations", null, "Full rations", fixRations);
                     else if (h.mood < 1f)
                         Count("fed", OutpostLedger.MoodRecoverPerFedDay, "fed, recovering", null);
 
                     float bonus = FoodBook.MoodPerDay(h.lastMeal);
                     if (bonus < 0f)
                         Count("meal:" + h.lastMeal, bonus, "last ate raw " + CampReadouts.Label(h.lastMeal),
-                            "cook it at the kitchen");
+                            null, "Cook at the kitchen", fixCook);
                     else if (bonus > 0f)
                         Count("meal:" + h.lastMeal, bonus, "well fed on " + CampReadouts.Label(h.lastMeal), null);
 
                     if (h.full < EconomyTuning.HungryBelow && l.BestMeal() == null)
                         Count("hungry", 0f, "getting hungry, nothing to eat",
-                            "fish, hunt or farm; unsave a dish in the larder");
+                            "or unsave a dish in the larder", "Gather food", fixFood);
                 }
 
                 if (l.IsHandWarm(i))
                     Count("warm", warmBonus, "sleep warm by the fire", null);
                 else if (i < beds)
                     Count("cold", 0f, "sleep in a cold bed",
-                        $"a hut near the fire is warm: {CampReadouts.SignedPct(warmBonus)} a day");
+                        $"a hut near the fire is warm: {CampReadouts.SignedPct(warmBonus)} a day",
+                        "Build a hut", fixHut);
                 else
-                    Count("nobed", 0f, "have no bed", "build a hut near the fire");
+                    Count("nobed", 0f, "have no bed", null, "Build a hut", fixHut);
 
                 if (h.pouting) Count("pout", 0f, "pouting at the fire", "they come round as mood rises");
             }
@@ -195,7 +243,7 @@ namespace SeaSick.UI.Sheets
                 string val = r.perHand == 0f ? "" : CampReadouts.SignedPct(r.perHand);
                 string tone = r.perHand < 0f ? "bad" : r.perHand > 0f ? "ok" : "warm";
                 string each = r.perHand == 0f ? "" : " (each, a day)";
-                why.Add(val, tone, $"{r.n} {r.text}{each}", r.hint);
+                why.Add(val, tone, $"{r.n} {r.text}{each}", r.hint, r.fixLabel, r.fix);
             }
             why.End();
             ReadoutUi.SetText(emptyWhy, l.hands.Count == 0 ? "Nobody lives here yet." : "");
