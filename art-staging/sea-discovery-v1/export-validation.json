@@ -1,0 +1,53 @@
+{
+  "passed": true,
+  "assets": [
+    {
+      "asset": "BrokenBoardShort",
+      "meshes": 1,
+      "triangles": 32,
+      "colors_preserved": true
+    },
+    {
+      "asset": "BrokenBoardLong",
+      "meshes": 1,
+      "triangles": 32,
+      "colors_preserved": true
+    },
+    {
+      "asset": "LashedBoardBundle",
+      "meshes": 1,
+      "triangles": 208,
+      "colors_preserved": true
+    },
+    {
+      "asset": "MessageBottle",
+      "meshes": 2,
+      "triangles": 504,
+      "colors_preserved": true
+    },
+    {
+      "asset": "ReefSplitPeak",
+      "meshes": 1,
+      "triangles": 168,
+      "colors_preserved": true
+    },
+    {
+      "asset": "ReefLowLedge",
+      "meshes": 1,
+      "triangles": 168,
+      "colors_preserved": true
+    },
+    {
+      "asset": "ReefLeaningTeeth",
+      "meshes": 1,
+      "triangles": 168,
+      "colors_preserved": true
+    },
+    {
+      "asset": "SalvageCluster",
+      "meshes": 3,
+      "triangles": 1508,
+      "colors_preserved": true
+    }
+  ]
+}

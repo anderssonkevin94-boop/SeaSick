@@ -1,0 +1,39 @@
+/Users/kevinandersson/Desktop/SeaSick/tools/blender/worker_tools_v1.py:7: DeprecationWarning: 'Material.use_nodes' is expected to be removed in Blender 6.0
+  mat=bpy.data.materials.new('SS_WorkerTools_GameColor');mat.use_nodes=True;n=mat.node_tree.nodes;vc=n.new('ShaderNodeVertexColor');vc.layer_name='GameColor';bs=n.get('Principled BSDF');bs.inputs['Roughness'].default_value=.64;mat.node_tree.links.new(vc.outputs['Color'],bs.inputs['Base Color'])
+00:02.271  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/worker-tools-v1/Hammer.png'
+00:03.020  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/worker-tools-v1/Axe.png'
+00:03.688  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/worker-tools-v1/Saw.png'
+00:04.286  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/worker-tools-v1/Hoe.png'
+00:04.864  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/worker-tools-v1/StirPaddle.png'
+00:05.441  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/worker-tools-v1/SpearStone.png'
+00:06.014  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/worker-tools-v1/SpearIron.png'
+BlenderMCP: cannot start server in background mode (blender -b) - commands would never execute
+BlenderMCP: run Blender with a GUI, or use a virtual display: xvfb-run -a blender
+BlenderMCP addon registered
+BlenderMCP server stopped
+BlenderMCP addon unregistered
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/worker-tools-v1/Hammer.fbx'
+export finished in 0.0057 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/worker-tools-v1/Axe.fbx'
+export finished in 0.0025 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/worker-tools-v1/Saw.fbx'
+export finished in 0.0023 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/worker-tools-v1/Hoe.fbx'
+export finished in 0.0027 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/worker-tools-v1/StirPaddle.fbx'
+export finished in 0.0026 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/worker-tools-v1/SpearStone.fbx'
+export finished in 0.0021 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/worker-tools-v1/SpearIron.fbx'
+export finished in 0.0020 sec.
+Info: Saved as "worker-tools.blend"
+Blender 5.1.1 (hash b70da489d7f4 built 2026-04-14 01:46:23)
+
+Blender quit

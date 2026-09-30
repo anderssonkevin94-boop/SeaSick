@@ -1,0 +1,72 @@
+[
+  {
+    "name": "Potato_Unit",
+    "triangles": 120,
+    "meshes": 1
+  },
+  {
+    "name": "Carrot_Unit",
+    "triangles": 120,
+    "meshes": 1
+  },
+  {
+    "name": "Onion_Unit",
+    "triangles": 188,
+    "meshes": 1
+  },
+  {
+    "name": "Wheat_Unit",
+    "triangles": 1028,
+    "meshes": 1
+  },
+  {
+    "name": "Apple_Unit",
+    "triangles": 168,
+    "meshes": 1
+  },
+  {
+    "name": "Fish_Unit",
+    "triangles": 160,
+    "meshes": 1
+  },
+  {
+    "name": "Meat_Unit",
+    "triangles": 70,
+    "meshes": 1
+  },
+  {
+    "name": "Potato_Display",
+    "triangles": 2044,
+    "meshes": 6
+  },
+  {
+    "name": "Carrot_Display",
+    "triangles": 2044,
+    "meshes": 6
+  },
+  {
+    "name": "Onion_Display",
+    "triangles": 2384,
+    "meshes": 6
+  },
+  {
+    "name": "Wheat_Display",
+    "triangles": 4528,
+    "meshes": 4
+  },
+  {
+    "name": "Apple_Display",
+    "triangles": 2284,
+    "meshes": 6
+  },
+  {
+    "name": "Fish_Display",
+    "triangles": 1924,
+    "meshes": 4
+  },
+  {
+    "name": "Meat_Display",
+    "triangles": 1654,
+    "meshes": 4
+  }
+]

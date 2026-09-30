@@ -1,0 +1,145 @@
+{
+  "passed": true,
+  "assets": [
+    {
+      "asset": "Timber_Unit",
+      "triangles": 156,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Timber_CarryUnit",
+      "triangles": 156,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Timber_Carry",
+      "triangles": 312,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Timber_Stack",
+      "triangles": 936,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Boards_Unit",
+      "triangles": 60,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Boards_CarryUnit",
+      "triangles": 60,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Boards_Carry",
+      "triangles": 180,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Boards_Stack",
+      "triangles": 720,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Stone_Unit",
+      "triangles": 52,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Stone_CarryUnit",
+      "triangles": 52,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Stone_Carry",
+      "triangles": 104,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Stone_Stack",
+      "triangles": 416,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Ore_Unit",
+      "triangles": 52,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Ore_CarryUnit",
+      "triangles": 52,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Ore_Carry",
+      "triangles": 104,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Ore_Stack",
+      "triangles": 416,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Brick_Unit",
+      "triangles": 60,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Brick_CarryUnit",
+      "triangles": 60,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Brick_Carry",
+      "triangles": 180,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Brick_Stack",
+      "triangles": 1440,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    }
+  ]
+}

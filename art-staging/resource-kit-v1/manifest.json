@@ -1,0 +1,262 @@
+[
+  {
+    "name": "Timber_Unit",
+    "triangles": 156,
+    "dimensions_m": [
+      0.24468207359313965,
+      1.6039999723434448,
+      0.23680467903614044
+    ],
+    "pivot": "bottom centre",
+    "notes": "Individual unit; stock counts and build progress remain runtime-owned.",
+    "boundary_edges": 0,
+    "zero_area_faces": 0
+  },
+  {
+    "name": "Timber_CarryUnit",
+    "triangles": 156,
+    "dimensions_m": [
+      0.17739450931549072,
+      1.1628999710083008,
+      0.1716834008693695
+    ],
+    "pivot": "grip centre",
+    "notes": "One carried item. Repeat up to existing runtime cap of six to preserve visible load counts.",
+    "boundary_edges": 0,
+    "zero_area_faces": 0
+  },
+  {
+    "name": "Timber_Carry",
+    "triangles": 312,
+    "dimensions_m": [
+      0.3573945164680481,
+      1.1628999710083008,
+      0.1716834008693695
+    ],
+    "pivot": "grip centre",
+    "notes": "Display bundle; align to existing carry anchor. Not a stock count replacement.",
+    "boundary_edges": 0,
+    "zero_area_faces": 0
+  },
+  {
+    "name": "Timber_Stack",
+    "triangles": 936,
+    "dimensions_m": [
+      0.7546820640563965,
+      1.6039999723434448,
+      0.6528046727180481
+    ],
+    "pivot": "bottom centre",
+    "notes": "Fixed review/static decoration stack. Use units for changing inventory piles.",
+    "boundary_edges": 0,
+    "zero_area_faces": 0
+  },
+  {
+    "name": "Boards_Unit",
+    "triangles": 60,
+    "dimensions_m": [
+      0.25,
+      1.600000023841858,
+      0.07500000298023224
+    ],
+    "pivot": "bottom centre",
+    "notes": "Individual unit; stock counts and build progress remain runtime-owned.",
+    "boundary_edges": 0,
+    "zero_area_faces": 0
+  },
+  {
+    "name": "Boards_CarryUnit",
+    "triangles": 60,
+    "dimensions_m": [
+      0.46000000834465027,
+      0.1300000250339508,
+      0.03500249981880188
+    ],
+    "pivot": "grip centre",
+    "notes": "One carried item. Repeat up to existing runtime cap of six to preserve visible load counts.",
+    "boundary_edges": 0,
+    "zero_area_faces": 0
+  },
+  {
+    "name": "Boards_Carry",
+    "triangles": 180,
+    "dimensions_m": [
+      0.46000000834465027,
+      0.1300000250339508,
+      0.12500250339508057
+    ],
+    "pivot": "grip centre",
+    "notes": "Display bundle; align to existing carry anchor. Not a stock count replacement.",
+    "boundary_edges": 0,
+    "zero_area_faces": 0
+  },
+  {
+    "name": "Boards_Stack",
+    "triangles": 720,
+    "dimensions_m": [
+      0.800000011920929,
+      1.649999976158142,
+      0.31800001859664917
+    ],
+    "pivot": "bottom centre",
+    "notes": "Fixed review/static decoration stack. Use units for changing inventory piles.",
+    "boundary_edges": 0,
+    "zero_area_faces": 0
+  },
+  {
+    "name": "Stone_Unit",
+    "triangles": 52,
+    "dimensions_m": [
+      0.4906107187271118,
+      0.4347567558288574,
+      0.3100000023841858
+    ],
+    "pivot": "bottom centre",
+    "notes": "Individual unit; stock counts and build progress remain runtime-owned.",
+    "boundary_edges": 0,
+    "zero_area_faces": 0
+  },
+  {
+    "name": "Stone_CarryUnit",
+    "triangles": 52,
+    "dimensions_m": [
+      0.1962442845106125,
+      0.1739027053117752,
+      0.19994999468326569
+    ],
+    "pivot": "grip centre",
+    "notes": "One carried item. Repeat up to existing runtime cap of six to preserve visible load counts.",
+    "boundary_edges": 0,
+    "zero_area_faces": 0
+  },
+  {
+    "name": "Stone_Carry",
+    "triangles": 104,
+    "dimensions_m": [
+      0.36624428629875183,
+      0.1739027053117752,
+      0.19994999468326569
+    ],
+    "pivot": "grip centre",
+    "notes": "Display bundle; align to existing carry anchor. Not a stock count replacement.",
+    "boundary_edges": 0,
+    "zero_area_faces": 0
+  },
+  {
+    "name": "Stone_Stack",
+    "triangles": 416,
+    "dimensions_m": [
+      1.151115894317627,
+      1.1497042179107666,
+      0.75
+    ],
+    "pivot": "bottom centre",
+    "notes": "Fixed review/static decoration stack. Use units for changing inventory piles.",
+    "boundary_edges": 0,
+    "zero_area_faces": 0
+  },
+  {
+    "name": "Ore_Unit",
+    "triangles": 52,
+    "dimensions_m": [
+      0.4906107187271118,
+      0.4347567558288574,
+      0.3100000023841858
+    ],
+    "pivot": "bottom centre",
+    "notes": "Individual unit; stock counts and build progress remain runtime-owned.",
+    "boundary_edges": 0,
+    "zero_area_faces": 0
+  },
+  {
+    "name": "Ore_CarryUnit",
+    "triangles": 52,
+    "dimensions_m": [
+      0.1962442845106125,
+      0.1739027053117752,
+      0.19994999468326569
+    ],
+    "pivot": "grip centre",
+    "notes": "One carried item. Repeat up to existing runtime cap of six to preserve visible load counts.",
+    "boundary_edges": 0,
+    "zero_area_faces": 0
+  },
+  {
+    "name": "Ore_Carry",
+    "triangles": 104,
+    "dimensions_m": [
+      0.36624428629875183,
+      0.1739027053117752,
+      0.19994999468326569
+    ],
+    "pivot": "grip centre",
+    "notes": "Display bundle; align to existing carry anchor. Not a stock count replacement.",
+    "boundary_edges": 0,
+    "zero_area_faces": 0
+  },
+  {
+    "name": "Ore_Stack",
+    "triangles": 416,
+    "dimensions_m": [
+      1.151115894317627,
+      1.1497042179107666,
+      0.75
+    ],
+    "pivot": "bottom centre",
+    "notes": "Fixed review/static decoration stack. Use units for changing inventory piles.",
+    "boundary_edges": 0,
+    "zero_area_faces": 0
+  },
+  {
+    "name": "Brick_Unit",
+    "triangles": 60,
+    "dimensions_m": [
+      0.36000001430511475,
+      0.18000000715255737,
+      0.11999999731779099
+    ],
+    "pivot": "bottom centre",
+    "notes": "Individual unit; stock counts and build progress remain runtime-owned.",
+    "boundary_edges": 0,
+    "zero_area_faces": 0
+  },
+  {
+    "name": "Brick_CarryUnit",
+    "triangles": 60,
+    "dimensions_m": [
+      0.16999199986457825,
+      0.10000800341367722,
+      0.08499599993228912
+    ],
+    "pivot": "grip centre",
+    "notes": "One carried item. Repeat up to existing runtime cap of six to preserve visible load counts.",
+    "boundary_edges": 0,
+    "zero_area_faces": 0
+  },
+  {
+    "name": "Brick_Carry",
+    "triangles": 180,
+    "dimensions_m": [
+      0.16999199986457825,
+      0.10000800341367722,
+      0.2649959921836853
+    ],
+    "pivot": "grip centre",
+    "notes": "Display bundle; align to existing carry anchor. Not a stock count replacement.",
+    "boundary_edges": 0,
+    "zero_area_faces": 0
+  },
+  {
+    "name": "Brick_Stack",
+    "triangles": 1440,
+    "dimensions_m": [
+      1.190000057220459,
+      0.375,
+      0.5009999871253967
+    ],
+    "pivot": "bottom centre",
+    "notes": "Fixed review/static decoration stack. Use units for changing inventory piles.",
+    "boundary_edges": 0,
+    "zero_area_faces": 0
+  }
+]

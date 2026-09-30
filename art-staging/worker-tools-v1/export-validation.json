@@ -1,0 +1,54 @@
+{
+  "passed": true,
+  "assets": [
+    {
+      "asset": "Hammer",
+      "triangles": 252,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Axe",
+      "triangles": 196,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Saw",
+      "triangles": 164,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "Hoe",
+      "triangles": 252,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "StirPaddle",
+      "triangles": 148,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "SpearStone",
+      "triangles": 192,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    },
+    {
+      "asset": "SpearIron",
+      "triangles": 192,
+      "gameColor": true,
+      "materials": 1,
+      "finite": true
+    }
+  ]
+}

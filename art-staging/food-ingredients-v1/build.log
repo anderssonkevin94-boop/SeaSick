@@ -1,0 +1,67 @@
+/Users/kevinandersson/Desktop/SeaSick/tools/blender/food_ingredients_v1.py:7: DeprecationWarning: 'Material.use_nodes' is expected to be removed in Blender 6.0
+  mat=bpy.data.materials.new('SS_Food_GameColor');mat.use_nodes=True;vc=mat.node_tree.nodes.new('ShaderNodeVertexColor');vc.layer_name='GameColor';mat.node_tree.links.new(vc.outputs['Color'],mat.node_tree.nodes['Principled BSDF'].inputs['Base Color']);mat.node_tree.nodes['Principled BSDF'].inputs['Roughness'].default_value=.75
+00:01.974  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/icons/Potato.png'
+00:02.429  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/icons/Carrot.png'
+00:02.951  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/icons/Onion.png'
+00:03.304  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/icons/Wheat.png'
+00:03.819  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/icons/Apple.png'
+00:04.152  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/icons/Fish.png'
+00:04.608  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/icons/Meat.png'
+00:05.552  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Potato_Display.png'
+00:06.380  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Carrot_Display.png'
+00:07.292  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Onion_Display.png'
+00:08.069  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Wheat_Display.png'
+00:08.934  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Apple_Display.png'
+00:09.795  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Fish_Display.png'
+00:10.708  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Meat_Display.png'
+BlenderMCP: cannot start server in background mode (blender -b) - commands would never execute
+BlenderMCP: run Blender with a GUI, or use a virtual display: xvfb-run -a blender
+BlenderMCP addon registered
+BlenderMCP server stopped
+BlenderMCP addon unregistered
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Potato_Unit.fbx'
+export finished in 0.0053 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Carrot_Unit.fbx'
+export finished in 0.0021 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Onion_Unit.fbx'
+export finished in 0.0019 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Wheat_Unit.fbx'
+export finished in 0.0025 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Apple_Unit.fbx'
+export finished in 0.0020 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Fish_Unit.fbx'
+export finished in 0.0020 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Meat_Unit.fbx'
+export finished in 0.0018 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Potato_Display.fbx'
+export finished in 0.0064 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Carrot_Display.fbx'
+export finished in 0.0059 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Onion_Display.fbx'
+export finished in 0.0058 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Wheat_Display.fbx'
+export finished in 0.0067 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Apple_Display.fbx'
+export finished in 0.0064 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Fish_Display.fbx'
+export finished in 0.0049 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/food-ingredients-v1/Meat_Display.fbx'
+export finished in 0.0051 sec.
+Info: Saved as "food-ingredients.blend"
+Blender 5.1.1 (hash b70da489d7f4 built 2026-04-14 01:46:23)
+
+Blender quit

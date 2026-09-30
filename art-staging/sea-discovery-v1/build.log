@@ -1,0 +1,45 @@
+/Users/kevinandersson/Desktop/SeaSick/tools/blender/sea_discovery_v1.py:7: DeprecationWarning: 'Material.use_nodes' is expected to be removed in Blender 6.0
+  mat=bpy.data.materials.new('SS_SeaDiscovery_GameColor');mat.use_nodes=True;n=mat.node_tree.nodes;vc=n.new('ShaderNodeVertexColor');vc.layer_name='GameColor';bs=n.get('Principled BSDF');bs.inputs['Roughness'].default_value=.78;mat.node_tree.links.new(vc.outputs['Color'],bs.inputs['Base Color'])
+/Users/kevinandersson/Desktop/SeaSick/tools/blender/sea_discovery_v1.py:45: DeprecationWarning: 'Material.use_nodes' is expected to be removed in Blender 6.0
+  glass=bottle.obj('Bottle_Glass');gm=bpy.data.materials.new('SS_Bottle_Glass');gm.use_nodes=True;nodes=gm.node_tree.nodes;nodes.clear();out=nodes.new('ShaderNodeOutputMaterial');mix=nodes.new('ShaderNodeMixShader');mix.inputs[0].default_value=.26;trans=nodes.new('ShaderNodeBsdfTransparent');solid=nodes.new('ShaderNodeBsdfPrincipled');solid.inputs['Base Color'].default_value=(.025,.27,.12,1);solid.inputs['Roughness'].default_value=.18;gm.node_tree.links.new(trans.outputs[0],mix.inputs[1]);gm.node_tree.links.new(solid.outputs[0],mix.inputs[2]);gm.node_tree.links.new(mix.outputs[0],out.inputs['Surface']);glass.data.materials.clear();glass.data.materials.append(gm)
+00:03.381  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/sea-discovery-v1/BrokenBoardShort.png'
+00:04.897  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/sea-discovery-v1/BrokenBoardLong.png'
+00:06.366  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/sea-discovery-v1/LashedBoardBundle.png'
+00:08.557  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/sea-discovery-v1/MessageBottle.png'
+00:11.059  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/sea-discovery-v1/ReefSplitPeak.png'
+00:12.974  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/sea-discovery-v1/ReefLowLedge.png'
+00:15.170  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/sea-discovery-v1/ReefLeaningTeeth.png'
+00:16.917  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/sea-discovery-v1/SalvageCluster.png'
+BlenderMCP: cannot start server in background mode (blender -b) - commands would never execute
+BlenderMCP: run Blender with a GUI, or use a virtual display: xvfb-run -a blender
+BlenderMCP addon registered
+BlenderMCP server stopped
+BlenderMCP addon unregistered
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/sea-discovery-v1/BrokenBoardShort.fbx'
+export finished in 0.0080 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/sea-discovery-v1/BrokenBoardLong.fbx'
+export finished in 0.0023 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/sea-discovery-v1/LashedBoardBundle.fbx'
+export finished in 0.0062 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/sea-discovery-v1/MessageBottle.fbx'
+export finished in 0.0100 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/sea-discovery-v1/ReefSplitPeak.fbx'
+export finished in 0.0065 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/sea-discovery-v1/ReefLowLedge.fbx'
+export finished in 0.0080 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/sea-discovery-v1/ReefLeaningTeeth.fbx'
+export finished in 0.0083 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/sea-discovery-v1/SalvageCluster.fbx'
+export finished in 0.0130 sec.
+Info: Saved as "sea-discovery.blend"
+Blender 5.1.1 (hash b70da489d7f4 built 2026-04-14 01:46:23)
+
+Blender quit

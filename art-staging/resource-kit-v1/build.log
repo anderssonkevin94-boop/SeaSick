@@ -1,0 +1,88 @@
+/Users/kevinandersson/Desktop/SeaSick/tools/blender/resource_kit_v1.py:7: DeprecationWarning: 'Material.use_nodes' is expected to be removed in Blender 6.0
+  mat=bpy.data.materials.new('SS_Resources_GameColor');mat.use_nodes=True;v=mat.node_tree.nodes.new('ShaderNodeVertexColor');v.layer_name='GameColor';bs=mat.node_tree.nodes.get('Principled BSDF');bs.inputs['Roughness'].default_value=.85;mat.node_tree.links.new(v.outputs['Color'],bs.inputs['Base Color'])
+/Users/kevinandersson/Desktop/SeaSick/tools/blender/resource_kit_v1.py:94: DeprecationWarning: 'Material.use_nodes' is expected to be removed in Blender 6.0
+  bpy.ops.mesh.primitive_plane_add(size=200,location=(0,0,-.012));floor=bpy.context.object;floor.name='REVIEW_floor';fm=bpy.data.materials.new('Backdrop');fm.use_nodes=True;fm.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value=(.14,.19,.20,1);floor.data.materials.append(fm)
+00:02.468  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Timber_Unit.png'
+00:03.818  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Timber_Carry.png'
+00:04.713  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Timber_Stack.png'
+00:05.600  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Boards_Unit.png'
+00:06.422  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Boards_Carry.png'
+00:07.337  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Boards_Stack.png'
+00:08.120  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Stone_Unit.png'
+00:08.921  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Stone_Carry.png'
+00:09.728  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Stone_Stack.png'
+00:10.558  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Ore_Unit.png'
+00:11.316  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Ore_Carry.png'
+00:12.146  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Ore_Stack.png'
+00:12.829  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Brick_Unit.png'
+00:13.700  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Brick_Carry.png'
+00:14.541  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Brick_Stack.png'
+BlenderMCP: cannot start server in background mode (blender -b) - commands would never execute
+BlenderMCP: run Blender with a GUI, or use a virtual display: xvfb-run -a blender
+BlenderMCP addon registered
+BlenderMCP server stopped
+BlenderMCP addon unregistered
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Timber_Unit.fbx'
+export finished in 0.0060 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Timber_CarryUnit.fbx'
+export finished in 0.0018 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Timber_Carry.fbx'
+export finished in 0.0020 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Timber_Stack.fbx'
+export finished in 0.0026 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Boards_Unit.fbx'
+export finished in 0.0017 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Boards_CarryUnit.fbx'
+export finished in 0.0017 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Boards_Carry.fbx'
+export finished in 0.0020 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Boards_Stack.fbx'
+export finished in 0.0027 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Stone_Unit.fbx'
+export finished in 0.0020 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Stone_CarryUnit.fbx'
+export finished in 0.0018 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Stone_Carry.fbx'
+export finished in 0.0016 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Stone_Stack.fbx'
+export finished in 0.0021 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Ore_Unit.fbx'
+export finished in 0.0018 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Ore_CarryUnit.fbx'
+export finished in 0.0021 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Ore_Carry.fbx'
+export finished in 0.0016 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Ore_Stack.fbx'
+export finished in 0.0022 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Brick_Unit.fbx'
+export finished in 0.0015 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Brick_CarryUnit.fbx'
+export finished in 0.0019 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Brick_Carry.fbx'
+export finished in 0.0027 sec.
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/resource-kit-v1/Brick_Stack.fbx'
+export finished in 0.0048 sec.
+Info: Saved as "resource-kit.blend"
+Blender 5.1.1 (hash b70da489d7f4 built 2026-04-14 01:46:23)
+
+Blender quit

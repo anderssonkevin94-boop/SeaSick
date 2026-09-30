@@ -1,0 +1,149 @@
+[
+  {
+    "name": "Hammer",
+    "triangles": 252,
+    "size_blender_m": [
+      0.07999999821186066,
+      0.19049999117851257,
+      0.38100001215934753
+    ],
+    "grip_source": [
+      0,
+      0,
+      0
+    ],
+    "contact_game_frame": [
+      0,
+      0.3,
+      0.1
+    ],
+    "zero_area_faces": 0,
+    "boundary_edges": 0
+  },
+  {
+    "name": "Axe",
+    "triangles": 196,
+    "size_blender_m": [
+      0.06199999898672104,
+      0.19249999523162842,
+      0.7200000286102295
+    ],
+    "grip_source": [
+      0,
+      0,
+      0
+    ],
+    "contact_game_frame": [
+      0,
+      0.56,
+      0.13
+    ],
+    "zero_area_faces": 0,
+    "boundary_edges": 0
+  },
+  {
+    "name": "Saw",
+    "triangles": 164,
+    "size_blender_m": [
+      0.035999998450279236,
+      0.1850000023841858,
+      0.6850000023841858
+    ],
+    "grip_source": [
+      0,
+      0,
+      0
+    ],
+    "contact_game_frame": [
+      0,
+      0.33,
+      0.055
+    ],
+    "zero_area_faces": 0,
+    "boundary_edges": 0
+  },
+  {
+    "name": "Hoe",
+    "triangles": 252,
+    "size_blender_m": [
+      0.1899999976158142,
+      0.16500000655651093,
+      1.1450001001358032
+    ],
+    "grip_source": [
+      0,
+      0,
+      0
+    ],
+    "contact_game_frame": [
+      0,
+      1.02,
+      0.14
+    ],
+    "zero_area_faces": 0,
+    "boundary_edges": 0
+  },
+  {
+    "name": "StirPaddle",
+    "triangles": 148,
+    "size_blender_m": [
+      0.11999999731779099,
+      0.041999999433755875,
+      0.8149999976158142
+    ],
+    "grip_source": [
+      0,
+      0,
+      0
+    ],
+    "contact_game_frame": [
+      0,
+      0.66,
+      0
+    ],
+    "zero_area_faces": 0,
+    "boundary_edges": 0
+  },
+  {
+    "name": "SpearStone",
+    "triangles": 192,
+    "size_blender_m": [
+      0.10400000214576721,
+      0.05999999865889549,
+      2.054999828338623
+    ],
+    "grip_source": [
+      0,
+      0,
+      0
+    ],
+    "contact_game_frame": [
+      0,
+      1.405,
+      0
+    ],
+    "zero_area_faces": 0,
+    "boundary_edges": 0
+  },
+  {
+    "name": "SpearIron",
+    "triangles": 192,
+    "size_blender_m": [
+      0.08399999886751175,
+      0.05999999865889549,
+      2.0999999046325684
+    ],
+    "grip_source": [
+      0,
+      0,
+      0
+    ],
+    "contact_game_frame": [
+      0,
+      1.45,
+      0
+    ],
+    "zero_area_faces": 0,
+    "boundary_edges": 0
+  }
+]

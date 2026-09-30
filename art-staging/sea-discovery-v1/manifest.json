@@ -1,0 +1,42 @@
+[
+  {
+    "name": "BrokenBoardShort",
+    "triangles": 32,
+    "notes": "Surface-centred, 1.25m class; preserve per-piece wave posing."
+  },
+  {
+    "name": "BrokenBoardLong",
+    "triangles": 32,
+    "notes": "Surface-centred, 2.2m class matching SalvageSpawner flotsam."
+  },
+  {
+    "name": "LashedBoardBundle",
+    "triangles": 208,
+    "notes": "Three boards, two broad rope bindings; surface-centred."
+  },
+  {
+    "name": "MessageBottle",
+    "triangles": 504,
+    "notes": "0.34m body diameter, deliberately enlarged for phone review; root waterline +0.1m matches existing bob offset. Two materials: alpha glass and opaque scroll/cork."
+  },
+  {
+    "name": "ReefSplitPeak",
+    "triangles": 168,
+    "notes": "Unit horizontal radius, origin mean waterline; scale by existing hazard radius. Wet lower band. Preserve Reef.Configure and runtime foam separately."
+  },
+  {
+    "name": "ReefLowLedge",
+    "triangles": 168,
+    "notes": "Unit horizontal radius, origin mean waterline; scale by existing hazard radius. Wet lower band. Preserve Reef.Configure and runtime foam separately."
+  },
+  {
+    "name": "ReefLeaningTeeth",
+    "triangles": 168,
+    "notes": "Unit horizontal radius, origin mean waterline; scale by existing hazard radius. Wet lower band. Preserve Reef.Configure and runtime foam separately."
+  },
+  {
+    "name": "SalvageCluster",
+    "triangles": 1508,
+    "notes": "Approved V2 Cargo_Box_Large mesh, unchanged; posed with two new broken boards. Review/static cluster only. Keep runtime resource identities and count-driven CargoVisual for live flotsam."
+  }
+]
