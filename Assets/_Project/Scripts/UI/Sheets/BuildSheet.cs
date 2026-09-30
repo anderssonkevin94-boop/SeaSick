@@ -404,7 +404,7 @@ namespace SeaSick.UI.Sheets
         void Lack(string res, int need, int have)
         {
             if (need <= have) return;
-            parts.Add($"{need - have} {ResDefs.Label(res)}");
+            parts.Add(ResDefs.Counted(res, need - have));
             missing.TryGetValue(res, out int m);
             missing[res] = m + (need - have);
         }

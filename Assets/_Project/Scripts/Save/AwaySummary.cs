@@ -156,7 +156,7 @@ namespace SeaSick.Save
                 var lost = new System.Text.StringBuilder();
                 for (int k = 0; k < rec.raidRes.Count && k < rec.raidGot.Count; k++)
                     if (rec.raidGot[k] > 0)
-                        lost.Append(lost.Length > 0 ? ", " : "").Append($"{rec.raidGot[k]} {ResDefs.Label(rec.raidRes[k])}");
+                        lost.Append(lost.Length > 0 ? ", " : "").Append(ResDefs.Counted(rec.raidRes[k], rec.raidGot[k]));
                 string times = rec.raids == 1 ? "Raided" : $"Raided {rec.raids} times";
                 if (lost.Length > 0) ev.Add(new Event { tone = 2, rank = 80, text = $"{times}: lost {lost}" });
                 else ev.Add(new Event { tone = 0, rank = 20, text = $"{times}: driven off, nothing taken" });

@@ -177,6 +177,18 @@ namespace SeaSick.World.Economy
         /// table does not know (which the validator will have flagged).
         public static string Label(string id) => TryGet(id, out var d) ? d.label : (id ?? "?");
 
+        /// **A count with its noun, singular when it is one (2026-09-30).**
+        /// Labels such as "tools", "boards", "fine boards" and "arrows" are
+        /// plural-only, so a bare `$"{n} {Label}"` read "1 tools". `Counted`
+        /// says "1 tool" / "1 fine board" and leaves every other count
+        /// ("3 tools", "4 timber", "1 spear") exactly as it was.
+        public static string Counted(string id, int n)
+        {
+            string label = Label(id);
+            if (n == 1 && label.Length > 2 && label.EndsWith("s")) label = label.Substring(0, label.Length - 1);
+            return n + " " + label;
+        }
+
         public static ResTier Tier(string id) => TryGet(id, out var d) ? d.tier : ResTier.Raw;
 
         /// The Stores tab a resource lands on. `ResCategory.Raw` for an id

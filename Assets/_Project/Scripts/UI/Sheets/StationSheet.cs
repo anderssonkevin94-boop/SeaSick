@@ -308,6 +308,10 @@ namespace SeaSick.UI.Sheets
         enum Main { None, Select, Stop, Fix, Upgrade }
         Main mainMode;
         ShortFix.Fix mainFix;
+        /// The hand working the viewed station, or null (set by `FillMake`):
+        /// a spot paused "no cook" / "no smith" / "no worker" offers
+        /// "Assign <name>" instead of only Stop (island UI rule 2, 2026-09-30).
+        OutpostHand viewHand;
         Button primaryBtn, stopBtn;
         VisualElement thumbRow;
 
@@ -832,6 +836,7 @@ namespace SeaSick.UI.Sheets
         /// row). Only texts, classes and display flip here -- nothing is built.
         void FillMake(OutpostLedger l, StationStock st, OutpostHand hand, Recipe tapped)
         {
+            viewHand = hand;
             FillSpots(l, st, hand);
             var list = SpotRecipes(viewSpot);
             var sp = SpotOf(st, viewSpot);
@@ -1031,7 +1036,7 @@ namespace SeaSick.UI.Sheets
             }
             // Everything is here: the one input's count, or "ready".
             SetText(t.status, r.takes.Length == 1
-                ? $"{Mathf.Min(Have(l, st, r.takes[0].res), 999)} {ResDefs.Label(r.takes[0].res)}"
+                ? ResDefs.Counted(r.takes[0].res, Mathf.Min(Have(l, st, r.takes[0].res), 999))
                 : "ready");
             Tone(t, 0);
         }
@@ -1089,7 +1094,7 @@ namespace SeaSick.UI.Sheets
             // The output: "1 baked potato · fills ½ day"; a good that is not
             // eaten just says its yield.
             int y = Mathf.Max(1, r.yield);
-            string outText = $"{y} {ResDefs.Label(r.makes)}";
+            string outText = ResDefs.Counted(r.makes, y);
             if (FoodBook.IsEdible(r.makes))
             {
                 string fill = FillWords(FoodBook.Fill(r.makes));
@@ -1110,7 +1115,8 @@ namespace SeaSick.UI.Sheets
             {
                 text = StationPage.Cap(sp.pauseReason);
                 tone = 1;
-                if (shortRes != null) fix = ShortFix.For(outpost, shortRes);
+                if (viewHand == null) fix = ShortFix.AssignHand(outpost, st);
+                else if (shortRes != null) fix = ShortFix.For(outpost, shortRes);
             }
             else if (shortRes != null)
             {
@@ -1170,7 +1176,14 @@ namespace SeaSick.UI.Sheets
             if (l != null && st != null && r != null)
             {
                 string lockWhy = LockShort(l, r);
-                if (thisRuns) { mode = Main.Stop; text = stopText; }
+                if (thisRuns && viewHand == null && ShortFix.AssignHand(outpost, st).Valid)
+                {
+                    // Paused "no cook": the fix is the primary, Stop stays beside it.
+                    mainFix = ShortFix.AssignHand(outpost, st);
+                    mode = Main.Fix;
+                    text = mainFix.label;
+                }
+                else if (thisRuns) { mode = Main.Stop; text = stopText; }
                 else if (lockWhy != null)
                 {
                     mode = LockFix(l, r, out mainFix, out text);
@@ -2061,7 +2074,7 @@ namespace SeaSick.UI.Sheets
             {
                 if (l.CampfireLevel < next.campfireLevel) return "Needs Campfire " + RecipeGraph.Roman(next.campfireLevel);
                 var missing = Cost.Missing(next.cost, l.SpendableOf);
-                if (missing.Count > 0) return $"Need {missing[0].n} {ResDefs.Label(missing[0].res)}";
+                if (missing.Count > 0) return "Need " + ResDefs.Counted(missing[0].res, missing[0].n);
                 return string.IsNullOrEmpty(why) ? "Not yet" : Cap(why);
             }
 

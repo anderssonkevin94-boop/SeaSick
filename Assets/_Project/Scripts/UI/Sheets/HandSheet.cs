@@ -450,7 +450,7 @@ namespace SeaSick.UI.Sheets
             if (h.Hauling)
             {
                 icon = h.haulRes;
-                string load = $"{h.haulCount} {ResDefs.Label(h.haulRes)}";
+                string load = ResDefs.Counted(h.haulRes, h.haulCount);
                 if (h.HuntTrip && !h.huntKilled) { main = "Out after game"; icon = Res.Game; }
                 else if (h.haulPicked) main = $"Carrying {load} to the {PlaceName(l, h.haulTo, h.haulToStation)}";
                 else if (h.haulFrom == HaulPlace.Shore) main = "Fishing at the shore";

@@ -1,4 +1,5 @@
 using SeaSick.Ship;
+using SeaSick.Ship.Overboard;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -11,6 +12,11 @@ namespace SeaSick.UI.Sheets
     /// (`HudLayout.ToastRow`'s 22 % line), across the thumb lane's width.
     /// Replaces the IMGUI label `GatherParty.OnGUI` drew, which read as a
     /// blurry stretched ellipse on the phone.
+    ///
+    /// **Also the game's one notice toast (2026-09-30):** `Banner.Show`
+    /// messages ("Bo is aboard", "MAN OVERBOARD!", squalls) draw here, label
+    /// hidden, instead of the IMGUI box that sat over the minimap and the
+    /// hull chip. A party report wins while it is fresh.
     ///
     /// Up for `ShowSeconds` from the report, tap to dismiss. Not while the
     /// landing party sheet is open: its own card says the same line.
@@ -30,8 +36,11 @@ namespace SeaSick.UI.Sheets
 
         readonly Button card;
         readonly Label title;
+        readonly Label label;
         bool shown = true;
         float textFor = -999f;
+        float bannerFor = -999f;
+        bool bannerMode;
 
         public PartyReportToast(VisualElement root)
         {
@@ -44,7 +53,7 @@ namespace SeaSick.UI.Sheets
             var body = new VisualElement { pickingMode = PickingMode.Ignore };
             body.AddToClassList("next-body");
             body.style.marginRight = 0f;
-            var label = new Label("LANDING PARTY") { pickingMode = PickingMode.Ignore };
+            label = new Label("LANDING PARTY") { pickingMode = PickingMode.Ignore };
             label.AddToClassList("next-label");
             body.Add(label);
             title = new Label { pickingMode = PickingMode.Ignore };
@@ -57,7 +66,10 @@ namespace SeaSick.UI.Sheets
             Hide();
         }
 
-        static void Dismiss() => GatherParty.DismissReport();
+        void Dismiss()
+        {
+            if (bannerMode) Banner.Dismiss(); else GatherParty.DismissReport();
+        }
 
         void Hide()
         {
@@ -69,15 +81,29 @@ namespace SeaSick.UI.Sheets
 
         public void Tick(VisualElement root)
         {
-            bool want = GatherParty.ReportFresh
-                        && Time.unscaledTime - GatherParty.LastReportAt < ShowSeconds
-                        && !LandingPartySheet.IsOpen
-                        && !ThumbBar.PlacementActive;
+            Banner.UiDrawing = Time.unscaledTime;
+            bool party = GatherParty.ReportFresh
+                         && Time.unscaledTime - GatherParty.LastReportAt < ShowSeconds
+                         && !LandingPartySheet.IsOpen;
+            bool notice = !party && Banner.Fresh;
+            bool want = (party || notice) && !ThumbBar.PlacementActive;
             if (!want) { Hide(); return; }
 
-            if (textFor != GatherParty.LastReportAt)
+            if (notice)
             {
+                if (!bannerMode || bannerFor != Banner.ShownAt || title.text != Banner.Text)
+                {
+                    bannerMode = true;
+                    bannerFor = Banner.ShownAt;
+                    label.style.display = DisplayStyle.None;
+                    title.text = Banner.Text;
+                }
+            }
+            else if (bannerMode || textFor != GatherParty.LastReportAt)
+            {
+                bannerMode = false;
                 textFor = GatherParty.LastReportAt;
+                label.style.display = DisplayStyle.Flex;
                 title.text = GatherParty.LastReport;
             }
             if (!shown)

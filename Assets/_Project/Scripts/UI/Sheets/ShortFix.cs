@@ -25,6 +25,11 @@ namespace SeaSick.UI.Sheets
     ///   Campfire to N"**; no station of that kind yet -> **"Build <station>"**
     ///   opens the Build sheet on its plan (or the fire, when the plan itself
     ///   is locked by the fire).
+    /// - **A station with nobody on it** ("no cook", "no smith", "no
+    ///   worker"; `AssignHand`, 2026-09-30): **"Assign <name>"** sends the
+    ///   best free hand (`FreeHandFor` + `Outpost.Assign`, the calls
+    ///   `WorkersSheet`'s "Assign idle" makes); with nobody free it is **"Free
+    ///   up a hand"** and opens `WorkersSheet`.
     /// - Anything else (a hunt drop, an unknown id) has no fix; `Fix.Valid`
     ///   is false and the caller hides its button.
     ///
@@ -35,7 +40,7 @@ namespace SeaSick.UI.Sheets
     /// re-labelled by `Bind`.
     public static class ShortFix
     {
-        public enum Kind { None, Gather, Station, Build, Raise, Forge }
+        public enum Kind { None, Gather, Station, Build, Raise, Forge, Assign, FreeHand }
 
         public struct Fix
         {
@@ -47,6 +52,8 @@ namespace SeaSick.UI.Sheets
             public Building station;
             /// Build: the plan id.
             public string planId;
+            /// Assign: the station that needs a hand.
+            public StationStock stock;
 
             public bool Valid => kind != Kind.None;
 
@@ -90,6 +97,17 @@ namespace SeaSick.UI.Sheets
                         if (s != null) Sheets.Open(s);
                         return false;
                     }
+                    case Kind.Assign:
+                    {
+                        var l = camp.Ledger;
+                        var free = l != null && stock != null && !stock.removed ? l.FreeHandFor(stock.planId) : null;
+                        if (free != null && camp.Assign(free, stock)) return true;
+                        Sheets.Open(new WorkersSheet(camp));
+                        return false;
+                    }
+                    case Kind.FreeHand:
+                        Sheets.Open(new WorkersSheet(camp));
+                        return false;
                 }
                 return false;
             }
@@ -141,6 +159,20 @@ namespace SeaSick.UI.Sheets
                 return new Fix { kind = Kind.Gather, res = res, label = "Gather " + name };
             }
             return ForMade(camp, l, res);
+        }
+
+        /// **"Assign <name>"** for a station nobody works (see the type
+        /// comment): the best free hand's name, or "Free up a hand" when
+        /// nobody is free. `Valid` is false for a null or demolished station.
+        public static Fix AssignHand(Outpost camp, StationStock station)
+        {
+            var l = camp != null ? camp.Ledger : null;
+            if (l == null || station == null || station.removed) return default;
+            var free = l.FreeHandFor(station.planId);
+            if (free == null)
+                return new Fix { kind = Kind.FreeHand, stock = station, planId = station.planId, label = "Free up a hand" };
+            string n = string.IsNullOrEmpty(free.name) ? "a hand" : free.name;
+            return new Fix { kind = Kind.Assign, stock = station, planId = station.planId, label = "Assign " + n };
         }
 
         /// **"Raise Campfire to N"**: the fix for anything gated by the fire's

@@ -18,6 +18,21 @@ namespace SeaSick.Ship.Overboard
         string text = "";
         float showUntil;
 
+        /// **The UI Toolkit toast draws this now (2026-09-30).** Kevin: the
+        /// castaway banner ("Bo is aboard") sat over the minimap and the hull
+        /// chip. `SeaSick.UI.Sheets.PartyReportToast` (under the chart, the
+        /// thumb lane's width) shows `Text` for as long as `Fresh`, and
+        /// stamps `UiDrawing` every frame it ticks; while that stamp is
+        /// recent this IMGUI box stays quiet, and it is only the fallback
+        /// when no sheet host is running.
+        public static string Text => instance != null ? instance.text : "";
+        public static bool Fresh => instance != null && !string.IsNullOrEmpty(instance.text)
+                                    && Time.unscaledTime < instance.showUntil;
+        /// When the current message was shown (unscaled), to tell a new one.
+        public static float ShownAt { get; private set; } = -999f;
+        public static float UiDrawing = -999f;
+        public static void Dismiss() { if (instance != null) instance.showUntil = 0f; }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Install()
         {
@@ -34,11 +49,13 @@ namespace SeaSick.Ship.Overboard
             if (instance == null) return;
             instance.text = message;
             instance.showUntil = Time.unscaledTime + seconds;
+            ShownAt = Time.unscaledTime;
         }
 
         void OnGUI()
         {
             if (Time.unscaledTime >= showUntil || string.IsNullOrEmpty(text)) return;
+            if (Time.unscaledTime - UiDrawing < 0.5f) return;
 
             float scale = Mathf.Clamp(Screen.dpi > 0 ? Screen.dpi / 160f : 2f, 1f, 3f);
             var old = GUI.matrix;

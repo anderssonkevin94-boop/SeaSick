@@ -21,7 +21,7 @@ namespace SeaSick.World.Economy
 
         public Ingredient(string res, int n) { this.res = res; this.n = n; }
 
-        public override string ToString() => $"{n} {ResDefs.Label(res)}";
+        public override string ToString() => ResDefs.Counted(res, n);
     }
 
     /// Helpers over `Ingredient[]`. Static, allocation-light, and the only
