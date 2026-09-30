@@ -42,6 +42,7 @@ Shader "SeaSick/Island Fog"
             #pragma multi_compile_fog
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
 
             TEXTURE2D(_FogTex);
             SAMPLER(sampler_FogTex);
@@ -96,7 +97,27 @@ Shader "SeaSick/Island Fog"
 
             half4 frag(Varyings i) : SV_Target
             {
-                float2 uv = (i.positionWS.xz - _FogRect.xy) * _FogRect.zw;
+                // Read the grid where the eye actually lands -- the ground
+                // behind this pixel -- not where the cloud sheet is. The sheet
+                // floats a canopy up, so at the island camera's 28 deg its
+                // own xz is ~30 m nearer the camera than the ground it hides:
+                // the landing strip's hole then showed half the island clear
+                // (2026-09-30 screenshot pass). Sky behind (the bank's top
+                // edge seen from the sea) keeps the sheet's own xz.
+                float2 xz = i.positionWS.xz;
+                float2 suv = GetNormalizedScreenSpaceUV(i.positionCS);
+                float raw = SampleSceneDepth(suv);
+                #if UNITY_REVERSED_Z
+                bool sky = raw <= 0.00001;
+                #else
+                bool sky = raw >= 0.99999;
+                #endif
+                if (!sky)
+                {
+                    float3 behind = ComputeWorldSpacePosition(suv, raw, UNITY_MATRIX_I_VP);
+                    xz = behind.xz;
+                }
+                float2 uv = (xz - _FogRect.xy) * _FogRect.zw;
                 float2 t = _FogTexel.xy * 0.9;
                 // Five bilinear taps: the 5 m cells become soft round patches.
                 float fog = SAMPLE_TEXTURE2D(_FogTex, sampler_FogTex, uv).r * 0.36

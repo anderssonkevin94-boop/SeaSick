@@ -112,7 +112,11 @@ namespace SeaSick.UI.Sheets
         public void Tick(VisualElement root)
         {
             bool active = Active;
-            root.EnableInClassList("midnight-land", active);
+            // The landing party sheet is a midnight card off a fresh island
+            // too, where there is no camp and so no land HUD: without the
+            // class its frame fell back to the cream sea card under the
+            // page's pale midnight text (2026-09-30 screenshot pass).
+            root.EnableInClassList("midnight-land", active || LandingPartySheet.IsOpen);
             top.style.display = active ? DisplayStyle.Flex : DisplayStyle.None;
             if (!active)
             {

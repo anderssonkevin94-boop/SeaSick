@@ -870,6 +870,12 @@ namespace SeaSick.Ship
         /// every frame in `Ashore` and a hand can change hands mid-frame.
         bool AllAboard()
         {
+            // A landing party out is not aboard, whoever `crew` (cached at
+            // Start) knows about: a hand boarded later (a save's villagers,
+            // a castaway) is missing from it, and the ship went back to
+            // Anchored -- Cast off offered -- the moment he walked off
+            // (2026-09-30 screenshot pass).
+            if (Party.Out) return false;
             foreach (var c in crew)
             {
                 if (c == null) continue;
@@ -990,6 +996,10 @@ namespace SeaSick.Ship
         public void PutPartyAshore(GatherParty p, System.Collections.Generic.List<CrewAgent> who, Vector3 landing)
         {
             if (p == null || who == null || who.Count == 0) return;
+            party = p;
+            // Everyone is under her now; hands boarded since Start join the
+            // list the recall and `AllAboard` walk.
+            crew = GetComponentsInChildren<CrewAgent>(true);
             for (int i = 0; i < who.Count; i++)
             {
                 if (!Ours(who[i])) continue;
@@ -1062,7 +1072,7 @@ namespace SeaSick.Ship
 
         void RecallCrew()
         {
-            if (party != null && party.Out) party.Recall("recalled");
+            if (Party.Out) party.Recall("recalled");
             // Parked camp hands are not ours to recall -- they live there now.
             foreach (var c in crew) if (Ours(c)) c.ReturnAboard();
         }
@@ -1367,7 +1377,7 @@ namespace SeaSick.Ship
                     // A landing party out: the recall is the party's, the row
                     // above it opens the sheet (their progress), and the line
                     // says why there is no cast-off.
-                    if (party != null && party.Out)
+                    if (Party.Out)
                     {
                         if (party.Recalling) GUI.Label(primary, "coming back aboard…", infoStyle);
                         else if (GUI.Button(primary, Desk ? "Call them back   (space)" : "Call them back", buttonStyle)) RecallCrew();
