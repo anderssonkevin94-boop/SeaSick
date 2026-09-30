@@ -2021,7 +2021,7 @@ namespace SeaSick.World
             // tracking them.
             if (marksOf.Count > 64) marksOf.Clear();
             m = new Marks();
-            Transform benchAlt = null;
+            Transform benchAlt = null, cookLine = null;
             foreach (var t in b.GetComponentsInChildren<Transform>(true))
             {
                 switch (BuildingFactory.Stem(t.name))
@@ -2044,9 +2044,13 @@ namespace SeaSick.World
                     case "Catch_Anchor":
                         if (benchAlt == null) benchAlt = t;
                         break;
+                    // The level 1 kitchen (V6, 2026-10-01): the cook faces
+                    // his cauldron and grill, straight ahead between the two
+                    // fires, not the prep board at his right hand.
+                    case "Cook_Line_Anchor": cookLine = t; break;
                 }
             }
-            if (m.bench == null) m.bench = benchAlt;
+            if (m.bench == null) m.bench = cookLine != null ? cookLine : benchAlt;
             marksOf[b] = m;
             return m;
         }

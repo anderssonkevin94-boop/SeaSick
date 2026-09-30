@@ -56,6 +56,26 @@ namespace SeaSick.World
         GameObject benchLoaded, benchCutting, benchFinished, tool;
         bool discovered;
 
+        /// **Per-spot cooking groups (kitchen V6, 2026-10-01).** The level 1
+        /// kitchen has a cauldron AND a grill in front of the one cook, each
+        /// with its own "running" dressing: `Grill_Cooking` (fish, meat,
+        /// glow on the slab) shows while the Grill spot is Working,
+        /// `Work_Cooking` (soup, `Cauldron_Steam`, `Cauldron_Glow`) and the
+        /// `Spoon_Tool` in the pot while the Cauldron spot is. Only a model
+        /// that carries a spot-only group (`Grill_Cooking`) switches on; on
+        /// every other kit `Work_Cooking` stays the shown spot's legacy
+        /// `Bench_Cutting` alias, unchanged. Each group is driven by ITS
+        /// spot's own bench, so both can run at once.
+        static readonly (string spot, string stem)[] SpotGroupNames =
+        {
+            ("Grill", "Grill_Cooking"),
+            ("Cauldron", "Work_Cooking"),
+            ("Cauldron", "Spoon_Tool"),
+        };
+        const string SpotModeMarker = "Grill_Cooking";
+        readonly List<(string spot, GameObject go)> spotGroups = new List<(string spot, GameObject go)>();
+        readonly List<int> shownSpotGroups = new List<int>();
+
         StationStock station;
         bool resolved;
         int resolveAttempts;
@@ -69,7 +89,7 @@ namespace SeaSick.World
         void Start()
         {
             DiscoverSlots();
-            if (inputSlots.Count == 0 && outputSlots.Count == 0
+            if (inputSlots.Count == 0 && outputSlots.Count == 0 && spotGroups.Count == 0
                 && benchLoaded == null && benchCutting == null && benchFinished == null && tool == null)
             {
                 enabled = false;   // nothing on this model to ever toggle
@@ -110,7 +130,11 @@ namespace SeaSick.World
                 sinceResolve = 0;
                 var fresh = ResolveStation();
                 if (fresh == null) { if (station.removed) { resolved = false; resolveAttempts = 0; } return; }
-                if (fresh != station) { station = fresh; shownInput = shownOutput = shownResults = -1; shownBench = (BenchState)(-1); }
+                if (fresh != station)
+                {
+                    station = fresh; shownInput = shownOutput = shownResults = -1; shownBench = (BenchState)(-1);
+                    for (int i = 0; i < shownSpotGroups.Count; i++) shownSpotGroups[i] = -1;
+                }
             }
             Apply();
         }
@@ -166,16 +190,36 @@ namespace SeaSick.World
                     ? Mathf.Clamp(station.benchOut, 0, benchResults.Count) : 0;
                 if (resN != shownResults) { SetShown(benchResults, resN); shownResults = resN; }
             }
+            for (int i = 0; i < spotGroups.Count; i++)
+            {
+                int on = SpotWorking(station, spotGroups[i].spot) ? 1 : 0;
+                if (on != shownSpotGroups[i]) { spotGroups[i].go.SetActive(on == 1); shownSpotGroups[i] = on; }
+            }
+        }
+
+        /// Is the station's spot named `spot` running a job right now?
+        static bool SpotWorking(StationStock s, string spot)
+        {
+            foreach (var sp in s.Spots)
+                if (sp != null && sp.spot == spot) return sp.benchState == BenchState.Working;
+            return false;
+        }
+
+        bool SpotDriven(GameObject go)
+        {
+            foreach (var g in spotGroups) if (g.go == go) return true;
+            return false;
         }
 
         void ApplyBench(BenchState bench)
         {
             shownBench = bench;
             if (benchLoaded != null) benchLoaded.SetActive(bench == BenchState.Loaded);
-            if (benchCutting != null) benchCutting.SetActive(bench == BenchState.Working);
+            // A spot-driven group (kitchen V6) is `Apply`'s, per spot.
+            if (benchCutting != null && !SpotDriven(benchCutting)) benchCutting.SetActive(bench == BenchState.Working);
             if (benchFinished != null) benchFinished.SetActive(bench == BenchState.Finished);
             // Tool out only while it is actually being swung.
-            if (tool != null) tool.SetActive(bench == BenchState.Working);
+            if (tool != null && !SpotDriven(tool)) tool.SetActive(bench == BenchState.Working);
             // Every piece until `Apply` says how many are left (`Preview`
             // has no ledger, so a finished bench there shows the full job).
             if (benchResults.Count > 0)
@@ -255,6 +299,15 @@ namespace SeaSick.World
             benchFinished = FindFirstByStem(benchRoot, BenchFinishedNames)?.gameObject;
             if (benchFinished != null) CollectSlots(benchFinished.transform, "Bench_Result_", benchResults);
             tool = FindToolChild(transform)?.gameObject;
+            if (FindByStem(transform, SpotModeMarker) != null)
+                foreach (var (spot, stem) in SpotGroupNames)
+                {
+                    var g = FindByStem(transform, stem);
+                    if (g == null) continue;
+                    g.gameObject.SetActive(false);
+                    spotGroups.Add((spot, g.gameObject));
+                    shownSpotGroups.Add(-1);
+                }
 
             // All hidden until the first real Apply -- an idle bench should
             // never show its finished/loaded dressing before the ledger has
@@ -348,6 +401,13 @@ namespace SeaSick.World
             SetShown(view.outputSlots, Mathf.Clamp(output, 0, view.outputSlots.Count));
             view.shownOutput = output;
             view.ApplyBench(bench);
+            // No ledger here: every spot shows the one previewed state.
+            for (int i = 0; i < view.spotGroups.Count; i++)
+            {
+                bool on = bench == BenchState.Working;
+                view.spotGroups[i].go.SetActive(on);
+                view.shownSpotGroups[i] = on ? 1 : 0;
+            }
             return view;
         }
     }
