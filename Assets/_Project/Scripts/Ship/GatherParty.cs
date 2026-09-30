@@ -44,8 +44,8 @@ namespace SeaSick.Ship
     ///
     /// **The report.** When the last hand is aboard, `LastReport` says what
     /// they brought or found ("Found ore and a cairn · 6 timber aboard") and
-    /// a toast shows it for `ReportSeconds` (`OnGUI`, the game's ice toast
-    /// card), or the sheet's "now" card while it is open.
+    /// a toast shows it for 4.5 s (`PartyReportToast`, 2026-09-30), or the
+    /// sheet's "now" card for `ReportSeconds` while it is open.
     ///
     /// --- 2026-09-27 (the gather trip, unchanged) ---------------------------
     ///
@@ -115,6 +115,13 @@ namespace SeaSick.Ship
         public const float RevealRadius = 25f;
         /// How far one explore stop is from the last, metres.
         public const float ExploreStep = 22f;
+        /// **An explore trip ends early (2026-09-30)** once no land under
+        /// cloud is left within this many metres of the landing, or nothing
+        /// new has opened for `ExploreStaleSeconds`: a small island was open
+        /// in 15 s and the party walked on for the whole two minutes. Stops
+        /// are never chosen past it either.
+        public const float ExploreReach = 180f;
+        public const float ExploreStaleSeconds = 15f;
         /// A live boar this close to an explorer is an encounter (rolled once).
         public const float BoarDangerMetres = 18f;
         /// Chance an encounter hurts somebody: nobody in the party armed / armed.
@@ -232,7 +239,7 @@ namespace SeaSick.Ship
         }
 
         readonly Dictionary<CrewAgent, Job> jobs = new Dictionary<CrewAgent, Job>();
-        float startedAt, nextReveal, nextDanger;
+        float startedAt, nextReveal, nextDanger, nextDoneLook, lastRevealed, lastNewAt;
         readonly HashSet<Animal> metBoars = new HashSet<Animal>();
         FaunaLod fauna;
         string wardedOffBy;
@@ -479,6 +486,9 @@ namespace SeaSick.Ship
             startedAt = Time.time;
             nextReveal = 0f;
             nextDanger = Time.time + 1f;
+            nextDoneLook = Time.time + 1f;
+            lastRevealed = -1f;
+            lastNewAt = Time.time;
             metBoars.Clear();
             FindFauna();
             Snapshot();
@@ -513,11 +523,13 @@ namespace SeaSick.Ship
                 if (h == null || h.Party != this) continue;
                 var j = JobOf(h);
                 if (j != null && j.target != null && !j.target.Dead) { j.target.Hunted = false; j.target = null; }
-                if (Mode == Order.Explore && j != null && h.OnErrand && j.trail.Count > 0)
+                // Explorers turn round at once and take the straightest
+                // walkable way back (`HomeStep`), not the whole winding trail
+                // (2026-09-30: a recall took ~60 s and first walked on).
+                if (Mode == Order.Explore && j != null && h.OnErrand)
                 {
                     j.phase = Phase.Home;
-                    h.RetargetErrand(PopHome(j, h.transform.position));
-                    continue;
+                    if (HomeStep(h, j, out Vector3 back)) { h.RetargetErrand(back); continue; }
                 }
                 h.ReturnAboard();
             }
@@ -581,18 +593,11 @@ namespace SeaSick.Ship
             if (Mode == Order.Explore)
             {
                 if (Recalling || j.hurt || Elapsed >= ExploreSeconds) j.phase = Phase.Home;
-                if (j.phase == Phase.Home)
-                {
-                    if (j.trail.Count == 0) return false;
-                    at = PopHome(j, who.transform.position);
-                    return true;
-                }
+                if (j.phase == Phase.Home) return HomeStep(who, j, out at);
                 if (NextExploreStop(who, j, out at)) return true;
                 // Walled in on every side: turn for home.
                 j.phase = Phase.Home;
-                if (j.trail.Count == 0) return false;
-                at = PopHome(j, who.transform.position);
-                return true;
+                return HomeStep(who, j, out at);
             }
             if (Mode == Order.Hunt)
             {
@@ -806,6 +811,16 @@ namespace SeaSick.Ship
                 LookForTrouble();
             }
 
+            // The trip ends when the time is up or there is nothing left in
+            // reach to find -- whichever comes first -- and everyone turns
+            // for the landing at once (2026-09-30).
+            if (Mode == Order.Explore && !Recalling && Time.time >= nextDoneLook)
+            {
+                nextDoneLook = Time.time + 1f;
+                string done = ExploreDone();
+                if (done != null) Recall(done);
+            }
+
             DriveHunters();
 
             // Done when everyone is back aboard.
@@ -977,35 +992,9 @@ namespace SeaSick.Ship
 
         public static void DismissReport() => LastReportAt = -999f;
 
-        readonly SeaSick.UI.HudLabel reportLabel = new SeaSick.UI.HudLabel();
-        static GUIStyle reportStyle;
-
-        /// The result toast: the game's ice "news" card (`ReturnSummary`'s
-        /// look), top of the screen, tap to dismiss. The sheet shows the
-        /// same line in its own card while it is open.
-        void OnGUI()
-        {
-            if (!ReportFresh) return;
-            if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen
-                || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
-            if (SeaSick.UI.Sheets.LandingPartySheet.IsOpen) return;
-            if (reportLabel.Changed(LastReport.GetHashCode())) reportLabel.Set(LastReport);
-            if (reportStyle == null)
-                reportStyle = new GUIStyle(SeaSick.UI.UITheme.Toast) { wordWrap = true, alignment = TextAnchor.MiddleLeft };
-            float width = Mathf.Min(SeaSick.UI.HudLayout.Safe.width - SeaSick.UI.HudLayout.Unit * 2f,
-                                    SeaSick.UI.HudLayout.Unit * 30f);
-            float pad = SeaSick.UI.HudLayout.Pad;
-            float height = reportStyle.CalcHeight(reportLabel.Content, width - pad * 2f) + SeaSick.UI.HudLayout.Unit * 1.2f;
-            var rect = SeaSick.UI.HudLayout.ToastRow(height, width);
-            SeaSick.UI.UITheme.ToastCard(rect, SeaSick.UI.UITheme.LedgerIce);
-            GUI.Label(new Rect(rect.x + pad, rect.y, rect.width - pad * 2f, rect.height), reportLabel.Content, reportStyle);
-            SeaSick.UI.UIBlocker.Block(rect);
-            if (Event.current.type == EventType.MouseDown && rect.Contains(Event.current.mousePosition))
-            {
-                DismissReport();
-                Event.current.Use();
-            }
-        }
+        // The result toast is `SeaSick.UI.Sheets.PartyReportToast` (UI
+        // Toolkit, the Next card's look) since 2026-09-30; the IMGUI label
+        // that stood here drew as a blurry stretched ellipse on the phone.
 
         bool RaidersNear()
         {
@@ -1056,6 +1045,15 @@ namespace SeaSick.Ship
                 j.heading = Quaternion.Euler(0f, fan, 0f) * inland.normalized;
             }
 
+            // The nearest cloud in reach pulls a little, so a hand in open
+            // ground walks toward what is left rather than about at random.
+            Vector3 lure = Vector3.zero;
+            if (fog != null && fog.NearestFoggedLand(from, ExploreReach, 0.6f, out Vector3 near))
+            {
+                lure = near - from; lure.y = 0f;
+                lure = lure.sqrMagnitude > 1f ? lure.normalized : Vector3.zero;
+            }
+
             float bestScore = float.MinValue;
             bool found = false;
             Vector3 best = default;
@@ -1071,8 +1069,10 @@ namespace SeaSick.Ship
                         p.y = h(p.x, p.z);
                         if (p.y < 0.6f) continue;   // the sea, the surf, wet sand
                     }
+                    Vector3 off = p - landing; off.y = 0f;
+                    if (off.sqrMagnitude > ExploreReach * ExploreReach) continue;
                     if (!LineWalkable(from, p)) continue;
-                    float score = Mathf.Cos(ang * Mathf.Deg2Rad) * 2f;
+                    float score = Mathf.Cos(ang * Mathf.Deg2Rad) * 2f + Vector3.Dot(dir, lure) * 1.5f;
                     if (fog != null) score += Unrevealed(fog, p) * 3f;
                     foreach (var kv in jobs)
                     {
@@ -1101,6 +1101,41 @@ namespace SeaSick.Ship
             if (!fog.IsRevealed(p + new Vector3(0f, 0f, 10f))) n++;
             if (!fog.IsRevealed(p + new Vector3(0f, 0f, -10f))) n++;
             return n;
+        }
+
+        /// Why the explore trip is over, or null while there is fog in reach
+        /// and the party is still opening it.
+        string ExploreDone()
+        {
+            if (Elapsed >= ExploreSeconds) return "time to turn back";
+            var fog = IslandFog.For(island);
+            if (fog == null || !fog.Fogged) return "the whole island is explored";
+            float r = fog.Revealed01;
+            if (r > lastRevealed + 0.0001f) { lastRevealed = r; lastNewAt = Time.time; }
+            if (!fog.NearestFoggedLand(landing, ExploreReach, 0.6f, out _))
+                return "nothing left to explore in reach";
+            if (Time.time - lastNewAt > ExploreStaleSeconds) return "nothing new in reach";
+            return null;
+        }
+
+        /// **The next step home (2026-09-30).** Straight to the landing when
+        /// that line is walkable (false: `CrewAgent` then walks the plank);
+        /// else the trail point nearest the landing that he can see from
+        /// here, dropping everything after it; else the old step back.
+        bool HomeStep(CrewAgent who, Job j, out Vector3 at)
+        {
+            at = default;
+            Vector3 from = who.transform.position;
+            if (j.trail.Count == 0 || LineWalkable(from, landing)) { j.trail.Clear(); return false; }
+            for (int i = 0; i < j.trail.Count; i++)
+            {
+                if (!LineWalkable(from, j.trail[i])) continue;
+                at = j.trail[i];
+                j.trail.RemoveRange(i, j.trail.Count - i);
+                return true;
+            }
+            at = PopHome(j, from);
+            return true;
         }
 
         /// The next stop home: the newest trail point more than 3 m off.

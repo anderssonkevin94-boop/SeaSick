@@ -327,6 +327,39 @@ namespace SeaSick.World
             return Bit(y * Width + x);
         }
 
+        /// **The nearest land still under cloud** within `maxDist` of
+        /// `from` (flat metres), standing at least `minGround` above the sea,
+        /// or false. 2026-09-30: an explore trip ends when this says there is
+        /// nothing left in reach (a small island was open in 15 s and the
+        /// party walked on for two minutes). A scan of the grid (at most
+        /// 96 x 96), asked once a second and at each explore stop.
+        public bool NearestFoggedLand(Vector3 from, float maxDist, float minGround, out Vector3 at)
+        {
+            at = default;
+            if (bits == null || Settled(Island) || revealedLand >= landCount) return false;
+            float best = maxDist * maxDist;
+            bool found = false;
+            for (int y = 0; y < Height; y++)
+            {
+                float wz = Origin.y + (y + 0.5f) * Cell;
+                float dz = wz - from.z;
+                if (dz * dz > best) continue;
+                for (int x = 0; x < Width; x++)
+                {
+                    int k = y * Width + x;
+                    if ((flags[k] & FlagLand) == 0 || Bit(k) || ground[k] < minGround) continue;
+                    float wx = Origin.x + (x + 0.5f) * Cell;
+                    float dx = wx - from.x;
+                    float d2 = dx * dx + dz * dz;
+                    if (d2 >= best) continue;
+                    best = d2;
+                    at = new Vector3(wx, ground[k], wz);
+                    found = true;
+                }
+            }
+            return found;
+        }
+
         /// Share of the island's land revealed, 0..1. Settled islands = 1.
         public float Revealed01
         {

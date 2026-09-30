@@ -18,8 +18,9 @@ namespace SeaSick.UI.Sheets
     /// `.st` + Hand.uss + Lookout.uss), hugging its content on the phone so
     /// the island stays visible above it (`SheetHost.HugsContent`).
     ///
-    /// * **header** -- landing glyph · "Landing party" · "Anchored off
-    ///   Island_3 · 4 aboard" (Gather: "hold 23/34") · pill "35% explored"
+    /// * **header** -- landing glyph · "Landing party" · pill "35%
+    ///   explored" · under it "Island_3 · 4 aboard" (Gather: "hold 23/34")
+    ///   on its own line (2026-09-30: beside the pill it read "Anchored …")
     ///   (`IslandFog.Revealed01`) · ☰ (the pause menu, since the IMGUI
     ///   Menu/Ledger chips stand down off a fresh island) · ✕;
     /// * **three order cards** -- Explore · Gather · Hunt;
@@ -140,6 +141,21 @@ namespace SeaSick.UI.Sheets
             menu.style.marginRight = 6f;
             menu.Add(new StationPage.Glyph("menu", StationPage.Ink, "st-glyph"));
             head.Root.Insert(Mathf.Max(0, head.Root.childCount - 1), menu);
+            // **The sub line under the pill, on its own line (2026-09-30).**
+            // Glyph + name + ☰ + ✕ leave the pill's line ~95 pt on the
+            // phone, and "Anchored off Island_2 · 2 aboard" read "Anchored …".
+            var words = head.Root.Q(className: "st-head-words");
+            var sub = head.Root.Q<Label>(className: "st-sub");
+            if (words != null && sub != null && sub.parent != words)
+            {
+                sub.RemoveFromHierarchy();
+                sub.style.marginTop = 2f;
+                sub.style.flexShrink = 0f;
+                sub.style.whiteSpace = WhiteSpace.NoWrap;
+                sub.style.overflow = Overflow.Hidden;
+                sub.style.textOverflow = TextOverflow.Ellipsis;
+                words.Add(sub);
+            }
             FillHeader();
             return head.Root;
         }
@@ -158,7 +174,7 @@ namespace SeaSick.UI.Sheets
                 tail = $"hold {voyage.TotalHeld}/{voyage.HoldCapacity}";
             else
                 tail = $"{GatherParty.Company(anchor).Count} aboard";
-            head.SetSub($"Anchored off {island.name} · {tail}");
+            head.SetSub($"{island.name} · {tail}");
             var fog = Fog;
             int pct = fog != null ? Mathf.RoundToInt(fog.Revealed01 * 100f) : 100;
             head.SetPill($"{pct}% explored", pct >= 100 ? StationPage.PillGood : StationPage.PillWait);

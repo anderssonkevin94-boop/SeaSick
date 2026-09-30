@@ -10,13 +10,28 @@
 // The land under it is dimmed and greyed (the cloud is mostly but never
 // fully opaque) and a tree under it is a faint shape at most.
 //
-// Cost: one draw per fogged island in view, no depth write, five texture
+// Cost: one draw per fogged island in view, no depth write, seven texture
 // taps and eight hashes a pixel. No keywords beyond URP's fog.
+//
+// 2026-09-30 polish pass:
+// * No white tree silhouettes. The grid is read at the ground behind each
+//   pixel, and a TREE behind a pixel is not ground: its cell was fogged
+//   while the sea or the clearing beside it was not, so the far coast's
+//   palms and every tree at a clearing's edge drew as a white cut-out. The
+//   texture's G channel now carries the ground height (0 = sea); a depth
+//   hit well above it is a prop, and the grid is read where the ray meets
+//   the ground past it -- the same place its neighbours read, so a prop has
+//   no outline of its own. Where that lands in the sea, the ray is also
+//   read at canopy height (`_Canopy`), so the far coast's trees stay inside
+//   the cloud instead of poking out of it.
+// * No muddy dusk. The main light's hue is taken at a fifth and its
+//   brightness clamped, so a pink-orange sun and a brown ambient give a
+//   soft grey cloud with a little warmth, never a pink-brown one.
 Shader "SeaSick/Island Fog"
 {
     Properties
     {
-        _FogTex ("Fog grid (R8)", 2D) = "black" {}
+        _FogTex ("Fog grid (R fog, G ground height / 127.5 m)", 2D) = "black" {}
         _FogRect ("Grid origin xz, 1/size xz", Vector) = (0,0,0.01,0.01)
         _FogTexel ("Texel size", Vector) = (0.01,0.01,0,0)
         _CloudColor ("Cloud", Color) = (0.97,0.975,0.98,1)
@@ -25,6 +40,7 @@ Shader "SeaSick/Island Fog"
         _Fade ("Whole-island fade", Range(0,1)) = 1
         _NoiseScale ("Billow scale (1/m)", Float) = 0.045
         _Drift ("Drift (m/s)", Float) = 0.6
+        _Canopy ("Canopy top, world y (m)", Float) = 20
     }
     SubShader
     {
@@ -57,6 +73,7 @@ Shader "SeaSick/Island Fog"
                 float _Fade;
                 float _NoiseScale;
                 float _Drift;
+                float _Canopy;
             CBUFFER_END
 
             struct Attributes { float4 positionOS : POSITION; };
@@ -105,6 +122,7 @@ Shader "SeaSick/Island Fog"
                 // (2026-09-30 screenshot pass). Sky behind (the bank's top
                 // edge seen from the sea) keeps the sheet's own xz.
                 float2 xz = i.positionWS.xz;
+                float3 eye = GetCameraPositionWS();
                 float2 suv = GetNormalizedScreenSpaceUV(i.positionCS);
                 float raw = SampleSceneDepth(suv);
                 #if UNITY_REVERSED_Z
@@ -112,10 +130,55 @@ Shader "SeaSick/Island Fog"
                 #else
                 bool sky = raw >= 0.99999;
                 #endif
+                float canopyFog = 0;
+                float propFog = 1;
+                // Sky behind (the bank's top edge, or far sea the depth
+                // texture misses): the sheet's own xz, land cells only, so
+                // a distant bank has the island's outline and not the
+                // mesh's straight quad edges.
+                float landOnly = 1;
+                if (sky)
+                {
+                    float gS = SAMPLE_TEXTURE2D(_FogTex, sampler_FogTex, (xz - _FogRect.xy) * _FogRect.zw).g;
+                    landOnly = saturate(gS * 255.0);
+                }
                 if (!sky)
                 {
                     float3 behind = ComputeWorldSpacePosition(suv, raw, UNITY_MATRIX_I_VP);
+                    float3 ray = behind - eye;
+                    // G = the ground height of the cell behind (0 = sea).
+                    float2 gB = SAMPLE_TEXTURE2D(_FogTex, sampler_FogTex, (behind.xz - _FogRect.xy) * _FogRect.zw).rg;
+                    float groundB = gB.g * 127.5;
+                    // A prop standing out of the ground (tree, palm, rock,
+                    // beast): read past it, where the ray meets its ground,
+                    // so it gets its surroundings' cloud and no silhouette.
+                    // Never more cloud than its own cell has, though: a
+                    // palm on the opened beach stays in front of the bank.
+                    if (gB.g > 0.004 && behind.y > groundB + 2.0 && ray.y < -0.01)
+                    {
+                        propFog = gB.r;
+                        float t = (groundB - eye.y) / ray.y;
+                        behind = eye + ray * min(t, 4.0);
+                    }
                     xz = behind.xz;
+                    // Landed in the sea (the far coast, seen past its
+                    // trees): the cloud stands canopy-high over that coast,
+                    // so read the ray there too. Never nearer than the sheet
+                    // itself -- in front of the island that is open water.
+                    // Only from above the canopy (the island camera); from
+                    // the deck the near cloud already hides the far coast.
+                    float2 gE = SAMPLE_TEXTURE2D(_FogTex, sampler_FogTex, (xz - _FogRect.xy) * _FogRect.zw).rg;
+                    if (gE.g <= 0.004 && ray.y < -0.01 && eye.y > _Canopy)
+                    {
+                        float3 toSheet = i.positionWS - eye;
+                        float tc = (min(_Canopy, i.positionWS.y) - eye.y) / ray.y;
+                        float ts = length(toSheet) / max(length(ray), 0.001);
+                        float3 c = eye + ray * clamp(tc, ts, 1.0);
+                        // Land's cloud only: the skirt over open water
+                        // (the cover's two-cell margin) stays thin.
+                        float2 gc = SAMPLE_TEXTURE2D(_FogTex, sampler_FogTex, (c.xz - _FogRect.xy) * _FogRect.zw).rg;
+                        canopyFog = gc.r * saturate(gc.g * 255.0);
+                    }
                 }
                 float2 uv = (xz - _FogRect.xy) * _FogRect.zw;
                 float2 t = _FogTexel.xy * 0.9;
@@ -125,6 +188,7 @@ Shader "SeaSick/Island Fog"
                           + SAMPLE_TEXTURE2D(_FogTex, sampler_FogTex, uv + float2(-t.x, 0)).r * 0.16
                           + SAMPLE_TEXTURE2D(_FogTex, sampler_FogTex, uv + float2(0,  t.y)).r * 0.16
                           + SAMPLE_TEXTURE2D(_FogTex, sampler_FogTex, uv + float2(0, -t.y)).r * 0.16;
+                fog = max(min(fog, propFog), canopyFog) * landOnly;
 
                 // Slow billows drifting with a light air.
                 float2 q = i.positionWS.xz * _NoiseScale + float2(_Time.y, _Time.y * 0.6) * (_Drift * _NoiseScale);
@@ -152,6 +216,12 @@ Shader "SeaSick/Island Fog"
                 float sun = saturate(dot(up, light.direction)) * 0.5 + 0.5;
                 float3 base = lerp(_ShadeColor.rgb, _CloudColor.rgb, saturate(n * 1.2 - 0.1));
                 float3 lit = light.color * (0.35 + 0.35 * sun) + max(0, SampleSH(up)) * 0.8;
+                // Never muddy (2026-09-30, the dusk cloud read pink-brown):
+                // a fifth of the light's hue, its brightness kept between a
+                // soft night grey and full white.
+                float lum = dot(lit, float3(0.2126, 0.7152, 0.0722));
+                float3 hue = lit / max(lum, 0.0001);
+                lit = lerp(float3(1, 1, 1), hue, 0.2) * clamp(lum, 0.42, 1.08);
                 float3 col = base * lit;
                 col = MixFog(col, i.fog);
                 return half4(col, a);

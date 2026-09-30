@@ -56,6 +56,7 @@ namespace SeaSick.UI.Sheets
         SeaLedger sea;
         ThumbBar.View thumb;
         NextCard.View nextCard;
+        PartyReportToast partyToast;
         bool midnight;
         readonly BuildingSheetFocus buildingFocus = new BuildingSheetFocus();
 
@@ -151,6 +152,8 @@ namespace SeaSick.UI.Sheets
             // The Next card (phase 2) after the bar: it sits above it, in
             // the same lane.
             nextCard = new NextCard.View(root);
+            // The landing party's report (2026-09-30), over the lot.
+            partyToast = new PartyReportToast(root);
             if (ring == null) ring = gameObject.AddComponent<SelectionRing>();
             chromeBuilt = true;
         }
@@ -884,7 +887,8 @@ namespace SeaSick.UI.Sheets
             // And so is the landing party sheet (2026-09-30), the same card
             // scale as every house sheet though no camp exists yet.
             runtimePanel.referenceResolution = (MidnightLandHud.Active || ThumbBar.PlacementActive
-                                                || NextCard.NoCampShowing || LandingPartySheet.IsOpen) && !HudLayout.Wide
+                                                || NextCard.NoCampShowing || LandingPartySheet.IsOpen
+                                                || PartyReportToast.Showing) && !HudLayout.Wide
                 ? new Vector2Int(430, 932) : originalResolution;
             // Before the land HUD: the food notice and the ledger drawer
             // stack on this frame's `ThumbBar.ReservePanel`.
@@ -892,6 +896,7 @@ namespace SeaSick.UI.Sheets
             // After the bar (its lane, its reserve), before the land HUD
             // (whose IMGUI claim and food notice read the card's).
             nextCard.Tick(root);
+            partyToast.Tick(root);
             land.Tick(root);
             sea.Tick(root);
             var panelSize = new Vector2(root.resolvedStyle.width, root.resolvedStyle.height);

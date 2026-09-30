@@ -1012,6 +1012,24 @@ namespace SeaSick.Ship
         GatherParty party;
         GatherParty Party => party != null ? party : (party = GatherParty.For(this));
 
+        /// **A raider in range (2026-09-30).** The combat lock's dial and the
+        /// helm take the bottom of the screen then, and the landing party's
+        /// row stacked over both: it stands down until the fight is over
+        /// (the party runs for the ship on its own when raiders come near).
+        /// Asked once a frame, not per IMGUI event.
+        bool CombatNear
+        {
+            get
+            {
+                if (combatNearFrame == Time.frameCount) return combatNear;
+                combatNearFrame = Time.frameCount;
+                if (combatLock == null) combatLock = GetComponent<SeaSick.Combat.CombatLock>();
+                return combatNear = combatLock != null && combatLock.WantsSpace;
+            }
+        }
+        bool combatNear;
+        int combatNearFrame = -1;
+
         /// **"Landing party" (2026-09-30)**, where "⛏ Send gather party"
         /// was: one thumb row above Cast off that opens
         /// `LandingPartySheet` (Explore · Gather · Hunt). Kevin, on the old
@@ -1019,7 +1037,7 @@ namespace SeaSick.Ship
         /// worked."*
         void DrawGatherParty(ref Prompts.Stack stack, float bh, GUIStyle buttonStyle)
         {
-            if (CurrentIsland == null || CampSiting.Placing) return;
+            if (CurrentIsland == null || CampSiting.Placing || CombatNear) return;
             var r = stack.Next(bh);
             UIBlocker.Block(r);
             if (GUI.Button(r, "Landing party", buttonStyle))
@@ -1072,9 +1090,14 @@ namespace SeaSick.Ship
 
         void RecallCrew()
         {
-            if (Party.Out) party.Recall("recalled");
+            bool partyOut = Party.Out;
+            if (partyOut) party.Recall("called back");
             // Parked camp hands are not ours to recall -- they live there now.
-            foreach (var c in crew) if (Ours(c)) c.ReturnAboard();
+            // A landing party's hands were just turned for home by the party
+            // itself (explorers by the straightest walkable way, 2026-09-30);
+            // a second order here would overwrite theirs.
+            foreach (var c in crew)
+                if (Ours(c) && !(partyOut && c.Party == party)) c.ReturnAboard();
         }
 
         /// Let go and get her underway, from outside. The home panel's
@@ -1381,6 +1404,9 @@ namespace SeaSick.Ship
                     {
                         if (party.Recalling) GUI.Label(primary, "coming back aboard…", infoStyle);
                         else if (GUI.Button(primary, Desk ? "Call them back   (space)" : "Call them back", buttonStyle)) RecallCrew();
+                        // A raider in range: only the recall stays (the lock
+                        // dial and the helm need the room).
+                        if (CombatNear) break;
                         var open = stack.Next(bh);
                         UIBlocker.Block(open);
                         if (GUI.Button(open, "Landing party", buttonStyle))

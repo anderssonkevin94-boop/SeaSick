@@ -9,7 +9,7 @@ namespace SeaSick.World
     /// island near the camera, draped a canopy above the ground and sloping
     /// down to the water at the coast, so from the deck or from the island
     /// camera the land under it is dimmed and greyed and its trees and props
-    /// are faint shapes at most. Alpha is the island's fog grid as an R8
+    /// are faint shapes at most. Alpha is the island's fog grid as an RG16 (R fog, G ground)
     /// texture (`SeaSick/Island Fog`); opened cells fade out over ~1 s.
     /// Nothing on a settled island (camp or any building); when a camp is
     /// made, the whole cover fades away and is freed.
@@ -33,8 +33,9 @@ namespace SeaSick.World
         /// Seconds for a cell to open, and for a settled island's cover to go.
         const float FadeSeconds = 1f;
         /// The cloud's height over the highest ground near it: above a 13 m
-        /// canopy.
-        const float Lift = 15f;
+        /// canopy. 21 since 2026-09-30: the tallest palms (~18 m) poked
+        /// green fronds out through a 15 m sheet.
+        const float Lift = 21f;
         /// Where the coast skirt meets the water.
         const float SkirtY = 1.2f;
         /// The mesh's vertex spacing, in fog cells.
@@ -56,7 +57,11 @@ namespace SeaSick.World
             public Material material;
             public Texture2D texture;
             public Mesh mesh;
+            /// Texels, `stride` bytes each: R = the cloud shown (eased),
+            /// G = the ground height (`GroundByte`, 0 = sea). 2026-09-30:
+            /// the shader tells a tree behind the cloud from the ground by G.
             public byte[] shown;
+            public int stride = 2;
             public int ax0, ay0, ax1 = -1, ay1 = -1;   // box still fading
             public float fade = 1f;
             public bool leaving;
@@ -164,10 +169,10 @@ namespace SeaSick.World
                 {
                     int k = y * w + x;
                     int target = fog.FogAt(k) ? 255 : 0;
-                    int cur = c.shown[k];
+                    int cur = c.shown[k * c.stride];
                     if (cur == target) continue;
                     cur = cur < target ? Mathf.Min(target, cur + step) : Mathf.Max(target, cur - step);
-                    c.shown[k] = (byte)cur;
+                    c.shown[k * c.stride] = (byte)cur;
                     moved = true;
                 }
             if (moved)
@@ -258,9 +263,16 @@ namespace SeaSick.World
             if (fog.LandCells == 0) return;   // nothing to cover; an empty entry stops a rebuild
 
             int w = fog.Width, h = fog.Height, n = w * h;
-            c.shown = new byte[n];
-            for (int k = 0; k < n; k++) c.shown[k] = fog.FogAt(k) ? (byte)255 : (byte)0;
-            c.texture = new Texture2D(w, h, TextureFormat.R8, false, true)
+            // RG16 everywhere that matters (Metal, desktop); RGBA32 if not.
+            var format = SystemInfo.SupportsTextureFormat(TextureFormat.RG16) ? TextureFormat.RG16 : TextureFormat.RGBA32;
+            c.stride = format == TextureFormat.RG16 ? 2 : 4;
+            c.shown = new byte[n * c.stride];
+            for (int k = 0; k < n; k++)
+            {
+                c.shown[k * c.stride] = fog.FogAt(k) ? (byte)255 : (byte)0;
+                c.shown[k * c.stride + 1] = GroundByte(fog, k);
+            }
+            c.texture = new Texture2D(w, h, format, false, true)
             {
                 name = "IslandFog_" + isle.name,
                 filterMode = FilterMode.Bilinear,
@@ -288,6 +300,14 @@ namespace SeaSick.World
             r.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
             r.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
             c.renderer = r;
+        }
+
+        /// The ground height in G: half-metres, 1..255 (0.5..127.5 m) on
+        /// land, 0 on the sea. The shader reads it back as g * 127.5.
+        static byte GroundByte(IslandFog fog, int k)
+        {
+            if (!fog.LandAt(k)) return 0;
+            return (byte)Mathf.Clamp(Mathf.RoundToInt(fog.GroundAt(k) * 2f), 1, 255);
         }
 
         /// A sheet over the covered cells, in world space: every `Step`
