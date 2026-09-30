@@ -8,7 +8,7 @@ namespace SeaSick.Ship.Modular
         const float Step=.30f, Radius=.22f;
         struct Tri {public Vector3 a,b,c;}
         sealed class Node {public Vector3 p;public readonly List<int> edges=new List<int>();}
-        sealed class Route {public Vector3 target;public List<int> nodes;public int at;}
+        sealed class Route {public Vector3 target;public List<int> nodes;public int at;public Vector3 last;}
         readonly List<Node> nodes=new List<Node>();readonly List<Tri> floors=new List<Tri>();
         readonly List<Bounds> obstacles=new List<Bounds>();readonly Dictionary<int,Route> routes=new Dictionary<int,Route>();
         Transform ship;public int NodeCount=>nodes.Count;public int LadderLinks{get;private set;}
@@ -127,18 +127,32 @@ namespace SeaSick.Ship.Modular
         public bool Move(Transform hand,Vector3 target,float distance)
         {
             int id=hand.GetInstanceID();
-            if(!routes.TryGetValue(id,out var r)||(r.target-target).sqrMagnitude>.02f)
-            {r=new Route{target=target,nodes=Find(hand.localPosition,target)};routes[id]=r;}
+            // **The cached route is only good for the walk it was made for**
+            // (2026-10-01). It used to be keyed on the target alone, so a hand
+            // sent to the same spot twice -- after being moved, re-assigned or
+            // interrupted -- kept the old node list and `at` index and walked a
+            // straight line from wherever he now stood, through props, cargo
+            // sockets, rails and the funnel. `last` is where THIS method left
+            // him; if he is anywhere else now, someone moved him and the route
+            // is rebuilt from his real position. Repeated calls of one walk
+            // (same walker, same target, still progressing) still reuse it,
+            // so there is no per-frame pathfinding.
+            var here=hand.localPosition;
+            if(!routes.TryGetValue(id,out var r)||(r.target-target).sqrMagnitude>.02f||(r.last-here).sqrMagnitude>.0025f)
+            {r=new Route{target=target,nodes=Find(here,target)};routes[id]=r;}
+            r.last=here;
             if(r.nodes==null)return false;
             if(r.at>=r.nodes.Count)
             {
                 var end=ClosestWalkable(target);
                 if((end-target).sqrMagnitude<.12f&&!Blocked(target))end=target;
                 hand.localPosition=Vector3.MoveTowards(hand.localPosition,end,distance);
+                r.last=hand.localPosition;
                 return (hand.localPosition-end).sqrMagnitude<.001f;
             }
             var next=nodes[r.nodes[r.at]].p;hand.localPosition=Vector3.MoveTowards(hand.localPosition,next,distance);
             if((hand.localPosition-next).sqrMagnitude<.001f)r.at++;
+            r.last=hand.localPosition;
             return false;
         }
     }

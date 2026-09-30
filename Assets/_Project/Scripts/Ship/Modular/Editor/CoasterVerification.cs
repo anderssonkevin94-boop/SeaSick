@@ -55,6 +55,50 @@ namespace SeaSick.Ship.Modular
             log.AppendLine($"Gun station routes: {total-failed}/{total} passed.");
             File.WriteAllText("art-staging/f-coaster-runtime/routes.txt",log.ToString());return log.ToString();
         }
+        /// **Walk-route cache check** (2026-10-01): a walker sent to the same target
+        /// twice, the second time from somewhere else, must follow the deck graph
+        /// (not a straight line through a reserved cargo box), while repeated calls
+        /// of one walk reuse the cached route. Builds the default coaster with a
+        /// reserved box dead centre between two deck points and logs both walks.
+        public static string WalkCache()
+        {
+            var lib=ModuleLibrary.LoadFromResources();var reference=SteamerBootstrap.ReferenceData();
+            var baseline=ShipyardPlanner.PlanFor(ShipConfiguration.Long(),lib,reference,null,out _);
+            var c=CoasterFamily.Default();var plan=ShipyardPlanner.PlanFor(c,lib,reference,baseline,out var a);
+            var ship=new GameObject("WalkCache ship");var drawing=new GameObject("Drawing");drawing.transform.SetParent(ship.transform,false);drawing.transform.localPosition=plan.viewOffset;
+            drawing.AddComponent<ModularShipView>().Build(a);
+            var nav=drawing.AddComponent<CoasterNavigation>();
+            // Probe two deck points on the centre line, then reserve a box between them.
+            float z0=plan.viewOffset.z+3.5f,z1=plan.viewOffset.z+11f;
+            var start=nav.ClosestWalkable(new Vector3(0,.9f,z0));var goal=nav.ClosestWalkable(new Vector3(0,.9f,z1));
+            nav.Build(ship.transform,plan,new Cannon[0]);start=nav.ClosestWalkable(new Vector3(0,.9f,z0));goal=nav.ClosestWalkable(new Vector3(0,.9f,z1));
+            var mid=(start+goal)*.5f;var box=new Bounds(mid+new Vector3(0,.4f,0),new Vector3(1.0f,.8f,1.4f));
+            nav.Build(ship.transform,plan,new Cannon[0],new[]{box});
+            start=nav.ClosestWalkable(start);goal=nav.ClosestWalkable(goal);
+            var exp=box;exp.Expand(new Vector3(.3f,0,.3f));
+            var log=new StringBuilder($"nodes={nav.NodeCount} start={start} goal={goal} box={box.center}/{box.size} hasRoute={nav.HasRoute(start,goal)}\n");
+            var w=new GameObject("Walker").transform;w.SetParent(ship.transform,false);
+            int Walk(Vector3 from,string label,out int inside,out float longest)
+            {
+                w.localPosition=from;inside=0;longest=0;int n=0;var prev=from;
+                while(n<800&&!nav.Move(w,goal,.1f)){n++;if(exp.Contains(new Vector3(w.localPosition.x,box.center.y,w.localPosition.z)))inside++;}
+                log.AppendLine($"{label}: {n} steps, end={w.localPosition}, steps inside reserved box={inside}");return n;
+            }
+            int s1=Walk(start,"walk 1 (fresh)",out int in1,out _);
+            // Same target again from the far side of the box, as after being moved / interrupted.
+            var other=nav.ClosestWalkable(new Vector3(0,.9f,z0-.3f));
+            // Straight line from `other` to `goal` crosses the box?
+            bool straightCrosses=false;for(int i=0;i<=100;i++){var p=Vector3.Lerp(other,goal,i/100f);if(exp.Contains(new Vector3(p.x,box.center.y,p.z)))straightCrosses=true;}
+            int s2=Walk(other,"walk 2 (same target, moved start)",out int in2,out _);
+            // Same walker, same target, still progressing: no rebuild (route object kept).
+            w.localPosition=other;nav.Move(w,goal,.1f);var before=typeof(CoasterNavigation).GetField("routes",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance).GetValue(nav);
+            var d=(System.Collections.IDictionary)before;var r1=d[w.GetInstanceID()];nav.Move(w,goal,.1f);nav.Move(w,goal,.1f);bool kept=ReferenceEquals(r1,d[w.GetInstanceID()]);
+            log.AppendLine($"straight line from moved start crosses box: {straightCrosses}; route object reused across progressing calls: {kept}");
+            bool ok=in1==0&&in2==0&&kept&&s2>0;
+            log.AppendLine(ok?"PASS":"FAIL");
+            UnityEngine.Object.DestroyImmediate(ship);
+            File.WriteAllText("art-staging/f-coaster-runtime/walkcache.txt",log.ToString());return log.ToString();
+        }
         public static string Render(bool allRaised=false)
         {
             var c=CoasterFamily.Default();if(allRaised){c.middleIds[0]=CoasterFamily.Hull("middle",true);c.bowId=CoasterFamily.Hull("bow",true);}
