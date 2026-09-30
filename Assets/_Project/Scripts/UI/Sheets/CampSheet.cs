@@ -187,7 +187,12 @@ namespace SeaSick.UI.Sheets
 
             // 4. BUILDINGS
             builtHead = ReadoutUi.Eyebrow(col);
+            // **Two to a row (2026-09-30).** One row per building ran past
+            // the tall frame at 13 buildings -- the last rows cut in half
+            // under the thumb row (Kevin's rule: a control is never
+            // clipped). Name over status in half-width tiles halves it.
             builtHolder = Classed(new VisualElement(), "cs-list");
+            builtHolder.AddToClassList("cs-grid2");
             col.Add(builtHolder);
             builtNone = Classed(new Label("Nothing built yet."), "cp-note");
             col.Add(builtNone);
@@ -775,7 +780,7 @@ namespace SeaSick.UI.Sheets
             words.Add(r.sub);
             r.root.Add(words);
             r.status = Classed(new Label { pickingMode = PickingMode.Ignore }, "cs-st");
-            r.root.Add(r.status);
+            words.Add(r.status);
             builtHolder.Add(r.root);
             return r;
         }

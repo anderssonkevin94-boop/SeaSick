@@ -153,8 +153,11 @@ namespace SeaSick.UI.Sheets
             }
 
             var acts = CardKit.Acts(root);
-            if (hugged) CardKit.Act(acts, "Larder", OpenLarder);
-            overviewBtn = CardKit.Act(acts, "Overview", OpenOverview);
+            // **Named for the sheet they open (2026-09-30)**: phase 4 folded
+            // the Larder into Food and the Overview into Camp, so the buttons
+            // say "Food" and "Camp" -- the same words as the bottom bar.
+            if (hugged) CardKit.Act(acts, "Food", OpenLarder);
+            overviewBtn = CardKit.Act(acts, "Camp", OpenOverview);
             raiseBtn = CardKit.Act(acts, "Raise", Raise, 1);
 
             Refresh();
@@ -204,6 +207,10 @@ namespace SeaSick.UI.Sheets
             bool can = next != null && l.CanRaiseCampfire(out _);
             raiseBtn.SetEnabled(can);
             raiseBtn.text = next != null ? $"Raise to {RecipeGraph.Roman(next.level)}" : "Top level";
+            // A fire at its top level has nothing to raise: no dead button
+            // (2026-09-30) -- the header pill already says "Top level".
+            var showRaise = next != null ? DisplayStyle.Flex : DisplayStyle.None;
+            if (raiseBtn.style.display != showRaise) raiseBtn.style.display = showRaise;
             CardKit.Primary(raiseBtn, next != null);
 
             // The item the raise is most short of, a gatherable first.

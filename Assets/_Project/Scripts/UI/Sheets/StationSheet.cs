@@ -1200,24 +1200,55 @@ namespace SeaSick.UI.Sheets
             {
                 Root = StationPage.Root("st-head");
 
+                // **Hugging, 2026-09-30 (Kevin: "it isn't obvious where to
+                // press").** Half a phone wide row held ☰ + name + pill + Move
+                // + ✕ and the NAME lost: "Sa...". So in the hugging frame the
+                // ☰ goes -- an icon-only button whose only label was a
+                // tooltip the phone never shows, for a ledger the Camp tab
+                // already opens -- and the status pill drops under the name,
+                // beside "Level 1 · island". Tall/desk header unchanged.
+                bool hug = Hugging;
                 menu = new Button(() => onMenu?.Invoke()) { text = "" };
                 menu.AddToClassList("st-square");
                 menu.tooltip = "Open the ledger";
                 menu.Add(new Glyph("menu", Ink, "st-glyph"));
-                Root.Add(menu);
+                if (!hug) Root.Add(menu);
 
                 var words = new VisualElement(); words.AddToClassList("st-head-words");
+                if (hug) words.style.marginLeft = 0f;
                 words.Add(Text(title, "st-title"));
                 sub = Text("", "st-sub");
-                words.Add(sub);
-                Root.Add(words);
 
                 pill = new VisualElement(); pill.AddToClassList("st-pill");
                 pill.pickingMode = PickingMode.Ignore;
                 pillText = Text("", "st-pill-text");
                 pill.Add(pillText);
                 pill.style.display = withPill ? DisplayStyle.Flex : DisplayStyle.None;
-                Root.Add(pill);
+                if (hug)
+                {
+                    var line = new VisualElement();
+                    line.style.flexDirection = FlexDirection.Row;
+                    line.style.alignItems = Align.Center;
+                    line.style.marginTop = 2f;
+                    pill.style.marginRight = 8f;
+                    line.Add(pill);
+                    sub.style.flexShrink = 1f;
+                    sub.style.minWidth = 0f;
+                    sub.style.overflow = Overflow.Hidden;
+                    sub.style.whiteSpace = WhiteSpace.NoWrap;
+                    sub.style.textOverflow = TextOverflow.Ellipsis;
+                    line.style.minWidth = 0f;
+                    line.style.overflow = Overflow.Hidden;
+                    line.Add(sub);
+                    words.Add(line);
+                    Root.Add(words);
+                }
+                else
+                {
+                    words.Add(sub);
+                    Root.Add(words);
+                    Root.Add(pill);
+                }
 
                 var close = new Button(() => Sheets.Close()) { text = "" };
                 close.AddToClassList("st-square");

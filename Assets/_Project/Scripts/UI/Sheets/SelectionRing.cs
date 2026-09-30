@@ -22,6 +22,8 @@ namespace SeaSick.UI.Sheets
         const int Segments = 64;
         /// Nothing smaller: below this a ring round a campfire is a dot.
         const float MinRadius = 1.5f;
+        /// Half-width past which a hit is ground, not a structure.
+        const float MaxFootprint = 16f;
 
         LineRenderer line;
         Material mat;
@@ -129,10 +131,25 @@ namespace SeaSick.UI.Sheets
             for (int i = 0; i < hits.Length; i++)
             {
                 if (hits[i] == null) continue;
+                // **The island is not the building (2026-09-30).** The
+                // terrain chunk under every building is inside the sphere
+                // too, and its 64 m extents clamped every ring to 24 m -- a
+                // white circle round the whole camp for a sawmill. A hit
+                // wider than any structure is ground, skipped. A building's
+                // tap trigger has no renderer of its own, so its footprint is
+                // all of its children's bounds together, not the first one's.
+                Bounds b;
                 var rend = hits[i].GetComponentInParent<Renderer>();
-                if (rend == null) rend = hits[i].GetComponentInChildren<Renderer>();
-                if (rend == null) continue;
-                var e = rend.bounds.extents;
+                if (rend != null) b = rend.bounds;
+                else
+                {
+                    var kids = hits[i].GetComponentsInChildren<Renderer>();
+                    if (kids.Length == 0) continue;
+                    b = kids[0].bounds;
+                    for (int k = 1; k < kids.Length; k++) b.Encapsulate(kids[k].bounds);
+                }
+                var e = b.extents;
+                if (Mathf.Max(e.x, e.z) > MaxFootprint) continue;
                 best = Mathf.Max(best, Mathf.Max(e.x, e.z) * 1.25f);
             }
             return Mathf.Clamp(best, MinRadius, 24f);

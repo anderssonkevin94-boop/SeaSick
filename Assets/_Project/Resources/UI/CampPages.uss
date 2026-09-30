@@ -222,3 +222,11 @@
 .cs-st--bad { color: rgb(246, 146, 128); }
 .cs-st--ok { color: rgb(159, 224, 194); }
 .cs-st--info { color: rgb(164, 210, 232); }
+
+/* Camp sheet buildings, two to a row (2026-09-30): name, sub and status stacked
+ * left in half-width tiles, so 13+ buildings fit the tall frame uncut. */
+.cs-grid2 { flex-direction: row; flex-wrap: wrap; justify-content: space-between; }
+.cs-grid2 .cp-hand { width: 49%; min-height: 52px; padding: 6px 10px; }
+.cp-root .cs-grid2 .cp-hand-name { -unity-text-align: middle-left; }
+.cp-root .cs-grid2 .cp-job { -unity-text-align: middle-left; }
+.cs-grid2 .cs-st { margin-left: 0; max-width: 100%; -unity-text-align: middle-left; }

@@ -464,8 +464,9 @@ namespace SeaSick.UI.Sheets
             page = new VisualElement();
             page.style.flexDirection = FlexDirection.Column;
             // A hugging frame reads the page's NATURAL height (`MeasureHug`),
-            // so there it neither grows into the band nor shrinks to it; the
-            // body still clips anything past the cap.
+            // so there it neither grows into the band nor shrinks to it; a
+            // page past the cap grows the frame (`Place`, 2026-09-30) and only
+            // one past the tall ceiling is ever clipped.
             page.style.flexGrow = hug ? 0f : 1f;
             page.style.flexShrink = hug ? 0f : 1f;
             // min-height 0: an action row that grows a line (the Ship
@@ -752,6 +753,67 @@ namespace SeaSick.UI.Sheets
             return size;
         }
 
+        /// **The tall sheet's height, SCREEN pixels (2026-09-30)**: the room
+        /// between the top resource bar and the bottom nav, the same number
+        /// `FrameSizeScreen` gives a `WantsTallSheet` frame. A hugging frame
+        /// whose measured content is past its half-screen cap grows up to
+        /// this instead of clipping its bottom row.
+        public static float TallCeilingScreen()
+        {
+            var safe = Screen.safeArea;
+            if (safe.width < 1f || safe.height < 1f)
+                safe = new Rect(0f, 0f, Screen.width, Screen.height);
+            float reserve = MidnightLandHud.Active
+                ? (MidnightLandHud.TopHeight + MidnightLandHud.NavHeight + 24f) / PanelScale + Margin
+                : Margin * 2f;
+            return safe.height - reserve;
+        }
+
+        /// **Every control the open sheet draws that the frame cuts
+        /// (2026-09-30, Kevin's rule: "a control is NEVER clipped or
+        /// half-hidden").** Walks the live card: any displayed `Button` in the
+        /// body whose rect runs past the body's padded inside, or any in the
+        /// action row or header that runs past the card, is listed as
+        /// "label (px over)". Empty when the sheet is clean. Dev/probe use --
+        /// cheap, but only ever called on demand.
+        public static string ClippedControls()
+        {
+            var h = Instance;
+            if (h == null || h.card == null || Sheets.Current == null) return "";
+            var sb = new System.Text.StringBuilder();
+            var bodyR = h.body.worldBound;
+            var bs = h.body.resolvedStyle;
+            var inside = Rect.MinMaxRect(bodyR.xMin + bs.paddingLeft - 1f, bodyR.yMin + bs.paddingTop - 1f,
+                                         bodyR.xMax - bs.paddingRight + 1f, bodyR.yMax - bs.paddingBottom + 1f);
+            var cardR = h.card.worldBound;
+            void Check(VisualElement root, Rect keep)
+            {
+                root.Query<Button>().ForEach(b =>
+                {
+                    if (!Shown(b, root)) return;
+                    var r = b.worldBound;
+                    if (r.width < 1f || r.height < 1f) return;
+                    float over = Mathf.Max(Mathf.Max(r.yMax - keep.yMax, keep.yMin - r.yMin),
+                                           Mathf.Max(r.xMax - keep.xMax, keep.xMin - r.xMin));
+                    if (over > 1f)
+                        sb.Append(string.IsNullOrEmpty(b.text) ? b.name : b.text.Replace('\n', ' '))
+                          .Append(" (").Append(Mathf.RoundToInt(over)).Append("px) ");
+                });
+            }
+            Check(h.body, inside);
+            Check(h.actions, cardR);
+            Check(h.head, cardR);
+            return sb.ToString().Trim();
+        }
+
+        static bool Shown(VisualElement e, VisualElement stop)
+        {
+            for (var p = e; p != null && p != stop.parent; p = p.parent)
+                if (p.resolvedStyle.display == DisplayStyle.None || p.resolvedStyle.visibility == Visibility.Hidden)
+                    return false;
+            return true;
+        }
+
         /// **How tall a page may be, in panel units.**
         ///
         /// The strip and the action row are always subtracted, even on a
@@ -948,7 +1010,17 @@ namespace SeaSick.UI.Sheets
                 else if (!hugPending) want = hugLast;
                 if (want > 0f)
                 {
-                    h = Mathf.Min(h, Mathf.Ceil(want) / unit);
+                    // **Grow, never clip (Kevin, 2026-09-30: "I can tell
+                    // there's a button down there but I can't press it").**
+                    // `want` is MEASURED -- the resolved header, strip, action
+                    // row and page -- so a page taller than the half-screen
+                    // cap no longer loses its bottom row under the thumb
+                    // row: the frame grows past the cap, up to the tall
+                    // sheet's ceiling (`TallCeilingScreen`). The cap stays
+                    // what pages plan for (`HugBodyBudget`); this is the
+                    // safety net for a page whose estimate was short.
+                    float ceiling = Mathf.Max(h, TallCeilingScreen());
+                    h = Mathf.Min(ceiling, Mathf.Ceil(want) / unit);
                     if (hugPending)
                     {
                         hugPending = false;

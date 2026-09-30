@@ -108,8 +108,6 @@ namespace SeaSick.UI.Sheets
                 title = StationPage.Text(titleText, "st-title");
                 sub = StationPage.Text("", "st-sub");
                 words.Add(title);
-                words.Add(sub);
-                Root.Add(words);
 
                 pill = Box("st-pill");
                 pillText = StationPage.Text("", "st-pill-text");
@@ -118,7 +116,35 @@ namespace SeaSick.UI.Sheets
                 // Tappable when the card says so (`PillTap`): the lookout's
                 // pill opens his own sheet (2026-09-27).
                 pill.RegisterCallback<ClickEvent>(_ => PillTap?.Invoke());
-                Root.Add(pill);
+
+                // **Hugging, 2026-09-30**: the pill drops under the title,
+                // beside the sub line. In the half-screen frame glyph + name
+                // + pill + Move + ✕ left the NAME "Cam..." / "Watchto...".
+                if (StationPage.Hugging)
+                {
+                    var line = new VisualElement { pickingMode = PickingMode.Ignore };
+                    line.style.flexDirection = FlexDirection.Row;
+                    line.style.alignItems = Align.Center;
+                    line.style.marginTop = 2f;
+                    pill.style.marginRight = 8f;
+                    line.Add(pill);
+                    sub.style.flexShrink = 1f;
+                    sub.style.minWidth = 0f;
+                    sub.style.overflow = Overflow.Hidden;
+                    sub.style.whiteSpace = WhiteSpace.NoWrap;
+                    sub.style.textOverflow = TextOverflow.Ellipsis;
+                    line.style.minWidth = 0f;
+                    line.style.overflow = Overflow.Hidden;
+                    line.Add(sub);
+                    words.Add(line);
+                    Root.Add(words);
+                }
+                else
+                {
+                    words.Add(sub);
+                    Root.Add(words);
+                    Root.Add(pill);
+                }
 
                 var close = new Button(() => Sheets.Close()) { text = "" };
                 close.AddToClassList("st-square");
@@ -314,13 +340,22 @@ namespace SeaSick.UI.Sheets
                 t.initial = StationPage.Text("", "lk-av-t");
                 av.Add(t.initial);
                 t.root.Add(av);
+                // **Name over job, beside the face (2026-09-30).** Added
+                // straight to the row tile they ran together ("Pipidle"),
+                // and the absolute "Relieve" pill sat on top of the name.
+                // Now the words are one column that ellipsizes, and the
+                // pill is gone: the tile IS the button, "on watch" is its
+                // state and the eyebrow says "tap again to relieve".
+                av.style.marginBottom = 0f;
+                var words = Box("hs-tile-words");
+                words.style.marginLeft = 6f;
                 t.name = StationPage.Text("", "hs-tile-n");
                 t.sub = StationPage.Text("", "hs-tile-s");
-                t.root.Add(t.name);
-                t.root.Add(t.sub);
+                words.Add(t.name);
+                words.Add(t.sub);
+                t.root.Add(words);
                 t.pill = Box("lk-pill");
                 t.pill.Add(StationPage.Text("Relieve", "lk-pill-t"));
-                t.root.Add(t.pill);
                 tiles.Add(t);
                 Grid.Add(t.root);
             }

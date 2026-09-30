@@ -33,18 +33,38 @@ namespace SeaSick.UI.Sheets
         public void SetTab(int index) { }
         public Color Accent => SheetTheme.Timber;
 
-        public VisualElement BuildHeader() =>
-            SheetKit.Header("going up", Title, SheetTheme.Timber, "⚒",
+        /// **One header line, "Shelter · 40%" (Kevin, 2026-09-30, the
+        /// phone's SiteSheet).** The "GOING UP" eyebrow over the name and the
+        /// big "0%" under it were two lines of chrome for one fact, and they
+        /// pushed the fix button off the half-screen frame. The title label is
+        /// kept so `Refresh` re-writes the percentage in place.
+        public VisualElement BuildHeader()
+        {
+            var h = SheetKit.Header(null, HeadLine(Pending), SheetTheme.Timber, "⚒",
                 () => Sheets.Close());
+            titleLabel = h.Q<Label>(className: SheetTheme.Title);
+            ringKey = -99;
+            return h;
+        }
 
-        /// The three verbs, pinned: staff it, call it off, put it somewhere
-        /// else. Same calls as before -- they have simply stopped being the
-        /// last thing you scroll to.
+        /// The three verbs, pinned: the MAIN one, call it off, put it
+        /// somewhere else.
+        ///
+        /// **The main verb says what it does, and is never a dead button
+        /// (Kevin, 2026-09-30: "I don't like the look of cut-off buttons or
+        /// where it isn't obvious where to press").** It used to be "Add a
+        /// hand", greyed out whenever nobody was idle, with the real fix
+        /// ("Gather timber") as a body bar under it that the frame cut. Now
+        /// `Refresh` picks, in this order: the fix for what the site is short
+        /// of (`ShortFix`, e.g. "Gather timber"); "Add a hand" while someone
+        /// is idle; "Free up a hand" (opens Workers) otherwise.
         public VisualElement BuildActions()
         {
-            addHand = SheetKit.Btn("Add a hand", AddHand, true);
+            mainMode = Main.None;
+            main = SheetKit.Btn("Add a hand", PressMain, true);
+            RefreshMain();
             return SheetKit.Actions(
-                addHand,
+                main,
                 SheetKit.Btn("Cancel", CancelBuild, false, true),
                 SheetKit.Btn("Move", MoveBuild, false, true));
         }
@@ -91,24 +111,24 @@ namespace SeaSick.UI.Sheets
 
         // --- the pieces kept between refreshes ---------------------------------
 
-        Label big;            // "60 %"
+        Label titleLabel;     // "Shelter · 60%", the header's own title
         Label who;            // "Bo is on it · about 2 days left"
         VisualElement ring;   // the bar standing in for a progress ring
         VisualElement chips;
-        Button addHand;
 
-        /// **The fix for what this drawing is short of (2026-09-30, island UI
-        /// rule 2).** One button under the have/need chips for the material
-        /// the CAMP cannot cover -- built once in `Build`, shown/hidden and
-        /// re-labelled by `Refresh`, never rebuilt with the chips.
-        ShortFix.Slot fixSlot;
+        /// **The main verb (2026-09-30)**: one brass button in the thumb row
+        /// whose label and action `RefreshMain` picks -- see `BuildActions`.
+        enum Main { None, Fix, AddHand, FreeHand }
+        Button main;
+        Main mainMode;
+        ShortFix.Fix fix;
 
         long chipsKey = long.MinValue;
         int ringKey = -99;
 
         public VisualElement Build()
         {
-            big = null; who = null; ring = null; chips = null; fixSlot = null;
+            who = null; ring = null; chips = null;
             chipsKey = long.MinValue;
             ringKey = -99;
 
@@ -132,18 +152,15 @@ namespace SeaSick.UI.Sheets
             // the number the player reads; the bar under it is what makes it
             // a shape rather than a figure, and a real ring can replace both
             // without this file changing.
-            big = SheetKit.Text("0%", true, false, 28f);
+            // The percentage lives in the header line now (2026-09-30).
             ring = SheetBits.Holder();
-            root.Add(SheetKit.Row(big, ring));
+            root.Add(ring);
 
             who = SheetKit.Text("", false, true, 12f);
             root.Add(who);
 
             chips = SheetBits.Holder();
             root.Add(chips);
-
-            fixSlot = new ShortFix.Slot(Refresh);
-            root.Add(fixSlot.button);
 
             Refresh();
             return root;
@@ -165,7 +182,7 @@ namespace SeaSick.UI.Sheets
             if (pct != ringKey)
             {
                 ringKey = pct;
-                if (big != null) big.text = pct + "%";
+                if (titleLabel != null) titleLabel.text = HeadLine(p);
                 SheetBits.Swap(ring, SheetKit.Bar(p.Progress01, SheetTheme.Timber, 10f));
             }
 
@@ -272,22 +289,54 @@ namespace SeaSick.UI.Sheets
                 if (stall.Length > 0) chips.Add(SheetKit.Note(stall));
             }
 
-            if (addHand != null)
-                addHand.SetEnabled(SheetBits.FirstIdle(l) != null);
+            RefreshMain();
+        }
+
+        /// "Shelter · 40%".
+        string HeadLine(PendingBuild p) =>
+            Cap(Title) + " · " + (p != null ? Mathf.RoundToInt(p.Progress01 * 100f) : 0) + "%";
+
+        /// Pick the main verb (see `BuildActions`) and re-label it only when
+        /// it changed, so the button under the thumb is the same element.
+        void RefreshMain()
+        {
+            if (main == null) return;
+            var l = outpost != null ? outpost.Ledger : null;
+            var p = Pending;
+            if (l == null || p == null) return;
 
             // The material the camp's own pile cannot cover, most missing
             // first (a gatherable wins a tie): what is in the pile the
             // builders will carry over, so only a real shortfall is a problem.
-            if (fixSlot != null)
+            var most = new ShortFix.Most();
+            if (!p.Stocked)
             {
-                var most = new ShortFix.Most();
-                if (!p.Stocked)
-                {
-                    most.Add(Res.Timber, timberLeft - l.SpendableOf(Res.Timber));
-                    most.Add(Res.Stone, stoneLeft - l.SpendableOf(Res.Stone));
-                    most.Add(Res.Brick, brickLeft - l.SpendableOf(Res.Brick));
-                }
-                fixSlot.Bind(outpost, most.Res);
+                most.Add(Res.Timber, Mathf.Max(0, p.needed - p.done) - l.SpendableOf(Res.Timber));
+                most.Add(Res.Stone, Mathf.Max(0, p.stoneNeeded - p.stoneDone) - l.SpendableOf(Res.Stone));
+                most.Add(Res.Brick, Mathf.Max(0, p.brickNeeded - p.brickDone) - l.SpendableOf(Res.Brick));
+            }
+            fix = ShortFix.For(outpost, most.Res);
+
+            Main want; string text;
+            if (fix.Valid) { want = Main.Fix; text = fix.label; }
+            else if (SheetBits.FirstIdle(l) != null) { want = Main.AddHand; text = "Add a hand"; }
+            else { want = Main.FreeHand; text = "Free up a hand"; }
+            if (want != mainMode || main.text != text) { mainMode = want; main.text = text; }
+        }
+
+        void PressMain()
+        {
+            switch (mainMode)
+            {
+                case Main.Fix:
+                    if (fix.Run(outpost)) Refresh();
+                    break;
+                case Main.AddHand:
+                    AddHand();
+                    break;
+                case Main.FreeHand:
+                    if (outpost != null) Sheets.Open(new WorkersSheet(outpost));
+                    break;
             }
         }
 
