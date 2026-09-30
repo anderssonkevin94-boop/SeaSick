@@ -32,11 +32,10 @@ namespace SeaSick.UI.Sheets
     /// a glitch, so the rotation is eased over about six tenths of a second
     /// and the cardinals ride with it.
     ///
-    /// ## It is never hidden
+    /// ## It is a sea instrument
     ///
-    /// Unlike the sheets, this is up at sea as well as at anchor. The sheets
-    /// are about a decision you have walked up to; the chart is about where
-    /// you are, and there is no moment in this game when that stops mattering.
+    /// Up the whole time she is at sea, gone while she lies at an island
+    /// (Kevin, 2026-10-01: the island is on screen, the dial only covered it).
     public class ChartInstrument
     {
         // ---- geometry, in panel units ----
@@ -173,9 +172,12 @@ namespace SeaSick.UI.Sheets
             // Placing owns the top of the screen (its instruction card sits
             // where the chart does ashore), and the chart answers nothing
             // while a ghost is being positioned (phase 1 UI, 2026-09-30).
-            bool placing = ThumbBar.PlacementActive;
-            root.style.display = placing ? DisplayStyle.None : DisplayStyle.Flex;
-            if (placing) { ScreenRect = Rect.zero; return; }
+            // **Not on an island** (Kevin, 2026-10-01): lying at one — a camp
+            // or a fresh one, anchored, ashore or docked — the dial goes away;
+            // it comes back the moment she weighs anchor.
+            bool hidden = ThumbBar.PlacementActive || AtIsland();
+            root.style.display = hidden ? DisplayStyle.None : DisplayStyle.Flex;
+            if (hidden) { ScreenRect = Rect.zero; return; }
 
             // Top-left, inside the safe area. The place label sits to its
             // right and is positioned off the same corner.
@@ -183,20 +185,12 @@ namespace SeaSick.UI.Sheets
             var safe = Screen.safeArea;
             root.style.left = safe.xMin * scale + 14f;
             root.style.top = (Screen.height - safe.yMax) * scale + 14f;
-            bool land = MidnightLandHud.Active;
-            float chartScale = land ? (BuildingSheetFocus.IsBuilding(Sheets.Current) ? .40f : .62f) : .58f;
+            const float chartScale = .58f;
             root.style.scale = new Scale(new Vector3(chartScale, chartScale, 1f));
             root.style.transformOrigin = new TransformOrigin(0f, 0f);
-            if (land)
-            {
-                root.style.left = safe.xMax * scale - Diameter * chartScale - 14f;
-                if (HudLayout.Wide)
-                    root.style.left = (safe.xMin + safe.width * (2f / 3f)) * scale - Diameter * chartScale - 14f;
-                root.style.top = (Screen.height - safe.yMax) * scale + MidnightLandHud.TopHeight + 20f;
-            }
-            // At sea, under the sea HUD's top bar (phase 6, 2026-09-30,
-            // mockup "8 · Sea: sailing"): the bar owns the top edge upright.
-            else if (SeaHud.ChartTopPanel > 0f) root.style.top = SeaHud.ChartTopPanel;
+            // Under the sea HUD's top bar (phase 6, 2026-09-30, mockup
+            // "8 · Sea: sailing"): the bar owns the top edge upright.
+            if (SeaHud.ChartTopPanel > 0f) root.style.top = SeaHud.ChartTopPanel;
             {
                 // Last layout's box in screen px, GUI space: the sea HUD keeps
                 // the combat target chip clear of it.
@@ -205,7 +199,6 @@ namespace SeaSick.UI.Sheets
                 ScreenRect = wb.width > 0f && wb.height > 0f
                     ? new Rect(wb.x * inv, wb.y * inv, wb.width * inv, wb.height * inv) : Rect.zero;
             }
-            tab.style.display = land ? DisplayStyle.None : DisplayStyle.Flex;
 
             bool under = ChartData.UnderWay;
 
@@ -237,6 +230,18 @@ namespace SeaSick.UI.Sheets
             root.MarkDirtyRepaint();
             sea.MarkDirtyRepaint();
             marks.MarkDirtyRepaint();
+        }
+
+        /// Lying at an island: anchored, ashore or docked with an island
+        /// under her, camp or no camp. Open-sea anchoring keeps the dial.
+        static bool AtIsland()
+        {
+            var a = Sheets.Anchor;
+            if (a == null || a.CurrentIsland == null) return false;
+            var st = a.CurrentState;
+            return st == AnchorController.State.Anchored
+                || st == AnchorController.State.Ashore
+                || a.CurrentDock != null;
         }
 
         /// How much sea is in the disc.
