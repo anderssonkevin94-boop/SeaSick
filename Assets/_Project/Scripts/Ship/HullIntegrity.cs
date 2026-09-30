@@ -61,6 +61,21 @@ namespace SeaSick.Ship
         public float LastImpactSpeed { get; private set; }
         public float LastShotTime { get; private set; } = -99f;
 
+        /// **Every hull loss, with where it came from** (2026-09-30). The
+        /// "ground on the breakers" / "hull bleeds at anchor" hunt had no way
+        /// to tell a surf `Batter` from a reef `Bill` from a round shot; this
+        /// is that way. Args: the hull, the source ("land", "reef", "ram",
+        /// "surf", "shot", "batter"), the fraction lost, the contact point
+        /// and the closing speed (0 where there is none). Dev/probes only
+        /// subscribe; nothing in the game does.
+        public static event System.Action<HullIntegrity, string, float, Vector3, float> Damaged;
+
+        void Report(string source, float before, Vector3 at, float speed)
+        {
+            float lost = before - integrity;
+            if (lost > 0f) Damaged?.Invoke(this, source, lost, at, speed);
+        }
+
         ShipMotor motor;
         CrewAgent[] crew;
         SeaSick.Ocean.BuoyantBody buoyancy;
@@ -164,15 +179,29 @@ namespace SeaSick.Ship
                 v += outward * Mathf.Min(seawardPush * Time.fixedDeltaTime, 1.5f - seawardNow);
             body.linearVelocity = v;
 
-            if (closingSpeed > freeImpactSpeed && Time.time - LastImpactTime > 0.5f)
-                Bill(closingSpeed, 1f);
+            if (closingSpeed > freeImpactSpeed && Time.time - lastBillTime > billCooldown)
+                Bill(closingSpeed, 1f, "land");
         }
 
+        /// **A contact bills on impact, once.** (2026-09-30.) Only closing
+        /// speed above `freeImpactSpeed` bills, and not again for
+        /// `billCooldown` seconds, so a hull RESTING on a shore or a reef
+        /// (the wall cancels her closing speed every step) costs nothing
+        /// while a ram at speed still costs what it did. The cooldown used
+        /// to read `LastImpactTime`, which the surf's `Batter` and every
+        /// round shot also stamp -- so a ship in the white water was never
+        /// billed for driving onto the rocks at all. Its own clock now.
+        float lastBillTime = -99f;
+        const float billCooldown = 0.5f;
+
         /// The hull's share of a contact at `closingSpeed`, and the crew's.
-        void Bill(float closingSpeed, float damageScale)
+        void Bill(float closingSpeed, float damageScale, string source)
         {
+            lastBillTime = Time.time;
             float excess = closingSpeed - freeImpactSpeed;
+            float before = integrity;
             integrity = Mathf.Clamp01(integrity - excess * damagePerImpactSpeed * damageScale);
+            Report(source, before, transform.position, closingSpeed);
             LastImpactTime = Time.time;
             LastImpactSpeed = closingSpeed;
 
@@ -291,7 +320,8 @@ namespace SeaSick.Ship
             float solidRadius = obstacleRadius + hullMargin;
             if (dist < 0.01f) return;
 
-            Aground(toShip / dist, obstaclePos + (toShip / dist) * solidRadius, damageScale);
+            Aground(toShip / dist, obstaclePos + (toShip / dist) * solidRadius, damageScale,
+                    damageScale == ramDamageScale ? "ram" : "reef");
         }
 
         static float Ground(Vector3 p)
@@ -437,7 +467,7 @@ namespace SeaSick.Ship
         }
 
         /// Shove her clear, kill the closing speed, and bill the hull for it.
-        void Aground(Vector3 outward, Vector3 fixedPos, float damageScale)
+        void Aground(Vector3 outward, Vector3 fixedPos, float damageScale, string source)
         {
             Vector3 pos = transform.position;
             transform.position = new Vector3(fixedPos.x, pos.y, fixedPos.z);
@@ -445,8 +475,8 @@ namespace SeaSick.Ship
             float closingSpeed = -Vector3.Dot(motor.Velocity, outward);
             motor.KillVelocityAlong(outward);
 
-            if (closingSpeed > freeImpactSpeed && Time.time - LastImpactTime > 0.5f)
-                Bill(closingSpeed, damageScale);
+            if (closingSpeed > freeImpactSpeed && Time.time - lastBillTime > billCooldown)
+                Bill(closingSpeed, damageScale, source);
         }
 
         /// Metres of water she needs under her before she touches.
@@ -493,16 +523,35 @@ namespace SeaSick.Ship
         /// `damagePerShot`, not a fraction** — passing 0.30 there costs about
         /// 2.5% hull, not 30%, which is exactly the trap this method exists to
         /// avoid. No crew jolt: the caller owns that, or it gets applied twice.
-        public void Batter(Vector3 point, float fraction)
+        public void Batter(Vector3 point, float fraction, string source = "batter")
         {
+            float before = integrity;
             integrity = Mathf.Clamp01(integrity - Mathf.Max(0f, fraction));
-            LastImpactTime = Time.time;
-            Splinters(point);
+            Report(source, before, point, 0f);
+            // **Wear, not an impact** (2026-09-30). `Breakers` calls this
+            // every physics step while she is in the white water. It used to
+            // stamp `LastImpactTime` each time -- which the crew and the
+            // cargo lashings read as "a slam in the last 0.5 s" and scaled by
+            // the STALE `LastImpactSpeed` of whatever she last hit -- and to
+            // spawn a fresh particle system with a new material on every one
+            // of those steps: fifty a second on the phone (measured: 1574
+            // splinter bursts in 35 s of surf). A burst at most every
+            // `splinterEvery` seconds reads the same and costs nothing.
+            if (Time.time - lastSplinters >= splinterEvery)
+            {
+                lastSplinters = Time.time;
+                Splinters(point);
+            }
         }
+
+        float lastSplinters = -99f;
+        const float splinterEvery = 0.6f;
 
         public void TakeShot(Vector3 point, float amount)
         {
+            float before = integrity;
             integrity = Mathf.Clamp01(integrity - damagePerShot * Mathf.Max(0.01f, amount));
+            Report("shot", before, point, 0f);
             LastShotTime = Time.time;
             LastImpactTime = Time.time;
 

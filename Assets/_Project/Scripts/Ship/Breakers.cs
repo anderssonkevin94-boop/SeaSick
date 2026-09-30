@@ -44,6 +44,35 @@ namespace SeaSick.Ship
         /// Metres of water under her, as the wave has it right now.
         public float DepthUnderKeel { get; private set; }
 
+        /// **The water she lay in does not turn on her when she lets go.**
+        /// (2026-09-30, Kevin: "ground on the breakers" casting off at his
+        /// camp, hull 47 % -> 0 % in about a minute.)
+        ///
+        /// A berth or an anchorage is chosen inside the surf line more often
+        /// than not: landing is offered anywhere under 12 m of water, and at
+        /// the sea near these islands (local Hs 1.7-2.9 m) the surf starts
+        /// at 5-8 m of depth. Measured on his save: his camp's pier berth
+        /// lies in 6.6 m (onset), his beach anchorage in 1.7 m (full surf).
+        /// Anchored, she is exempt (above). The instant she was cast off she
+        /// was at a standstill in white water, the set drove her shoreward at
+        /// up to 1.8 m/s^2 before the engine had way on, and the batter took
+        /// ~1-2 % a second while she was pinned against the land wall:
+        /// 1.00 -> 0.69 in 35 s off the beach, 1.00 -> 0.91 in 40 s off the
+        /// pier (she was set in under the pier root, 0.9 m of water) --
+        /// every point of it `surf`, no land/reef contact at all.
+        ///
+        /// So from the moment the anchor comes up she has a clear path out:
+        /// no set and no battering until she has been in water the surf does
+        /// not reach for `clearToEndLeaving` seconds running, or has gone
+        /// `leavingRadius` from where she lay (so running along a beach in
+        /// the breakers still costs what it always did).
+        /// Sailing INTO the surf is unchanged.
+        bool leaving = true;   // also covers the very first frames of a boot
+        Vector3 leftFrom;
+        const float leavingRadius = 150f;
+        float clearFor;
+        const float clearToEndLeaving = 4f;
+
         ShipMotor motor;
         Rigidbody rb;
         BuoyantBody buoyancy;
@@ -55,6 +84,7 @@ namespace SeaSick.Ship
             rb = GetComponent<Rigidbody>();
             buoyancy = GetComponent<BuoyantBody>();
             hull = GetComponent<HullIntegrity>();
+            leftFrom = transform.position;
         }
 
         static float Ground(Vector3 p) =>
@@ -67,9 +97,16 @@ namespace SeaSick.Ship
 
             // Anchored is a decision, not an accident: the shore party moors
             // her in inches of water on purpose and must not be billed for it.
+            // Nor is a load: `SaveGame.Restore` stands her at the saved spot
+            // UNDER WAY and only re-anchors her after the outposts are
+            // rebuilt, seconds later (measured 2026-09-30: 3.8 % of hull lost
+            // on every Continue off a beach camp, before the player touched
+            // anything).
             var ctrl = SeaStateController.Instance;
-            if (motor.Anchored || ctrl == null || Island.TerrainHeight == null)
+            if (motor.Anchored || SeaSick.Save.SaveGame.Restoring
+                || ctrl == null || Island.TerrainHeight == null)
             {
+                if (motor.Anchored) { leaving = true; leftFrom = transform.position; clearFor = 0f; }
                 Breaking01 = Mathf.MoveTowards(Breaking01, 0f, dt);
                 return;
             }
@@ -86,6 +123,26 @@ namespace SeaSick.Ship
             // seconds and the instrument has to be able to warn before it is
             // already happening.
             Breaking01 = Mathf.MoveTowards(Breaking01, want, 1.5f * dt);
+
+            // **Leaving the berth she chose** (2026-09-30). See `leaving`.
+            if (leaving)
+            {
+                // Clear for a few seconds running, not for one step: the local
+                // Hs this reads moves by a metre across a few metres of water
+                // (measured 2.06 -> 2.51 m within 5 s of the pier berth), so a
+                // berth ON the surf line reads "clear" for a moment on
+                // cast-off and the grace was gone before she had way on.
+                // And clear WITH WAY ON: a ship with nobody aboard to work
+                // the engine (Kevin's save: 0 hands, `Labour01` 0, the
+                // throttle never leaves 0) drifts, and a lull in the Hs field
+                // must not hand a derelict back to the surf.
+                clearFor = want <= 0f && motor.CurrentSpeed > 1.5f ? clearFor + dt : 0f;
+                Vector3 off = p - leftFrom; off.y = 0f;
+                if (clearFor >= clearToEndLeaving || off.sqrMagnitude > leavingRadius * leavingRadius)
+                    leaving = false;
+                else { SetDirection = Vector3.zero; return; }
+            }
+
             if (Breaking01 <= 0.001f) { SetDirection = Vector3.zero; return; }
 
             // Shoreward is UPHILL on the seabed, which needs no island centre
@@ -105,7 +162,7 @@ namespace SeaSick.Ship
                 float size = Mathf.Clamp01(hs / Mathf.Max(1f,
                     batterFullAtHullFraction * motor.HullLength));
                 float loss = batterPerSecond * Breaking01 * Breaking01 * size * dt;
-                if (loss > 0f) hull.Batter(p, loss);
+                if (loss > 0f) hull.Batter(p, loss, "surf");
             }
         }
     }

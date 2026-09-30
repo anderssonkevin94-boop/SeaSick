@@ -745,6 +745,31 @@ namespace SeaSick.Terrain
             }
         }
 
+        /// Water shallower than this is where a landing is offered
+        /// (`AnchorController.landingDepth`), so it is where ships anchor,
+        /// piers stand and casting off starts.
+        const float AnchorageDepth = 12f;
+        /// Open water a reef's rock keeps between itself and that zone.
+        const float ReefAnchorageClearance = 40f;
+
+        /// True if no water shallower than `AnchorageDepth` lies within
+        /// `ReefAnchorageClearance` of the reef's edge. Two rings of 16:
+        /// 32 height samples a reef, once, at world build.
+        bool ClearOfAnchorages(Vector3 pos, float radius)
+        {
+            for (int ring = 1; ring <= 2; ring++)
+            {
+                float r = radius + ReefAnchorageClearance * ring * 0.5f;
+                for (int k = 0; k < 16; k++)
+                {
+                    float a = k * (Mathf.PI * 2f / 16f);
+                    if (Height(pos.x + Mathf.Sin(a) * r, pos.z + Mathf.Cos(a) * r) > -AnchorageDepth)
+                        return false;
+                }
+            }
+            return true;
+        }
+
         void BuildReefs(Vector3 home)
         {
             var rockMat = IslandPropFactory.MakeMat(new Color(0.26f, 0.27f, 0.30f));
@@ -764,9 +789,21 @@ namespace SeaSick.Terrain
                 if (clash) continue;
 
                 float radius = Random.Range(world.reefRadiusRange.x, world.reefRadiusRange.y);
+                int rocks = Random.Range(2, 5);
+                // **Never on an approach** (2026-09-30). A reef stood 9 m off
+                // the water a landing is offered in (Reef_10 on seed 260921;
+                // two more within 30 m), i.e. on the line a ship takes to
+                // anchor, berth at a pier or cast off. Dropped AFTER every
+                // roll this reef would have drawn -- the rock loop below
+                // draws 8 per rock on either path -- so every reef and spawn
+                // after it still lands exactly where it did.
+                if (!ClearOfAnchorages(pos, radius))
+                {
+                    for (int r = 0; r < rocks * 8; r++) _ = Random.value;
+                    continue;
+                }
                 var root = new GameObject("Reef_" + i);
                 root.transform.position = pos;
-                int rocks = Random.Range(2, 5);
                 // Astra's reef clusters (sea discovery kit v1, Kevin approved
                 // 2026-09-30): ONE mesh per reef, picked from the world seed
                 // and the reef's index by `SeaKit.ReefName` (a pure hash, no

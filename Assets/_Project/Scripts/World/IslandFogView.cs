@@ -24,11 +24,16 @@ namespace SeaSick.World
     /// texture upload. No allocations. The scan for islands in range runs
     /// twice a second and builds at most one cover a scan (the grid's
     /// height samples are the only real cost, once per island per world).
-    /// Draw cost: one transparent draw per fogged island in view.
+    /// Draw cost: one transparent draw per fogged island within ~450 m.
+    ///
+    /// **Near only (Kevin, 2026-09-30):** far fresh islands drew their cloud
+    /// as flat white plates with straight edges on the horizon. The 3D cloud
+    /// now fades in as the camera closes on an island's SHORE (full within
+    /// 300 m, gone at 450 m: no draw call, no upload) and the chart's cloud
+    /// bands carry the fog beyond. Its outer edge is a coast fall-off baked
+    /// in the mesh (`BuildMesh`), not a plate edge.
     public class IslandFogView : MonoBehaviour
     {
-        /// Covers are built and drawn for islands this close to the camera.
-        const float ViewRange = 1100f;
         const float PollSeconds = 0.5f;
         /// Seconds for a cell to open, and for a settled island's cover to go.
         const float FadeSeconds = 1f;
@@ -43,6 +48,19 @@ namespace SeaSick.World
         /// The cover's strength while a building is being sited on this
         /// island (Make camp on a fresh island): a veil, so the ground reads.
         const float PlacingVeil = 0.3f;
+        /// Kevin, 2026-09-30: the cloud is 3D only near. Fully drawn while
+        /// the camera is within `NearFull` m of the island's shore, fading out
+        /// to nothing at `NearGone` m (no draw call beyond); past that the
+        /// chart's cloud bands carry the fog.
+        const float NearFull = 300f;
+        const float NearGone = 450f;
+        /// Seconds-inverse: how fast the distance fade eases to its target.
+        const float NearEase = 1.5f;
+        /// Coast fall-off, metres past the nearest land cell: solid within
+        /// `CoastSolid`, gone at `CoastGone`. `CoastReachCells` covers it.
+        const float CoastSolid = 3f;
+        const float CoastGone = 20f;
+        const int CoastReachCells = 4;
 
         static IslandFogView instance;
         static Shader shader;
@@ -66,6 +84,11 @@ namespace SeaSick.World
             public float fade = 1f;
             public bool leaving;
             public int version;
+            /// Kevin, 2026-09-30: the distance fade, 1 within `NearFull` of the
+            /// shore and 0 past `NearGone`; `near` eases to `nearTarget`.
+            public float near, nearTarget;
+            /// Shore samples (x,z pairs, world) to measure that distance from.
+            public Vector2[] shore;
         }
 
         readonly List<Cover> covers = new List<Cover>();
@@ -126,7 +149,7 @@ namespace SeaSick.World
                         covers.RemoveAt(i);
                         continue;
                     }
-                    c.material.SetFloat(FadeId, c.fade);
+                    c.material.SetFloat(FadeId, c.fade * c.near);
                     continue;
                 }
                 if (c.texture == null) continue;   // an island with no land to cover
@@ -135,10 +158,21 @@ namespace SeaSick.World
                 // to be seen to be chosen, so the cloud thins to a veil.
                 float want = SeaSick.UI.Sheets.ThumbBar.PlacementActive && c.island == lastAnchorIsland
                     ? PlacingVeil : 1f;
+                bool changed = false;
                 if (c.fade != want)
                 {
                     c.fade = Mathf.MoveTowards(c.fade, want, dt / FadeSeconds);
-                    c.material.SetFloat(FadeId, c.fade);
+                    changed = true;
+                }
+                if (c.near != c.nearTarget)
+                {
+                    c.near = Mathf.MoveTowards(c.near, c.nearTarget, dt * NearEase);
+                    changed = true;
+                }
+                if (changed)
+                {
+                    c.material.SetFloat(FadeId, c.fade * c.near);
+                    c.renderer.enabled = c.near > 0.002f;
                 }
 
                 if (c.fog.Version != c.version)
@@ -154,7 +188,7 @@ namespace SeaSick.World
                         }
                     }
                 }
-                if (c.ax1 >= c.ax0) Animate(c, step);
+                if (c.ax1 >= c.ax0 && c.renderer.enabled) Animate(c, step);
             }
         }
 
@@ -229,21 +263,65 @@ namespace SeaSick.World
                 if (c != null)
                 {
                     if (settled) { c.leaving = true; continue; }
-                    if (c.renderer != null)
-                    {
-                        float g = Island.FlatDistance(eye, isle.transform.position) - isle.MaxRadius;
-                        c.renderer.enabled = g < ViewRange * 1.2f;
-                    }
+                    if (c.renderer != null) c.nearTarget = NearAt(c, eye);
                     continue;
                 }
                 if (settled) continue;
                 float gap = Island.FlatDistance(eye, isle.transform.position) - isle.MaxRadius;
-                if (gap < ViewRange && gap < buildGap) { buildGap = gap; build = isle; }
+                // MaxRadius over-reaches the shore, so this errs early, never late.
+                if (gap < NearGone && gap < buildGap) { buildGap = gap; build = isle; }
             }
-            if (build != null) Make(build);
+            if (build != null) Make(build, eye);
         }
 
-        void Make(Island isle)
+        /// 0..1: how much of the 3D cloud to show at `eye` -- 1 within
+        /// `NearFull` m of the island's shore, 0 past `NearGone`, smooth
+        /// between. Over the land itself the answer is 1. A scan of the
+        /// cover's few hundred shore samples, twice a second; no allocation.
+        static float NearAt(Cover c, Vector3 eye)
+        {
+            var fog = c.fog;
+            if (fog == null || c.shore == null) return 0f;
+            int cx = Mathf.FloorToInt((eye.x - fog.Origin.x) / fog.Cell);
+            int cy = Mathf.FloorToInt((eye.z - fog.Origin.y) / fog.Cell);
+            if (cx >= 0 && cy >= 0 && cx < fog.Width && cy < fog.Height && fog.LandAt(cy * fog.Width + cx))
+                return 1f;
+            float best = float.MaxValue;
+            var s = c.shore;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float dx = s[i].x - eye.x, dz = s[i].y - eye.z;
+                float sq = dx * dx + dz * dz;
+                if (sq < best) best = sq;
+            }
+            float t = Mathf.Clamp01((Mathf.Sqrt(best) - NearFull) / (NearGone - NearFull));
+            return 1f - t * t * (3f - 2f * t);
+        }
+
+        /// The island's coast as world x,z points: land cells with a
+        /// non-land neighbour (or at the grid's edge), thinned to ~400.
+        static Vector2[] ShoreSamples(IslandFog fog)
+        {
+            int w = fog.Width, h = fog.Height;
+            var pts = new List<Vector2>(512);
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    if (!fog.LandAt(y * w + x)) continue;
+                    bool edge = x == 0 || y == 0 || x == w - 1 || y == h - 1
+                        || !fog.LandAt(y * w + x - 1) || !fog.LandAt(y * w + x + 1)
+                        || !fog.LandAt((y - 1) * w + x) || !fog.LandAt((y + 1) * w + x);
+                    if (edge) pts.Add(new Vector2(fog.Origin.x + (x + 0.5f) * fog.Cell,
+                                                  fog.Origin.y + (y + 0.5f) * fog.Cell));
+                }
+            int every = pts.Count / 400 + 1;
+            if (every == 1) return pts.ToArray();
+            var thin = new Vector2[(pts.Count + every - 1) / every];
+            for (int i = 0; i < thin.Length; i++) thin[i] = pts[i * every];
+            return thin;
+        }
+
+        void Make(Island isle, Vector3 eye)
         {
             if (shader == null)
             {
@@ -300,6 +378,11 @@ namespace SeaSick.World
             r.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
             r.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
             c.renderer = r;
+
+            c.shore = ShoreSamples(fog);
+            c.near = c.nearTarget = NearAt(c, eye);
+            c.material.SetFloat(FadeId, c.near);
+            r.enabled = c.near > 0.002f;
         }
 
         /// The ground height in G: half-metres, 1..255 (0.5..127.5 m) on
@@ -313,38 +396,65 @@ namespace SeaSick.World
         /// A sheet over the covered cells, in world space: every `Step`
         /// cells a vertex at `Lift` over the highest land near it, or down at
         /// the water where no land is near (the skirt the sea sees).
+        ///
+        /// Kevin, 2026-09-30: no plate edges over the sea. Each vertex also
+        /// carries a coast alpha in its colour (1 within `CoastSolid` m of a
+        /// land cell, falling to 0 at `CoastGone` m), the shader multiplies it
+        /// in, and a quad whose four corners are all 0 is not built: the
+        /// cloud ends in a soft fall-off that follows the coastline, and no
+        /// mesh edge is ever visible over open water.
         static Mesh BuildMesh(IslandFog fog)
         {
             int w = fog.Width, h = fog.Height;
             int vw = w / Step + 2, vh = h / Step + 2;
             var verts = new Vector3[vw * vh];
+            var cols = new Color32[vw * vh];
+            float reachSq = (CoastGone / fog.Cell) * (CoastGone / fog.Cell);
             for (int vy = 0; vy < vh; vy++)
                 for (int vx = 0; vx < vw; vx++)
                 {
                     int cx = vx * Step, cy = vy * Step;   // the corner's cell
                     float top = 0f; bool land = false;
-                    for (int y = cy - 3; y <= cy + 2; y++)
+                    float nearSq = float.MaxValue;        // to the nearest land cell, in cells
+                    for (int y = cy - CoastReachCells; y <= cy + CoastReachCells; y++)
                     {
                         if (y < 0 || y >= h) continue;
-                        for (int x = cx - 3; x <= cx + 2; x++)
+                        for (int x = cx - CoastReachCells; x <= cx + CoastReachCells; x++)
                         {
                             if (x < 0 || x >= w) continue;
                             int k = y * w + x;
                             if (!fog.LandAt(k)) continue;
-                            land = true;
-                            top = Mathf.Max(top, fog.GroundAt(k));
+                            float ddx = x + 0.5f - cx, ddy = y + 0.5f - cy;
+                            float sq = ddx * ddx + ddy * ddy;
+                            if (sq < nearSq) nearSq = sq;
+                            if (y >= cy - 3 && y <= cy + 2 && x >= cx - 3 && x <= cx + 2)
+                            {
+                                land = true;
+                                top = Mathf.Max(top, fog.GroundAt(k));
+                            }
                         }
                     }
                     verts[vy * vw + vx] = new Vector3(
                         fog.Origin.x + cx * fog.Cell,
                         land ? top + Lift : SkirtY,
                         fog.Origin.y + cy * fog.Cell);
+                    float alpha = 0f;
+                    if (nearSq < reachSq)
+                    {
+                        float d = Mathf.Sqrt(nearSq) * fog.Cell;
+                        float t = Mathf.Clamp01((d - CoastSolid) / (CoastGone - CoastSolid));
+                        alpha = 1f - t * t * (3f - 2f * t);
+                    }
+                    cols[vy * vw + vx] = new Color32(255, 255, 255, (byte)Mathf.RoundToInt(alpha * 255f));
                 }
 
             var tris = new List<int>(vw * vh * 6);
             for (int vy = 0; vy < vh - 1; vy++)
                 for (int vx = 0; vx < vw - 1; vx++)
                 {
+                    int a = vy * vw + vx, b = a + 1, d = a + vw, e = d + 1;
+                    // Off the coast by more than the fall-off: no quad.
+                    if (cols[a].a == 0 && cols[b].a == 0 && cols[d].a == 0 && cols[e].a == 0) continue;
                     // The quad's cells, one ring wider: any under cloud?
                     bool cover = false;
                     for (int y = vy * Step - 1; y <= vy * Step + Step && !cover; y++)
@@ -357,7 +467,6 @@ namespace SeaSick.World
                         }
                     }
                     if (!cover) continue;
-                    int a = vy * vw + vx, b = a + 1, d = a + vw, e = d + 1;
                     tris.Add(a); tris.Add(d); tris.Add(e);
                     tris.Add(a); tris.Add(e); tris.Add(b);
                 }
@@ -366,6 +475,7 @@ namespace SeaSick.World
             mesh.indexFormat = verts.Length > 65000
                 ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
             mesh.SetVertices(verts);
+            mesh.SetColors(cols);
             mesh.SetTriangles(tris, 0);
             mesh.RecalculateBounds();
             return mesh;
@@ -378,7 +488,7 @@ namespace SeaSick.World
             if (c.material != null) Destroy(c.material);
             if (c.texture != null) Destroy(c.texture);
             if (c.mesh != null) Destroy(c.mesh);
-            c.go = null; c.material = null; c.texture = null; c.mesh = null; c.renderer = null;
+            c.go = null; c.material = null; c.texture = null; c.mesh = null; c.renderer = null; c.shore = null;
         }
     }
 }

@@ -13,6 +13,12 @@
 // Cost: one draw per fogged island in view, no depth write, seven texture
 // taps and eight hashes a pixel. No keywords beyond URP's fog.
 //
+// 2026-09-30, near only: the mesh's vertex colour alpha is a coast fall-off
+// (1 on and beside land, 0 ~20 m out to sea), multiplied in last, so the
+// cloud's outer edge follows the coastline softly and no straight mesh edge
+// shows over the water. `IslandFogView` also fades a whole cover out by
+// distance (`_Fade`) and skips its draw beyond ~450 m.
+//
 // 2026-09-30 polish pass:
 // * No white tree silhouettes. The grid is read at the ground behind each
 //   pixel, and a TREE behind a pixel is not ground: its cell was fogged
@@ -76,12 +82,13 @@ Shader "SeaSick/Island Fog"
                 float _Canopy;
             CBUFFER_END
 
-            struct Attributes { float4 positionOS : POSITION; };
+            struct Attributes { float4 positionOS : POSITION; float4 color : COLOR; };
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
                 float3 positionWS : TEXCOORD0;
                 float fog : TEXCOORD1;
+                float edge : TEXCOORD2;   // coast alpha from the mesh (vertex colour a)
             };
 
             float hash12(float2 p)
@@ -109,6 +116,7 @@ Shader "SeaSick/Island Fog"
                 o.positionWS = TransformObjectToWorld(v.positionOS.xyz);
                 o.positionCS = TransformWorldToHClip(o.positionWS);
                 o.fog = ComputeFogFactor(o.positionCS.z);
+                o.edge = v.color.a;
                 return o;
             }
 
@@ -208,6 +216,9 @@ Shader "SeaSick/Island Fog"
                 // Never a white wall in the lens: thin out right at the camera.
                 a *= saturate((dist - 3.0) / 14.0);
                 a *= _Fade;
+                // The coast fall-off: the mesh carries 1 on land and near it,
+                // 0 a dozen metres out to sea, so the cloud has no plate edge.
+                a *= i.edge;
 
                 // Lit like weather: sun-side tops bright, the rest cool grey,
                 // night and dusk through the same light the land gets.
