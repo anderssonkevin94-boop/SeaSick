@@ -101,7 +101,7 @@ namespace SeaSick.UI.Sheets
         VisualElement watchCard;
         Label watchT, watchS;
         WatchTiles tiles;
-        Button wallsBtn, mainBtn;
+        Button wallsBtn, mainBtn, hideBtn;
 
         public VisualElement Build()
         {
@@ -160,10 +160,18 @@ namespace SeaSick.UI.Sheets
             wallsBtn = new Button(Walls) { text = "Walls" };
             wallsBtn.AddToClassList("st-btn");
             wallsBtn.AddToClassList("hs-act");
-            wallsBtn.AddToClassList("hs-act--first");
             mainBtn = new Button(Main) { text = "" };
             mainBtn.AddToClassList("st-btn");
             mainBtn.AddToClassList("hs-act");
+            // **Hide everyone (2026-09-30)** -- the raid switch, here instead of
+            // the floating IMGUI button (`RaidBanner`). Only while raiders are
+            // on the sand; first in the row, and the loud one; "Walls" steps aside while it shows.
+            hideBtn = new Button(HideAll) { text = "Hide everyone" };
+            hideBtn.AddToClassList("st-btn");
+            hideBtn.AddToClassList("hs-act");
+            hideBtn.AddToClassList("hs-act--stop");
+            hideBtn.style.display = DisplayStyle.None;
+            acts.Add(hideBtn);
             acts.Add(wallsBtn);
             acts.Add(mainBtn);
             root.Add(acts);
@@ -265,6 +273,28 @@ namespace SeaSick.UI.Sheets
 
             tiles.Refresh(l);
             FillMain(l, towers);
+            FillHide(phase == Phase.Ashore);
+        }
+
+        /// Show the Hide / Send-out switch while raiders are ashore; the
+        /// first visible button in the row carries the flush-left margin.
+        void FillHide(bool live)
+        {
+            bool hiding = live && SeaSick.Combat.RaidAlarm.IsHiding(outpost);
+            hideBtn.style.display = live ? DisplayStyle.Flex : DisplayStyle.None;
+            string text = hiding ? "Send the armed out" : "Hide everyone";
+            if (hideBtn.text != text) hideBtn.text = text;
+            hideBtn.EnableInClassList("hs-act--first", live);
+            // Three buttons crowd a phone row; mid-raid "Walls" (a build
+            // shortcut) gives way to the switch.
+            wallsBtn.style.display = live ? DisplayStyle.None : DisplayStyle.Flex;
+            wallsBtn.EnableInClassList("hs-act--first", !live);
+        }
+
+        void HideAll()
+        {
+            SeaSick.Combat.RaidAlarm.HideAll(outpost, !SeaSick.Combat.RaidAlarm.IsHiding(outpost));
+            Refresh();
         }
 
         // --- the thumb row ---------------------------------------------------------------

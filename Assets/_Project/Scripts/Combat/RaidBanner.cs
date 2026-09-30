@@ -73,18 +73,21 @@ namespace SeaSick.UI
                 phase = 3;
             }
 
-            // **Ashore, the alert strip says it, 2026-09-27**: its RAID chip
-            // (tap -> the lookout) replaces this line while the land HUD is
-            // up. The after-raid verdict (phase 3) still shows here, and at
-            // sea this banner is the only voice.
-            //
-            // The Fight / Hide-all switch is still drawn ashore (it is the
-            // only place the player can reach it until Astra's RaidSheet
-            // carries one -- see the write-up at the bottom of this file);
-            // only the text line gives way to the alert strip.
+            // **Ashore, the land HUD says it all, 2026-09-27 / 2026-09-30**:
+            // its RAID chip (tap -> `RaidSheet`) replaces this line while the
+            // land HUD is up, and Kevin's rule (*"no control is ever cut off
+            // or half-hidden"*) took the floating "Hide everyone" button off
+            // the phone too -- it sat over the chip and over the camp above
+            // a half-height sheet. The switch now lives in `RaidSheet`'s
+            // thumb row. The after-raid verdict (phase 3) still shows here,
+            // and at sea (or on the classic HUD) this banner and its button
+            // are the only voice.
             if (phase != 3 && Sheets.AlertStrip.ShowsRaid && Sheets.MidnightLandHud.Active)
             {
-                if (live) DrawSwitch(outpost);
+                // Desktop keeps the H mirror of the switch.
+                var kb = UnityEngine.InputSystem.Keyboard.current;
+                if (live && kb != null && kb.hKey.wasPressedThisFrame)
+                    SeaSick.Combat.RaidAlarm.HideAll(outpost, !SeaSick.Combat.RaidAlarm.IsHiding(outpost));
                 return;
             }
 
@@ -105,7 +108,8 @@ namespace SeaSick.UI
             var inset = new Rect(rect.x + HudLayout.Pad, rect.y, rect.width - HudLayout.Pad * 2f, rect.height);
             GUI.Label(inset, label.Content, style);
 
-            if (live) DrawSwitch(outpost);
+            // The land HUD's raid switch is `RaidSheet`'s, not an IMGUI button.
+            if (live && !Sheets.MidnightLandHud.Active) DrawSwitch(outpost);
         }
 
         /// The phase-3 style, unwrapped, is `UITheme.Toast` itself -- a live
@@ -150,22 +154,7 @@ namespace SeaSick.UI
         }
     }
 
-    // --- for Astra (Scripts/UI) -------------------------------------------
-    //
-    // `RaidSheet` (Scripts/UI/Sheets/RaidSheet.cs) is the land-side raid
-    // card -- it currently shows raiders/wall/gate chips and the lookout,
-    // but nothing about who's defending, who's hiding, or spears left, and
-    // it has no Hide-all button. Two things the land HUD is missing that
-    // this file now has at sea:
-    //   1. The counts -- `Combat.RaidAlarm.Counts(outpost)` returns
-    //      (defending, hiding, spearsLeftInStore); a fourth chip or a line
-    //      under the existing three would match.
-    //   2. The switch -- `Combat.RaidAlarm.HideAll(outpost, hide)` and
-    //      `Combat.RaidAlarm.IsHiding(outpost)` for the label; a UI Toolkit
-    //      button in `RaidSheet`'s "hs-acts" thumb row (beside "Walls") is
-    //      the natural spot, same shape as `mainBtn` there already.
-    // The Hide-all button ALSO does not appear at all while
-    // `Sheets.MidnightLandHud.Active` is true (this file returns before
-    // drawing it), so ashore, on the land HUD, players have NO way to hit
-    // the switch today -- RaidSheet is the only place that can fix that.
+    // Ashore, on the land HUD, the Fight / Hide-all switch is a button in
+    // `RaidSheet`'s thumb row (2026-09-30); `Draw` never draws the IMGUI one
+    // there. At sea and on the classic HUD it is still drawn above.
 }
