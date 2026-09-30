@@ -43,6 +43,16 @@ MonoBehaviour:
   - Onion
   - Potato
   - Wheat
+  - GrilledFish
+  - GrilledMeat
+  - RoastCarrots
+  - BakedPotato
+  - VegStew
+  - HuntersStew
+  - FishPie
+  - Bread
+  - Flour
+  - Bow
   icons:
   - {fileID: 2800000, guid: 51162246725c84e6292ae6fca3984ede, type: 3}
   - {fileID: 2800000, guid: ede6f851718d34630bea487377f3491c, type: 3}
@@ -74,3 +84,13 @@ MonoBehaviour:
   - {fileID: 2800000, guid: af7e0d1e4205d4a479abe00e87b58658, type: 3}
   - {fileID: 2800000, guid: 23e9ad54d1ce645ed9639293e37a5d31, type: 3}
   - {fileID: 2800000, guid: 40508ddadc2dc4bd1901385a56694725, type: 3}
+  - {fileID: 2800000, guid: 0e3fd510ef9741d8b2e4547a44e5f6cf, type: 3}
+  - {fileID: 2800000, guid: 4d0a19bbe65a4542be040d58afeaf71a, type: 3}
+  - {fileID: 2800000, guid: 39acec098ff1429a87e11a46dc4ffc45, type: 3}
+  - {fileID: 2800000, guid: f931da6dfa8349fcab2cb49f88e1dfa6, type: 3}
+  - {fileID: 2800000, guid: a6ebf6d04e524006b52ec9ccf4514a37, type: 3}
+  - {fileID: 2800000, guid: cfdd3ba3f6694c0e896960d38c0d2596, type: 3}
+  - {fileID: 2800000, guid: 741f3e362d7f448c89230c4704a5dd28, type: 3}
+  - {fileID: 2800000, guid: c4a452bddb7b4709bddc7445b449af56, type: 3}
+  - {fileID: 2800000, guid: 2ef0dbaf53044d9586f6acaef3de40fc, type: 3}
+  - {fileID: 2800000, guid: ce59b1548c4b4102ac1114041d9c25b5, type: 3}
