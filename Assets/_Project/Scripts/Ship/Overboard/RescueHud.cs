@@ -131,6 +131,11 @@ namespace SeaSick.Ship.Overboard
             foreach (var f in FlotsamCrate.All) if (f != null) targets.Add(f);
             foreach (var b in MessageBottle.All) if (b != null) targets.Add(b);
             foreach (var sh in FishShoal.All) if (sh != null) targets.Add(sh);
+            // Castaways on a board (Kevin, 2026-09-30): arrow + tap-to-steer
+            // only (`Boardable` is false; `Voyage.CastawaySpawner` owns the
+            // Pull aboard button), and not once that button is up.
+            foreach (var cw in Castaway.All)
+                if (cw != null && !cw.Pulling && !cw.InPullReach) targets.Add(cw);
         }
 
         void OnGUI()

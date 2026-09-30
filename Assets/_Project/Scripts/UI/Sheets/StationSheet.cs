@@ -6,38 +6,56 @@ using UnityEngine.UIElements;
 
 namespace SeaSick.UI.Sheets
 {
-    /// **The station page, concept A2 (Kevin approved the Melvor-style
-    /// redesign, 2026-09-27).** Every production building opens ONE
-    /// full-height page (`WantsTallSheet`), read top to bottom:
+    /// **The station screen, Melvor-style (Kevin approved, 2026-09-30,
+    /// island UI phase 5; mockups "5 · Kitchen (Melvor): Grill picked" and
+    /// "5b · Cauldron picked").** Every production building opens a
+    /// half-height sheet over itself (the building stays in view above, the
+    /// `SheetHost` hug rules), read top to bottom:
     ///
-    /// 1. **header** -- ☰ (the Ledger drawer, `OpenLedger`), the name,
-    ///    "Level N · island", and a status pill (working / waiting / no
-    ///    worker / output full);
-    /// 2. **the worker** -- avatar, name, role · mood; Assign / Swap /
-    ///    Unassign;
-    /// 3. **recipes** -- a two-column grid of cards (icon, ×yield, inputs and
-    ///    time, the running order's bar and "making 7 of 10"; locked cards
-    ///    dashed with the reason). A tap picks the order's recipe. More cards
-    ///    than fit PAGE with dots, never a scroll;
-    /// 4. **the order** -- one segmented control ∞ / 5 / 10 / 20 / Stop;
-    /// 5. **in and out** -- bay → bench ring → rack of THIS building;
-    /// 6. **why it's stopped** -- the ledger's `StallReason`, when it is;
-    /// 7. **upgrade** -- this building's next level, its price, one button.
+    /// 1. **header** -- the name, "Level N · Ada works both" (or "no
+    ///    worker"), Move and ✕;
+    /// 2. **spot tiles** -- only for a station with two or more spots
+    ///    (Kitchen = Grill + Cauldron, Forge = Smelter + Forge): a glyph, the
+    ///    spot's name, one status line ("Grilled meat · 12 s" moss, "Idle ·
+    ///    pick a dish" amber, or the pause reason) and a thin bar. The one
+    ///    being viewed has the ice outline; a tap switches the grid below;
+    /// 3. **the recipe grid** for the viewed spot -- four tiles a row: the
+    ///    item's icon (its name alone when there is none -- never an empty
+    ///    box), the name, and ONE status: COOKING / RUNNING (moss) when it is
+    ///    this spot's recipe, "8 potato" (moss) when the inputs are here,
+    ///    "no fish" / "short: onion" when they are not, or LOCKED (dashed,
+    ///    lock glyph, "needs Campfire II"). The tapped tile has the thick ice
+    ///    border. More than fit PAGE through a last "More" tile, never a
+    ///    scroll. One recipe on the spot: no grid, the detail alone;
+    /// 4. **the detail** of the tapped recipe -- name + "15 s each"; input
+    ///    chips "potato 8/1" (moss / ember) → the output ("1 baked potato ·
+    ///    fills ½ day"); one line ("Runs until the potatoes run out or 10 are
+    ///    in the store."); when short, the fix as a text link on the right
+    ///    ("Gather ore →", `ShortFix`);
+    /// 5. **the thumb row** (`BuildActions`) -- ONE bright primary:
+    ///    "Select for the grill" ("Select" on a one-spot station), "Stop
+    ///    grill" when the tapped recipe is the one running there, or the
+    ///    lock's fix ("Raise Campfire to II") when it is locked; plus "Stop
+    ///    grill" beside it while the spot runs something else. Never a
+    ///    disabled primary: no verb, no button.
     ///
-    /// **Sized to fit the phone's tall band without a scroll** (Kevin's
-    /// no-scroll rule, 2026-09-22). The body sits in a vertical ScrollView
-    /// only as a safety net: on the phone the page fits and it never moves;
-    /// on the desk's shorter column it scrolls with the wheel.
+    /// The old **make** + **orders** pages (amount segments ∞/5/10/20,
+    /// standing orders "Keep 10") are gone: a selected recipe runs until it
+    /// is paused (inputs out, store full) or stopped. **work** (the worker,
+    /// in and out, why it stopped) and **level** (the one-button upgrade
+    /// card) stay as the secondary tabs.
     ///
     /// **It reads and it calls; it never decides.** Every number comes off
-    /// `OutpostLedger` for THIS built instance (`StationForRaised`); every
-    /// button is a verb the ledger or `Outpost` already had (`PlaceOrder`,
-    /// `StopOrder`, `Assign`, `OrderIdle`, `UpgradeAt`).
+    /// `OutpostLedger` / `StationStock` for THIS built instance
+    /// (`StationForRaised`); every button is a verb the ledger or `Outpost`
+    /// already has (`SelectRecipe`, `StopSpot`, `Assign`, `UpgradeAt`,
+    /// `ShortFix.Run`).
     ///
     /// **Built once, re-texted after (1cf73f9).** `SheetHost` calls
     /// `Refresh` every 0.25 s, and a UI Toolkit click needs its press and
-    /// release on the SAME element -- so nothing a finger can land on is
-    /// rebuilt on that timer.
+    /// release on the SAME element -- so the tiles are a pool built with the
+    /// page and only re-bound; nothing a finger can land on is rebuilt on
+    /// that timer.
     public class StationSheet : ISheetFramed
     {
         /// **The old ☰ hook**, unused since the ledger drawer went
@@ -58,9 +76,25 @@ namespace SeaSick.UI.Sheets
         /// building demolished while this page is open moves it.
         int raisedIndex = -1;
 
-        /// The recipe a tap picked -- the order's recipe for the next amount
-        /// tap. Null = whatever is running, else the station's default.
-        string pickedRecipe;
+        // --- the spots (Kevin, 2026-09-30: Melvor-style station screen) --------
+
+        /// The station's spots in the ledger's order
+        /// (`StationSpots.SpotsFor`); a one-spot station holds one entry,
+        /// null when the ledger names none.
+        readonly IReadOnlyList<string> spotNames;
+        /// Two or more spots: the spot tiles row is drawn.
+        readonly bool multiSpot;
+        /// The station makes dishes: "COOKING", "pick a dish".
+        readonly bool foodStation;
+        /// The spot whose grid is shown (an index into `spotNames`).
+        int viewSpot;
+        /// Per spot: the recipe a tap picked (null = the running one, else
+        /// the first unlocked) and the grid page it is on.
+        readonly string[] pickedBy;
+        readonly int[] pageBy;
+        /// A refused Select's reason, shown on the detail's line until the
+        /// next tap.
+        string refusal;
 
         public StationSheet(Outpost o, Building b)
         {
@@ -72,11 +106,74 @@ namespace SeaSick.UI.Sheets
             hasUpgrade = Techs.MaxLevel(planId) > 1;
             hasWorker = BuildPlans.HasPosition(planId) && hasMake;
             isStore = planId == BuildPlans.Storage.id;
+
+            var names = hasMake ? StationSpots.SpotsFor(planId) : null;
+            spotNames = names != null && names.Count > 0 ? names : new string[] { null };
+            multiSpot = spotNames.Count >= 2;
+            pickedBy = new string[spotNames.Count];
+            pageBy = new int[spotNames.Count];
+            if (hasMake)
+                foreach (var r in Recipes.At(planId))
+                    if (r != null && FoodBook.IsDish(r.makes)) { foodStation = true; break; }
+
             if (hasMake)
                 hugTabs = hasUpgrade
-                    ? new[] { PageMake, PageWork, PageOrders, PageLevel }
-                    : new[] { PageMake, PageWork, PageOrders };
+                    ? new[] { PageMake, PageWork, PageLevel }
+                    : new[] { PageMake, PageWork };
             ResolveRaisedIndex();
+            // Open on the recipe a fix asked for (`FocusNext`), else on the
+            // first spot that is running something.
+            if (!TakeFocus())
+            {
+                var st = Station(L);
+                for (int i = 0; i < spotNames.Count; i++)
+                {
+                    var sp = SpotOf(st, i);
+                    if (sp != null && !string.IsNullOrEmpty(sp.recipeId)) { viewSpot = i; break; }
+                }
+            }
+        }
+
+        // --- a fix's focus (Kevin, 2026-09-30) ------------------------------------
+
+        /// **Open the next station sheet ON the recipe that makes `res`.**
+        /// Kevin's bug: the quarry's "Make tools" fix opened the forge on
+        /// the spear, its first recipe. `ShortFix` calls this just before it
+        /// opens the station; the next `StationSheet` built consumes it --
+        /// viewing that recipe's spot (the Forge, not the Smelter) with the
+        /// recipe tapped, so the detail shows it and Select is the primary.
+        /// One-shot: cleared on use, or ignored after `FocusSeconds` when no
+        /// sheet took it.
+        public static void FocusNext(string res)
+        {
+            focusRes = res;
+            focusAt = Time.unscaledTime;
+        }
+
+        static string focusRes;
+        static float focusAt = -100f;
+        const float FocusSeconds = 2f;
+
+        /// Takes the pending focus when it is fresh and this station makes
+        /// it; true when a spot and recipe were picked.
+        bool TakeFocus()
+        {
+            string res = focusRes;
+            if (res == null) return false;
+            focusRes = null;
+            if (!hasMake || Time.unscaledTime - focusAt > FocusSeconds) return false;
+            for (int i = 0; i < spotNames.Count; i++)
+            {
+                var list = SpotRecipes(i);
+                for (int k = 0; k < list.Count; k++)
+                    if (list[k] != null && list[k].makes == res)
+                    {
+                        viewSpot = i;
+                        pickedBy[i] = list[k].id;
+                        return true;
+                    }
+            }
+            return false;
         }
 
         void ResolveRaisedIndex()
@@ -120,33 +217,28 @@ namespace SeaSick.UI.Sheets
 
         public bool StillValid => outpost != null && outpost.Ledger != null && building != null;
 
-        // One page on a desk or a tall band: no host tab strip, no host
-        // action row (the upgrade is a card on the page, the order is the
-        // segmented control).
-        //
         // **Pages in a hugging frame (Kevin, 2026-09-30).** On the phone the
         // sheet is at most half the screen (`SheetHost.HugsContent`) so the
-        // building stays in view, and the production page -- worker,
-        // recipes, order, standing orders, in and out, upgrade -- is three
-        // half-screens tall. It splits along the lines it already had:
-        // **make** (recipes + the amount row + its fix), **work** (the
-        // worker + in and out + why it stopped), **orders** (standing
-        // orders), **level** (the upgrade). A building with nothing to make
-        // (a hut, the store) stays one page and simply hugs it.
+        // building stays in view. A station splits into **make** (the
+        // Melvor screen: spots, grid, detail, the thumb row), **work** (the
+        // worker + in and out + why it stopped) and **level** (the upgrade).
+        // A building with nothing to make (a hut, the store) stays one page
+        // and simply hugs it. On the desk it is one tall page, no tabs.
         public string[] TabLabels => StationPage.Hugging ? hugTabs : null;
         public int Tab => tab;
         public void SetTab(int index) { tab = index; }
-        public VisualElement BuildActions() => null;
 
         int tab = -1;
         readonly string[] hugTabs;
-        const string PageMake = "make", PageWork = "work", PageOrders = "orders", PageLevel = "level";
+        const string PageMake = "make", PageWork = "work", PageLevel = "level";
 
         StationPage.Header header;
 
         public VisualElement BuildHeader()
         {
-            header = new StationPage.Header(Title, hasMake, () => StationPage.OpenLedgerFor(outpost));
+            // No status pill (2026-09-30): the spot tiles and the grid's
+            // badge say what runs; the sub line says who works it.
+            header = new StationPage.Header(Title, false, () => StationPage.OpenLedgerFor(outpost));
             // Move / turn this building (Kevin, 2026-09-30) -- beside ✕,
             // never in place of the page's own action.
             MoveButton.AddTo(header.Root, outpost, building);
@@ -155,8 +247,8 @@ namespace SeaSick.UI.Sheets
 
         // --- the thumb floor, shared ----------------------------------------
 
-        /// The old sheets' thumb floor in panel units -- `FireSheet` still
-        /// reads it.
+        /// The old sheets' thumb floor in panel units -- `FireSheet`,
+        /// `GatherSheet` and `FarmSheet` still read it.
         internal const float TouchPx = 44f;
 
         // --- the pieces kept between refreshes --------------------------------
@@ -165,31 +257,59 @@ namespace SeaSick.UI.Sheets
         StationPage.WorkerCard worker;
         StationPage.UpgradeCard upgrade;
 
-        // recipes
-        sealed class RecipeCard
+        /// The make page (spots + grid + detail) was built this tab; the
+        /// thumb row belongs to it.
+        bool makeBuilt;
+
+        // spot tiles
+        sealed class SpotTile
         {
-            public Recipe r;
-            public VisualElement root, icon, barHolder, bar;
-            public Label name, yield, state;
-            public Label[] takes;
-            public Label time;
-            public StationPage.DashedFrame dashes;
-            public bool locked;
+            public Button root;
+            public StationPage.Glyph glyph;
+            public Label name, status;
+            public VisualElement fill;
+            public int kind = -1;
         }
-        readonly List<RecipeCard> cards = new List<RecipeCard>();
-        int perPage = 2, recipePage;
-        VisualElement dots;
-        Label orderEyebrow;
+        SpotTile[] spotTiles;
 
-        // the order
-        static readonly int[] Amounts = { OutpostLedger.RepeatOrder, 5, 10, 20 };
-        readonly Button[] amountBtns = new Button[Amounts.Length];
-        Button stopBtn;
+        // the recipe grid
+        sealed class RecipeTile
+        {
+            public Button root;
+            public VisualElement icon, bar, fill;
+            public StationPage.Glyph lockGlyph, moreGlyph;
+            public Label name, status, badge;
+            public StationPage.DashedFrame dashes;
+            /// What the tile shows right now: a recipe, "More", or nothing.
+            public Recipe r;
+            public bool more;
+            public int kind = -1;
+        }
+        RecipeTile[] tiles;
+        VisualElement grid;
+        Label gridEyebrow;
+        const int PerRow = 4;
 
-        /// The size of each station's running order as it was placed, so a
-        /// card can say "making 7 of 10" -- the ledger keeps only what is
-        /// left. Best effort: an order placed elsewhere is sized on sight.
-        static readonly Dictionary<StationStock, int> OrderTotals = new Dictionary<StationStock, int>();
+        // the detail
+        sealed class IoChip
+        {
+            public VisualElement root, icon;
+            public Label text;
+        }
+        VisualElement detail, detailArrow;
+        Label detailName, detailTime, detailLine;
+        IoChip[] inChips;
+        IoChip outChip;
+        Button detailFix;
+        ShortFix.Fix detailFixF;
+        const int MaxInputs = 5;
+
+        // the thumb row
+        enum Main { None, Select, Stop, Fix, Upgrade }
+        Main mainMode;
+        ShortFix.Fix mainFix;
+        Button primaryBtn, stopBtn;
+        VisualElement thumbRow;
 
         // in and out
         VisualElement bayIcon, rackIcon;
@@ -216,21 +336,21 @@ namespace SeaSick.UI.Sheets
         const int StoreTileCount = 8;
         const int StoreTilesPerRow = 4;
 
-        /// Built for a hugging frame (compact recipe cards, no eyebrows the
-        /// tab already says, one of `hugTabs` per page).
+        /// Built for a hugging frame (condensed chrome, no eyebrows the tab
+        /// already says, one of `hugTabs` per page).
         bool hugged;
 
         public VisualElement Build()
         {
-            cards.Clear();
-            orderFix = null;
             storeTiles = null; storeHolds = null; storeAll = null; stallLine = null; worker = null; upgrade = null;
             // Every refresh target is re-bound by the page that builds it;
             // the others stay null so `Refresh` skips them.
-            stopBtn = null; keepBtn = null; queueEyebrow = null; queueList = null; orderEyebrow = null;
-            queueKey = long.MinValue;
+            spotTiles = null; tiles = null; grid = null; gridEyebrow = null;
+            detail = null; detailArrow = null; detailName = detailTime = detailLine = null;
+            inChips = null; outChip = null; detailFix = null;
+            primaryBtn = stopBtn = null; thumbRow = null;
             bayValue = benchValue = benchLabel = rackValue = null; bayIcon = rackIcon = null; ring = null;
-            dots = null;
+            makeBuilt = false;
             hugged = StationPage.Hugging;
             string on = hugged && hugTabs != null ? hugTabs[Mathf.Clamp(tab, 0, hugTabs.Length - 1)] : null;
             bool all = on == null;
@@ -244,25 +364,20 @@ namespace SeaSick.UI.Sheets
             var col = StationPage.Column(root);
 
             bool first = true;
-            VisualElement Section(string eyebrow, out Label eyebrowLabel)
+            VisualElement Section(string eyebrow)
             {
                 var s = new VisualElement();
                 s.AddToClassList("st-section");
                 if (first) s.style.marginTop = 0f;
                 first = false;
-                eyebrowLabel = null;
-                if (eyebrow != null)
-                {
-                    eyebrowLabel = StationPage.Text(eyebrow, "st-eyebrow");
-                    s.Add(eyebrowLabel);
-                }
+                if (eyebrow != null) s.Add(StationPage.Text(eyebrow, "st-eyebrow"));
                 col.Add(s);
                 return s;
             }
 
             if (hasWorker && (all || on == PageWork))
             {
-                var s = Section(null, out _);
+                var s = Section(null);
                 worker = new StationPage.WorkerCard(outpost, planId, () => Refresh(), CurrentStation);
                 s.Add(worker.Root);
             }
@@ -271,11 +386,11 @@ namespace SeaSick.UI.Sheets
             {
                 // Two rows of icon tiles, no eyebrow when hugging -- the
                 // Backpack's Island page is the goods' home, this is the glance.
-                var s = Section(hugged ? null : "ON THE RACKS", out _);
+                var s = Section(hugged ? null : "ON THE RACKS");
                 var card = StationPage.Card();
                 card.AddToClassList("st-store-card");
-                var grid = new VisualElement(); grid.AddToClassList("st-store-grid");
-                card.Add(grid);
+                var sg = new VisualElement(); sg.AddToClassList("st-store-grid");
+                card.Add(sg);
                 int n = StoreTileCount;
                 storeTiles = new StoreTile[n];
                 for (int i = 0; i < n; i++)
@@ -297,7 +412,7 @@ namespace SeaSick.UI.Sheets
                     bar.Add(t.fill);
                     t.root.Add(bar);
                     t.root.style.display = DisplayStyle.None;
-                    grid.Add(t.root);
+                    sg.Add(t.root);
                     storeTiles[i] = t;
                 }
                 var foot = new VisualElement(); foot.AddToClassList("st-store-foot");
@@ -310,24 +425,13 @@ namespace SeaSick.UI.Sheets
                 s.Add(card);
             }
 
-            if (hasMake && all)
+            if (hasMake && (all || on == PageMake))
             {
-                BuildRecipes(Section("RECIPES", out _));
-                var os = Section("ORDER", out orderEyebrow);
-                BuildOrder(os);
-                BuildQueue(os);
-                BuildFlow(Section("IN AND OUT", out _));
+                BuildMake(Section(null));
+                makeBuilt = true;
             }
-            else if (hasMake)
-            {
-                if (on == PageMake)
-                {
-                    BuildRecipes(Section(null, out _));
-                    BuildOrder(Section(null, out _));
-                }
-                else if (on == PageOrders) BuildQueue(Section(null, out _));
-                else if (on == PageWork) BuildFlow(Section(null, out _));
-            }
+            if (hasMake && (all || on == PageWork))
+                BuildFlow(Section(hugged ? null : "IN AND OUT"));
 
             if (hasUpgrade && (all || on == PageLevel))
             {
@@ -340,521 +444,863 @@ namespace SeaSick.UI.Sheets
             return root;
         }
 
-        // --- 3. recipes -------------------------------------------------------
+        // --- the thumb row ------------------------------------------------------
 
-        void BuildRecipes(VisualElement s)
+        /// **The one main action, in the thumb row (island UI rule 1).** Built
+        /// with the make page only; the work and level pages have their own
+        /// buttons on the page. The primary is re-labelled and re-pointed by
+        /// `FillThumb`, never rebuilt.
+        public VisualElement BuildActions()
         {
-            var recipes = Recipes.At(planId);
-            // Hugging: one row of two compact cards, the amount row under it.
-            perPage = hugged ? 2 : PerPage(recipes.Count);
-            var grid = new VisualElement();
-            grid.AddToClassList("st-grid");
-            s.Add(grid);
-            for (int i = 0; i < recipes.Count; i++)
-            {
-                var c = BuildCard(recipes[i]);
-                if (i % perPage >= 2) c.root.AddToClassList("st-recipe--row2");
-                cards.Add(c);
-                grid.Add(c.root);
-            }
+            primaryBtn = stopBtn = null; thumbRow = null;
+            if (!makeBuilt) return null;
+            primaryBtn = SheetKit.Btn("Select", PressMain, true);
+            stopBtn = SheetKit.Btn("Stop", PressStop);
+            ThumbStyle(primaryBtn, 18f);
+            ThumbStyle(stopBtn, 15f);
+            thumbRow = SheetKit.Actions(primaryBtn, stopBtn);
+            // The primary takes the row; Stop is the narrow one beside it.
+            primaryBtn.style.flexGrow = 2.4f;
+            stopBtn.style.flexGrow = 1f;
+            Refresh();
+            return thumbRow;
+        }
 
-            dots = null;
-            int pages = Mathf.CeilToInt(recipes.Count / (float)perPage);
-            if (pages > 1)
+        /// Thumb-sized (≥ 44, the mockup's 54 pt rounded down to fit the
+        /// half-height frame), wraps rather than clips a long "Raise
+        /// Campfire to II".
+        static void ThumbStyle(Button b, float font)
+        {
+            b.style.height = StyleKeyword.Auto;
+            b.style.minHeight = 50f;
+            b.style.fontSize = font;
+            b.style.whiteSpace = WhiteSpace.Normal;
+            b.style.borderTopLeftRadius = b.style.borderTopRightRadius =
+                b.style.borderBottomLeftRadius = b.style.borderBottomRightRadius = 14f;
+        }
+
+        // --- 2-4. the make page: spots, grid, detail -------------------------------
+
+        /// Panel units the make page's pieces cost, for planning how many grid
+        /// rows fit the hugging frame BEFORE building (a page never re-plans
+        /// under a finger). The sums of the `st-spot*` / `st-rtile*` /
+        /// `st-detail*` rules in Station.uss, rounded UP.
+        const float SpotRowPx = 80f;     // 8 pad + 22 name row + 4 + 17 status + 4 + 5 bar + 8 pad + 4 border + 8 gap
+        const float TileRowPx = 88f;     // 7 pad + 28 icon + 3 + 16 name + 3 + 15 status + 5 pad + 3 border + 8 gap
+        const float DetailPx = 112f;     // 10 pad + 20 head + 6 + 26 chips + 6 + 18 line + 10 pad + 2 border + 8 gap + wrap slack
+        const float EyebrowRowPx = 22f;
+        const float ThumbRowPx = 73f;    // 10 pad + 50 button + 12 pad + 1 rule
+
+        void BuildMake(VisualElement s)
+        {
+            if (multiSpot)
             {
-                dots = new VisualElement();
-                dots.AddToClassList("st-dots");
-                for (int p = 0; p < pages; p++)
+                var row = new VisualElement(); row.AddToClassList("st-spots");
+                spotTiles = new SpotTile[spotNames.Count];
+                for (int i = 0; i < spotNames.Count; i++)
                 {
-                    int page = p;
-                    var b = new Button(() => { recipePage = page; ShowRecipePage(); });
-                    b.AddToClassList("st-dot-btn");
-                    b.text = "";
-                    var dot = new VisualElement();
-                    dot.AddToClassList("st-dot");
-                    dot.pickingMode = PickingMode.Ignore;
-                    b.Add(dot);
-                    dots.Add(b);
+                    int idx = i;
+                    var t = new SpotTile();
+                    t.root = new Button(() => ViewSpot(idx)) { text = "" };
+                    t.root.AddToClassList("st-spot");
+                    if (i == 0) t.root.AddToClassList("st-spot--first");
+                    var top = new VisualElement(); top.AddToClassList("st-spot-top");
+                    top.pickingMode = PickingMode.Ignore;
+                    t.glyph = new StationPage.Glyph(SpotGlyph(spotNames[i]), StationPage.Dim, "st-spot-glyph");
+                    top.Add(t.glyph);
+                    t.name = StationPage.Text(StationPage.Cap(spotNames[i]), "st-spot-name");
+                    top.Add(t.name);
+                    t.root.Add(top);
+                    t.status = StationPage.Text("", "st-spot-status");
+                    t.root.Add(t.status);
+                    var bar = new VisualElement { pickingMode = PickingMode.Ignore };
+                    bar.AddToClassList("st-spot-bar");
+                    t.fill = new VisualElement { pickingMode = PickingMode.Ignore };
+                    t.fill.AddToClassList("st-spot-fill");
+                    bar.Add(t.fill);
+                    t.root.Add(bar);
+                    row.Add(t.root);
+                    spotTiles[i] = t;
                 }
-                s.Add(dots);
+                s.Add(row);
             }
 
-            // Open on the page that holds what is running.
-            var l = L;
-            var st = Station(l);
-            var order = st != null && l != null ? l.OrderAt(planId, st.ordinal) : default;
-            recipePage = 0;
-            if (order.Active && order.recipe != null)
-                for (int i = 0; i < cards.Count; i++)
-                    if (cards[i].r.id == order.recipe.id) recipePage = i / perPage;
-            ShowRecipePage();
+            // The eyebrow teaches the tap on the desk; in the hugging frame
+            // the ice outline already says which spot, and the 22 units are
+            // a grid row's worth of the half screen.
+            if (!hugged)
+            {
+                gridEyebrow = StationPage.Text("", "st-eyebrow");
+                gridEyebrow.AddToClassList("st-grid-eyebrow");
+                s.Add(gridEyebrow);
+            }
+
+            int most = 0;
+            for (int i = 0; i < spotNames.Count; i++) most = Mathf.Max(most, SpotRecipes(i).Count);
+            int rows = PlanRows(most);
+            int pool = Mathf.Min(most, rows * PerRow);
+            grid = new VisualElement(); grid.AddToClassList("st-rgrid");
+            tiles = new RecipeTile[pool];
+            for (int i = 0; i < pool; i++)
+            {
+                var t = BuildTile();
+                if (i % PerRow == PerRow - 1) t.root.AddToClassList("st-rtile--end");
+                if (i >= PerRow) t.root.AddToClassList("st-rtile--row2");
+                tiles[i] = t;
+                grid.Add(t.root);
+            }
+            s.Add(grid);
+
+            BuildDetail(s);
+
+            // Open every spot on the page that holds its running recipe.
+            var st = Station(L);
+            for (int i = 0; i < spotNames.Count; i++) pageBy[i] = PageOf(i, Tapped(L, st, i));
         }
 
-        /// **Two cards a page, or four when two rows fit the band.** Four is
-        /// the design (the forge's five page as 4 + 1), but on a phone the
-        /// second row costs ~230 units the tall band does not have with the
-        /// order, flow and upgrade below it, so the grid pages at two there.
-        /// Worked out from the band BEFORE building -- a page never re-plans
-        /// under a finger.
-        static int PerPage(int count)
+        /// **How many grid rows fit**, planned from the band before building.
+        /// Hugging: the half-screen body (`SheetHost.HugBodyBudget`) less the
+        /// thumb row, the spot tiles and the detail -- on a 16 Pro that is
+        /// one row, and the cauldron's five dishes page as 3 + More. Desk:
+        /// every row (the tall column holds them).
+        int PlanRows(int most)
         {
-            if (count <= 2) return 2;
-            float frame = SheetHost.FrameSizeScreen().y * SheetHost.PanelScale;
-            float avail = frame - SheetHost.BorderPx - 82f - SheetHost.BodyPadPx - 22f;
-            const float Rest = 575f, CardRow = 232f;
-            return avail >= Rest + 2f * CardRow + 12f ? 4 : 2;
+            int need = Mathf.CeilToInt(most / (float)PerRow);
+            if (need <= 1) return 1;
+            if (!hugged) return need;
+            float budget = SheetHost.HugBodyBudget(hugTabs != null && hugTabs.Length > 1) - ThumbRowPx;
+            float fixedPx = (multiSpot ? SpotRowPx : 0f) + DetailPx;
+            int fit = Mathf.FloorToInt((budget - fixedPx) / TileRowPx);
+            return Mathf.Clamp(fit, 1, need);
         }
 
-        void ShowRecipePage()
+        RecipeTile BuildTile()
         {
-            for (int i = 0; i < cards.Count; i++)
-                cards[i].root.style.display = i / perPage == recipePage ? DisplayStyle.Flex : DisplayStyle.None;
-            if (dots != null)
-                for (int p = 0; p < dots.childCount; p++)
-                    dots[p][0].EnableInClassList("st-dot--on", p == recipePage);
+            var t = new RecipeTile();
+            t.root = new Button { text = "" };
+            t.root.AddToClassList("st-rtile");
+            t.icon = StationPage.Icon(null, "st-rtile-icon");
+            t.root.Add(t.icon);
+            t.lockGlyph = new StationPage.Glyph("lock", StationPage.Dim, "st-rtile-glyph");
+            t.lockGlyph.style.display = DisplayStyle.None;
+            t.root.Add(t.lockGlyph);
+            t.moreGlyph = new StationPage.Glyph("arrow", StationPage.Ink, "st-rtile-glyph");
+            t.moreGlyph.style.display = DisplayStyle.None;
+            t.root.Add(t.moreGlyph);
+            t.name = StationPage.Text("", "st-rtile-name");
+            t.root.Add(t.name);
+            t.status = StationPage.Text("", "st-rtile-status");
+            t.root.Add(t.status);
+            t.badge = StationPage.Text("", "st-badge");
+            t.badge.style.display = DisplayStyle.None;
+            t.root.Add(t.badge);
+            // The running recipe's progress: a thin strip along the foot.
+            t.bar = new VisualElement { pickingMode = PickingMode.Ignore };
+            t.bar.AddToClassList("st-rtile-bar");
+            t.fill = new VisualElement { pickingMode = PickingMode.Ignore };
+            t.fill.AddToClassList("st-rtile-fill");
+            t.bar.Add(t.fill);
+            t.bar.style.visibility = Visibility.Hidden;
+            t.root.Add(t.bar);
+            // UI Toolkit has no dashed border: a locked tile draws its own.
+            t.dashes = new StationPage.DashedFrame(12f, 1.5f, StationPage.Edge);
+            t.dashes.style.display = DisplayStyle.None;
+            t.root.Add(t.dashes);
+            // Registered once; what the tile IS is read at the tap.
+            t.root.clicked += () => PressTile(t);
+            return t;
         }
 
-        RecipeCard BuildCard(Recipe r)
+        void BuildDetail(VisualElement s)
         {
-            var c = new RecipeCard { r = r };
-            c.root = new VisualElement();
-            c.root.AddToClassList("st-recipe");
+            detail = new VisualElement(); detail.AddToClassList("st-detail");
+            var head = new VisualElement(); head.AddToClassList("st-detail-head");
+            detailName = StationPage.Text("", "st-detail-name");
+            detailTime = StationPage.Text("", "st-detail-time");
+            head.Add(detailName); head.Add(detailTime);
+            detail.Add(head);
 
-            var nameRow = new VisualElement(); nameRow.AddToClassList("st-name-row");
-            if (hugged)
+            var io = new VisualElement(); io.AddToClassList("st-detail-io");
+            inChips = new IoChip[MaxInputs];
+            for (int i = 0; i < MaxInputs; i++)
             {
-                // **Compact card (2026-09-30)**: the 72-unit picture tile
-                // becomes an icon at the head of the name row -- the card
-                // keeps every fact and loses half its height.
-                c.icon = StationPage.Icon(r.makes, "st-name-icon");
-                nameRow.Add(c.icon);
+                inChips[i] = Chip();
+                inChips[i].root.style.display = DisplayStyle.None;
+                io.Add(inChips[i].root);
             }
-            else
-            {
-                var tile = new VisualElement(); tile.AddToClassList("st-tile");
-                c.icon = StationPage.Icon(r.makes, "st-tile-icon");
-                tile.Add(c.icon);
-                c.root.Add(tile);
-            }
-            c.name = StationPage.Text(StationPage.Cap(r.label), "st-recipe-name");
-            c.yield = StationPage.Text($"×{Mathf.Max(1, r.yield)}", "st-yield");
-            nameRow.Add(c.name); nameRow.Add(c.yield);
-            c.root.Add(nameRow);
+            detailArrow = new StationPage.Glyph("arrow", StationPage.Dim, "st-io-arrow");
+            io.Add(detailArrow);
+            outChip = Chip();
+            outChip.text.AddToClassList("st-io-text--out");
+            io.Add(outChip.root);
+            detail.Add(io);
 
-            var takes = new VisualElement(); takes.AddToClassList("st-takes");
-            c.takes = new Label[r.takes.Length];
-            for (int i = 0; i < r.takes.Length; i++)
-            {
-                takes.Add(StationPage.Icon(r.takes[i].res, "st-small-icon"));
-                c.takes[i] = StationPage.Text($"{r.takes[i].n} {ResDefs.Label(r.takes[i].res)}", "st-takes-text");
-                takes.Add(c.takes[i]);
-            }
-            c.time = StationPage.Text("", "st-takes-text");
-            takes.Add(c.time);
-            c.root.Add(takes);
+            var foot = new VisualElement(); foot.AddToClassList("st-detail-foot");
+            detailLine = StationPage.Text("", "st-detail-line");
+            foot.Add(detailLine);
+            detailFix = new Button(() => { if (detailFixF.Run(outpost)) Refresh(); }) { text = "" };
+            detailFix.AddToClassList("st-link");
+            detailFix.AddToClassList("st-detail-fix");
+            detailFix.style.display = DisplayStyle.None;
+            foot.Add(detailFix);
+            detail.Add(foot);
+            s.Add(detail);
+        }
 
-            c.barHolder = new VisualElement(); c.barHolder.AddToClassList("st-bar");
-            c.bar = new VisualElement(); c.bar.AddToClassList("st-bar-fill");
-            c.barHolder.Add(c.bar);
-            c.root.Add(c.barHolder);
-
-            c.state = StationPage.Text("", "st-recipe-state");
-            c.root.Add(c.state);
-
-            // UI Toolkit has no dashed border: a locked card draws its own.
-            c.dashes = new StationPage.DashedFrame(18f, 2f, StationPage.Edge);
-            c.dashes.style.display = DisplayStyle.None;
-            c.root.Add(c.dashes);
-
-            // Registered once, gated on `c.locked` read at the tap.
-            c.root.RegisterCallback<ClickEvent>(_ => PickRecipe(c));
+        static IoChip Chip()
+        {
+            var c = new IoChip();
+            c.root = new VisualElement { pickingMode = PickingMode.Ignore };
+            c.root.AddToClassList("st-io-chip");
+            c.icon = StationPage.Icon(null, "st-io-icon");
+            c.root.Add(c.icon);
+            c.text = StationPage.Text("", "st-io-text");
+            c.root.Add(c.text);
             return c;
         }
 
-        void PickRecipe(RecipeCard c)
+        // --- the spot and recipe model ------------------------------------------------
+
+        /// The recipes at spot `i` (`StationSpots.RecipesFor`). A one-spot
+        /// station whose ledger names no spot falls back to every recipe of
+        /// the station, the list the old grid showed.
+        IReadOnlyList<Recipe> SpotRecipes(int i)
         {
-            if (c.locked) return;
-            var l = L;
-            ResolveRaisedIndex();
-            var st = Station(l);
-            pickedRecipe = c.r.id;
-            // A running order switches recipe at once, keeping its amount:
-            // the tap IS the order's recipe (the mockup's one decision).
-            if (st != null && l != null)
+            if (!hasMake || i < 0 || i >= spotNames.Count) return System.Array.Empty<Recipe>();
+            var list = StationSpots.RecipesFor(planId, spotNames[i]);
+            if ((list == null || list.Count == 0) && !multiSpot) return Recipes.At(planId);
+            return list ?? (IReadOnlyList<Recipe>)System.Array.Empty<Recipe>();
+        }
+
+        /// The ledger's index of spot `i` in `StationStock.Spots`: matched by
+        /// name, else the same position (a one-spot station is index 0).
+        static int SpotIndexIn(StationStock st, IReadOnlyList<string> names, int i)
+        {
+            var list = st != null ? st.Spots : null;
+            if (list == null || list.Count == 0) return i;
+            string name = names[i];
+            if (name != null)
+                for (int k = 0; k < list.Count; k++)
+                    if (list[k] != null && list[k].spot == name) return k;
+            return Mathf.Clamp(i, 0, list.Count - 1);
+        }
+
+        int SpotIndex(StationStock st, int i) => SpotIndexIn(st, spotNames, i);
+
+        /// Spot `i`'s live state, or null (no station, no spots yet).
+        SpotState SpotOf(StationStock st, int i)
+        {
+            var list = st != null ? st.Spots : null;
+            if (list == null || list.Count == 0) return null;
+            int k = SpotIndex(st, i);
+            return k >= 0 && k < list.Count ? list[k] : null;
+        }
+
+        static bool HasRecipe(SpotState sp) => sp != null && !string.IsNullOrEmpty(sp.recipeId);
+
+        /// The recipe the detail is about at spot `i`: the one a tap picked,
+        /// else the one the spot runs, else the first the camp can make,
+        /// else the first.
+        Recipe Tapped(OutpostLedger l, StationStock st, int i)
+        {
+            var list = SpotRecipes(i);
+            string id = i >= 0 && i < pickedBy.Length ? pickedBy[i] : null;
+            if (id != null)
+                for (int k = 0; k < list.Count; k++) if (list[k].id == id) return list[k];
+            var sp = SpotOf(st, i);
+            if (HasRecipe(sp))
+                for (int k = 0; k < list.Count; k++) if (list[k].id == sp.recipeId) return list[k];
+            if (l != null)
+                for (int k = 0; k < list.Count; k++) if (LockShort(l, list[k]) == null) return list[k];
+            return list.Count > 0 ? list[0] : null;
+        }
+
+        /// Recipes a page shows: the whole pool when they all fit, else one
+        /// less -- the last tile is "More".
+        int PerPage(int count) =>
+            tiles == null || tiles.Length == 0 ? 1
+            : count <= tiles.Length ? tiles.Length : Mathf.Max(1, tiles.Length - 1);
+
+        int Pages(int count) => Mathf.Max(1, Mathf.CeilToInt(count / (float)PerPage(count)));
+
+        int PageOf(int spot, Recipe r)
+        {
+            if (r == null) return 0;
+            var list = SpotRecipes(spot);
+            int per = PerPage(list.Count);
+            for (int k = 0; k < list.Count; k++) if (list[k] == r) return k / per;
+            return 0;
+        }
+
+        /// "needs Campfire II" / "needs level 2" / "needs a saw blade", or
+        /// null when the recipe can be selected HERE. This building's own
+        /// level gates its level-2 recipes (`RecipeAvailable` reads the
+        /// plan's best copy).
+        string LockShort(OutpostLedger l, Recipe r)
+        {
+            bool ok = l.RecipeAvailable(r, out string why);
+            if (l.CampfireLevel < r.campfireLevel) return "needs Campfire " + RecipeGraph.Roman(r.campfireLevel);
+            if (MyLevel(l) < r.stationLevel) return $"needs level {r.stationLevel}";
+            if (r.tool != null && l.CountOf(r.tool) <= 0) return "needs a " + ResDefs.Label(r.tool);
+            return ok ? null : why;
+        }
+
+        /// What this building has of `res` for a recipe: the camp store plus
+        /// this bench's own bay -- the count the old cards showed.
+        static int Have(OutpostLedger l, StationStock st, string res) =>
+            l.StoreCountOf(res) + (st != null ? st.BayCount(res) : 0);
+
+        /// The input the recipe lacks most (`ShortFix.Most`: a gatherable
+        /// first), or null when every input is here.
+        static string MostShort(OutpostLedger l, StationStock st, Recipe r)
+        {
+            var most = new ShortFix.Most();
+            foreach (var line in r.takes) most.Add(line.res, line.n - Have(l, st, line.res));
+            return most.Res;
+        }
+
+        static int Need(Recipe r, string res)
+        {
+            foreach (var line in r.takes) if (line.res == res) return line.n;
+            return 0;
+        }
+
+        // --- taps -----------------------------------------------------------------------
+
+        void ViewSpot(int i)
+        {
+            if (i == viewSpot) return;
+            viewSpot = i;
+            refusal = null;
+            pageBy[i] = PageOf(i, Tapped(L, CurrentStation(), i));
+            Refresh();
+        }
+
+        void PressTile(RecipeTile t)
+        {
+            refusal = null;
+            if (t.more)
             {
-                var order = l.OrderAt(planId, st.ordinal);
-                if (order.Active && order.recipe != null && order.recipe.id != c.r.id)
-                {
-                    int count = order.repeat ? OutpostLedger.RepeatOrder : order.remaining;
-                    if (l.PlaceOrder(planId, c.r.id, count, st.ordinal)) OrderTotals[st] = count;
-                }
+                var list = SpotRecipes(viewSpot);
+                pageBy[viewSpot] = (pageBy[viewSpot] + 1) % Pages(list.Count);
+            }
+            else if (t.r != null) pickedBy[viewSpot] = t.r.id;
+            Refresh();
+        }
+
+        void PressMain()
+        {
+            var l = L;
+            var st = CurrentStation();
+            if (l == null) return;
+            var r = Tapped(l, st, viewSpot);
+            switch (mainMode)
+            {
+                case Main.Select:
+                    if (st == null || r == null) return;
+                    refusal = l.SelectRecipe(st, SpotIndex(st, viewSpot), r.id, out string why) ? null
+                        : (string.IsNullOrEmpty(why) ? "Can't start that here yet." : StationPage.Cap(why));
+                    break;
+                case Main.Stop:
+                    if (st != null) l.StopSpot(st, SpotIndex(st, viewSpot));
+                    refusal = null;
+                    break;
+                case Main.Fix:
+                    if (!mainFix.Run(outpost)) return;
+                    break;
+                case Main.Upgrade:
+                    DoUpgrade();
+                    return;
+                default: return;
             }
             Refresh();
         }
 
-        /// "needs campfire II and a saw blade", or null when the recipe can
-        /// be ordered HERE. This building's own level gates its level-2
-        /// recipes (`PlaceOrder` refuses them the same way).
-        string LockWhy(OutpostLedger l, Recipe r)
+        void PressStop()
         {
-            bool ok = l.RecipeAvailable(r, out string why);
-            bool levelShort = MyLevel(l) < r.stationLevel;
-            if (ok && !levelShort) return null;
-            var parts = new List<string>(3);
-            if (l.CampfireLevel < r.campfireLevel) parts.Add("campfire " + RecipeGraph.Roman(r.campfireLevel));
-            if (levelShort) parts.Add($"level {r.stationLevel}");
-            if (r.tool != null && l.CountOf(r.tool) <= 0) parts.Add("a " + ResDefs.Label(r.tool));
-            return parts.Count > 0 ? "needs " + string.Join(" and ", parts) : why;
+            var l = L;
+            var st = CurrentStation();
+            if (l == null || st == null) return;
+            l.StopSpot(st, SpotIndex(st, viewSpot));
+            refusal = null;
+            Refresh();
         }
+
+        // --- fill -------------------------------------------------------------------------
+
+        /// Re-binds the make page (spot tiles, the grid, the detail, the thumb
+        /// row). Only texts, classes and display flip here -- nothing is built.
+        void FillMake(OutpostLedger l, StationStock st, OutpostHand hand, Recipe tapped)
+        {
+            FillSpots(l, st, hand);
+            var list = SpotRecipes(viewSpot);
+            var sp = SpotOf(st, viewSpot);
+            FillGrid(l, st, sp, list, tapped);
+            FillDetail(l, st, sp, tapped);
+        }
+
+        void FillSpots(OutpostLedger l, StationStock st, OutpostHand hand)
+        {
+            if (spotTiles == null) return;
+            for (int i = 0; i < spotTiles.Length; i++)
+            {
+                var t = spotTiles[i];
+                var sp = SpotOf(st, i);
+                t.root.EnableInClassList("st-spot--on", i == viewSpot);
+                string text; int kind; float p = 0f;
+                var r = HasRecipe(sp) ? Recipes.Named(sp.recipeId) : null;
+                if (!HasRecipe(sp))
+                {
+                    text = foodStation ? "Idle · pick a dish" : "Idle · pick one";
+                    kind = 1;
+                }
+                else if (!string.IsNullOrEmpty(sp.pauseReason))
+                {
+                    text = StationPage.Cap(sp.pauseReason);
+                    kind = hand == null ? 2 : 1;
+                    p = sp.progress01;
+                }
+                else if (sp.Running)
+                {
+                    text = $"{StationPage.Cap(r != null ? r.label : sp.recipeId)} · {Secs(sp.SecondsLeft)}";
+                    kind = 0;
+                    p = sp.progress01;
+                }
+                else
+                {
+                    text = $"{StationPage.Cap(r != null ? r.label : sp.recipeId)} · waiting";
+                    kind = 1;
+                    p = sp.progress01;
+                }
+                if (t.status.text != text) t.status.text = text;
+                if (kind != t.kind)
+                {
+                    t.kind = kind;
+                    t.status.EnableInClassList("st-tone--good", kind == 0);
+                    t.status.EnableInClassList("st-tone--wait", kind == 1);
+                    t.status.EnableInClassList("st-tone--bad", kind == 2);
+                    t.fill.EnableInClassList("st-spot-fill--wait", kind != 0);
+                    t.glyph.SetColor(kind == 0 ? StationPage.Amber : StationPage.Dim);
+                }
+                t.fill.style.width = Length.Percent(Mathf.Clamp01(p) * 100f);
+            }
+        }
+
+        /// "12 s", "2 min" -- what is left on the spot's batch.
+        static string Secs(float s)
+        {
+            s = Mathf.Max(0f, s);
+            return s < 90f ? $"{Mathf.CeilToInt(s)} s" : $"{Mathf.CeilToInt(s / 60f)} min";
+        }
+
+        void FillGrid(OutpostLedger l, StationStock st, SpotState sp, IReadOnlyList<Recipe> list, Recipe tapped)
+        {
+            if (tiles == null || grid == null) return;
+            // One recipe on this spot (the fishing hut, the mill, the
+            // smelter...): no grid, the detail says it all.
+            bool showGrid = list.Count > 1;
+            var want = showGrid ? DisplayStyle.Flex : DisplayStyle.None;
+            if (grid.style.display != want) grid.style.display = want;
+            int per = PerPage(list.Count), pages = Pages(list.Count);
+            int page = Mathf.Clamp(pageBy[viewSpot], 0, pages - 1);
+            pageBy[viewSpot] = page;
+            bool paged = pages > 1;
+            if (gridEyebrow != null)
+            {
+                gridEyebrow.style.display = want;
+                string eb = (multiSpot ? (spotNames[viewSpot] ?? "").ToUpperInvariant() + " · " : "")
+                    + (foodStation ? "TAP A DISH" : "TAP A RECIPE")
+                    + (paged ? $" · {page + 1}/{pages}" : "");
+                if (gridEyebrow.text != eb) gridEyebrow.text = eb;
+            }
+            if (!showGrid) return;
+
+            for (int k = 0; k < tiles.Length; k++)
+            {
+                var t = tiles[k];
+                if (paged && k == tiles.Length - 1)
+                {
+                    BindMore(t, page, pages);
+                    continue;
+                }
+                int ri = page * per + k;
+                if (ri >= list.Count)
+                {
+                    // A short last page keeps "More" in its corner: the
+                    // empty slots hold their place, invisibly.
+                    t.r = null; t.more = false;
+                    t.root.style.display = paged ? DisplayStyle.Flex : DisplayStyle.None;
+                    t.root.style.visibility = Visibility.Hidden;
+                    continue;
+                }
+                t.root.style.display = DisplayStyle.Flex;
+                t.root.style.visibility = Visibility.Visible;
+                BindTile(t, list[ri], l, st, sp, tapped);
+            }
+        }
+
+        void BindMore(RecipeTile t, int page, int pages)
+        {
+            t.r = null; t.more = true;
+            t.root.style.display = DisplayStyle.Flex;
+            t.root.style.visibility = Visibility.Visible;
+            Tone(t, 3);
+            t.root.EnableInClassList("st-rtile--on", false);
+            t.root.EnableInClassList("st-rtile--run", false);
+            t.root.EnableInClassList("st-rtile--locked", false);
+            t.root.EnableInClassList("st-rtile--more", true);
+            t.dashes.style.display = DisplayStyle.None;
+            t.icon.style.display = DisplayStyle.None;
+            t.lockGlyph.style.display = DisplayStyle.None;
+            t.moreGlyph.style.display = DisplayStyle.Flex;
+            t.bar.style.visibility = Visibility.Hidden;
+            t.badge.style.display = DisplayStyle.None;
+            t.status.style.display = DisplayStyle.Flex;
+            SetText(t.name, "More");
+            SetText(t.status, $"{page + 1} of {pages}");
+        }
+
+        /// One tile, ONE status: the running badge, the lock, short, or the
+        /// count on hand.
+        void BindTile(RecipeTile t, Recipe r, OutpostLedger l, StationStock st, SpotState sp, Recipe tapped)
+        {
+            t.r = r; t.more = false;
+            t.root.EnableInClassList("st-rtile--more", false);
+            t.moreGlyph.style.display = DisplayStyle.None;
+            string lockWhy = l != null ? LockShort(l, r) : null;
+            bool locked = lockWhy != null;
+            bool mine = HasRecipe(sp) && sp.recipeId == r.id;
+            bool picked = tapped != null && tapped.id == r.id;
+
+            t.root.EnableInClassList("st-rtile--on", picked);
+            t.root.EnableInClassList("st-rtile--run", mine && !picked);
+            t.root.EnableInClassList("st-rtile--locked", locked);
+            var dash = locked && !picked ? DisplayStyle.Flex : DisplayStyle.None;
+            if (t.dashes.style.display != dash) t.dashes.style.display = dash;
+
+            // The item's picture; a locked tile shows the lock instead, and
+            // an item with no icon shows its name alone -- never an empty box.
+            bool hasIcon = !locked && ItemIconSet.Get(r.makes) != null;
+            StationPage.SetIcon(t.icon, hasIcon ? r.makes : null);
+            t.icon.style.display = hasIcon ? DisplayStyle.Flex : DisplayStyle.None;
+            t.lockGlyph.style.display = locked ? DisplayStyle.Flex : DisplayStyle.None;
+            SetText(t.name, StationPage.Cap(r.label));
+
+            bool badge = mine && !locked;
+            t.badge.style.display = badge ? DisplayStyle.Flex : DisplayStyle.None;
+            t.status.style.display = badge ? DisplayStyle.None : DisplayStyle.Flex;
+            t.bar.style.visibility = badge ? Visibility.Visible : Visibility.Hidden;
+            if (badge)
+            {
+                bool running = sp.Running && string.IsNullOrEmpty(sp.pauseReason);
+                SetText(t.badge, running ? (foodStation ? "COOKING" : "RUNNING") : "PAUSED");
+                t.badge.EnableInClassList("st-badge--wait", !running);
+                t.fill.style.width = Length.Percent(Mathf.Clamp01(sp.progress01) * 100f);
+                return;
+            }
+            if (locked)
+            {
+                SetText(t.status, lockWhy);
+                Tone(t, 3);
+                return;
+            }
+            if (l == null) { SetText(t.status, ""); return; }
+            string res = MostShort(l, st, r);
+            if (res != null)
+            {
+                int have = Have(l, st, res);
+                string label = ResDefs.Label(res);
+                // An input nobody here can make yet names the building.
+                var fix = ShortFix.For(outpost, res);
+                if (fix.kind == ShortFix.Kind.Build)
+                {
+                    SetText(t.status, "needs a " + BuildPlans.Named(fix.planId).label);
+                    Tone(t, 1);
+                }
+                else if (r.takes.Length == 1 && have <= 0)
+                {
+                    SetText(t.status, "no " + label);
+                    Tone(t, 2);
+                }
+                else
+                {
+                    SetText(t.status, "short: " + label);
+                    Tone(t, 1);
+                }
+                return;
+            }
+            // Everything is here: the one input's count, or "ready".
+            SetText(t.status, r.takes.Length == 1
+                ? $"{Mathf.Min(Have(l, st, r.takes[0].res), 999)} {ResDefs.Label(r.takes[0].res)}"
+                : "ready");
+            Tone(t, 0);
+        }
+
+        /// 0 good (moss), 1 wait (amber), 2 bad (ember), 3 muted.
+        static void Tone(RecipeTile t, int kind)
+        {
+            if (kind == t.kind) return;
+            t.kind = kind;
+            t.status.EnableInClassList("st-tone--good", kind == 0);
+            t.status.EnableInClassList("st-tone--wait", kind == 1);
+            t.status.EnableInClassList("st-tone--bad", kind == 2);
+        }
+
+        static void SetText(Label l, string s)
+        {
+            if (l != null && l.text != s) l.text = s ?? "";
+        }
+
+        static void SetTone(VisualElement e, int kind)
+        {
+            e.EnableInClassList("st-tone--good", kind == 0);
+            e.EnableInClassList("st-tone--wait", kind == 1);
+            e.EnableInClassList("st-tone--bad", kind == 2);
+        }
+
+        void FillDetail(OutpostLedger l, StationStock st, SpotState sp, Recipe r)
+        {
+            if (detail == null) return;
+            var show = r != null && l != null ? DisplayStyle.Flex : DisplayStyle.None;
+            if (detail.style.display != show) detail.style.display = show;
+            if (r == null || l == null) { FillThumb(l, st, sp, null); return; }
+
+            SetText(detailName, StationPage.Cap(r.label));
+            SetText(detailTime, EachTime(r, MyLevel(l)));
+
+            // Inputs: "potato 8/1", moss when enough, ember when short.
+            int n = Mathf.Min(r.takes.Length, inChips.Length);
+            for (int i = 0; i < inChips.Length; i++)
+            {
+                var c = inChips[i];
+                bool on = i < n;
+                var d = on ? DisplayStyle.Flex : DisplayStyle.None;
+                if (c.root.style.display != d) c.root.style.display = d;
+                if (!on) continue;
+                var line = r.takes[i];
+                int have = Have(l, st, line.res);
+                BindChipIcon(c, line.res);
+                SetText(c.text, $"{ResDefs.Label(line.res)} {Mathf.Min(have, 999)}/{line.n}");
+                c.text.EnableInClassList("st-tone--good", have >= line.n);
+                c.text.EnableInClassList("st-tone--bad", have < line.n);
+            }
+            detailArrow.style.display = n > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+
+            // The output: "1 baked potato · fills ½ day"; a good that is not
+            // eaten just says its yield.
+            int y = Mathf.Max(1, r.yield);
+            string outText = $"{y} {ResDefs.Label(r.makes)}";
+            if (FoodBook.IsEdible(r.makes))
+            {
+                string fill = FillWords(FoodBook.Fill(r.makes));
+                if (fill != null) outText += y > 1 ? $" · fills {fill} each" : $" · fills {fill}";
+            }
+            BindChipIcon(outChip, r.makes);
+            SetText(outChip.text, outText);
+
+            // The one line, and the fix beside it when an input is short.
+            string lockWhy = LockShort(l, r);
+            string shortRes = lockWhy == null ? MostShort(l, st, r) : null;
+            bool mine = HasRecipe(sp) && sp.recipeId == r.id;
+            string text; int tone;
+            var fix = default(ShortFix.Fix);
+            if (!string.IsNullOrEmpty(refusal)) { text = refusal; tone = 2; }
+            else if (lockWhy != null) { text = StationPage.Cap(lockWhy) + "."; tone = 2; }
+            else if (mine && !string.IsNullOrEmpty(sp.pauseReason))
+            {
+                text = StationPage.Cap(sp.pauseReason);
+                tone = 1;
+                if (shortRes != null) fix = ShortFix.For(outpost, shortRes);
+            }
+            else if (shortRes != null)
+            {
+                int have = Have(l, st, shortRes);
+                string lab = ResDefs.Label(shortRes);
+                text = have <= 0
+                    ? $"No {Plural(lab)} yet. It will wait for {(Mass(lab) ? "it" : "them")}."
+                    : $"Short of {Plural(lab)} ({have}/{Need(r, shortRes)}). It will wait.";
+                tone = 1;
+                fix = ShortFix.For(outpost, shortRes);
+            }
+            else
+            {
+                // A selected spot pauses when its output has nowhere to go
+                // ("store full of X", `OutpostLedger.SpotPause`): the store's
+                // per-kind ceiling, "a campfire watches over ten of anything".
+                int ceil = Mathf.Max(1, l.ceilingPer);
+                if (r.takes.Length == 0) text = $"Runs until {ceil} are in the store.";
+                else if (r.takes.Length == 1) text = $"Runs until {RunsOut(ResDefs.Label(r.takes[0].res))} or {ceil} are in the store.";
+                else text = $"Runs until an input runs out or {ceil} are in the store.";
+                tone = 3;
+            }
+            SetText(detailLine, text);
+            SetTone(detailLine, tone);
+
+            detailFixF = fix;
+            var fd = fix.Valid ? DisplayStyle.Flex : DisplayStyle.None;
+            if (detailFix.style.display != fd) detailFix.style.display = fd;
+            if (fix.Valid) { string ft = fix.label + " →"; if (detailFix.text != ft) detailFix.text = ft; }
+
+            FillThumb(l, st, sp, r);
+        }
+
+        static void BindChipIcon(IoChip c, string res)
+        {
+            bool has = res != null && ItemIconSet.Get(res) != null;
+            StationPage.SetIcon(c.icon, has ? res : null);
+            var d = has ? DisplayStyle.Flex : DisplayStyle.None;
+            if (c.icon.style.display != d) c.icon.style.display = d;
+        }
+
+        /// **The thumb row (island UI rule 1): ONE bright primary, never a
+        /// disabled one.** The tapped recipe running here -> "Stop grill";
+        /// locked -> its fix; otherwise "Select for the grill". "Stop grill"
+        /// sits beside it while the spot runs something else.
+        void FillThumb(OutpostLedger l, StationStock st, SpotState sp, Recipe r)
+        {
+            if (primaryBtn == null) return;
+            string spot = multiSpot ? (spotNames[viewSpot] ?? "").ToLowerInvariant() : null;
+            string stopText = spot != null ? "Stop " + spot : "Stop";
+            bool busy = HasRecipe(sp);
+            bool thisRuns = busy && r != null && sp.recipeId == r.id;
+
+            var mode = Main.None;
+            string text = null;
+            mainFix = default;
+            if (l != null && st != null && r != null)
+            {
+                string lockWhy = LockShort(l, r);
+                if (thisRuns) { mode = Main.Stop; text = stopText; }
+                else if (lockWhy != null)
+                {
+                    mode = LockFix(l, r, out mainFix, out text);
+                }
+                else
+                {
+                    mode = Main.Select;
+                    text = spot != null ? $"Select for the {spot}" : "Select";
+                }
+            }
+            mainMode = mode;
+            var pd = mode != Main.None ? DisplayStyle.Flex : DisplayStyle.None;
+            if (primaryBtn.style.display != pd) primaryBtn.style.display = pd;
+            if (text != null && primaryBtn.text != text) primaryBtn.text = text;
+
+            bool stopShown = busy && mode != Main.Stop;
+            var sd = stopShown ? DisplayStyle.Flex : DisplayStyle.None;
+            if (stopBtn.style.display != sd) stopBtn.style.display = sd;
+            if (stopBtn.text != stopText) stopBtn.text = stopText;
+            // Stop alone keeps its own width, not the whole row.
+            stopBtn.style.flexGrow = mode == Main.None ? 0f : 1f;
+
+            var rd = mode != Main.None || stopShown ? DisplayStyle.Flex : DisplayStyle.None;
+            if (thumbRow != null && thumbRow.style.display != rd) thumbRow.style.display = rd;
+        }
+
+        /// The fix for a locked recipe, as the primary: the fire too low ->
+        /// "Raise Campfire to II"; this building's level too low -> "Raise to
+        /// level 2" when it can be paid, else the upgrade's own fix (the item
+        /// it lacks most, or the fire); a tool missing -> make it. None when
+        /// nothing can be pressed (the detail's line says why).
+        Main LockFix(OutpostLedger l, Recipe r, out ShortFix.Fix fix, out string text)
+        {
+            fix = default; text = null;
+            if (l.CampfireLevel < r.campfireLevel)
+                fix = ShortFix.RaiseFire(outpost, r.makes);
+            else if (MyLevel(l) < r.stationLevel)
+            {
+                var next = l.NextUpgradeAt(raisedIndex, planId);
+                if (next != null && l.CanUpgradeAt(raisedIndex, planId, out _))
+                {
+                    text = "Raise to level " + next.toLevel;
+                    return Main.Upgrade;
+                }
+                if (next != null)
+                {
+                    if (l.CampfireLevel < next.campfireLevel) fix = ShortFix.RaiseFire(outpost);
+                    else
+                    {
+                        var most = new ShortFix.Most();
+                        foreach (var c in next.cost) most.Add(c.res, c.n - l.SpendableOf(c.res));
+                        if (most.Res != null) fix = ShortFix.For(outpost, most.Res);
+                    }
+                }
+            }
+            else if (r.tool != null && l.CountOf(r.tool) <= 0)
+                fix = ShortFix.For(outpost, r.tool);
+            if (!fix.Valid) return Main.None;
+            text = fix.label;
+            return Main.Fix;
+        }
+
+        // --- words ---------------------------------------------------------------------------
 
         /// One batch's time on the bench at THIS building's level, from the
         /// same numbers the ledger works with (`ratePerDay` × level, a
         /// `TimeOfDay.WorkDaySeconds` day -- the fixed 180 s the recipes are
-        /// priced in, so a longer sky day never slows a bench).
-        string BatchTime(Recipe r, int level)
+        /// priced in, so a longer sky day never slows a bench): "15 s each",
+        /// "45 s for 3".
+        string EachTime(Recipe r, int level)
         {
             float rate = r.ratePerDay * Techs.RateMul(planId, level);
             if (rate <= 0f) return "";
-            float secs = TimeOfDay.WorkDaySeconds * Mathf.Max(1, r.yield) / rate;
-            return secs < 90f ? $"· {Mathf.RoundToInt(secs)} s" : $"· {secs / 60f:0.#} min";
+            int y = Mathf.Max(1, r.yield);
+            float secs = TimeOfDay.WorkDaySeconds * y / rate;
+            string t = secs < 90f ? $"{Mathf.RoundToInt(secs)} s" : $"{secs / 60f:0.#} min";
+            return y > 1 ? $"{t} for {y}" : $"{t} each";
         }
 
-        string SelectedId(OutpostLedger l, StationStock st)
+        /// A day's food in words: "½ day", "a day", "1¼ days".
+        static string FillWords(float f)
         {
-            if (pickedRecipe != null)
-                foreach (var c in cards) if (c.r.id == pickedRecipe) return pickedRecipe;
-            if (st != null)
+            if (f <= 0.001f) return null;
+            if (Mathf.Abs(f - 1f) < 0.01f) return "a day";
+            int whole = Mathf.FloorToInt(f + 0.01f);
+            float frac = f - whole;
+            string part = Mathf.Abs(frac) < 0.01f ? ""
+                : Mathf.Abs(frac - 0.25f) < 0.01f ? "¼"
+                : Mathf.Abs(frac - 0.5f) < 0.01f ? "½"
+                : Mathf.Abs(frac - 0.75f) < 0.01f ? "¾" : null;
+            if (part == null) return $"{f:0.##} day";
+            if (whole == 0) return part + " day";
+            return whole + part + " days";
+        }
+
+        /// Goods that read as a mass, not a count ("the timber runs out").
+        static bool Mass(string s)
+        {
+            switch (s)
             {
-                var order = l.OrderAt(planId, st.ordinal);
-                if (order.Active && order.recipe != null) return order.recipe.id;
+                case "timber": case "stone": case "ore": case "flour": case "meat": case "fish":
+                case "wheat": case "iron": case "food": case "game": case "hide":
+                    return true;
             }
-            var feed = Feeding(l, st);
-            if (feed != null) return feed.id;
-            return cards.Count > 0 ? cards[0].r.id : null;
-        }
-
-        void FillRecipes(OutpostLedger l, StationStock st, OutpostHand hand, string selected)
-        {
-            if (cards.Count == 0) return;
-            int level = MyLevel(l);
-            var order = st != null ? l.OrderAt(planId, st.ordinal) : default;
-            string stall = hand != null ? l.StallReason(hand) : null;
-            foreach (var c in cards)
-            {
-                var r = c.r;
-                string lockWhy = LockWhy(l, r);
-                c.locked = lockWhy != null;
-                bool active = order.Active && order.recipe != null && order.recipe.id == r.id;
-                bool picked = !c.locked && selected == r.id;
-
-                c.root.EnableInClassList("st-recipe--locked", c.locked);
-                c.root.EnableInClassList("st-recipe--on", picked);
-                c.dashes.style.display = c.locked ? DisplayStyle.Flex : DisplayStyle.None;
-                c.time.text = BatchTime(r, level)
-                    + (FoodBook.IsDish(r.makes) ? $" · fill {FoodBook.Fill(r.makes):0.##}" : "");
-                for (int ti = 0; ti < c.takes.Length && ti < r.takes.Length; ti++)
-                {
-                    var line = r.takes[ti];
-                    int have = l.StoreCountOf(line.res) + (st != null ? st.BayCount(line.res) : 0);
-                    c.takes[ti].text = $"{line.n} {ResDefs.Label(line.res)} ({have})";
-                    c.takes[ti].EnableInClassList("st-state--wait", have < line.n);
-                }
-
-                c.state.RemoveFromClassList("st-state--make");
-                c.state.RemoveFromClassList("st-state--wait");
-                c.state.RemoveFromClassList("st-state--lock");
-                c.barHolder.style.visibility = active && !c.locked ? Visibility.Visible : Visibility.Hidden;
-
-                if (c.locked)
-                {
-                    c.state.text = lockWhy;
-                    c.state.AddToClassList("st-state--lock");
-                }
-                else if (active)
-                {
-                    float p = st.BenchRecipe == r
-                        ? (st.benchState == BenchState.Finished ? 1f : Mathf.Clamp01(st.benchProgress)) : 0f;
-                    c.bar.style.width = Length.Percent(p * 100f);
-                    if (hand == null)
-                    {
-                        c.state.text = "waiting for a worker";
-                        c.state.AddToClassList("st-state--wait");
-                    }
-                    else if (!string.IsNullOrEmpty(stall) && st.benchState != BenchState.Working)
-                    {
-                        c.state.text = stall;
-                        c.state.AddToClassList("st-state--wait");
-                    }
-                    else
-                    {
-                        c.state.text = MakingText(st, order, r);
-                        c.state.AddToClassList("st-state--make");
-                    }
-                }
-                else c.state.text = picked ? "pick an amount below" : "tap to make";
-            }
-        }
-
-        /// "making 7 of 10" off the order's size as placed and what is left
-        /// (`orderLeft` counts OUTPUT units, a batch at a time).
-        static string MakingText(StationStock st, StationOrder order, Recipe r)
-        {
-            if (order.repeat) return "making · until stopped";
-            if (!OrderTotals.TryGetValue(st, out int total) || total < order.remaining || total <= 0)
-                OrderTotals[st] = total = order.remaining;
-            int made = total - order.remaining;
-            int now = Mathf.Min(total, made + 1);
-            return $"making {now} of {total}";
-        }
-
-        // --- 4. the order -------------------------------------------------------
-
-        void BuildOrder(VisualElement s)
-        {
-            var seg = new VisualElement();
-            seg.AddToClassList("st-seg");
-            for (int i = 0; i < Amounts.Length; i++)
-            {
-                int count = Amounts[i];
-                var b = new Button(() => PlaceAmount(count));
-                b.text = count < 0 ? "∞" : count.ToString();
-                b.AddToClassList("st-seg-btn");
-                if (i == 0) b.AddToClassList("st-seg-btn--first");
-                if (count < 0) b.AddToClassList("st-seg-btn--inf");
-                amountBtns[i] = b;
-                seg.Add(b);
-            }
-            stopBtn = new Button(() =>
-            {
-                var l = L;
-                ResolveRaisedIndex();
-                var st = Station(l);
-                if (st == null) return;
-                l.StopOrder(planId, st.ordinal);
-                OrderTotals.Remove(st);
-                Refresh();
-            }) { text = "Stop" };
-            stopBtn.AddToClassList("st-seg-btn");
-            stopBtn.AddToClassList("st-seg-btn--stop");
-            seg.Add(stopBtn);
-            s.Add(seg);
-            orderFix = new ShortFix.Slot(() => Refresh());
-            // Hugging: the fix sits a little tighter under the amount row.
-            if (hugged) orderFix.button.style.marginTop = 6f;
-            s.Add(orderFix.button);
-        }
-
-        /// **Keep in stock (2026-09-27, food rework phase 2)**: queue the
-        /// selected recipe as "keep 10"; the queue below is worked top-down,
-        /// each line with its own N and status. Under the amount row on the
-        /// tall page; its own **orders** page in a hugging frame, where the
-        /// button shares the eyebrow's row so a level-3 queue still fits.
-        void BuildQueue(VisualElement s)
-        {
-            keepBtn = new Button(QueueKeep) { text = "Keep 10 in stock" };
-            keepBtn.AddToClassList("st-seg-btn");
-            keepBtn.style.minHeight = TouchPx;
-            queueEyebrow = StationPage.Text("STANDING ORDERS · TOP-DOWN", "st-eyebrow");
-            if (hugged)
-            {
-                var row = new VisualElement();
-                row.style.flexDirection = FlexDirection.Row;
-                row.style.alignItems = Align.Center;
-                queueEyebrow.style.flexGrow = 1f;
-                queueEyebrow.style.flexShrink = 1f;
-                queueEyebrow.style.marginBottom = 0f;
-                queueEyebrow.style.whiteSpace = WhiteSpace.Normal;
-                keepBtn.style.flexGrow = 0f;
-                keepBtn.style.flexBasis = StyleKeyword.Auto;
-                keepBtn.style.paddingLeft = 14f;
-                keepBtn.style.paddingRight = 14f;
-                keepBtn.style.marginLeft = 8f;
-                keepBtn.text = "Keep 10";
-                row.Add(queueEyebrow);
-                row.Add(keepBtn);
-                s.Add(row);
-            }
-            else
-            {
-                keepBtn.style.marginTop = 8f;
-                s.Add(keepBtn);
-                queueEyebrow.style.marginTop = 12f;
-                s.Add(queueEyebrow);
-            }
-            queueList = new VisualElement();
-            s.Add(queueList);
-        }
-
-        /// **The fix for the selected recipe's shortfall (2026-09-30, island UI
-        /// rule 2):** one button under the amount row -- "Gather Timber",
-        /// "Make Boards", or "Raise Campfire to II" when the recipe is locked
-        /// by the fire. Built once in `BuildOrder`, bound by `FillOrder`.
-        ShortFix.Slot orderFix;
-
-        Button keepBtn;
-        Label queueEyebrow;
-        VisualElement queueList;
-        long queueKey = long.MinValue;
-
-        void QueueKeep()
-        {
-            var l = L;
-            ResolveRaisedIndex();
-            var st = Station(l);
-            if (st == null || l == null) return;
-            string id = SelectedId(l, st);
-            if (id == null) return;
-            l.QueueOrder(StationIndexOf(l, st), id, OrderMode.Keep, 10);
-            queueKey = long.MinValue;
-            Refresh();
-        }
-
-        int StationIndexOf(OutpostLedger l, StationStock st) =>
-            l != null && st != null && l.Stations is IList<StationStock> list ? list.IndexOf(st) : -1;
-
-        void FillQueue(OutpostLedger l, StationStock st, string selected)
-        {
-            if (queueList == null || keepBtn == null) return;
-            int si = StationIndexOf(l, st);
-            var q = si >= 0 ? l.QueueAt(si) : null;
-            int slots = si >= 0 ? l.QueueSlots(si) : 0;
-            var sel = Recipes.Named(selected);
-            bool canKeep = si >= 0 && sel != null && LockWhy(l, sel) == null
-                && (q.Count < slots || HasLine(q, selected));
-            keepBtn.SetEnabled(canKeep);
-            queueEyebrow.text = hugged
-                ? $"STANDING ORDERS · {(q != null ? q.Count : 0)}/{slots}"
-                : $"STANDING ORDERS · {(q != null ? q.Count : 0)}/{slots} · TOP-DOWN";
-
-            long key = si * 7919L + slots;
-            var status = new List<string>();
-            if (q != null)
-                for (int i = 0; i < q.Count; i++)
-                {
-                    string line = l.QueueStatus(si, i);
-                    status.Add(line);
-                    key = key * 31 + q[i].recipe.GetHashCode();
-                    key = key * 31 + q[i].n * 3 + (int)q[i].mode;
-                    key = key * 31 + line.GetHashCode();
-                }
-            if (key == queueKey) return;
-            queueKey = key;
-            queueList.Clear();
-            if (q == null || q.Count == 0)
-            {
-                queueList.Add(StationPage.Text("no standing orders", "st-line"));
-                return;
-            }
-            for (int i = 0; i < q.Count; i++)
-            {
-                int idx = i;
-                var o = q[i];
-                var r = Recipes.Named(o.recipe);
-                var card = StationPage.Card();
-                card.style.marginTop = 6f;
-                card.style.alignItems = Align.Center;
-                if (hugged) { card.style.paddingTop = 4f; card.style.paddingBottom = 4f; }
-                card.Add(StationPage.Icon(r?.makes, "st-small-icon"));
-                var colL = new VisualElement(); colL.AddToClassList("st-col");
-                colL.style.flexGrow = 1f;
-                string mode = o.mode == OrderMode.Keep ? $"Keep {o.n}"
-                    : o.mode == OrderMode.Repeat ? "Repeat" : $"Make {o.n}";
-                colL.Add(StationPage.Text($"{i + 1}. {mode} {r?.label ?? o.recipe}", "st-line"));
-                var st2 = StationPage.Text(status[i], "st-line");
-                st2.AddToClassList("st-muted");
-                colL.Add(st2);
-                card.Add(colL);
-                if (o.mode != OrderMode.Repeat)
-                {
-                    card.Add(SmallBtn("−", () => { l.SetQueuedN(si, idx, o.n - (o.n > 10 ? 5 : 1)); queueKey = long.MinValue; Refresh(); }));
-                    card.Add(SmallBtn("+", () => { l.SetQueuedN(si, idx, o.n + (o.n >= 10 ? 5 : 1)); queueKey = long.MinValue; Refresh(); }));
-                }
-                if (i > 0) card.Add(SmallBtn("↑", () => { l.MoveQueued(si, idx, -1); queueKey = long.MinValue; Refresh(); }));
-                card.Add(SmallBtn("✕", () => { l.UnqueueOrder(si, idx); queueKey = long.MinValue; Refresh(); }));
-                queueList.Add(card);
-            }
-        }
-
-        static bool HasLine(IReadOnlyList<QueuedOrder> q, string id)
-        {
-            if (q == null) return false;
-            foreach (var o in q) if (o.recipe == id) return true;
             return false;
         }
 
-        static Button SmallBtn(string text, System.Action act)
+        static string Plural(string s)
         {
-            var b = new Button(act) { text = text };
-            b.AddToClassList("st-seg-btn");
-            b.style.minWidth = TouchPx;
-            b.style.minHeight = TouchPx;
-            b.style.flexGrow = 0f;
-            b.style.marginLeft = 4f;
-            return b;
+            if (string.IsNullOrEmpty(s) || Mass(s) || s.EndsWith("s")) return s;
+            if (s.EndsWith("o")) return s + "es";
+            return s + "s";
         }
 
-        void PlaceAmount(int count)
+        /// "the potatoes run out" / "the timber runs out".
+        static string RunsOut(string s) =>
+            Mass(s) ? $"the {s} runs out" : $"the {Plural(s)} run out";
+
+        /// A spot's drawn glyph, by its name.
+        static string SpotGlyph(string spot)
         {
-            var l = L;
-            ResolveRaisedIndex();
-            var st = Station(l);
-            if (st == null) return;
-            string id = SelectedId(l, st);
-            if (id == null) return;
-            if (l.PlaceOrder(planId, id, count, st.ordinal)) OrderTotals[st] = count;
-            Refresh();
+            string s = (spot ?? "").ToLowerInvariant();
+            if (s.Contains("grill")) return "grill";
+            if (s.Contains("cauldron") || s.Contains("pot")) return "cauldron";
+            if (s.Contains("smelt") || s.Contains("furnace")) return "smelter";
+            if (s.Contains("forge") || s.Contains("anvil")) return "anvil";
+            return "spot";
         }
 
-        void FillOrder(OutpostLedger l, StationStock st, string selected)
-        {
-            if (stopBtn == null) return;
-            var sel = Recipes.Named(selected);
-            if (orderEyebrow != null)
-                orderEyebrow.text = sel != null ? "ORDER · " + sel.label.ToUpperInvariant() : "ORDER";
-            var order = st != null ? l.OrderAt(planId, st.ordinal) : default;
-            bool active = order.Active && order.recipe != null;
-            bool canOrder = st != null && sel != null && LockWhy(l, sel) == null;
-
-            int on = -1;
-            if (active && order.recipe.id == selected)
-            {
-                if (order.repeat) on = 0;
-                else if (OrderTotals.TryGetValue(st, out int total))
-                    for (int i = 1; i < Amounts.Length; i++) if (Amounts[i] == total) on = i;
-            }
-            for (int i = 0; i < amountBtns.Length; i++)
-            {
-                amountBtns[i].EnableInClassList("st-seg-btn--on", i == on);
-                amountBtns[i].SetEnabled(canOrder);
-            }
-            stopBtn.SetEnabled(active);
-            BindOrderFix(l, st, sel);
-        }
-
-        /// The one fix for the selected recipe: locked by the fire -> raise
-        /// it; locked for want of a tool -> make the tool; otherwise the
-        /// input the pile (store + this bench's bay, as the card counts it)
-        /// lacks most, a gatherable first. Hidden when nothing is short.
-        void BindOrderFix(OutpostLedger l, StationStock st, Recipe sel)
-        {
-            if (orderFix == null) return;
-            var fix = default(ShortFix.Fix);
-            if (sel != null && st != null)
-            {
-                if (l.CampfireLevel < sel.campfireLevel) fix = ShortFix.RaiseFire(outpost, sel.makes);
-                else if (sel.tool != null && l.CountOf(sel.tool) <= 0) fix = ShortFix.For(outpost, sel.tool);
-                else
-                {
-                    var most = new ShortFix.Most();
-                    foreach (var line in sel.takes)
-                        most.Add(line.res, line.n - (l.StoreCountOf(line.res) + st.BayCount(line.res)));
-                    if (most.Res != null) fix = ShortFix.For(outpost, most.Res);
-                }
-            }
-            orderFix.Bind(outpost, fix);
-        }
-
-        // --- 5. in and out ------------------------------------------------------
+        // --- work: in and out ------------------------------------------------------
 
         void BuildFlow(VisualElement s)
         {
@@ -889,17 +1335,26 @@ namespace SeaSick.UI.Sheets
             s.Add(stallLine);
         }
 
-        /// The recipe the bay is being filled for: the order's, else what is
-        /// on the bench, else what the station would make by default.
-        Recipe Feeding(OutpostLedger l, StationStock s) =>
-            (s != null ? (s.OrderRecipe ?? s.BenchRecipe) : null) ?? l.RecipeAt(planId);
+        /// The first spot that has a recipe set (the one the in-and-out card
+        /// follows), and its index into `spotNames`; -1 when none has.
+        int BusySpot(StationStock st)
+        {
+            for (int i = 0; i < spotNames.Count; i++) if (HasRecipe(SpotOf(st, i))) return i;
+            return -1;
+        }
 
-        void FillFlow(OutpostLedger l, StationStock st, OutpostHand hand, string selected)
+        /// **In and out (2026-09-30, per spot).** Bay -> the working spot's
+        /// batch -> rack. The bench cell follows the viewed spot when it has
+        /// a recipe, else the first spot that does, and names it on a
+        /// two-spot station ("grill").
+        void FillFlow(OutpostLedger l, StationStock st, OutpostHand hand, Recipe tapped)
         {
             if (bayValue == null) return;
-            var r = (st != null ? (st.BenchRecipe ?? st.OrderRecipe) : null) ?? Recipes.Named(selected) ?? Feeding(l, st);
+            int bi = HasRecipe(SpotOf(st, viewSpot)) ? viewSpot : BusySpot(st);
+            var sp = bi >= 0 ? SpotOf(st, bi) : null;
+            var r = (HasRecipe(sp) ? Recipes.Named(sp.recipeId) : null) ?? tapped ?? Recipes.Default(planId);
             string input = r != null && r.takes.Length > 0 ? r.takes[0].res : null;
-            string output = st?.BenchMakes ?? r?.makes;
+            string output = r?.makes;
             StationPage.SetIcon(bayIcon, input);
             StationPage.SetIcon(rackIcon, output);
 
@@ -918,17 +1373,16 @@ namespace SeaSick.UI.Sheets
             }
             else bayValue.text = input != null ? $"{st.BayCount(input)} / {st.InputCap}" : "--";
 
-            float p = st.benchState == BenchState.Finished ? 1f
-                    : st.benchState == BenchState.Empty ? 0f : Mathf.Clamp01(st.benchProgress);
-            ring.Value = p;
-            benchValue.text = st.benchState == BenchState.Empty ? "empty" : $"{Mathf.RoundToInt(p * 100f)}%";
-            benchLabel.text = st.benchState == BenchState.Finished ? "done, to the rack" : "on the bench";
+            float p = sp != null ? Mathf.Clamp01(sp.progress01) : 0f;
+            ring.Value = sp != null && sp.Running ? p : 0f;
+            benchValue.text = sp == null ? "idle" : $"{Mathf.RoundToInt(p * 100f)}%";
+            benchLabel.text = multiSpot && bi >= 0 ? (spotNames[bi] ?? "").ToLowerInvariant() : "on the bench";
             // **The fisher fishes at the water (2026-09-30, 0a17d6c).** The
             // fishing hut's bench is never used -- a catch is a trip from
             // the shore into the box (`OutpostLedger.FishesAtShore`) -- so
             // "empty" there was a lie while he stood at the water.
             bool shore = OutpostLedger.FishesAtShore(st);
-            benchValue.EnableInClassList("st-flow-value--words", shore);
+            benchValue.EnableInClassList("st-flow-value--words", shore || sp == null);
             if (shore)
             {
                 ring.Value = 0f;
@@ -939,13 +1393,14 @@ namespace SeaSick.UI.Sheets
             rackValue.text = $"{st.RackTotal} / {st.OutputCap}";
             rackValue.EnableInClassList("st-cost--short", st.RackFull);
 
-            string why = StallText(l, hand, l.OrderAt(planId, st.ordinal).Active);
+            string why = StallText(l, hand, BusySpot(st) >= 0);
             stallLine.text = why;
             stallLine.style.display = string.IsNullOrEmpty(why) ? DisplayStyle.None : DisplayStyle.Flex;
         }
 
         /// The ledger's `StallReason` for the hand on it; with nobody on it,
-        /// an order that is waiting for a hand says so. Empty when working.
+        /// a spot that has a recipe waiting for a hand says so. Empty when
+        /// working.
         internal static string StallText(OutpostLedger l, OutpostHand hand, bool wantsHand)
         {
             if (hand != null)
@@ -1013,40 +1468,30 @@ namespace SeaSick.UI.Sheets
 
             var st = Station(l);
             var hand = HandOn(l, st);
-            string selected = hasMake ? SelectedId(l, st) : null;
+            var tapped = hasMake ? Tapped(l, st, viewSpot) : null;
 
             if (header != null)
             {
-                header.SetSub($"Level {MyLevel(l)} · {StationPage.IslandName(outpost)}");
                 if (hasMake)
                 {
-                    var (text, kind) = Pill(l, st, hand);
-                    header.SetPill(text, kind);
+                    // "Level 1 · Ada works both" (Kevin's mockup: who is on it
+                    // is what a station's owner wants at a glance).
+                    string who = hand == null ? "no worker"
+                        : $"{(string.IsNullOrEmpty(hand.name) ? "a hand" : hand.name)} works "
+                          + (!multiSpot ? "here" : spotNames.Count == 2 ? "both" : "all");
+                    header.SetSub($"Level {MyLevel(l)} · {who}");
                 }
+                else header.SetSub($"Level {MyLevel(l)} · {StationPage.IslandName(outpost)}");
                 header.Refresh();
             }
             worker?.Update(l, hand, 0);
-            FillRecipes(l, st, hand, selected);
-            FillOrder(l, st, selected);
-            FillQueue(l, st, selected);
-            FillFlow(l, st, hand, selected);
+            if (makeBuilt) FillMake(l, st, hand, tapped);
+            FillFlow(l, st, hand, tapped);
             FillStore(l);
             upgrade?.Update(l, raisedIndex, planId, MyLevel(l), GoalPin.IsUpgradePinned(outpost, raisedIndex, planId));
         }
 
-        /// The header's word for this building right now.
-        static (string, int) Pill(OutpostLedger l, StationStock st, OutpostHand hand)
-        {
-            if (st == null) return ("--", StationPage.PillWait);
-            if (hand == null) return ("no worker", StationPage.PillBad);
-            if (st.RackFull) return ("output full", StationPage.PillBad);
-            if (st.benchState == BenchState.Working) return ("working", StationPage.PillGood);
-            if (!string.IsNullOrEmpty(l.StallReason(hand))) return ("waiting", StationPage.PillWait);
-            if (!st.HasOrder && st.benchState == BenchState.Empty) return ("idle", StationPage.PillWait);
-            return ("working", StationPage.PillGood);
-        }
-
-        // --- 7. upgrade ------------------------------------------------------------------
+        // --- level: the upgrade --------------------------------------------------------
 
         void DoUpgrade()
         {
@@ -1103,6 +1548,7 @@ namespace SeaSick.UI.Sheets
         }
     }
 
+
     /// **The station page's kit** -- the pieces `StationSheet` and
     /// `FarmSheet` share: the header, the worker card, the upgrade card,
     /// item icons and the three drawn glyphs. Styles live in
@@ -1116,6 +1562,8 @@ namespace SeaSick.UI.Sheets
         public static readonly Color Ink = new Color32(232, 242, 246, 255);
         public static readonly Color Mint = new Color32(159, 224, 194, 255);
         public static readonly Color Track = new Color32(30, 51, 68, 255);
+        /// The Melvor screen's amber (a running spot's glyph), 2026-09-30.
+        public static readonly Color Amber = new Color32(242, 196, 109, 255);
 
         static StyleSheet sheet;
         static bool loaded;
@@ -1633,7 +2081,7 @@ namespace SeaSick.UI.Sheets
         public sealed class Glyph : VisualElement
         {
             readonly string kind;
-            readonly Color color;
+            Color color;
 
             public Glyph(string kind, Color color, string cls)
             {
@@ -1642,6 +2090,15 @@ namespace SeaSick.UI.Sheets
                 AddToClassList(cls);
                 pickingMode = PickingMode.Ignore;
                 generateVisualContent += Draw;
+            }
+
+            /// Re-tints the stroke; repaints only when it changed (the spot
+            /// tiles' glyph goes amber while the spot works, 2026-09-30).
+            public void SetColor(Color c)
+            {
+                if (c == color) return;
+                color = c;
+                MarkDirtyRepaint();
             }
 
             void Draw(MeshGenerationContext ctx)
@@ -1707,6 +2164,41 @@ namespace SeaSick.UI.Sheets
                         break;
                     // The "while you were away" card (2026-09-27): a clock,
                     // same drawn-glyph treatment as the other card headers.
+                    // **The station spots (Melvor screen, 2026-09-30)**: the
+                    // grill, the cauldron, the smelter and the forge's anvil;
+                    // "spot" (a ring) for any other; "lock" on a locked tile.
+                    case "grill":
+                        Line(3, 11, 21, 11); Line(5, 11, 5, 14); Line(19, 11, 19, 14);
+                        Line(7, 6, 8, 8.5f); Line(12, 5, 12, 8.5f); Line(17, 6, 16, 8.5f);
+                        Line(8, 18, 16, 18);
+                        break;
+                    case "cauldron":
+                        Line(3, 10, 21, 10); Line(4.5f, 10, 6.5f, 19); Line(19.5f, 10, 17.5f, 19);
+                        Line(6.5f, 19, 17.5f, 19);
+                        Line(9, 7, 10, 4); Line(14, 7, 15, 4);
+                        break;
+                    case "smelter":
+                        Line(5, 20, 5, 9); Line(19, 20, 19, 9); Line(5, 9, 12, 4); Line(19, 9, 12, 4);
+                        Line(4, 20, 20, 20);
+                        Line(9, 20, 9, 15); Line(15, 20, 15, 15); Line(9, 15, 15, 15);
+                        break;
+                    case "anvil":
+                        Line(3, 8, 20, 8); Line(3, 8, 7, 11.5f); Line(7, 11.5f, 20, 11.5f); Line(20, 8, 20, 11.5f);
+                        Line(10, 11.5f, 10, 16); Line(15, 11.5f, 15, 16);
+                        Line(10, 16, 7, 19.5f); Line(15, 16, 18, 19.5f); Line(7, 19.5f, 18, 19.5f);
+                        break;
+                    case "lock":
+                        Line(6, 11, 18, 11); Line(18, 11, 18, 20); Line(18, 20, 6, 20); Line(6, 20, 6, 11);
+                        Line(8.5f, 11, 8.5f, 8); Line(15.5f, 11, 15.5f, 8);
+                        p.BeginPath();
+                        p.Arc(new Vector2(12 * s, 8 * s), 3.5f * s, 180f, 360f);
+                        p.Stroke();
+                        break;
+                    case "spot":
+                        p.BeginPath();
+                        p.Arc(new Vector2(12 * s, 12 * s), 6.5f * s, 0f, 360f);
+                        p.Stroke();
+                        break;
                     case "clock":
                         p.BeginPath();
                         p.Arc(new Vector2(12 * s, 12 * s), 8f * s, 0f, 360f);

@@ -151,6 +151,13 @@ namespace SeaSick.World
         /// Boards cut true on a steel-edged saw. What a building's second
         /// level is framed with.
         public const string FineBoards = "FineBoards";
+        /// **A fine board bent and strung with hide, 2026-09-30.** Kevin:
+        /// *"The Fletcher makes Bows from fine boards + hide, in addition to
+        /// arrows"* -- used for defence, hunting and by sailors from the
+        /// ship. **A bow shoots arrows and nothing else**: every shot spends
+        /// one `Arrows`, and a bow with no arrows cannot shoot. Worn like a
+        /// spear (`Economy.Techs.BowWear`, animals or raiders per bow).
+        public const string Bow = "Bow";
 
         /// What a hand can be told to go and GATHER — the things that are
         /// lying about on an island. The rest are made at a building by
@@ -233,6 +240,7 @@ namespace SeaSick.World
             SawBlade => 1,
             Spear => 2,
             IronSpear => 2,
+            Bow => 2,
             Arrows => 12,
             Meals => 4,
             Potato => 6, Carrot => 6, Onion => 6, Wheat => 5, Apple => 6,
@@ -274,6 +282,9 @@ namespace SeaSick.World
             Iron => new Color(0.36f, 0.36f, 0.40f),
             Spear => new Color(0.70f, 0.58f, 0.40f),
             IronSpear => new Color(0.56f, 0.52f, 0.46f),
+            // Fine-board stave, darker than the arrows it shoots so a bow
+            // and a quiver lying side by side do not read as one pile.
+            Bow => new Color(0.60f, 0.42f, 0.24f),
             SawBlade => new Color(0.62f, 0.64f, 0.68f),
             FineBoards => new Color(0.78f, 0.62f, 0.38f),
             Potato => new Color(0.70f, 0.56f, 0.36f),

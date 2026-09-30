@@ -464,9 +464,10 @@ namespace SeaSick.World.Economy
                     row.how = "no game left on this island · hunt elsewhere";
                     return;
                 }
-                if (spear == null)
+                // A bow with arrows hunts as well as a spear (2026-09-30).
+                if (spear == null && !l.BowReady())
                 {
-                    row.how += " · needs a spear";
+                    row.how += " · " + l.HunterBlocker();
                     row.state = GoalState.Blocked;
                     // The hunter can be posted now; the spear is the real wait.
                     row.step = hunters == 0 ? AssignStep(Res.Game, "post a hunter", "he waits at the fire until a spear is made") : null;
@@ -505,7 +506,7 @@ namespace SeaSick.World.Economy
                 {
                     row.state = GoalState.Blocked;
                     row.how = res == Res.Ore
-                        ? "not on this island · ore is on the far islands"
+                        ? "not on this island · ore is in the far islands, and a few nearer ones have an outcrop"
                         : "not on this island · " + (ResDefs.TryGet(res, out var d) ? d.blurb : "found elsewhere");
                     row.qty = "far";
                     return;
@@ -672,7 +673,7 @@ namespace SeaSick.World.Economy
                     {
                         if (s == null || s.removed || s.planId != r.station) continue;
                         anyStation = true;
-                        if (s.HasOrder && s.orderRecipe == r.id) return true;
+                        if (s.Selects(r.id)) return true;   // any spot (2026-09-30)
                     }
                 if (anyStation) return false;
                 var chosen = l.RecipeAt(r.station);

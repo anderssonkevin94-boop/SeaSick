@@ -112,7 +112,7 @@ namespace SeaSick.UI.Sheets
                 if (h.walkingIn) continue;
                 if (h.order == OutpostOrder.Gather && h.target == Res.Game && l.HunterBlocker() != null)
                 {
-                    into.Add(new Alert { text = "No spear · no hunting", tone = Tone.Bad, open = () => Forge(camp), fixLabel = "Make spear" });
+                    into.Add(new Alert { text = "No spear or bow · no hunting", tone = Tone.Bad, open = () => Forge(camp), fixLabel = "Make spear" });
                     continue;
                 }
                 if (!l.Stalled(h) && string.IsNullOrEmpty(h.bodyBlocked)) continue;

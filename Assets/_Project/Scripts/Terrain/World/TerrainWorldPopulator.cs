@@ -157,6 +157,7 @@ namespace SeaSick.Terrain
         IEnumerator Build()
         {
             if (world.seed != 0) Random.InitState(world.seed);
+            oreGuaranteeSpent = false;
             prm = TerrainParams.From(terrain);
             lut = TerrainCurveLut.Bake(terrain.profileCurve, Allocator.Persistent);
             Island.TerrainHeight = Height;
@@ -509,10 +510,59 @@ namespace SeaSick.Terrain
                 props.AddRange(rocks);
             }
 
+            // What the island's own kind and boulders came to, BEFORE the ore
+            // outcrop below: `Configure`'s amount is the kind's, unchanged.
+            int kindAmount = props.Count;
+
+            // **A small ore outcrop on some islands nearer than the ore
+            // ring, 2026-09-30.** Kevin: *"implement the ore into the game,
+            // so one can make iron."* Ore was an island KIND only, unlocked
+            // from 0.55 of the discovery radius (1650 m), so on every island
+            // inside that ring the Gather menu had no ore and the forge's
+            // iron recipe (2 ore a bar) could never run. See `WantsOreOutcrop`.
+            if (kind.name != World.Res.Ore && WantsOreOutcrop(island))
+            {
+                // Its own seeded stream (from the island's position), and the
+                // build's stream put back after: an outcrop draws nothing
+                // from the sequence the rest of the world is rolled from, so
+                // every island, reef and raider after it lands where it did.
+                var stream = Random.state;
+                Random.InitState(unchecked((int)(IslandFind.HashCentre(island.transform.position) ^ 0x0eeu)));
+                var ore = BuildProps(root.transform, island, World.Res.Ore, meanR, OreOutcropNodes);
+                Random.state = stream;
+                if (ore.Count > 0)
+                {
+                    props.AddRange(ore);
+                    island.MarkOreOutcrop();
+                }
+            }
+
             island.RegisterProps(props);
-            island.Configure(kind.name, props.Count, meanR, false, false);
+            island.Configure(kind.name, kindAmount, meanR, false, false);
             QueueDress(root.transform, meanR, island, index);
             return island;
+        }
+
+        /// Ore rocks in an outcrop: four units each (`ResourceNode`), so
+        /// twenty ore, ten bars of iron. A handful of tools, not a mine --
+        /// an island whose KIND is Ore is still the place to load a hold.
+        public const int OreOutcropNodes = 5;
+
+        /// The first island built (nearest the start point) that is big
+        /// enough for a camp: it always has an outcrop, so a new world has
+        /// ore in its first hours. Reset at the start of every build.
+        bool oreGuaranteeSpent;
+
+        /// **Which islands carry an ore outcrop.** No `Random`: the nearest
+        /// camp-sized island always does, and a third of the others do, by
+        /// a hash of the island's centre (the same hash a find's kind is
+        /// rolled from, from another byte) -- so the same world has the same
+        /// outcrops on every load, and a save's camps find their ore where it
+        /// was.
+        bool WantsOreOutcrop(Island island)
+        {
+            if (!oreGuaranteeSpent) { oreGuaranteeSpent = true; return true; }
+            return ((IslandFind.HashCentre(island.transform.position) >> 8) % 3u) == 0u;
         }
 
         /// Re-bake one island's scenery against the CURRENT settings, for the

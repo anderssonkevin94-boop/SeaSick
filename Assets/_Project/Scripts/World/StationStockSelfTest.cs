@@ -62,6 +62,12 @@ namespace SeaSick.World
     ///     mid-trip sends a store -> ship armful back to the store (order
     ///     paused, count restored) and lets a ship -> store armful finish;
     ///     a re-ordered hand's armful lands, a builder walks it on.
+    /// (o) Station spots (Kevin, 2026-09-30): the forge's smelter and forge
+    ///     advance together, each exactly as far as alone (one worker, rate
+    ///     not divided); a grill pauses "waiting for fish" and resumes when
+    ///     fish reaches the store; a sawmill pauses "store full of boards"
+    ///     without loading its timber and resumes when the store has room.
+    ///     (b)'s old "full rack blocks the bench" is now "the spot pauses".
     public static class StationStockSelfTest
     {
         public static bool Run()
@@ -118,8 +124,16 @@ namespace SeaSick.World
             var cs = c.StationOf(BuildPlans.Quarry.id);
             Gate(sb, ref fails, "bay-rack-within-capacity", capOk, capOk ? $"rack {cs.RackTotal}/{cs.OutputCap}" : capWhy);
             Gate(sb, ref fails, "nothing-created-or-destroyed", consOk, consOk ? "60 stone in, 60 accounted" : consWhy);
-            Gate(sb, ref fails, "full-rack-blocks-bench", cs.RackFull && cs.benchState == BenchState.Finished,
-                $"rack {cs.RackTotal}/{cs.OutputCap}, bench {cs.benchState}, stall '{c.StallReason(c.hands[0])}'");
+            // Spots (2026-09-30): with the rack full and the store full of
+            // bricks the spot AUTO-PAUSES ("store full of brick") instead of
+            // loading a batch it could not put down; a batch that finished
+            // into a nearly-full rack may still wait on the bench.
+            var cspot = cs.Spots[0];
+            Gate(sb, ref fails, "full-rack-pauses-spot",
+                cs.RackFull && !cspot.BenchBusy && cspot.pauseReason != null
+                && cspot.pauseReason.StartsWith("store full of") && cspot.Selected,
+                $"rack {cs.RackTotal}/{cs.OutputCap}, bench {cs.benchState}, spot '{cspot.pauseReason ?? "running"}', "
+                + $"stall '{c.StallReason(c.hands[0])}'");
 
             // --- (d) repeat until stopped -------------------------------------
             var d = Quarry(200, 1000, 1);
@@ -455,6 +469,7 @@ namespace SeaSick.World
             Deposits(sb, ref fails);
             Delivery(sb, ref fails);
             Fishing(sb, ref fails);
+            SpotGates(sb, ref fails);
 
             sb.AppendLine(fails == 0 ? "ALL PASS" : $"{fails} FAILED");
             if (fails == 0) Debug.Log(sb.ToString()); else Debug.LogError(sb.ToString());
@@ -816,6 +831,121 @@ namespace SeaSick.World
                 $"fill {fill:0.##} with an empty store, best meal {meal ?? "none"}, ate {hungry.lastMeal}, full {hungry.full:0.00}");
         }
 
+        // --- (o) station spots, Kevin 2026-09-30 --------------------------------
+
+        /// **Melvor-style spots.** (1) The forge's Smelter (iron) and Forge
+        /// (spear) run AT ONCE under one smith, each at its full rate: their
+        /// benches advance exactly as far as each alone would. (2) A grill
+        /// with grilled fish selected runs its last fish, auto-pauses
+        /// "waiting for fish", and resumes by itself when fish reaches the
+        /// store. (3) A sawmill whose rack and store are full of boards
+        /// pauses "store full of boards" without loading its timber, and
+        /// resumes when the store has room.
+        static void SpotGates(StringBuilder sb, ref int fails)
+        {
+            string forge = BuildPlans.Blacksmith.id;
+            int smelter = StationSpots.IndexOf(forge, "Smelter"), anvil = StationSpots.IndexOf(forge, "Forge");
+
+            // (1) two spots at once
+            float Both(bool iron, bool spear, out float spearProg, out bool bothWorking)
+            {
+                var l = new OutpostLedger { ceilingPer = 1000, stationsMigrated = true, campfireLevel = 2 };
+                l.SetCentre(Vector3.zero);
+                l.raised.Add(new BuiltBuilding { planId = forge, x = 15f });
+                l.built.Add(forge);
+                l.hands.Add(new OutpostHand { name = "Smith", order = OutpostOrder.Work, target = forge,
+                    wHas = true, wx = 15f, wz = 0f });
+                l.Store(Res.Food, true).whole = 1000;
+                l.lastTicked = 0.0;
+                l.EnsureStations();
+                var st = l.StationOf(forge);
+                st.Bay(Res.Ore, true).whole = 2;
+                st.Bay(Res.Boards, true).whole = 1;
+                st.Bay(Res.Stone, true).whole = 1;
+                if (iron) l.SelectRecipe(st, smelter, "iron", out _);
+                if (spear) l.SelectRecipe(st, anvil, "spear", out _);
+                double now = 0.0;
+                bothWorking = false;
+                for (int i = 0; i < 4; i++)
+                {
+                    Advance(l, ref now, 0.05);
+                    if (st.Spots[smelter].BenchBusy && st.Spots[anvil].BenchBusy) bothWorking = true;
+                }
+                spearProg = st.Spots[anvil].progress01;
+                return st.Spots[smelter].progress01;
+            }
+            float ironBoth = Both(true, true, out float spearBoth, out bool sawBoth);
+            float ironAlone = Both(true, false, out _, out _);
+            Both(false, true, out float spearAlone, out _);
+            Gate(sb, ref fails, "spots-run-at-once-full-rate",
+                smelter >= 0 && anvil >= 0 && sawBoth && ironBoth > 0.1f && spearBoth > 0.1f
+                && Mathf.Abs(ironBoth - ironAlone) < 1e-4f && Mathf.Abs(spearBoth - spearAlone) < 1e-4f,
+                $"after 0.2 d: smelter {ironBoth:P0} (alone {ironAlone:P0}), forge {spearBoth:P0} (alone {spearAlone:P0}), "
+                + $"both working together {sawBoth}");
+
+            // (2) waiting for an input, then resuming
+            {
+                string kitchen = BuildPlans.Kitchen.id;
+                var l = new OutpostLedger { ceilingPer = 1000, stationsMigrated = true, campfireLevel = 1 };
+                l.SetCentre(Vector3.zero);
+                l.raised.Add(new BuiltBuilding { planId = kitchen, x = 15f });
+                l.built.Add(kitchen);
+                l.hands.Add(new OutpostHand { name = "Cook", order = OutpostOrder.Work, target = kitchen,
+                    wHas = true, wx = 15f, wz = 0f });
+                l.Store(Res.Food, true).whole = 1000;
+                l.lastTicked = 0.0;
+                l.EnsureStations();
+                var st = l.StationOf(kitchen);
+                int grill = StationSpots.IndexOf(kitchen, "Grill");
+                st.Bay(Res.Fish, true).whole = 1;
+                bool picked = l.SelectRecipe(st, grill, "grilled-fish", out string refusal);
+                bool wrongSpot = !l.SelectRecipe(st, StationSpots.IndexOf(kitchen, "Cauldron"), "grilled-fish", out string wrongWhy);
+                double now = 0.0;
+                for (int i = 0; i < 20; i++) Advance(l, ref now, 0.05);
+                var sp = st.Spots[grill];
+                // (Counted by the fish used, not the dishes: the cook may eat one.)
+                int fishLeft = st.BayCount(Res.Fish);
+                string paused = sp.pauseReason ?? "";
+                bool stillSelected = sp.Selected;
+                l.Store(Res.Fish, true).whole = 3;
+                bool resumed = false;
+                for (int i = 0; i < 40; i++)
+                {
+                    Advance(l, ref now, 0.05);
+                    if (sp.Running && sp.BenchBusy) resumed = true;
+                }
+                int fishUsed = 3 - l.StoreCountOf(Res.Fish) - st.BayCount(Res.Fish) - l.CarriedOf(Res.Fish);
+                Gate(sb, ref fails, "spot-pauses-on-input-and-resumes",
+                    picked && wrongSpot && fishLeft == 0 && stillSelected && paused.StartsWith("waiting for")
+                    && resumed && fishUsed > 0,
+                    $"select {picked} ({refusal ?? "ok"}), cauldron refused '{wrongWhy}', bay fish {fishLeft} then "
+                    + $"'{paused}', fish in the store -> resumed {resumed}, {fishUsed} more used");
+            }
+
+            // (3) the store full: paused without loading, resumes with room
+            {
+                var l = Sawmill(5, 0);
+                l.Store(Res.Boards, true).whole = 5;
+                var st = l.StationOf(BuildPlans.Sawmill.id);
+                st.Rack(Res.Boards, true).whole = st.OutputCap;
+                st.Bay(Res.Timber, true).whole = 3;
+                l.hands[0].wHas = true; l.hands[0].wx = 15f; l.hands[0].wz = 0f;
+                l.SelectRecipe(st, 0, "boards", out _);
+                double now = 0.0;
+                for (int i = 0; i < 10; i++) Advance(l, ref now, 0.05);
+                var sp = st.Spots[0];
+                string paused = sp.pauseReason ?? "";
+                int timberWhilePaused = st.BayCount(Res.Timber);
+                bool idleBench = sp.benchState == BenchState.Empty;
+                l.ceilingPer = 100;
+                for (int i = 0; i < 20; i++) Advance(l, ref now, 0.05);
+                int timberAfter = st.BayCount(Res.Timber);
+                Gate(sb, ref fails, "spot-pauses-on-full-store-and-resumes",
+                    paused.StartsWith("store full of") && timberWhilePaused == 3 && idleBench && timberAfter < 3,
+                    $"'{paused}', timber kept {timberWhilePaused}/3, bench empty {idleBench}; store room -> timber {timberAfter}");
+            }
+        }
+
         /// A sawmill 15 m from the store (the fire square at 0,0), one
         /// sawyer, fed, no timber standing -- the test sets the rest.
         static OutpostLedger Sawmill(int ceiling, int storeTimber)
@@ -901,12 +1031,13 @@ namespace SeaSick.World
         {
             int n = l.CountOf(Res.Stone) + l.CarriedOf(Res.Stone) + Bricks(l);
             foreach (var s in l.Stations)
-            {
-                if (s.benchState != BenchState.Loaded && s.benchState != BenchState.Working) continue;
-                var r = s.BenchRecipe;
-                if (r == null) continue;
-                foreach (var line in r.takes) if (line.res == Res.Stone) n += line.n;
-            }
+                foreach (var sp in s.Spots)          // every spot's bench (2026-09-30)
+                {
+                    if (!sp.BenchBusy) continue;
+                    var r = sp.BenchRecipe;
+                    if (r == null) continue;
+                    foreach (var line in r.takes) if (line.res == Res.Stone) n += line.n;
+                }
             return n;
         }
 

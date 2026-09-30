@@ -211,6 +211,11 @@ namespace SeaSick.Dev
         {
             GUILayout.Label("Recruits at sea (dev)");
 
+            // Kevin, 2026-09-30: people floating in the water. One on a
+            // board 45 m off the bow now, instead of ~10 min of sailing.
+            if (GUILayout.Button("Castaway in the water ahead", GUILayout.Height(RowH)))
+                Banner.Show(SeaSick.Voyage.CastawaySpawner.DebugSpawn());
+
             if (GUILayout.Button("Spawn stranger on nearest island", GUILayout.Height(RowH)))
             {
                 var motor = FindAnyObjectByType<ShipMotor>();

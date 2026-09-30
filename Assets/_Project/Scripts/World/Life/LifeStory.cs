@@ -214,6 +214,17 @@ namespace SeaSick.World.Life
                         "Waited on " + camp + " for a ship, and one finally came.",
                         "Was found on " + camp + " with nothing, and taken aboard anyway.",
                     });
+                case LifeEvents.PulledFromSea:
+                {
+                    // Kevin, 2026-09-30: castaways on a board at sea.
+                    string by = string.IsNullOrEmpty(e.other) ? "the ship's crew" : e.other;
+                    return Pick(h, salt, new[]
+                    {
+                        "Pulled from the sea off " + camp + " by " + by + ".",
+                        "Was found clinging to a board off " + camp + ", and " + by + " hauled them in.",
+                        "Came out of the sea off " + camp + " with nothing but a plank and a name.",
+                    });
+                }
                 case LifeEvents.Ferried:
                     return Pick(h, salt, new[]
                     {

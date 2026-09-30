@@ -63,13 +63,20 @@ namespace SeaSick.World
                 // whatever the pile does afterwards -- only the phase-9 dev
                 // "Arm" flag and a hunter with nothing here yet fall back to
                 // the camp-wide snapshot.
-                r.defendSpear = !string.IsNullOrEmpty(r.raidSpear) ? r.raidSpear : ledger.SpearInHand();
+                // **Bows (2026-09-30):** a bow hunter caught out fights
+                // with his bow (`huntArmed` = the trip went out with it).
+                r.defendSpear = !string.IsNullOrEmpty(r.raidSpear) ? r.raidSpear
+                    : r.huntArmed ? Res.Bow : ledger.SpearInHand();
                 party.MarkDefender(r.name);
                 if (armedNow) defendArmedLatch = true;
                 ledger.DropCarriedLoadNow(r);
                 Drop();
                 defendJabClock = 0f;
             }
+
+            // **A bow shoots from range (2026-09-30)** -- its own targeting,
+            // over the wall included (`CampWorker.Archery`).
+            if (r.defendSpear == Res.Bow) return TickArcher(r, party, dt);
 
             RaidWalker foe = NearestRaider(party);
             if (foe == null)
@@ -139,6 +146,7 @@ namespace SeaSick.World
             {
                 r.defending = false;
                 r.defendSpear = null;
+                r.bowDry = false;
                 phase = Phase.Resting;
                 acting?.Set(VillagerActing.Mode.None);
             }

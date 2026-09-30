@@ -655,7 +655,7 @@ namespace SeaSick.World
             kind = BuildKind.Fletcher,
             baseStoneCost = 2,
             label = "fletcher's",
-            blurb = "a fletcher makes arrows from timber; the hunt and the watch both want them",
+            blurb = "a fletcher makes arrows from timber, and bows from fine boards and hide; the hunt, the watch and the ship want them",
             resource = Res.Timber,
             baseCost = 14,
             footprint = new Vector2(4.84f, 4.93f),

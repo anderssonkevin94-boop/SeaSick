@@ -250,7 +250,13 @@ namespace SeaSick.World.Economy
         /// an iron one twelve.
         /// (Animals per spear: the tuning asset's `stoneSpearAnimals` /
         /// `ironSpearAnimals`.)
-        public static float SpearWear(string spear) => 1f / EconomyTuning.SpearAnimals(spear == Res.IronSpear);
+        public static float SpearWear(string spear) =>
+            spear == Res.Bow ? BowWear : 1f / EconomyTuning.SpearAnimals(spear == Res.IronSpear);
+
+        /// **Bows used up per kill (2026-09-30)**, hunting or raid: one over
+        /// the tuning asset's `bowAnimals`. The arrow each shot spends is
+        /// separate and whole (`OutpostLedger.SpendArrow`).
+        public static float BowWear => 1f / EconomyTuning.BowAnimals;
 
         /// **What comes home beside the meat, per animal -- and the ONLY way
         /// Hide enters a camp** (Kevin, 2026-09-27: "fine that hide is the

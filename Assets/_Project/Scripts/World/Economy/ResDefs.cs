@@ -142,7 +142,7 @@ namespace SeaSick.World.Economy
             new ResDef { id = Res.Meals, label = "ship's biscuit", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 2,
                 blurb = "hard bread for the hold; keeps a crew at sea", category = ResCategory.Food },
             new ResDef { id = Res.Arrows, label = "arrows", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 1,
-                blurb = "spent by hunters and lookouts", category = ResCategory.Gear },
+                blurb = "what a bow shoots, one a shot; lookouts loose them at raiders", category = ResCategory.Gear },
             new ResDef { id = Res.Spear, label = "spear", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 1,
                 blurb = "a board and a stone tip; a hunter cannot hunt without one", category = ResCategory.Gear },
             new ResDef { id = Res.Tools, label = "tools", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 2,
@@ -151,6 +151,10 @@ namespace SeaSick.World.Economy
                 blurb = "an iron edge for the sawmill; cuts fine boards", category = ResCategory.Gear },
             new ResDef { id = Res.IronSpear, label = "iron spear", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 2,
                 blurb = "a board and an iron tip; lasts three stone spears", category = ResCategory.Gear },
+            // Kevin, 2026-09-30: the fletcher makes bows from fine boards +
+            // hide. Fire II because fine boards are.
+            new ResDef { id = Res.Bow, label = "bow", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 2,
+                blurb = "a fine board strung with hide; shoots arrows to hunt, defend and fight from the ship", category = ResCategory.Gear },
         };
 
         static Dictionary<string, ResDef> byId;

@@ -42,6 +42,30 @@ namespace SeaSick.Combat
         [Tooltip("Death/rescue phase 10: metres an unarmed hand with no hut runs from the raiders' centre before crouching, kept inside the defend perimeter.")]
         public float crouchDistance = 10f;
 
+        [Header("Bows (2026-09-30, docs/GDD.md \"Bows\")")]
+        [Tooltip("Metres a defender with a bow shoots a raider from -- from behind the wall, or wherever he stands. Spear hands still close to jabReach.")]
+        public float bowRange = 18f;
+        [Tooltip("Metres a posted tower lookout with the camp's bow shoots from: higher up, farther.")]
+        public float lookoutBowRange = 26f;
+        [Tooltip("Real seconds between one archer's shots. Each shot spends one arrow.")]
+        public float bowShotSeconds = 1.5f;
+        [Tooltip("Chance one arrow hits (0..1). With bowDamage 1.5 an arrow is worth ~1 hp, so ~3 arrows drop a 3 hp raider -- in line with the landing volley's 2 arrows a raider.")]
+        [Range(0f, 1f)] public float bowHitChance = 0.7f;
+        [Tooltip("Damage one arrow that hits does (stone jab = 1, iron = 1.5).")]
+        public float bowDamage = 1.5f;
+        [Tooltip("Metres a second an arrow flies (show only; the hit lands when it arrives).")]
+        public float arrowSpeed = 30f;
+
+        [Header("Bows at sea (2026-09-30)")]
+        [Tooltip("Metres from the ship the crew's bows reach an enemy hull.")]
+        public float shipBowRange = 40f;
+        [Tooltip("Real seconds between the crew's volleys. Each archer spends one arrow from the hold per volley.")]
+        public float shipVolleySeconds = 3f;
+        [Tooltip("Chance one arrow at sea hits the enemy hull (0..1).")]
+        [Range(0f, 1f)] public float shipBowHitChance = 0.6f;
+        [Tooltip("Hull damage one arrow hit does, as a share of one round shot (1 = a cannonball). Arrows add up: at 0.1, ten hits = one ball.")]
+        public float shipArrowHullDamage = 0.1f;
+
         [Header("Raids grow with the camp (phase 12)")]
         [Tooltip("Party size with nobody home to raise it: the floor, and the minimum a raid is ever clamped down to.")]
         public int basePartySize = 3;
@@ -110,6 +134,17 @@ namespace SeaSick.Combat
         public static float CrouchDistance => Active != null ? Active.crouchDistance : 10f;
         public static float RaiderHitSeconds => Active != null ? Active.raiderHitSeconds : 1.2f;
         public static float RaiderReach => Active != null ? Active.raiderReach : 1.6f;
+
+        public static float BowRange => Active != null ? Active.bowRange : 18f;
+        public static float LookoutBowRange => Active != null ? Active.lookoutBowRange : 26f;
+        public static float BowShotSeconds => Mathf.Max(0.2f, Active != null ? Active.bowShotSeconds : 1.5f);
+        public static float BowHitChance => Active != null ? Active.bowHitChance : 0.7f;
+        public static float BowDamage => Active != null ? Active.bowDamage : 1.5f;
+        public static float ArrowSpeed => Mathf.Max(5f, Active != null ? Active.arrowSpeed : 30f);
+        public static float ShipBowRange => Active != null ? Active.shipBowRange : 40f;
+        public static float ShipVolleySeconds => Mathf.Max(0.5f, Active != null ? Active.shipVolleySeconds : 3f);
+        public static float ShipBowHitChance => Active != null ? Active.shipBowHitChance : 0.6f;
+        public static float ShipArrowHullDamage => Active != null ? Active.shipArrowHullDamage : 0.1f;
 
         public static float BreachCostMetres => Active != null ? Active.breachCostMetres : 40f;
         public static int LandingCandidates => Active != null ? Active.landingCandidates : 36;

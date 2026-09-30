@@ -19,7 +19,13 @@ namespace SeaSick.Combat
 
         HullIntegrity hull;
 
-        void Awake() { hull = GetComponent<HullIntegrity>(); }
+        void Awake()
+        {
+            hull = GetComponent<HullIntegrity>();
+            // **Bows at sea (2026-09-30):** the crew shoots arrows from the
+            // hold at raider hulls in range (`Ship.ShipArchers`).
+            if (GetComponent<ShipArchers>() == null) gameObject.AddComponent<ShipArchers>();
+        }
 
         /// The capsule a ball has to cross, from the hull she actually wears.
         /// The serialized numbers are the brig's; the steamer sizes hers here.

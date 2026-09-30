@@ -36,7 +36,14 @@ namespace SeaSick.World
         void TickHunting(OutpostHand r, float dt)
         {
             var ledger = camp != null ? camp.Ledger : null;
-            string spear = ledger != null ? ledger.SpearInHand() : null;
+            // **Bows (2026-09-30):** a bow trip (`huntArmed`) carries the
+            // bow; at home he shows the spear, or the bow if that is all the
+            // camp has to hunt with.
+            string spear = ledger == null ? null
+                : r.huntArmed ? Res.Bow
+                : ledger.SpearInHand() ?? (ledger.BowReady() ? Res.Bow : null);
+            // A bow hunter shoots from farther off than arm's length.
+            float reach = r.huntArmed ? HuntReach * Economy.EconomyTuning.BowHuntReachScale : HuntReach;
             if (hunterProps == null) hunterProps = HunterProps.On(gameObject);
             var props = hunterProps;
             var view = ledger != null ? ledger.HaulOf(r) : default;
@@ -80,6 +87,7 @@ namespace SeaSick.World
                 // the books kill it; wait for it (briefly) and lift it.
                 if (quarry != null && !props.HasCarcass)
                 {
+                    LooseHuntArrow(r, quarry);
                     Vector3 at = quarry.transform.position;
                     if (!quarry.Down && fallWait < FallWaitSeconds)
                     {
@@ -135,7 +143,7 @@ namespace SeaSick.World
                 phase = Phase.Going;
                 props.Drive(spear, HunterProps.Pose.Upright);
                 acting?.Set(VillagerActing.Mode.None);
-                if (!Near(beast, HuntReach + 0.35f)) { Walk(StandOffFrom(beast, HuntReach), dt); return; }
+                if (!Near(beast, reach + 0.35f)) { Walk(StandOffFrom(beast, reach), dt); return; }
                 r.walkingIn = false;
                 ledger.BodyArrived(r);
                 return;

@@ -119,7 +119,8 @@ namespace SeaSick.World
             return true;
         }
 
-        /// Walk to the store and take one spear out of it, iron first.
+        /// Walk to the store and take one spear out of it, iron first -- or,
+        /// with the spears gone, a bow (2026-09-30).
         /// `Combat.RaidAlarm.Begin` already checked one was there when it
         /// sent him, but a save/dev tool/another fetcher can have emptied it
         /// since -- gone by the time he arrives, and he hides instead of
@@ -137,8 +138,13 @@ namespace SeaSick.World
                 return true;
             }
 
+            // **Bows (2026-09-30):** spears first -- they are the melee
+            // line -- then a bow, if the camp has arrows for it and it is not
+            // one of the bows kept for the tower lookouts
+            // (`RaidAlarm.SpareBows`).
             string got = ledger.TakeFromStore(Res.IronSpear, 1) == 1 ? Res.IronSpear
                 : ledger.TakeFromStore(Res.Spear, 1) == 1 ? Res.Spear
+                : RaidAlarm.SpareBows(camp) > 0 && ledger.TakeFromStore(Res.Bow, 1) == 1 ? Res.Bow
                 : null;
             r.fetchingSpear = false;
             if (got != null) { r.raidSpear = got; r.raidSpearWear = 0f; }

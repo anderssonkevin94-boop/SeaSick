@@ -62,7 +62,10 @@ namespace SeaSick.Combat
             st.hideAllOverride = false;
             st.hidForNoSpear = 0;
 
-            int storeSpears = ledger.StoreCountOf(World.Res.IronSpear) + ledger.StoreCountOf(World.Res.Spear);
+            // **Bows (2026-09-30)** arm hands too, once the spears are gone
+            // (`World.CampWorker.TickFetchSpear` takes spears first).
+            int storeSpears = ledger.StoreCountOf(World.Res.IronSpear) + ledger.StoreCountOf(World.Res.Spear)
+                + SpareBows(camp);
 
             var eligible = new List<World.OutpostHand>();
             foreach (var h in ledger.hands)
@@ -166,7 +169,8 @@ namespace SeaSick.Combat
             // a fraction (there is nothing left of it). The hand goes back
             // to bare hands; if the raid is still live he hides like anyone
             // else with no spear.
-            string kind = attacker.raidSpear == World.Res.IronSpear ? "iron spear" : "stone spear";
+            string kind = attacker.raidSpear == World.Res.Bow ? "bow"
+                : attacker.raidSpear == World.Res.IronSpear ? "iron spear" : "stone spear";
             string who = string.IsNullOrEmpty(attacker.name) ? "A" : attacker.name + "'s";
             Flash(camp, $"{who} {kind} broke");
             World.Life.Lives.Log(attacker.name, World.Life.LifeEvents.SpearBroke, camp?.Ledger?.CampLabel);
@@ -239,7 +243,8 @@ namespace SeaSick.Combat
                 // hunter to walk to the store for a spear he was already
                 // holding. Only a hand with NOTHING in his hands draws on
                 // the store's count, closest-first spirit unchanged.
-                int available = ledger.StoreCountOf(World.Res.IronSpear) + ledger.StoreCountOf(World.Res.Spear);
+                int available = ledger.StoreCountOf(World.Res.IronSpear) + ledger.StoreCountOf(World.Res.Spear)
+                    + SpareBows(camp);
                 foreach (var h in ledger.hands)
                 {
                     if (h == null || !(h.hidingHut || h.hidingCrouch)) continue;
@@ -293,6 +298,20 @@ namespace SeaSick.Combat
                     h.returningSpear = false;
                 }
             }
+        }
+
+        /// **Store bows a ground hand may take at the alarm (2026-09-30).**
+        /// None without an arrow to shoot, and one bow per posted tower
+        /// lookout stays in the store for him: the lookouts shoot first
+        /// (`World.CampWorker.TickTowerArcher` shoots the pile's bow).
+        public static int SpareBows(World.Outpost camp)
+        {
+            var ledger = camp != null ? camp.Ledger : null;
+            if (ledger == null || !ledger.ArrowsHeld) return 0;
+            int lookouts = 0;
+            if (ledger.hands != null)
+                foreach (var h in ledger.hands) if (h != null && IsPostedLookout(h)) lookouts++;
+            return Mathf.Max(0, ledger.StoreCountOf(World.Res.Bow) - lookouts);
         }
 
         static bool IsPostedLookout(World.OutpostHand h) =>

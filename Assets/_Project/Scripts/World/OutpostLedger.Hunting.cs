@@ -15,7 +15,8 @@ namespace SeaSick.World
     ///    measured (`SourceMetres(Game)`);
     /// 2. **the jab** -- `JabSeconds` of pose at the beast, then the pickup
     ///    event IS the kill (`HuntKill`): one animal off `Game.standing`, the
-    ///    spear worn `SpearWear`, an arrow loosed if he went out armed;
+    ///    spear worn `SpearWear` -- or, on a bow trip (2026-09-30), one arrow
+    ///    spent and the bow worn `BowWear` instead;
     /// 3. **the carry** -- the carcass on his shoulders, walked home;
     /// 4. **the drop-off** -- `Res.MeatPerAnimal` Food and `Techs.HuntDrops`
     ///    (1 Hide) as WHOLE units, as far as each fits, on arrival.
@@ -64,15 +65,24 @@ namespace SeaSick.World
         /// **Could `h` start a hunt trip right now** (2026-09-28): the checks
         /// `StartHuntTrip` makes, shared with `FeedFirst` so it never drafts
         /// a hand to a hunt that cannot start. `h` null = anybody.
+        /// **A bow + arrows is as good as a spear (2026-09-30)**.
         bool HuntCanStart(OutpostHand h) =>
-            SpearInHand() != null && !HuntStoreFull() && GameUnclaimed(h) >= 1;
+            (SpearInHand() != null || BowReady()) && !HuntStoreFull() && GameUnclaimed(h) >= 1;
 
-        /// Out after one animal: a spear in the pile, a beast nobody else is
-        /// on, and room for some part of the carcass. False otherwise.
+        /// Out after one animal: a spear -- or a bow with arrows -- in the
+        /// pile, a beast nobody else is on, and room for some part of the
+        /// carcass. False otherwise.
+        ///
+        /// **`huntArmed` = this trip went out with the BOW (2026-09-30).**
+        /// The bow is taken first when it can shoot: it hunts from farther
+        /// off (`EconomyTuning.BowHuntReachScale`) and a hunter caught out by
+        /// a raid shoots rather than jabs. Before real bows existed this
+        /// flag meant "arrows in the pile"; an old save's trip still carrying
+        /// it falls back to the spear at the kill if no bow is there.
         bool StartHuntTrip(OutpostHand h)
         {
             if (!HuntCanStart(h)) return false;
-            bool armed = HeldOf(Res.Arrows) >= 1f;
+            bool armed = BowReady();
             StartTimedTrip(h, Res.Game, 1, HaulPlace.Field, -1, HaulPlace.Store, -1);
             h.workLeft = JabSeconds;
             h.huntArmed = armed;
@@ -86,12 +96,25 @@ namespace SeaSick.World
         bool HuntKill(OutpostHand h)
         {
             var stock = Stock(Res.Game);
-            string spear = SpearInHand();
+            // **The weapon of this kill (bows, 2026-09-30):** the bow if the
+            // trip went out with it and it can still shoot, else the spear.
+            // The same event books it watched or not, so one bow kill is
+            // ALWAYS one arrow spent and one kill of bow wear.
+            bool bow = h.huntArmed && BowReady();
+            string spear = bow ? Res.Bow : SpearInHand();
             if (stock == null || stock.standing < 1f - 1e-4f || spear == null) return false;
             stock.standing = Mathf.Max(0f, stock.standing - 1f);
-            float wear = Economy.Techs.SpearWear(spear);
-            if (wear > 0f) DrawHeld(spear, wear);
-            if (h.huntArmed && HeldOf(Res.Arrows) > 0f) DrawHeld(Res.Arrows, Mathf.Min(1f, HeldOf(Res.Arrows)));
+            if (bow)
+            {
+                SpendArrow();
+                WearPileBow();
+            }
+            else
+            {
+                float wear = Economy.Techs.SpearWear(spear);
+                if (wear > 0f) DrawHeld(spear, wear);
+            }
+            h.huntArmed = bow;
             h.huntKilled = true;
             h.huntKills++;
             Life.Lives.Log(h.name, Life.LifeEvents.HuntingKill, CampLabel);

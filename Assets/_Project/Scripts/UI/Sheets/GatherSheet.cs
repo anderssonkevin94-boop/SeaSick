@@ -140,7 +140,7 @@ namespace SeaSick.UI.Sheets
             SheetKit.SetBar(stockBar, l.Fill01(res), SheetBits.Colour(res));
 
             if (huntBlocked)
-                noteLine.text = "Hunting needs a spear — the forge makes one from a board and a stone.";
+                noteLine.text = "Hunting needs a spear (the forge: a board and a stone) or a bow with arrows (the fletcher).";
             else if (workedOut)
                 noteLine.text = $"The {ResDefs.Label(res)} here is worked out — nothing left to gather.";
             else if (huntedOut)

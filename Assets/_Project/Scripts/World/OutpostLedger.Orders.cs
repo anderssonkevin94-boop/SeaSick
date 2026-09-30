@@ -3,16 +3,15 @@ using UnityEngine;
 
 namespace SeaSick.World
 {
-    /// **Standing orders (food rework phase 2, 2026-09-27).** A station holds
-    /// a short queue of orders worked top-down: make N, repeat, or KEEP N IN
-    /// STOCK -- the station works while the camp holds fewer than N of the
-    /// output and every ingredient is to hand, otherwise it idles with a
-    /// reason ("stocked 10/10", "waiting for onions") and the next entry
-    /// runs. Two slots at station level I, three at II (`QueueSlots`).
-    ///
-    /// The queue is projected into the old single-order fields each step
-    /// (`ResolveOrders`), so the bench, the haulers and the stall reasons are
-    /// untouched: they read `orderRecipe`/`orderLeft`/`orderRepeat` as ever.
+    /// **Standing orders (food rework phase 2, 2026-09-27) -- RETIRED
+    /// 2026-09-30 for station spots** (`OutpostLedger.Spots.cs`, Kevin's
+    /// Melvor-style stations: select a recipe on a spot, it runs until an
+    /// input runs out or the store is full, auto-pauses, resumes). An old
+    /// save's queue is moved onto the spots once (`StationStock.EnsureSpotRows`:
+    /// a Count line keeps its count, Repeat and Keep lines run until
+    /// stopped). The queue API below is kept so older callers still work:
+    /// it reads and writes the SELECTED SPOTS -- one "line" per selected
+    /// spot, in spot order.
     public partial class OutpostLedger
     {
         public const int MaxQueueSlots = 4;
@@ -25,72 +24,65 @@ namespace SeaSick.World
             return Mathf.Clamp(1 + LevelOf(s.planId, s.ordinal), 1, MaxQueueSlots);
         }
 
+        /// The selected spots as queue lines (a fresh list): Count with the
+        /// units left, else Repeat.
         public IReadOnlyList<QueuedOrder> QueueAt(int stationIndex)
         {
             var s = StationAt(stationIndex);
-            return s?.queue != null ? s.queue : (IReadOnlyList<QueuedOrder>)System.Array.Empty<QueuedOrder>();
+            var list = new List<QueuedOrder>();
+            if (s == null) return list;
+            foreach (var sp in s.Spots)
+                if (sp != null && sp.Selected)
+                    list.Add(new QueuedOrder
+                    {
+                        recipe = sp.recipeId,
+                        mode = sp.count > 0 ? OrderMode.Count : OrderMode.Repeat,
+                        n = sp.count,
+                    });
+            return list;
         }
 
-        /// Add an order to the bottom of the queue. False when the queue is
-        /// full or the recipe is not workable here yet.
+        /// Select the recipe on its own spot: Count keeps `n`, Repeat and
+        /// Keep run until stopped. False when it is not workable here yet.
         public bool QueueOrder(int stationIndex, string recipeId, OrderMode mode, int n)
         {
             var s = StationAt(stationIndex);
-            if (s == null) return false;
-            if (s.queue == null) s.queue = new List<QueuedOrder>();
-            if (!RecipeWorkableAt(s, recipeId)) return false;
-            if (mode != OrderMode.Repeat && n <= 0) return false;
-            // The same recipe twice is one line: update it.
-            foreach (var q in s.queue)
-                if (q.recipe == recipeId) { q.mode = mode; q.n = n; ResolveOrder(s, stationIndex); return true; }
-            // An old single order becomes the queue's first line.
-            AdoptSingleOrder(s);
-            if (s.queue.Count >= QueueSlots(stationIndex)) return false;
-            s.queue.Add(new QueuedOrder { recipe = recipeId, mode = mode, n = n });
-            ResolveOrder(s, stationIndex);
-            return true;
+            if (s == null || !RecipeWorkableAt(s, recipeId)) return false;
+            if (mode == OrderMode.Count && n <= 0) return false;
+            var r = Economy.Recipes.Named(recipeId);
+            return SetSpot(s, StationSpots.SpotIndexOf(r), recipeId, mode == OrderMode.Count ? n : 0, out _);
+        }
+
+        /// The `index`-th selected spot, or -1.
+        int SelectedSpotIndex(StationStock s, int index)
+        {
+            if (s == null || index < 0) return -1;
+            var spots = s.Spots;
+            for (int k = 0, seen = 0; k < spots.Count; k++)
+                if (spots[k] != null && spots[k].Selected && seen++ == index) return k;
+            return -1;
         }
 
         public void UnqueueOrder(int stationIndex, int index)
         {
             var s = StationAt(stationIndex);
-            if (s?.queue == null || index < 0 || index >= s.queue.Count) return;
-            s.queue.RemoveAt(index);
-            if (s.queue.Count == 0) s.ClearOrder();
-            else ResolveOrder(s, stationIndex);
+            int k = SelectedSpotIndex(s, index);
+            if (k >= 0) StopSpot(s, k);
         }
 
-        /// Nudge a line's N (keep target or count left), floor 1.
+        /// Nudge a Count line's units left, floor 1. An until-stopped spot
+        /// has no count to nudge.
         public void SetQueuedN(int stationIndex, int index, int n)
         {
             var s = StationAt(stationIndex);
-            if (s?.queue == null || index < 0 || index >= s.queue.Count) return;
-            s.queue[index].n = Mathf.Clamp(n, 1, 999);
-            ResolveOrder(s, stationIndex);
+            var sp = s?.SpotAt(SelectedSpotIndex(s, index));
+            if (sp == null || sp.count <= 0) return;
+            sp.count = Mathf.Clamp(n, 1, 999);
+            RefreshSpots(s);
         }
 
-        public void MoveQueued(int stationIndex, int index, int delta)
-        {
-            var s = StationAt(stationIndex);
-            if (s?.queue == null) return;
-            int to = index + delta;
-            if (index < 0 || index >= s.queue.Count || to < 0 || to >= s.queue.Count) return;
-            var q = s.queue[index];
-            s.queue.RemoveAt(index);
-            s.queue.Insert(to, q);
-            ResolveOrder(s, stationIndex);
-        }
-
-        void AdoptSingleOrder(StationStock s)
-        {
-            if (s.queue.Count > 0 || !s.HasOrder) return;
-            s.queue.Add(new QueuedOrder
-            {
-                recipe = s.orderRecipe,
-                mode = s.orderRepeat ? OrderMode.Repeat : OrderMode.Count,
-                n = s.orderLeft,
-            });
-        }
+        /// Spots run side by side: there is no order to move.
+        public void MoveQueued(int stationIndex, int index, int delta) { }
 
         bool RecipeWorkableAt(StationStock s, string recipeId)
         {
@@ -99,112 +91,16 @@ namespace SeaSick.World
                    && LevelOf(s.planId, s.ordinal) >= r.stationLevel;
         }
 
-        /// Units of `res` the camp holds for a keep target: store, racks,
-        /// a finished bench, and loads walking home.
-        int KeepCount(string res) => CountOf(res) + CarriedOf(res);
-
-        /// Can a batch of `r` be had here right now: every line in the bay,
-        /// on its way there, or in the store.
-        bool IngredientsToHand(StationStock s, int si, Economy.Recipe r, out string missing)
-        {
-            missing = null;
-            if (r.tool != null && HeldOf(r.tool) <= 0f) { missing = r.tool; return false; }
-            foreach (var line in r.takes)
-            {
-                if (line.n <= 0) continue;
-                int have = s.BayCount(line.res) + InFlightTo(HaulPlace.Station, si, line.res) + StoreFree(line.res);
-                if (have < line.n) { missing = line.res; return false; }
-            }
-            return true;
-        }
-
-        /// The status line for queue entry `index`: what it is doing or why
-        /// it is waiting.
+        /// The status line for "line" `index` (the index-th selected spot):
+        /// its pause reason, else what it is doing.
         public string QueueStatus(int stationIndex, int index)
         {
             var s = StationAt(stationIndex);
-            if (s?.queue == null || index < 0 || index >= s.queue.Count) return "";
-            var q = s.queue[index];
-            var r = Economy.Recipes.Named(q.recipe);
-            if (r == null) return "recipe gone";
-            bool active = s.HasOrder && s.orderRecipe == q.recipe;
-            if (q.mode == OrderMode.Keep)
-            {
-                int have = KeepCount(r.makes);
-                if (have >= q.n) return $"stocked {have}/{q.n}";
-                if (!IngredientsToHand(s, stationIndex, r, out string miss))
-                    return $"{have}/{q.n} · waiting for {Economy.ResDefs.Label(miss)}";
-                return active ? $"{have}/{q.n} · cooking" : $"{have}/{q.n} · next";
-            }
-            if (q.mode == OrderMode.Repeat) return active ? "repeating" : "waits its turn";
-            return active ? $"{q.n} left" : $"{q.n} to make";
-        }
-
-        /// Every station with a queue: project its first workable line into
-        /// the single-order fields. Called each step before the bench pass.
-        void ResolveOrders()
-        {
-            if (stations == null) return;
-            for (int i = 0; i < stations.Count; i++)
-            {
-                var s = stations[i];
-                if (s == null || s.queue == null || s.queue.Count == 0) continue;
-                ResolveOrder(s, i);
-            }
-        }
-
-        void ResolveOrder(StationStock s, int si)
-        {
-            for (int k = s.queue.Count - 1; k >= 0; k--)
-            {
-                var q = s.queue[k];
-                if (q == null || Economy.Recipes.Named(q.recipe) == null
-                    || (q.mode == OrderMode.Count && q.n <= 0))
-                    s.queue.RemoveAt(k);
-            }
-            foreach (var q in s.queue)
-            {
-                var r = Economy.Recipes.Named(q.recipe);
-                if (!RecipeWorkableAt(s, q.recipe)) continue;
-                switch (q.mode)
-                {
-                    case OrderMode.Count:
-                        Project(s, q.recipe, false, q.n);
-                        return;
-                    case OrderMode.Repeat:
-                        Project(s, q.recipe, true, 0);
-                        return;
-                    case OrderMode.Keep:
-                        // A batch already on the bench counts toward the target.
-                        int have = KeepCount(r.makes);
-                        if ((s.benchState == BenchState.Loaded || s.benchState == BenchState.Working)
-                            && s.benchRecipe == r.id) have += Mathf.Max(1, r.yield);
-                        if (have >= q.n) continue;
-                        if (!IngredientsToHand(s, si, r, out _)) continue;
-                        Project(s, q.recipe, true, 0);
-                        return;
-                }
-            }
-            s.ClearOrder();
-        }
-
-        static void Project(StationStock s, string recipe, bool repeat, int left)
-        {
-            s.orderRecipe = recipe;
-            s.orderRepeat = repeat;
-            s.orderLeft = repeat ? 0 : left;
-        }
-
-        /// A finished batch comes off a Count line of the queue.
-        void QueueFinished(StationStock s, Economy.Recipe r, int made)
-        {
-            if (s.queue == null) return;
-            foreach (var q in s.queue)
-                if (q.recipe == r.id && q.mode == OrderMode.Count && q.n > 0)
-                {
-                    q.n -= made;
-                    break;
-                }
+            var sp = s?.SpotAt(SelectedSpotIndex(s, index));
+            if (sp == null) return "";
+            if (sp.Recipe == null) return "recipe gone";
+            if (sp.pauseReason != null) return sp.pauseReason;
+            return sp.count > 0 ? $"{sp.count} left" : "running";
         }
     }
 }

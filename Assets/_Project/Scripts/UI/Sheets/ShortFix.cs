@@ -69,7 +69,14 @@ namespace SeaSick.UI.Sheets
                         return false;
                     }
                     case Kind.Station:
-                        if (station != null) Sheets.Open(Sheets.TryCreateFor(station) ?? new StationSheet(camp, station));
+                        // Open on the recipe that makes it, not the station's
+                        // first one (Kevin, 2026-09-30: the quarry's "Make
+                        // tools" landed on the forge's spear).
+                        if (station != null)
+                        {
+                            StationSheet.FocusNext(res);
+                            Sheets.Open(Sheets.TryCreateFor(station) ?? new StationSheet(camp, station));
+                        }
                         return false;
                     case Kind.Build:
                         Sheets.Open(new BuildSheet(camp, planId));

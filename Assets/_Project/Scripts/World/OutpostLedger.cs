@@ -362,6 +362,11 @@ namespace SeaSick.World
         /// hand, and for one whose `defending` comes from the phase 9 dev
         /// "Arm" flag rather than a real store spear.
         [System.NonSerialized] public string raidSpear;
+        /// **Bows (2026-09-30):** this hand has a bow to shoot (a store bow
+        /// in `raidSpear`, a bow hunter, or a tower lookout with the pile's)
+        /// but not one arrow left in the camp -- set by the archer's own tick
+        /// (`CampWorker.Archery`) so `Doing` can say why he is not shooting.
+        [System.NonSerialized] public bool bowDry;
         /// The camp's posted lookout, while a raid is live -- set/cleared by
         /// `Combat.RaidAlarm` so `Doing` can say "on the tower" rather than
         /// the ordinary "lookout" position label. Never changes what the
@@ -454,16 +459,21 @@ namespace SeaSick.World
                 // with his own) reads as ORDERED there, not unarmed -- the
                 // one thing the row has to never claim is that he has
                 // nothing when he does.
-                if (fetchingSpear) return "fetching a spear";
-                if (returningSpear) return "returning a spear";
+                if (fetchingSpear) return "fetching a weapon";
+                if (returningSpear) return raidSpear == Res.Bow ? "returning a bow" : "returning a spear";
                 if (hidingHut || hidingCrouch)
                 {
                     if (!string.IsNullOrEmpty(raidSpear)) return "hiding (ordered)";
                     return hidingHut ? "hiding, no spear" : "crouching, no spear";
                 }
                 if (defending)
+                {
+                    // **Bows, 2026-09-30**: the row says why an archer is
+                    // not shooting -- a bow with no arrows cannot.
+                    if (defendSpear == Res.Bow) return bowDry ? "defending, bow — no arrows" : "defending, bow";
                     return "defending, " + (defendSpear == Res.IronSpear ? "iron spear" : "stone spear");
-                if (raidLookout) return "on the tower";
+                }
+                if (raidLookout) return bowDry ? "on the tower, no arrows" : "on the tower";
                 // **Villagers with a day (2026-09-28)**: the evening/sleep
                 // routine, unless the player's own order is running through
                 // the night (`orderOverride`) -- his row keeps saying what
@@ -1790,10 +1800,53 @@ namespace SeaSick.World
             return null;
         }
 
-        /// Null when a spear is in the pile; else the reason a hunter is not
-        /// out on the island. **Hard gate**, Kevin 2026-09-23: no spear, no
-        /// kills.
-        public string HunterBlocker() => SpearInHand() == null ? "needs a spear" : null;
+        /// Null when a spear is in the pile, or a bow with arrows; else the
+        /// reason a hunter is not out on the island. **Hard gate**, Kevin
+        /// 2026-09-23: no spear, no kills -- **a bow + arrows counts as well
+        /// (2026-09-30)**, so a camp can hunt with either. A bow alone says
+        /// why it is not enough: it has nothing to shoot.
+        public string HunterBlocker()
+        {
+            if (SpearInHand() != null || BowReady()) return null;
+            return HeldOf(Res.Bow) > 0f ? "bow has no arrows" : "needs a spear or a bow";
+        }
+
+        // --- bows (2026-09-30, docs/GDD.md "Bows") ---------------------------
+        //
+        // Kevin: the fletcher makes bows from fine boards + hide; bows are for
+        // defence, hunting AND for sailors from the ship. **Arrows are the
+        // ammunition**: every shot spends one whole arrow, and a bow with no
+        // arrows cannot shoot. A hunter and a tower lookout shoot the PILE's
+        // bow (as a hunter jabs with the pile's spear); a hand armed at the
+        // alarm takes a bow OUT of the store like a spear (`raidSpear` =
+        // `Res.Bow`) and walks it home at all clear. The arrows always come
+        // off the pile, one per shot, so watched and unwatched spend the
+        // same: one arrow per kill on a hunt, booked at `HuntKill` in both.
+
+        /// A bow in the pile (store or the fletcher's rack) AND at least one
+        /// whole arrow to shoot from it.
+        public bool BowReady() => HeldOf(Res.Bow) > 0f && HeldOf(Res.Arrows) >= 1f;
+
+        /// A bow in the pile (store or rack), arrows or not -- what a tower
+        /// lookout needs to be an archer at all.
+        public bool BowHeld => HeldOf(Res.Bow) > 0f;
+
+        /// At least one whole arrow held (store or rack), bow or no bow.
+        public bool ArrowsHeld => HeldOf(Res.Arrows) >= 1f;
+
+        /// **One shot = one arrow**, off the store first, then the
+        /// fletcher's rack (`DrawHeld`). False (no shot) with none left.
+        public bool SpendArrow()
+        {
+            if (HeldOf(Res.Arrows) < 1f - 1e-4f) return false;
+            return DrawHeld(Res.Arrows, 1f) >= 1f - 1e-4f;
+        }
+
+        /// The pile's bow worn by one kill (a lookout's raider, a hunt).
+        public void WearPileBow()
+        {
+            if (HeldOf(Res.Bow) > 0f) DrawHeld(Res.Bow, Economy.Techs.BowWear);
+        }
 
         // --- what is built ---------------------------------------------------
 
@@ -2672,6 +2725,9 @@ namespace SeaSick.World
             double s = lastTicked;
             for (long i = 0; i < run; i++) { s += quantum; Step(QuantumDays * stride, s); }
             StepsRun += run;
+            // Station spots' pause reasons, once per tick, not per quantum
+            // (2026-09-30): reading only, so a 12 h catch-up pays it once.
+            RefreshAllSpots();
 
             // Advance the FULL elapsed quanta even when the run was clamped,
             // or the ledger would owe the same debt again on the next call and
@@ -3444,6 +3500,7 @@ namespace SeaSick.World
             Res.Hide => "hide",
             Res.Spear => "spear",
             Res.IronSpear => "iron spear",
+            Res.Bow => "bow",
             _ => string.IsNullOrEmpty(res) ? "supplies" : res.ToLowerInvariant(),
         };
 
@@ -3482,11 +3539,14 @@ namespace SeaSick.World
                         // term, which is the only way a readout stays honest
                         // about a good that is consumed rather than kept.
                         // Trips since 2026-09-27: a carcass per hunt trip.
-                        bool armed = HeldOf(Res.Arrows) >= 1f;
+                        // Bows since 2026-09-30: a bow hunt spends one arrow
+                        // a kill and wears the bow; a spear hunt spends none.
+                        bool armed = BowReady();
                         float kills = HuntTripPerDay(armed)
                                       * WorkFactorOn(h, Res.Food) * PriorityMultiplier(Res.Food);
                         if (resource == Res.Meat) { if (StoreRoomF(Res.Meat) > 0f) rate += kills * Res.MeatPerAnimal; }
                         else if (resource == Res.Arrows && armed) rate -= kills;
+                        else if (resource == Res.Bow && armed) rate -= kills * Economy.Techs.BowWear;
                         else foreach (var drop in Economy.Techs.HuntDrops)
                             if (drop.res == resource) rate += kills * drop.n;
                         continue;
@@ -3562,7 +3622,7 @@ namespace SeaSick.World
                         // it costs are deliberately not subtracted here --
                         // only the meat (and the hide) they buy is.
                         // Trips since 2026-09-27: a carcass per hunt trip.
-                        float kills = HuntTripPerDay(HeldOf(Res.Arrows) >= 1f)
+                        float kills = HuntTripPerDay(BowReady())
                                       * WorkFactorOn(h, Res.Food) * PriorityMultiplier(Res.Food);
                         if (resource == Res.Meat) { if (StoreRoomF(Res.Meat) > 0f) rate += kills * Res.MeatPerAnimal; }
                         else foreach (var drop in Economy.Techs.HuntDrops)

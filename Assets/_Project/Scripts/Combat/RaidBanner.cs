@@ -49,6 +49,12 @@ namespace SeaSick.UI
                 (defending, hiding, spearsLeft) = SeaSick.Combat.RaidAlarm.Counts(outpost);
                 string spearWord = spearsLeft == 0 ? "no spears left"
                     : spearsLeft == 1 ? "1 spear left" : $"{spearsLeft} spears left";
+                // Bows a hand could still take (2026-09-30), and a camp
+                // shooting with an empty quiver says so.
+                int bowsLeft = SeaSick.Combat.RaidAlarm.SpareBows(outpost);
+                if (bowsLeft > 0) spearWord += bowsLeft == 1 ? " · 1 bow" : $" · {bowsLeft} bows";
+                if (outpost.Ledger != null && outpost.Ledger.BowHeld && !outpost.Ledger.ArrowsHeld)
+                    spearWord += " · no arrows";
                 // **Phase 9 (village defence):** half the landing party
                 // down and the rest are running for their boat -- a
                 // different line than the ordinary scoreline while that

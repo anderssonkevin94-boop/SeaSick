@@ -2985,6 +2985,10 @@ namespace SeaSick.World
                     if ((transform.position - deck).sqrMagnitude > 1f) { OffTower(); return false; }
                     phase = Phase.Working;
                     transform.position = deck;
+                    // **The lookout shoots first (bows, 2026-09-30)**: with
+                    // the camp's bow and a raider in range he stops sweeping
+                    // the horizon and looses at him (`CampWorker.Archery`).
+                    if (TickTowerArcher(r, deck, dt)) return true;
                     // On watch: facing out, away from the camp, the gaze
                     // drifting either side of it -- two slow sines, a
                     // different start per man, so it reads as looking, not

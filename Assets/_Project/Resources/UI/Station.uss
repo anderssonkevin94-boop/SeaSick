@@ -317,3 +317,122 @@
 
 /* Leave space for the worker slot on a portrait phone. */
 .st .st-worker-assign { max-width: 140px; padding: 0 10px; white-space: normal; font-size: 16px; }
+
+/* ------------------------------------------------------------------
+ * The station screen, Melvor-style (Kevin approved 2026-09-30, island
+ * UI phase 5; mockups "5 · Kitchen (Melvor)" / "5b · Cauldron picked").
+ * Spot tiles (Grill | Cauldron) -> a four-a-row recipe grid for the
+ * viewed spot -> the tapped recipe's detail; the Select / Stop thumb row
+ * is the host's action row (`StationSheet.BuildActions`). Sized for the
+ * land panel (430 x 932 reference, ~1 unit a point), so the mockup's
+ * numbers carry over nearly 1:1; `StationSheet.SpotRowPx` / `TileRowPx`
+ * / `DetailPx` are the sums of these rules -- change them together.
+ * Tiles are Buttons (so `SheetHost.ClippedControls` sees them): every
+ * rule resets Unity's button chrome, :hover:active included.
+ * ------------------------------------------------------------------ */
+
+/* --- spot tiles -------------------------------------------------------- */
+
+.st-spots { flex-direction: row; margin-bottom: 8px; flex-shrink: 0; }
+.st .st-spot {
+    flex-grow: 1; flex-basis: 0; min-width: 0; min-height: 44px;
+    flex-direction: column; align-items: stretch; justify-content: flex-start;
+    margin: 0 0 0 8px; padding: 8px 10px;
+    border-radius: 14px; border-width: 2px; border-color: rgb(44, 74, 94);
+    background-color: rgb(28, 52, 70);
+}
+.st .st-spot--first { margin-left: 0; }
+.st .st-spot:hover, .st .st-spot:hover:active { background-color: rgb(34, 60, 80); }
+.st .st-spot--on { border-color: rgb(164, 210, 232); }
+.st-spot-top { flex-direction: row; align-items: center; }
+.st-spot-glyph { width: 22px; height: 22px; flex-shrink: 0; margin-right: 7px; }
+.st .st-spot-name {
+    font-size: 16px; flex-shrink: 1; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.st .st-spot-status {
+    font-size: 13px; margin-top: 4px; color: rgb(166, 186, 198);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.st-spot-bar { height: 5px; margin-top: 5px; border-radius: 3px; background-color: rgb(44, 74, 94); overflow: hidden; }
+.st-spot-fill { height: 5px; width: 0; background-color: rgb(156, 210, 122); }
+.st-spot-fill--wait { background-color: rgb(242, 196, 109); }
+
+/* --- the recipe grid ------------------------------------------------- */
+
+.st .st-grid-eyebrow { font-size: 12px; margin-bottom: 6px; }
+.st-rgrid { flex-direction: row; flex-wrap: wrap; flex-shrink: 0; margin-bottom: 8px; }
+.st .st-rtile {
+    width: 23.5%; min-height: 80px; margin: 0 2% 0 0; padding: 7px 2px 6px 2px;
+    flex-direction: column; align-items: center; justify-content: flex-start;
+    border-radius: 12px; border-width: 1.5px; border-color: rgb(44, 74, 94);
+    background-color: rgb(28, 52, 70);
+}
+.st .st-rtile:hover, .st .st-rtile:hover:active { background-color: rgb(34, 60, 80); }
+.st .st-rtile--end { margin-right: 0; }
+.st .st-rtile--row2 { margin-top: 7px; }
+.st .st-rtile--run { border-color: rgb(156, 210, 122); }
+.st .st-rtile--locked { background-color: rgb(22, 41, 58); border-width: 0; }
+/* the tapped tile: the thick ice border, over run and locked alike */
+.st .st-rtile--on { border-width: 2.5px; border-color: rgb(164, 210, 232); background-color: rgb(36, 62, 82); }
+.st-rtile-icon { width: 28px; height: 28px; flex-shrink: 0; -unity-background-scale-mode: scale-to-fit; }
+.st-rtile-glyph { width: 26px; height: 26px; flex-shrink: 0; margin: 1px 0 1px 0; }
+.st .st-rtile-name {
+    font-size: 13px; margin-top: 3px; white-space: normal; -unity-text-align: middle-center;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.st .st-rtile--locked .st-rtile-name { color: rgb(166, 186, 198); }
+.st .st-rtile-status {
+    font-size: 11px; margin-top: 2px; color: rgb(166, 186, 198);
+    white-space: normal; -unity-text-align: middle-center;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.st .st-badge {
+    font-size: 10px; margin-top: 3px; padding: 1px 5px; border-radius: 6px;
+    background-color: rgb(156, 210, 122); color: rgb(11, 23, 32); letter-spacing: 0.5px;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.st .st-badge--wait { background-color: rgb(242, 196, 109); }
+.st-rtile-bar {
+    position: absolute; left: 8px; right: 8px; bottom: 3px; height: 3px;
+    border-radius: 2px; background-color: rgb(44, 74, 94); overflow: hidden;
+}
+.st-rtile-fill { height: 3px; width: 0; background-color: rgb(156, 210, 122); }
+
+/* --- the detail -------------------------------------------------------- */
+
+.st-detail {
+    flex-direction: column; flex-shrink: 0; padding: 10px 12px;
+    border-radius: 14px; border-width: 1px; border-color: rgb(44, 74, 94);
+    background-color: rgb(28, 52, 70);
+}
+.st-detail-head { flex-direction: row; align-items: flex-end; justify-content: space-between; }
+.st .st-detail-name {
+    font-size: 17px; flex-shrink: 1; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.st .st-detail-time { font-size: 13px; color: rgb(166, 186, 198); margin-left: 8px; flex-shrink: 0; }
+.st-detail-io { flex-direction: row; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+.st-io-chip {
+    flex-direction: row; align-items: center; padding: 3px 8px; margin: 0 6px 4px 0;
+    border-radius: 8px; background-color: rgb(22, 41, 58);
+}
+.st-io-icon { width: 18px; height: 18px; margin-right: 4px; flex-shrink: 0; -unity-background-scale-mode: scale-to-fit; }
+.st .st-io-text { font-size: 13px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
+.st-io-arrow { width: 16px; height: 16px; margin: 0 6px 4px 0; flex-shrink: 0; }
+.st-detail-foot { flex-direction: row; align-items: center; margin-top: 2px; }
+.st .st-detail-line { font-size: 13px; color: rgb(166, 186, 198); flex-grow: 1; flex-shrink: 1; min-width: 0; white-space: normal; }
+/* the fix as a text link on the right: "Gather ore →", 44 tall to hit */
+.st .st-detail-fix {
+    align-self: center; flex-shrink: 0; min-height: 44px; margin: 0 -6px 0 8px;
+    font-size: 14px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+
+/* --- tones: last, so they win over each piece's own muted colour ------- */
+
+.st .st-tone--good { color: rgb(156, 210, 122); }
+.st .st-tone--wait { color: rgb(242, 196, 109); }
+.st .st-tone--bad { color: rgb(246, 146, 128); }

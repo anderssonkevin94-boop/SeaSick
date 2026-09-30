@@ -35,6 +35,13 @@ namespace SeaSick.World
     /// forever on that building. The rack, which is never resource-specific
     /// on the model, shows `StationStock.RackTotal` regardless of what is on
     /// it.
+    ///
+    /// **Spots (2026-09-30).** A station now has one bench per spot (the
+    /// kitchen's grill and cauldron, the forge's smelter and forge); the
+    /// model has one `Bench_*` set, so it shows the station's SHOWN spot --
+    /// the legacy `benchState`/`benchOut`/`BenchRecipe` mirror, which is the
+    /// first spot working, else the first finished, else spot 0
+    /// (`StationStock.SyncLegacy`). Unchanged code; a deliberate choice.
     public class StationStockView : MonoBehaviour
     {
         readonly List<GameObject> inputSlots = new List<GameObject>();

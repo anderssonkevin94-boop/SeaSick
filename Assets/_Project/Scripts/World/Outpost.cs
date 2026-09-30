@@ -187,6 +187,10 @@ namespace SeaSick.World
             // A camp restored from a save written before stone was a price
             // has no seam in its books. See `EnsureStoneStock`.
             EnsureStoneStock();
+            // The first camp's island always has a few ore rocks, laid on
+            // clear ground; then, as for any outcrop, its ore is in the books.
+            EnsureHomeOre();
+            EnsureOreStock();
             // An island with a herd on it has game in its books. Same reason
             // as the stone: a save written before hunting existed has none.
             EnsureGameStock();
@@ -3434,6 +3438,7 @@ namespace SeaSick.World
             // boulders behind the camp are enough to finish the buildings
             // you raise there and nothing like enough to load a hold with.
             EnsureStoneStock();
+            EnsureOreStock();
             EnsureFoodStock();
             PlaceCampStone();
         }
@@ -3468,6 +3473,218 @@ namespace SeaSick.World
             ledger.SeedStock(Res.Stone, WorkedHectares() * ScatteredStoneShare);
         }
 
+        // --- the first camp's ore (2026-09-30) --------------------------------
+
+        /// Rocks in the first camp's outcrop: three at four units each, so
+        /// twelve ore, six bars of iron, on top of nothing else.
+        public const int HomeOreRocks = 3;
+
+        bool homeOreMade;
+        int homeOreTries;
+        float homeOreNextTry;
+
+        /// **The first camp's island always has ore (Kevin: "Give Island_6
+        /// ore too").** General, not by name: the FIRST camp the player made
+        /// (`OutpostLedger.firstCamp`, decided once and saved: the first
+        /// ledger to ask while no other camp holds the flag -- for a fresh
+        /// game that is the first fire; for an old save with one camp, that
+        /// camp) gets `HomeOreRocks` ore rocks, unless its island already
+        /// has ore (an Ore island, or the populator's outcrop).
+        ///
+        /// **Laid at camp time, on clear ground, once.** The world is built
+        /// before any camp, so the populator cannot know where the fire and
+        /// the buildings are. The spots are found here (`FreeGroundFor`: not
+        /// on a building or its keep-out, a blueprint, a wall, a road, a
+        /// ladder, the fire's ring, another rock; open standable ground the
+        /// fire can reach -- inside the palisade when it is closed -- above
+        /// the beach and inside the shore), seeded from the island and the
+        /// fire, and SAVED (`homeOreX/Z`), so every later load stands the
+        /// same rocks in the same places whatever has been built since. A
+        /// building sited over one clears it like any rock (`OwnRocks`).
+        /// Nothing that stands is moved. Called from `CatchUp`; a camp whose
+        /// path grid is not ready, or with no free ground yet, tries again.
+        public void EnsureHomeOre()
+        {
+            if (ledger == null || Island == null || height == null || !HasCamp) return;
+            if (!ledger.firstCampChecked)
+            {
+                bool other = false;
+                foreach (var o in all)
+                    if (o != null && o != this && o.HasCamp && o.Ledger != null && o.Ledger.firstCamp) other = true;
+                ledger.firstCamp = !other;
+                ledger.firstCampChecked = true;
+            }
+            if (!ledger.firstCamp) return;
+            if (Island.HasOreOutcrop || Island.ResourceName == Res.Ore) return;   // it has ore already
+
+            if (!ledger.HasHomeOre)
+            {
+                if (homeOreTries >= 8 || Time.realtimeSinceStartup < homeOreNextTry) return;
+                var map = CampPath.For(this);
+                if (map == null || !map.Built) { if (map != null) map.Reachable(CampCentre); return; }   // asks it to build
+                homeOreNextTry = Time.realtimeSinceStartup + 4f;
+                homeOreTries++;
+                LayHomeOre();
+                if (!ledger.HasHomeOre) return;
+            }
+            if (homeOreMade) return;
+            homeOreMade = true;
+            for (int i = 0; i < ledger.homeOreX.Length && i < ledger.homeOreZ.Length; i++)
+            {
+                float x = ledger.homeOreX[i], z = ledger.homeOreZ[i];
+                var at = new Vector3(x, height(x, z), z);
+                var go = Terrain.IslandPropFactory.Make(Res.Ore);
+                if (go == null) continue;
+                go.name = "OreOutcrop_" + i;
+                go.transform.SetParent(Island.transform, true);
+                go.transform.position = at;
+                go.transform.rotation = Quaternion.Euler(0f, ((i * 137 + Mathf.RoundToInt(x + z) * 31) & 511) * (360f / 512f), 0f);
+                // Scale first: `ResourceNode.Awake` keeps it as the base.
+                go.transform.localScale *= 1.15f;
+                go.AddComponent<ResourceNode>().Configure(Res.Ore, Island, 4);
+            }
+        }
+
+        /// Choose and save the spots for `HomeOreRocks` rocks: an anchor on
+        /// clear ground near the camp, then the rest a few metres round it.
+        /// Seeded (island position, fire), so it is one answer.
+        void LayHomeOre()
+        {
+            Vector3 fire = CampCentre, ip = Island.transform.position;
+            int seed = unchecked(Mathf.RoundToInt(ip.x) * 73856093 ^ Mathf.RoundToInt(ip.z) * 19349663
+                                 ^ Mathf.RoundToInt(fire.x) * 83492791 ^ Mathf.RoundToInt(fire.z) * 2654435 ^ 0x0e5);
+            var rng = new System.Random(seed);
+            var spots = new List<Vector3>();
+            var best = new List<Vector3>();
+            // Fussy first, then looser: the wide margin and the tree check
+            // give way before the rocks do.
+            float[] margin = { 4f, 3f, 2.2f };
+            for (int pass = 0; pass < 3 && best.Count < HomeOreRocks; pass++)
+            {
+                spots.Clear();
+                float reach = 28f + 14f * pass;
+                for (int tries = 0; tries < 260 && spots.Count == 0; tries++)
+                {
+                    float ang = (float)(rng.NextDouble() * Mathf.PI * 2.0);
+                    float u = (float)rng.NextDouble();
+                    float r = 9f + (reach - 9f) * u * u;      // most of the tries near the camp
+                    var p = fire + new Vector3(Mathf.Cos(ang), 0f, Mathf.Sin(ang)) * r;
+                    p.y = height(p.x, p.z);
+                    if (FreeGroundFor(p, margin[pass], null, pass < 2)) spots.Add(p);
+                }
+                if (spots.Count == 0) continue;
+                Vector3 anchor = spots[0];
+                for (int tries = 0; tries < 120 && spots.Count < HomeOreRocks; tries++)
+                {
+                    float ang = (float)(rng.NextDouble() * Mathf.PI * 2.0);
+                    float r = 2.6f + (float)rng.NextDouble() * 2.4f;
+                    var p = anchor + new Vector3(Mathf.Cos(ang), 0f, Mathf.Sin(ang)) * r;
+                    p.y = height(p.x, p.z);
+                    bool apart = true;
+                    foreach (var s in spots)
+                    {
+                        Vector3 d = s - p; d.y = 0f;
+                        if (d.magnitude < 2.4f) { apart = false; break; }
+                    }
+                    if (apart && FreeGroundFor(p, Mathf.Min(margin[pass], 3f), null, pass < 2)) spots.Add(p);
+                }
+                if (spots.Count > best.Count) { best.Clear(); best.AddRange(spots); }
+            }
+            spots = best;
+            if (spots.Count == 0) return;
+            ledger.homeOreX = new float[spots.Count];
+            ledger.homeOreZ = new float[spots.Count];
+            for (int i = 0; i < spots.Count; i++) { ledger.homeOreX[i] = spots[i].x; ledger.homeOreZ[i] = spots[i].z; }
+        }
+
+        /// **Is this ground free for a rock to stand on?** Standable, open
+        /// ground the fire can reach, above the beach and inside the shore,
+        /// and clear (by `margin` metres beyond the footprint) of: any
+        /// building or hand-placed keep-out (the pier's head), any queued
+        /// blueprint or wall or road, any standing wall, any built road or
+        /// ladder, the fire's ring (6 m), and any other resource rock
+        /// (`ignore` are the rocks being placed now, which do not count).
+        /// `trees`: also stay off a standing tree. Never moves anything.
+        public bool FreeGroundFor(Vector3 p, float margin, List<ResourceNode> ignore, bool trees = false)
+        {
+            if (height == null || Island == null) return false;
+            float h = height(p.x, p.z);
+            if (h < minHeight + 0.8f) return false;
+            if (Island.HasProfile && Island.FlatDistance(p, Island.transform.position) > Island.RadiusToward(p) * 0.85f)
+                return false;
+            const float lim = 0.6f;     // 0.3 rise per metre over 2 m either side
+            if (Mathf.Abs(height(p.x + 2f, p.z) - h) > lim || Mathf.Abs(height(p.x - 2f, p.z) - h) > lim
+                || Mathf.Abs(height(p.x, p.z + 2f) - h) > lim || Mathf.Abs(height(p.x, p.z - 2f) - h) > lim)
+                return false;
+            if (!Clear(p, margin)) return false;                          // buildings, keep-outs, blueprints, walls
+            Vector3 fire = CampCentre;
+            fire.y = 0f;
+            if ((new Vector3(p.x, 0f, p.z) - fire).sqrMagnitude < 6f * 6f) return false;
+            for (int i = 0; i < roadSegments.Count; i++)
+            {
+                var r = roadSegments[i];
+                if (r != null && WallSegment.FlatDistance(r.A, r.B, p) < CampRoads.HalfWidth + margin) return false;
+            }
+            if (ladders != null)
+                for (int i = 0; i < ladders.Count; i++)
+                {
+                    var l = ladders[i];
+                    if (l == null) continue;
+                    if (WallSegment.FlatDistance(l.Foot, l.Top, p) < margin) return false;
+                }
+            var map = CampPath.For(this);
+            if (map != null && map.Built && !map.RoadGround(p)) return false;   // sea, cliff, rock, wall cell
+            if (!CampPath.Reachable(this, p)) return false;
+            foreach (var n in ResourceNode.All)
+            {
+                if (n == null || n.Home != Island || (ignore != null && ignore.Contains(n))) continue;
+                Vector3 d = n.transform.position - p; d.y = 0f;
+                if (d.sqrMagnitude < 3f * 3f) return false;
+            }
+            if (trees)
+            {
+                var wood = WoodHere();
+                if (wood != null)
+                    for (int i = 0; i < wood.TreeCount; i++)
+                    {
+                        var t = wood.TreeAt(i);
+                        if (t.felled) continue;
+                        Vector3 d = t.baseAt - p; d.y = 0f;
+                        if (d.sqrMagnitude < 2.2f * 2.2f) return false;
+                    }
+            }
+            return true;
+        }
+
+        /// **An island with an ore outcrop has an Ore stock, 2026-09-30.**
+        /// Kevin: *"implement the ore into the game, so one can make iron."*
+        /// The Gather menu, the seam sync and the gather party all read the
+        /// LEDGER's stocks, and Ore was only ever seeded for an island whose
+        /// KIND is Ore (`Configure`). The populator now stands a few Ore
+        /// nodes on some other islands (`Island.HasOreOutcrop`), and this
+        /// books them: exactly what stands (`ResourceNode.UnitsPerProp` each),
+        /// no regrowth, so the last ore rock hides with the last unit.
+        ///
+        /// Called from `CatchUp` as well as `Configure`, like
+        /// `EnsureStoneStock`, so a camp restored from a save written before
+        /// the outcrop existed gets its seam. A stock once seeded is never
+        /// seeded again (a worked-out seam stays at 0).
+        public void EnsureOreStock()
+        {
+            if (ledger == null || Island == null) return;
+            if (!Island.HasOreOutcrop && !ledger.HasHomeOre) return;
+            if (Island.ResourceName == Res.Ore) return;     // it has a proper seam
+            if (ledger.Stock(Res.Ore) != null) return;
+            int units = 0;
+            foreach (var n in ResourceNode.All)
+                if (n != null && n.Home == Island && n.Resource == Res.Ore) units += n.UnitsPerProp;
+            if (units <= 0) return;
+            var seam = ledger.Stock(Res.Ore, true);
+            seam.standingMax = units;
+            seam.standing = units;
+            seam.regrowPerDay = 0f;
+        }
+
         /// **Put the island's few boulders where the camp can see them.**
         ///
         /// The populator scatters three to six of them anywhere on the
@@ -3489,7 +3706,10 @@ namespace SeaSick.World
         void PlaceCampStone()
         {
             if (Island == null || height == null) return;
-            if (Island.ResourceName == Res.Stone) return;
+            // A Stone island keeps its own seam where the ground put it; its
+            // ore outcrop (if it has one) still comes to the camp, below.
+            bool stoneKeeps = Island.ResourceName == Res.Stone;
+            if (stoneKeeps && !Island.HasOreOutcrop) return;
 
             // **Round the FIRE, not round the survey.** The clearing is
             // where a camp could have gone; the campfire is where the player
@@ -3503,14 +3723,6 @@ namespace SeaSick.World
             if ((stonePlacedAt - centre).sqrMagnitude < 1f) return;
             stonePlacedAt = centre;
 
-            campStone.Clear();
-            foreach (var n in ResourceNode.All)
-                if (n != null && n.Home == Island && n.Resource == Res.Stone
-                    // A scenery rock's node IS that rock (2026-09-27,
-                    // `SceneryStone`): it never walks into the ring.
-                    && (n.Deposit == null || !n.Deposit.IsScenery)) campStone.Add(n);
-            if (campStone.Count == 0) return;
-
             // Outside the clearing, so a boulder is never standing where a
             // building will go, and within a walk of it.
             float near = Mathf.Max(ClearingRadius + 4f, 14f);
@@ -3519,14 +3731,47 @@ namespace SeaSick.World
             // ring reproduces on every visit and across a save.
             float turn = Mathf.Abs(centre.GetHashCode() % 360) * Mathf.Deg2Rad;
 
-            for (int i = 0; i < campStone.Count; i++)
+            campStone.Clear();
+            if (!stoneKeeps)
+                foreach (var n in ResourceNode.All)
+                    if (n != null && n.Home == Island && n.Resource == Res.Stone
+                        // A scenery rock's node IS that rock (2026-09-27,
+                        // `SceneryStone`): it never walks into the ring.
+                        && (n.Deposit == null || !n.Deposit.IsScenery)) campStone.Add(n);
+            RingRocks(campStone, centre, turn, near, far, false);
+
+            // **The ore outcrop comes to the camp too (2026-09-30)**, on the
+            // far side of the stone: a turn round the ring from the boulders
+            // and a few metres further out, so the two never share a spot
+            // and the stone's own places do not change. An Ore island's seam
+            // is left where the ground put it, like a Stone island's.
+            campStone.Clear();
+            if (Island.HasOreOutcrop && Island.ResourceName != Res.Ore)
+                foreach (var n in ResourceNode.All)
+                    if (n != null && n.Home == Island && n.Resource == Res.Ore) campStone.Add(n);
+            RingRocks(campStone, centre, turn + 2.1f, near + 3f, far + 3f, true);
+            campStone.Clear();
+        }
+
+        /// Stand each of `rocks` in the ring `near`..`far` metres round
+        /// `centre`, starting `turn` radians round, unless it is within `far`
+        /// already. The placing `PlaceCampStone` always did, for any rock.
+        ///
+        /// `mustBeClear` (ore, 2026-09-30) asks `FreeGroundFor` of every
+        /// spot first, so a rock is never stood on a building, blueprint,
+        /// wall, road, ladder or beside the fire; if none of its eight tries
+        /// is free it stays where it is. Stone keeps its old rule.
+        void RingRocks(List<ResourceNode> rocks, Vector3 centre, float turn, float near, float far, bool mustBeClear)
+        {
+            if (rocks.Count == 0) return;
+            for (int i = 0; i < rocks.Count; i++)
             {
-                var n = campStone[i];
+                var n = rocks[i];
                 Vector3 d = n.transform.position - centre;
                 d.y = 0f;
                 if (d.magnitude <= far) continue;           // already within reach
 
-                float a = turn + (i / (float)campStone.Count) * Mathf.PI * 2f;
+                float a = turn + (i / (float)rocks.Count) * Mathf.PI * 2f;
                 for (int k = 0; k < 8; k++)
                 {
                     float ang = a + k * 0.55f;
@@ -3536,11 +3781,11 @@ namespace SeaSick.World
                     float h = height(at.x, at.z);
                     if (h < minHeight) continue;            // beach, or in the water
                     at.y = h;
+                    if (mustBeClear && !FreeGroundFor(at, 3f, rocks)) continue;
                     n.transform.position = at;
                     break;
                 }
             }
-            campStone.Clear();
         }
 
         static readonly List<ResourceNode> campStone = new List<ResourceNode>();

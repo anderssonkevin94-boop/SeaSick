@@ -152,8 +152,14 @@ namespace SeaSick.World
                 // An old save's bench: a finished catch goes in the box, a
                 // half-done one is let go (a catch takes nothing, so no
                 // input is lost).
-                if (s.benchState == BenchState.Finished) UnloadBench(s);
-                else if (s.benchState != BenchState.Empty) EmptyBench(s);
+                // (Per spot since 2026-09-30.)
+                s.EnsureSpotRows();
+                foreach (var sp in s.spots)
+                {
+                    if (sp == null) continue;
+                    if (sp.benchState == BenchState.Finished) UnloadSpot(s, sp);
+                    else if (sp.benchState != BenchState.Empty) sp.EmptyBench();
+                }
                 if (StartCatchTrip(h, s, si)) continue;
                 if (RackChore(si, out var home)) { BeginChore(h, home); continue; }
                 break;
@@ -182,12 +188,9 @@ namespace SeaSick.World
                     if (m != null && m.station == s.planId) { r = m; break; }
             }
             if (r == null) return;
-            QueueFinished(s, r, n);
-            if (!s.orderRepeat && s.orderRecipe == r.id)
-            {
-                s.orderLeft -= n;
-                if (s.orderLeft <= 0) s.ClearOrder();
-            }
+            // A count order runs down on the catch's own spot (2026-09-30).
+            CountDown(s.SpotAt(StationSpots.SpotIndexOf(r)), r, n);
+            s.SyncLegacy();
         }
 
         /// Why a fisher with an order is not fishing, or null.

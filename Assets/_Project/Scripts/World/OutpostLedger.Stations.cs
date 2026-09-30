@@ -102,6 +102,11 @@ namespace SeaSick.World
     ///   the body picks its own tree and the leg length is `SourceMetres`.</item>
     /// <item>`CarriedOf(res)` -- units in hands' arms right now (not in `CountOf`).</item>
     /// </list>
+    /// **Since 2026-09-30 (station spots, `OutpostLedger.Spots.cs`)** the bench
+    ///   and the order are per SPOT: `StationStock.Spots` (`SpotState`: recipe,
+    ///   progress, pause reason, seconds left); the single-bench and order
+    ///   fields above are a mirror of the shown spot. The screen's write API
+    ///   is `SelectRecipe(station, spot, recipe, out refusal)` / `StopSpot`.
     /// WRITE API: `PlaceOrder(stationIndex | planId, recipeId, count /* -1 = repeat */)`,
     /// `StopOrder(stationIndex | planId)`. `ChooseRecipe(planId, recipeId)` is kept
     /// and now places a REPEAT order on every station of that plan.
@@ -487,6 +492,7 @@ namespace SeaSick.World
             if (s.rack != null) s.rack.Clear();
             EmptyBench(s);
             s.ClearOrder();
+            s.SyncLegacy();
         }
 
         /// The station instance a Work hand stands at: Work hands on one plan
@@ -534,6 +540,10 @@ namespace SeaSick.World
                         stations.Add(new StationStock { planId = p.id, ordinal = k });
             }
 
+            // One row per spot (2026-09-30); an old save's bench, order and
+            // queue move onto their spots here, once.
+            foreach (var s in stations) s?.EnsureSpotRows();
+
             if (!stationsMigrated)
             {
                 stationsMigrated = true;
@@ -544,10 +554,11 @@ namespace SeaSick.World
                     // into bays nobody works.
                     if (s == null || s.HasOrder || !Manned(s)) continue;
                     var r = LegacyRecipeAt(s.planId);
-                    if (r == null) continue;
-                    s.orderRecipe = r.id;
-                    s.orderRepeat = true;
-                    s.orderLeft = 0;
+                    var sp = s.SpotAt(StationSpots.SpotIndexOf(r));
+                    if (r == null || sp == null) continue;
+                    sp.recipeId = r.id;
+                    sp.count = 0;
+                    s.SyncLegacy();
                 }
             }
         }
@@ -569,12 +580,15 @@ namespace SeaSick.World
             if (s == null) return;
             if (s.bay != null) foreach (var b in s.bay) SpillRow(b);
             if (s.rack != null) foreach (var r in s.rack) SpillRow(r);
-            var rec = s.BenchRecipe;
-            if (rec != null)
+            // Every spot's bench (2026-09-30).
+            s.EnsureSpotRows();
+            foreach (var sp in s.spots)
             {
-                if (s.benchState == BenchState.Finished && s.benchOut > 0)
-                    Store(rec.makes, true).whole += s.benchOut;
-                else if (s.benchState == BenchState.Loaded || s.benchState == BenchState.Working)
+                var rec = sp?.BenchRecipe;
+                if (rec == null) continue;
+                if (sp.benchState == BenchState.Finished && sp.benchOut > 0)
+                    Store(rec.makes, true).whole += sp.benchOut;
+                else if (sp.BenchBusy)
                     foreach (var line in rec.takes)
                         if (line.n > 0) Store(line.res, true).whole += line.n;
             }
@@ -606,14 +620,10 @@ namespace SeaSick.World
             // Per building since 2026-09-27: a level-2 recipe wants THIS
             // copy at level 2, not merely some copy of the plan.
             if (LevelOf(s.planId, s.ordinal) < r.stationLevel) return false;
-            s.orderRecipe = r.id;
-            s.orderRepeat = count < 0;
-            s.orderLeft = count < 0 ? 0 : count;
-            // The single order replaces the queue (2026-09-27 phase 2).
-            if (s.queue == null) s.queue = new List<QueuedOrder>();
-            s.queue.Clear();
-            s.queue.Add(new QueuedOrder { recipe = r.id, mode = count < 0 ? OrderMode.Repeat : OrderMode.Count, n = s.orderLeft });
-            return true;
+            // **Spots, 2026-09-30**: the order lands on the recipe's own
+            // spot (the station's only one, bar the kitchen and the forge);
+            // repeat = until stopped, a count runs down and clears the spot.
+            return SetSpot(s, StationSpots.SpotIndexOf(r), r.id, count < 0 ? 0 : count, out _);
         }
 
         public bool PlaceOrder(string planId, string recipeId, int count, int ordinal = 0)
@@ -622,11 +632,14 @@ namespace SeaSick.World
             return PlaceOrder(StationIndex(planId, ordinal), recipeId, count);
         }
 
-        /// Stop a station's order. A job already on the bench still finishes.
+        /// Stop a station's order: every spot stopped (`StopSpot`; since
+        /// 2026-09-30 an unfinished batch's inputs go back into the bay).
         public void StopOrder(int stationIndex)
         {
             var s = StationAt(stationIndex);
-            if (s != null) { s.ClearOrder(); s.queue?.Clear(); }
+            if (s == null) return;
+            for (int k = 0; k < s.Spots.Count; k++) StopSpot(s, k);
+            s.queue?.Clear();
         }
 
         public void StopOrder(string planId, int ordinal = 0)
@@ -638,8 +651,12 @@ namespace SeaSick.World
         public StationOrder OrderAt(int stationIndex)
         {
             var s = StationAt(stationIndex);
-            if (s == null || !s.HasOrder) return default;
-            return new StationOrder { recipe = s.OrderRecipe, remaining = s.orderLeft, repeat = s.orderRepeat };
+            if (s == null) return default;
+            // The first selected spot (2026-09-30).
+            foreach (var sp in s.Spots)
+                if (sp != null && sp.Selected)
+                    return new StationOrder { recipe = sp.Recipe, remaining = sp.count, repeat = sp.count <= 0 };
+            return default;
         }
 
         public StationOrder OrderAt(string planId, int ordinal = 0)
@@ -715,12 +732,19 @@ namespace SeaSick.World
             foreach (var s in stations)
             {
                 if (s == null || got >= n) continue;
-                if (s.benchState == BenchState.Finished && s.benchOut > 0 && s.BenchMakes == res)
+                s.EnsureSpotRows();
+                bool took = false;
+                foreach (var sp in s.spots)
                 {
-                    int t = Mathf.Min(s.benchOut, n - got);
-                    s.benchOut -= t; got += t;
-                    if (s.benchOut <= 0) EmptyBench(s);
+                    if (sp == null || got >= n) continue;
+                    if (sp.benchState == BenchState.Finished && sp.benchOut > 0 && sp.BenchMakes == res)
+                    {
+                        int t = Mathf.Min(sp.benchOut, n - got);
+                        sp.benchOut -= t; got += t; took = true;
+                        if (sp.benchOut <= 0) sp.EmptyBench();
+                    }
                 }
+                if (took) s.SyncLegacy();
             }
             return got;
         }
@@ -1278,23 +1302,31 @@ namespace SeaSick.World
             for (int i = 0; i < stations.Count; i++)
             {
                 var s = stations[i];
-                var r = s?.OrderRecipe;
                 // Only a station somebody works: an unmanned bay would lock
                 // the stock away from the builders and the costs.
-                if (r == null || !Manned(s)) continue;
-                foreach (var line in r.takes)
+                if (s == null || !Manned(s)) continue;
+                s.EnsureSpotRows();
+                // Every selected spot's inputs (2026-09-30), bar a spot
+                // whose output has nowhere to go (auto-paused on the store).
+                if (RackJam(s) != null) continue;
+                foreach (var sp in s.spots)
                 {
-                    if (line.n <= 0) continue;
-                    int space = s.InputCap - s.BayCount(line.res) - InFlightTo(HaulPlace.Station, i, line.res);
-                    int inStore = StoreFree(line.res);
-                    if (space <= 0 || inStore <= 0) continue;
-                    c = new Chore
+                    var r = sp != null && sp.Selected ? sp.Recipe : null;
+                    if (r == null) continue;
+                    foreach (var line in r.takes)
                     {
-                        res = line.res, n = Mathf.Min(Res.Armful(line.res), Mathf.Min(space, inStore)),
-                        source = Store(line.res), from = HaulPlace.Store, fromStation = -1,
-                        to = HaulPlace.Station, toStation = i,
-                    };
-                    return true;
+                        if (line.n <= 0) continue;
+                        int space = s.InputCap - s.BayCount(line.res) - InFlightTo(HaulPlace.Station, i, line.res);
+                        int inStore = StoreFree(line.res);
+                        if (space <= 0 || inStore <= 0) continue;
+                        c = new Chore
+                        {
+                            res = line.res, n = Mathf.Min(Res.Armful(line.res), Mathf.Min(space, inStore)),
+                            source = Store(line.res), from = HaulPlace.Store, fromStation = -1,
+                            to = HaulPlace.Station, toStation = i,
+                        };
+                        return true;
+                    }
                 }
             }
             for (int i = 0; i < stations.Count; i++)
@@ -1304,11 +1336,11 @@ namespace SeaSick.World
                 var s = stations[i];
                 if (s == null || s.bay == null) continue;
                 // An unmanned station's order wants nothing: its bay goes home.
-                var r = Manned(s) ? s.OrderRecipe : null;
+                bool manned = Manned(s);
                 foreach (var row in s.bay)
                 {
                     int free = RowFree(i, row, true);
-                    if (row == null || free <= 0 || Wants(r, row.resource)) continue;
+                    if (row == null || free <= 0 || (manned && SpotsWant(s, row.resource))) continue;
                     int room = StoreRoomNet(row.resource);
                     if (room <= 0) continue;
                     c = new Chore
@@ -1375,153 +1407,118 @@ namespace SeaSick.World
             }
         }
 
-        // --- the bench -------------------------------------------------------------
+        // --- the bench (one per spot since 2026-09-30) -------------------------------
 
+        /// Every spot's bench emptied (a station torn down, an old save's
+        /// half-done catch). Nothing is put anywhere: the caller has.
         static void EmptyBench(StationStock s)
         {
-            s.benchState = BenchState.Empty;
-            s.benchRecipe = "";
-            s.benchProgress = 0f;
-            s.benchOut = 0;
+            s.EnsureSpotRows();
+            foreach (var sp in s.spots) sp?.EmptyBench();
+            s.SyncLegacy();
         }
 
-        /// Move a finished job onto the rack as far as it has room. True when
-        /// the bench is clear.
+        /// Every finished spot onto the (shared) rack as far as it has
+        /// room. True when no bench is left holding a finished batch.
         static bool UnloadBench(StationStock s)
         {
-            if (s.benchState != BenchState.Finished) return s.benchState == BenchState.Empty;
-            string makes = s.BenchMakes;
-            if (makes == null || s.benchOut <= 0) { EmptyBench(s); return true; }
-            int move = Mathf.Min(s.RackRoom, s.benchOut);
-            if (move > 0) { s.Rack(makes, true).whole += move; s.benchOut -= move; }
-            if (s.benchOut <= 0) { EmptyBench(s); return true; }
+            bool clear = true;
+            s.EnsureSpotRows();
+            foreach (var sp in s.spots)
+                if (sp != null && sp.benchState == BenchState.Finished && !UnloadSpot(s, sp)) clear = false;
+            s.SyncLegacy();
+            return clear;
+        }
+
+        static bool AnySpotBusy(StationStock s)
+        {
+            foreach (var sp in s.spots) if (sp != null && sp.BenchBusy) return true;
             return false;
         }
 
-        /// The order's next batch goes onto the bench, if every input is in
-        /// the bay and the tool is somewhere in the camp.
-        bool TryLoad(StationStock s)
-        {
-            if (s.benchState != BenchState.Empty || !s.HasOrder) return false;
-            var r = s.OrderRecipe;
-            if (r == null) { s.ClearOrder(); return false; }
-            if (r.tool != null && HeldOf(r.tool) <= 0f) return false;
-            foreach (var line in r.takes)
-                if (line.n > 0 && s.BayCount(line.res) < line.n) return false;
-            foreach (var line in r.takes)
-                if (line.n > 0) s.Bay(line.res).whole -= line.n;
-            s.benchRecipe = r.id;
-            s.benchState = BenchState.Loaded;
-            s.benchProgress = 0f;
-            s.benchOut = 0;
-            return true;
-        }
-
-        void FinishJob(StationStock s, Economy.Recipe r)
-        {
-            int yield = Mathf.Max(1, r.yield);
-            s.benchState = BenchState.Finished;
-            s.benchProgress = 1f;
-            s.benchOut = yield;
-            if (r.tool != null && r.toolWear > 0f) DrawHeld(r.tool, r.toolWear * yield);
-            away.Add(r.makes, yield);
-            QueueFinished(s, r, yield);
-            if (!s.orderRepeat && s.orderRecipe == r.id)
-            {
-                s.orderLeft -= yield;
-                if (s.orderLeft <= 0) s.ClearOrder();
-            }
-            UnloadBench(s);
-        }
-
-        /// **A stationed worker's day**: finish/unload the bench, load the
-        /// next batch, work it; when the bench cannot go on, haul -- rack to
-        /// store when it is full, raw from the store (or off the island, if
-        /// the store has none and it is gatherable) into the bay, and the
-        /// rack home when there is no more raw.
+        /// **A stationed worker's day** (spots, 2026-09-30): unload every
+        /// finished spot, load every empty selected spot that has its inputs,
+        /// then work ALL the loaded spots AT ONCE, each at its own full rate
+        /// -- one worker tends every spot and his effort is not divided (a
+        /// spot's timer runs only while he stands at the station, as the
+        /// single bench's did). A spot short of an input is fetched for
+        /// first (store, or off the island for a gatherable raw -- the other
+        /// spots wait while he walks). With nothing loaded, he hauls: the
+        /// rack to the store when it blocks, inputs into the bay, and the
+        /// rack home when there is no more to fetch.
         void WorkerDay(OutpostHand h, StationStock s, int si, ref float budget)
         {
             // The fisher works at the water, not at a bench (2026-09-30).
             if (FishesAtShore(s)) { CatchDay(h, s, si, ref budget); return; }
+            s.EnsureSpotRows();
+            var spots = s.spots;
             for (int guard = 0; guard < 128 && budget > Eps; guard++)
             {
                 if (h.Hauling) { if (!AdvanceHaul(h, ref budget)) break; continue; }
 
-                if (s.benchState == BenchState.Finished) UnloadBench(s);
-
-                if (s.benchState == BenchState.Loaded || s.benchState == BenchState.Working)
+                foreach (var sp in spots)
+                    if (sp != null && sp.benchState == BenchState.Finished) UnloadSpot(s, sp);
+                foreach (var sp in spots)
                 {
-                    // **At the bench to work it** (2026-09-27): the job's
-                    // timer runs only while he stands there.
-                    if (StationPlace(si, out var benchAt) && !WalkTo(h, benchAt, ref budget, WorkFactor(h))) break;
-                    if (budget <= Eps) break;
-                    var r = s.BenchRecipe;
-                    if (r == null) { EmptyBench(s); continue; }   // recipe removed from the game
-                    float rate = r.ratePerDay * Economy.Techs.RateMul(s.planId, LevelOf(s.planId, s.ordinal))
-                                 * PriorityMultiplier(r.makes);
-                    if (rate <= 0f) break;
-                    float perDay = rate / Mathf.Max(1, r.yield);        // bench progress per day
-                    float need = (1f - s.benchProgress) / perDay;
-                    s.benchState = BenchState.Working;
-                    if (budget >= need - Eps)
-                    {
-                        budget -= Mathf.Min(budget, need);
-                        FinishJob(s, r);
-                    }
-                    else
-                    {
-                        s.benchProgress += budget * perDay;
-                        budget = 0f;
-                    }
-                    continue;
+                    if (sp == null) continue;
+                    // A recipe removed from the game: its batch is let go.
+                    if (sp.BenchBusy && sp.BenchRecipe == null) sp.EmptyBench();
+                    if (sp.benchState == BenchState.Empty) TryLoadSpot(s, sp);
                 }
 
-                if (TryLoad(s)) continue;
-                if (!StartWorkerChore(h, s, si)) break;
+                if (!AnySpotBusy(s))
+                {
+                    if (!StartWorkerChore(h, s, si)) break;
+                    continue;
+                }
+                // A spot starved of an input: fetch it before working on.
+                if (StartInputFetch(h, s, si)) continue;
+
+                // **At the bench to work it** (2026-09-27): the job's timer
+                // runs only while he stands there.
+                if (StationPlace(si, out var benchAt) && !WalkTo(h, benchAt, ref budget, WorkFactor(h))) break;
+                if (budget <= Eps) break;
+
+                // Every loaded spot advances by the same span of his time:
+                // up to the first batch to finish, or the whole budget.
+                float step = budget;
+                bool any = false;
+                foreach (var sp in spots)
+                {
+                    if (sp == null || !sp.BenchBusy) continue;
+                    float perDay = BenchPerDay(s, sp.BenchRecipe);
+                    if (perDay <= 0f) continue;
+                    any = true;
+                    step = Mathf.Min(step, Mathf.Max(0f, (1f - sp.progress01) / perDay));
+                }
+                if (!any) break;
+                foreach (var sp in spots)
+                {
+                    if (sp == null || !sp.BenchBusy) continue;
+                    var r = sp.BenchRecipe;
+                    float perDay = BenchPerDay(s, r);
+                    if (perDay <= 0f) continue;
+                    sp.benchState = BenchState.Working;
+                    float need = (1f - sp.progress01) / perDay;
+                    if (step >= need - Eps) FinishSpotJob(s, sp, r);
+                    else sp.progress01 += step * perDay;
+                }
+                budget -= Mathf.Min(budget, step);
             }
+            s.SyncLegacy();
         }
 
         bool StartWorkerChore(OutpostHand h, StationStock s, int si)
         {
-            // The bench is blocked by a full rack: carry the rack home.
-            if (s.benchState == BenchState.Finished)
-            {
-                if (RackChore(si, out var rc)) { BeginChore(h, rc); return true; }
-                return false;
-            }
-
-            var r = s.OrderRecipe;
-            if (r != null && (r.tool == null || HeldOf(r.tool) > 0f))
-            {
-                foreach (var line in r.takes)
+            // A bench is blocked by a full rack: carry the rack home.
+            foreach (var sp in s.spots)
+                if (sp != null && sp.benchState == BenchState.Finished)
                 {
-                    if (line.n <= 0) continue;
-                    int have = s.BayCount(line.res) + InFlightTo(HaulPlace.Station, si, line.res);
-                    if (have >= line.n) continue;
-                    int space = s.InputCap - have;
-                    if (space <= 0) continue;
-                    int inStore = StoreFree(line.res);
-                    if (inStore > 0)
-                    {
-                        int n = Mathf.Min(Res.Armful(line.res), Mathf.Min(space, inStore));
-                        StartTimedTrip(h, line.res, n, HaulPlace.Store, -1, HaulPlace.Station, si);
-                        return true;
-                    }
-                    // **The store has none: he gathers it himself** (Kevin's
-                    // call) and his armful goes straight into his own bay.
-                    if (Res.IsGatherable(line.res) && line.res != Res.Game)
-                    {
-                        int standing = FieldFree(line.res);
-                        if (standing > 0)
-                        {
-                            int n = Mathf.Min(Res.Armful(line.res), Mathf.Min(space, standing));
-                            StartTimedTrip(h, line.res, n, HaulPlace.Field, -1, HaulPlace.Station, si);
-                            return true;
-                        }
-                    }
-                    break;                   // made elsewhere, or none left here
+                    if (RackChore(si, out var rc)) { BeginChore(h, rc); return true; }
+                    break;
                 }
-            }
+
+            if (StartInputFetch(h, s, si)) return true;
 
             // No more raw (no order, no tool, an input nobody can fetch), or
             // the inputs are already walking in: take the rack home.
@@ -1604,7 +1601,6 @@ namespace SeaSick.World
         void StepStations(float days, bool gatherersHaul)
         {
             if (hands == null) return;
-            ResolveOrders();
             foreach (var h in hands)
             {
                 if (h == null) continue;
@@ -1683,29 +1679,56 @@ namespace SeaSick.World
             return head;
         }
 
+        /// Why a stationed worker is not making anything, or null. Across
+        /// every spot since 2026-09-30: stalled only when NO spot can go on
+        /// (the first spot's cause is the one said).
         string StationStallCause(OutpostHand h)
         {
             var s = StationOfHand(h);
             if (s == null) return "the building is not standing";
-            if (s.benchState == BenchState.Loaded || s.benchState == BenchState.Working) return null;
-            if (s.benchState == BenchState.Finished)
+            s.EnsureSpotRows();
+            if (AnySpotBusy(s)) return null;
+            bool anySelected = false, anyFinished = false;
+            foreach (var sp in s.spots)
             {
-                string makes = s.BenchMakes;
-                return s.RackFull && StoreRoomNet(makes) <= 0
-                    ? $"rack and store are full of {Friendly(makes)}" : null;
+                if (sp == null) continue;
+                if (sp.Selected) anySelected = true;
+                if (sp.benchState == BenchState.Finished) anyFinished = true;
             }
-            var r = s.OrderRecipe;
+            if (anyFinished || anySelected)
+            {
+                string jam = RackJam(s);
+                if (jam != null) return $"rack and store are full of {Friendly(jam)}";
+                if (anyFinished) return null;
+            }
             // Checked before the haul: a worker carrying his rack home with
             // no order is still a station with nothing to make.
-            if (r == null) return "no order given";
+            if (!anySelected) return "no order given";
             if (h.Hauling) return null;
             if (FishesAtShore(s))
             {
                 string shoreCause = CatchStallCause(s);
                 if (shoreCause != null) return shoreCause;
             }
-            if (r.tool != null && HeldOf(r.tool) <= 0f) return $"needs a {Friendly(r.tool)} in the pile";
             int si = stations.IndexOf(s);
+            string first = null;
+            foreach (var sp in s.spots)
+            {
+                if (sp == null || !sp.Selected) continue;
+                string cause = SpotInputCause(s, si, sp.Recipe);
+                if (cause == null) return null;
+                if (first == null) first = cause;
+            }
+            return first;
+        }
+
+        /// One spot's recipe: why it cannot start, in the worker's words.
+        string SpotInputCause(StationStock s, int si, Economy.Recipe r)
+        {
+            if (r == null) return "no order given";
+            string locked = LockOf(s, r);
+            if (locked != null) return locked;
+            if (r.tool != null && HeldOf(r.tool) <= 0f) return $"needs a {Friendly(r.tool)} in the pile";
             foreach (var line in r.takes)
             {
                 if (line.n <= 0) continue;

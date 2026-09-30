@@ -30,6 +30,14 @@ namespace SeaSick.World
         [SerializeField] float radius = 40f;
 
         public string ResourceName => resourceName;
+
+        /// **This island has a small ore outcrop (2026-09-30)** on top of
+        /// its own kind: a few Ore `ResourceNode`s the populator stood on
+        /// it, so an island inside the ore ring still has ore to gather.
+        /// Set once at world build (`TerrainWorldPopulator`), derived from
+        /// the world, never saved. `Outpost.EnsureOreStock` books its seam.
+        public bool HasOreOutcrop { get; private set; }
+        internal void MarkOreOutcrop() => HasOreOutcrop = true;
         public float Remaining => remaining;
         public float Radius => radius;
         /// **Is this the player's home island?** Not a property of the island

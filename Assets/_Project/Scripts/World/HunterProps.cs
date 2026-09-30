@@ -77,7 +77,9 @@ namespace SeaSick.World
 
         /// **One frame of hunting.** `spearRes` is what the ledger says is
         /// in his hand (`OutpostLedger.SpearInHand`, null = none: no spear
-        /// is drawn). `aimAt` is the world point a thrust drives at.
+        /// is drawn; `Res.Bow` since 2026-09-30 draws a bow, and `Thrust`
+        /// then means aiming it). `aimAt` is the world point a thrust drives
+        /// at, or the mark a bow is aimed at.
         public void Drive(string spearRes, Pose p, Vector3 aimAt = default)
         {
             drivenFrame = Time.frameCount;
@@ -160,6 +162,25 @@ namespace SeaSick.World
             Transform body = transform;
             float s = BodyScale;
             Vector3 grip = Grip(s);
+
+            // **The bow (2026-09-30)**: stave upright in his fist. At rest it
+            // hangs flat along his side; drawn (`Pose.Thrust` = aiming) his
+            // arm is out toward the mark and the string faces him.
+            if (spearFor == Res.Bow)
+            {
+                Vector3 fwd;
+                if (pose == Pose.Thrust)
+                {
+                    fwd = aim - grip;
+                    fwd = Vector3.ProjectOnPlane(fwd, body.up);
+                    if (fwd.sqrMagnitude < 1e-4f) fwd = body.forward;
+                    fwd.Normalize();
+                    grip += fwd * (BowArmOut * s);
+                }
+                else fwd = body.right;
+                spear.transform.SetPositionAndRotation(grip, Quaternion.LookRotation(fwd, body.up));
+                return;
+            }
 
             Vector3 dir;
             if (pose == Pose.Thrust)
@@ -253,6 +274,7 @@ namespace SeaSick.World
             if (spear != null && spearFor == res) return;
             if (spear != null) Destroy(spear);
             spearFor = res;
+            if (res == Res.Bow) { spear = BuildBow(); return; }
             bool iron = res == Res.IronSpear;
 
             var root = new GameObject(iron ? "HunterSpear_Iron" : "HunterSpear_Stone");
@@ -295,6 +317,42 @@ namespace SeaSick.World
             band.transform.localPosition = new Vector3(0f, HeadAbove, 0f);
 
             spear = root;
+        }
+
+        // --- the bow (2026-09-30) ---------------------------------------------
+
+        /// Grip to fist-forward when the bow is drawn, body metres.
+        const float BowArmOut = 0.25f;
+        /// Half the stave's height and how far the strung tips sit back
+        /// toward the archer, body metres: a 1.3 m bow, chunky enough to read
+        /// on the phone beside a 1.7 m man.
+        const float BowHalf = 0.64f, BowTipBack = 0.16f, BowGripHalf = 0.14f, BowThick = 0.05f;
+
+        /// **A primitive bow** until Astra's kit has one: a thick grip, two
+        /// limbs swept back to the tips, a hide string between them. Built in
+        /// the bow's own frame (grip at the origin, +Y up the stave, +Z at
+        /// the mark), hung off the ROOT with local scale 1 like the spear.
+        GameObject BuildBow()
+        {
+            var root = new GameObject("HunterBow");
+            root.transform.SetParent(transform, false);
+            var wood = Mat("bow_stave", Res.Colour(Res.Bow));
+            var hide = Mat("bow_string", new Color(0.85f, 0.80f, 0.68f));
+            Vector3 top = new Vector3(0f, BowHalf, -BowTipBack), bottom = new Vector3(0f, -BowHalf, -BowTipBack);
+            Segment(root.transform, new Vector3(0f, -BowGripHalf, 0f), new Vector3(0f, BowGripHalf, 0f), BowThick * 1.3f, wood);
+            Segment(root.transform, new Vector3(0f, BowGripHalf, 0f), top, BowThick, wood);
+            Segment(root.transform, new Vector3(0f, -BowGripHalf, 0f), bottom, BowThick, wood);
+            Segment(root.transform, bottom, top, 0.012f, hide);
+            return root;
+        }
+
+        /// A cylinder from `a` to `b` (local to `parent`), `thick` across.
+        static void Segment(Transform parent, Vector3 a, Vector3 b, float thick, Material mat)
+        {
+            Vector3 d = b - a;
+            var go = Prim(PrimitiveType.Cylinder, parent, new Vector3(thick, d.magnitude * 0.5f, thick), mat);
+            go.transform.localPosition = (a + b) * 0.5f;
+            go.transform.localRotation = Quaternion.FromToRotation(Vector3.up, d.normalized);
         }
 
         // --- helpers -----------------------------------------------------------

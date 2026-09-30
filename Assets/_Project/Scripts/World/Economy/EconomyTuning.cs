@@ -125,6 +125,10 @@ namespace SeaSick.World.Economy
         public float stoneSpearAnimals = 4f;
         [Tooltip("Animals one iron spear lasts.")]
         public float ironSpearAnimals = 12f;
+        [Tooltip("Bows, 2026-09-30: animals (or raiders) one bow lasts before it is worn out. Each shot also spends one arrow.")]
+        public float bowAnimals = 12f;
+        [Tooltip("Bows, 2026-09-30: a bow hunter shoots from this many times a spear hunter's arm's length.")]
+        public float bowHuntReachScale = 5f;
 
         [Serializable]
         public class CropRow
@@ -326,6 +330,10 @@ namespace SeaSick.World.Economy
         public static int HidePerAnimal { get { var t = Active; return t != null ? Mathf.Max(0, t.hidePerAnimal) : 1; } }
         public static float SpearAnimals(bool iron) =>
             Mathf.Max(1f, iron ? F(t => t.ironSpearAnimals, 12f) : F(t => t.stoneSpearAnimals, 4f));
+        /// Animals or raiders one bow lasts (2026-09-30).
+        public static float BowAnimals => Mathf.Max(1f, F(t => t.bowAnimals, 12f));
+        /// A bow hunter's stand-off as a multiple of the spear's reach.
+        public static float BowHuntReachScale => Mathf.Max(1f, F(t => t.bowHuntReachScale, 5f));
 
         /// **How much faster N builders hammer than one**: N^crewExponent.
         /// 1 → 1, 2 → 1.68, 3 → 2.28, 4 → 2.83 at 0.75. Diminishing on

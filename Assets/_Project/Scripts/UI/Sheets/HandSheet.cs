@@ -738,8 +738,8 @@ namespace SeaSick.UI.Sheets
                     if (blocker != null && !here)
                     {
                         locked = true;
-                        sub = "needs spear";
-                        toastText = "Hunting needs a spear — the forge makes one from a board and a stone.";
+                        sub = "needs spear or bow";
+                        toastText = "Hunting needs a spear (the forge: a board and a stone) or a bow with arrows (the fletcher).";
                     }
                     else if (standing < 1f && !here)
                     {

@@ -19,6 +19,11 @@ namespace SeaSick.World.Economy
         public string id;
         /// `BuildPlan.id` of the station this is made at.
         public string station;
+        /// **The station spot it is worked on (2026-09-30, Melvor-style
+        /// stations)**: "Grill"/"Cauldron" at the kitchen, "Smelter"/"Forge"
+        /// at the blacksmith. Null = the station's single spot (or, at a
+        /// multi-spot station, its first). `StationSpots.SpotOf` reads it.
+        public string spot;
         public string makes;
         /// Outputs per batch; `takes` is the price of one batch.
         public int yield = 1;
@@ -76,30 +81,30 @@ namespace SeaSick.World.Economy
             // Cook times are REAL seconds at today's 180 s day (`Cook`), per
             // the approved design table; the first recipe is the kitchen's
             // default. Fill values and buffs are `Economy.FoodBook`'s.
-            new Recipe { id = "baked-potato", station = "Kitchen", makes = Res.BakedPotato, yield = 1,
+            new Recipe { id = "baked-potato", station = "Kitchen", spot = "Grill", makes = Res.BakedPotato, yield = 1,
                 takes = Cost.Of(Cost.I(Res.Potato, 1)), ratePerDay = Cook(15f, 1) },
-            new Recipe { id = "grilled-fish", station = "Kitchen", makes = Res.GrilledFish, yield = 1,
+            new Recipe { id = "grilled-fish", station = "Kitchen", spot = "Grill", makes = Res.GrilledFish, yield = 1,
                 takes = Cost.Of(Cost.I(Res.Fish, 1)), ratePerDay = Cook(20f, 1) },
             // Kevin, 2026-09-28: *"Grilled meat needs to be added to the
             // kitchen recipes. I have 30 meat and my village is starving."*
             // Meat only went into hunter's stew (Kitchen III, fire II).
-            new Recipe { id = "grilled-meat", station = "Kitchen", makes = Res.GrilledMeat, yield = 1,
+            new Recipe { id = "grilled-meat", station = "Kitchen", spot = "Grill", makes = Res.GrilledMeat, yield = 1,
                 takes = Cost.Of(Cost.I(Res.Meat, 1)), ratePerDay = Cook(20f, 1) },
-            new Recipe { id = "roast-carrots", station = "Kitchen", makes = Res.RoastCarrots, yield = 1,
+            new Recipe { id = "roast-carrots", station = "Kitchen", spot = "Grill", makes = Res.RoastCarrots, yield = 1,
                 takes = Cost.Of(Cost.I(Res.Carrot, 2)), ratePerDay = Cook(20f, 1) },
-            new Recipe { id = "bread", station = "Kitchen", makes = Res.Bread, yield = 3,
+            new Recipe { id = "bread", station = "Kitchen", spot = "Cauldron", makes = Res.Bread, yield = 3,
                 takes = Cost.Of(Cost.I(Res.Flour, 2)), ratePerDay = Cook(45f, 3),
                 campfireLevel = 2, stationLevel = 2 },
-            new Recipe { id = "veg-stew", station = "Kitchen", makes = Res.VegStew, yield = 3,
+            new Recipe { id = "veg-stew", station = "Kitchen", spot = "Cauldron", makes = Res.VegStew, yield = 3,
                 takes = Cost.Of(Cost.I(Res.Potato, 2), Cost.I(Res.Carrot, 1), Cost.I(Res.Onion, 1)),
                 ratePerDay = Cook(60f, 3), campfireLevel = 2, stationLevel = 2 },
-            new Recipe { id = "ships-biscuit", station = "Kitchen", makes = Res.Meals, yield = 4,
+            new Recipe { id = "ships-biscuit", station = "Kitchen", spot = "Grill", makes = Res.Meals, yield = 4,
                 takes = Cost.Of(Cost.I(Res.Flour, 2)), ratePerDay = Cook(60f, 4),
                 campfireLevel = 2, stationLevel = 2 },
-            new Recipe { id = "fish-pie", station = "Kitchen", makes = Res.FishPie, yield = 4,
+            new Recipe { id = "fish-pie", station = "Kitchen", spot = "Cauldron", makes = Res.FishPie, yield = 4,
                 takes = Cost.Of(Cost.I(Res.Fish, 2), Cost.I(Res.Potato, 2), Cost.I(Res.Flour, 1)),
                 ratePerDay = Cook(90f, 4), campfireLevel = 2, stationLevel = 3 },
-            new Recipe { id = "hunters-stew", station = "Kitchen", makes = Res.HuntersStew, yield = 4,
+            new Recipe { id = "hunters-stew", station = "Kitchen", spot = "Cauldron", makes = Res.HuntersStew, yield = 4,
                 takes = Cost.Of(Cost.I(Res.Meat, 1), Cost.I(Res.Potato, 2), Cost.I(Res.Carrot, 1), Cost.I(Res.Onion, 1)),
                 ratePerDay = Cook(90f, 4), campfireLevel = 2, stationLevel = 3 },
             // (Harvest feast -- Kitchen IV, fire III -- waits for fire III.)
@@ -121,20 +126,29 @@ namespace SeaSick.World.Economy
             // --- fletcher ---
             new Recipe { id = "arrows", station = "Fletcher", makes = Res.Arrows, yield = 3,
                 takes = Cost.Of(Cost.I(Res.Timber, 1)), ratePerDay = 3f },
+            // **The bow, 2026-09-30** (Kevin: "the Fletcher makes Bows from
+            // fine boards + hide, in addition to arrows"). 1 fine board + 1
+            // hide -> 1 bow at 1 a hand-day (180 s a bow), the pace of the
+            // iron spear and tools; fire II because fine boards are, station
+            // level I so a fletcher that stands can make one the day both
+            // inputs are in. After arrows, so arrows stay the default.
+            new Recipe { id = "bow", station = "Fletcher", makes = Res.Bow, yield = 1,
+                takes = Cost.Of(Cost.I(Res.FineBoards, 1), Cost.I(Res.Hide, 1)), ratePerDay = 1f,
+                campfireLevel = 2 },
 
             // --- forge ---
             // The first thing a forge makes needs no ore at all: Kevin's
             // spear is "a wood plank for the shaft and stone or metal for
             // the tip", and the stone one is what gets the first hunter out.
-            new Recipe { id = "spear", station = "Blacksmith", makes = Res.Spear, yield = 1,
+            new Recipe { id = "spear", station = "Blacksmith", spot = "Forge", makes = Res.Spear, yield = 1,
                 takes = Cost.Of(Cost.I(Res.Boards, 1), Cost.I(Res.Stone, 1)), ratePerDay = 1.5f },
-            new Recipe { id = "iron", station = "Blacksmith", makes = Res.Iron, yield = 1,
+            new Recipe { id = "iron", station = "Blacksmith", spot = "Smelter", makes = Res.Iron, yield = 1,
                 takes = Cost.Of(Cost.I(Res.Ore, 2)), ratePerDay = 1.5f, campfireLevel = 2 },
-            new Recipe { id = "saw-blade", station = "Blacksmith", makes = Res.SawBlade, yield = 1,
+            new Recipe { id = "saw-blade", station = "Blacksmith", spot = "Forge", makes = Res.SawBlade, yield = 1,
                 takes = Cost.Of(Cost.I(Res.Iron, 2)), ratePerDay = 0.5f, campfireLevel = 2 },
-            new Recipe { id = "tools", station = "Blacksmith", makes = Res.Tools, yield = 1,
+            new Recipe { id = "tools", station = "Blacksmith", spot = "Forge", makes = Res.Tools, yield = 1,
                 takes = Cost.Of(Cost.I(Res.Iron, 1), Cost.I(Res.Boards, 1)), ratePerDay = 1f, campfireLevel = 2 },
-            new Recipe { id = "iron-spear", station = "Blacksmith", makes = Res.IronSpear, yield = 1,
+            new Recipe { id = "iron-spear", station = "Blacksmith", spot = "Forge", makes = Res.IronSpear, yield = 1,
                 takes = Cost.Of(Cost.I(Res.Boards, 1), Cost.I(Res.Iron, 1)), ratePerDay = 1f,
                 campfireLevel = 2, stationLevel = 2 },
 

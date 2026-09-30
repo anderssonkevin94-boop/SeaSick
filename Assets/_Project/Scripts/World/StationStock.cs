@@ -65,7 +65,9 @@ namespace SeaSick.World
     /// (2026-09-23).** Input bay (per resource, `InputCap` units each), a
     /// bench holding one job, and an output rack (`OutputCap` units, all
     /// resources together), plus the player's ORDER. Nothing is worked here
-    /// without an order.
+    /// without an order. **Since 2026-09-30 the bench and the order are per
+    /// SPOT** (`spots`, `StationSpots`): each spot its own recipe and bench,
+    /// the bay and rack shared.
     ///
     /// Keyed by `planId` + `ordinal` (the nth built of that plan), not by the
     /// `raised` index, because `Outpost.Adopt` rebuilds `raised` and
@@ -99,10 +101,9 @@ namespace SeaSick.World
     [System.Serializable]
     public class StationStock
     {
-        /// **The order queue (phase 2, 2026-09-27).** When it has entries the
-        /// ledger projects the first workable one into `orderRecipe` /
-        /// `orderLeft` / `orderRepeat` each step (`ResolveOrders`), so every
-        /// bench/haul path keeps reading those. Empty = the old single order.
+        /// **The order queue (phase 2, 2026-09-27) -- RETIRED 2026-09-30.**
+        /// Only an old save has entries: `EnsureSpotRows` moves them onto the
+        /// spots once and empties it. Kept for JsonUtility.
         public List<QueuedOrder> queue = new List<QueuedOrder>();
         public string planId = "";
         /// Which of this plan's built instances (0 for the first).
@@ -120,6 +121,24 @@ namespace SeaSick.World
         /// Capacity `OutputCap` across all rows together.
         public List<OutpostStore> rack = new List<OutpostStore>();
 
+        /// **The spots (2026-09-30, Melvor-style stations).** One per
+        /// `StationSpots.SpotsFor(planId)`, in that order: each has its own
+        /// selected recipe and its own bench, all running at once under the
+        /// station's one worker. THE bay and THE rack above stay the
+        /// station's, SHARED by every spot at full capacity (a bay row is
+        /// per resource anyway; the rack is one pile of `OutputCap`) --
+        /// never split, so a one-spot station is exactly what it was.
+        /// Saved. Old saves: empty, and `EnsureSpotRows` builds it from the
+        /// legacy bench/order/queue fields below.
+        public List<SpotState> spots = new List<SpotState>();
+
+        /// **LEGACY MIRROR since 2026-09-30** -- the spots own the benches.
+        /// These four show the station's "shown" bench (`ShownSpot`: the
+        /// first spot working, else the first finished, else spot 0), for
+        /// the readers that only know one bench (the villager mime, the
+        /// bench visual `StationStockView`, older sheets). Rewritten by
+        /// `SyncLegacy` after every ledger step; writing them does nothing.
+        /// Still saved: an OLD save's bench is read from here once.
         public string benchRecipe = "";
         public BenchState benchState = BenchState.Empty;
         /// 0..1 through the current job.
@@ -127,7 +146,9 @@ namespace SeaSick.World
         /// Output units sitting on the bench when `benchState == Finished`.
         public int benchOut;
 
-        /// The player's order: recipe id, units still to make, or repeat.
+        /// **LEGACY MIRROR since 2026-09-30** of the first selected spot:
+        /// its recipe, its count (`orderLeft`), and "until stopped"
+        /// (`orderRepeat`). An OLD save's order is read from here once.
         public string orderRecipe = "";
         public int orderLeft;
         public bool orderRepeat;
@@ -156,7 +177,196 @@ namespace SeaSick.World
         /// **Flagged guess** for a station plan whose `outputSlots` is 0.
         public const int DefaultOutputSlots = 12;
 
-        public bool HasOrder => !string.IsNullOrEmpty(orderRecipe) && (orderRepeat || orderLeft > 0);
+        /// Some spot has a recipe selected (2026-09-30: was the one order).
+        public bool HasOrder
+        {
+            get
+            {
+                EnsureSpotRows();
+                foreach (var sp in spots) if (sp != null && sp.Selected) return true;
+                return false;
+            }
+        }
+
+        /// One per spot, in `StationSpots.SpotsFor(planId)` order.
+        public IReadOnlyList<SpotState> Spots
+        {
+            get { EnsureSpotRows(); return spots; }
+        }
+
+        /// The spot at `index`, or null.
+        public SpotState SpotAt(int index)
+        {
+            EnsureSpotRows();
+            return index >= 0 && index < spots.Count ? spots[index] : null;
+        }
+
+        /// Is some spot making `recipeId`?
+        public bool Selects(string recipeId)
+        {
+            if (string.IsNullOrEmpty(recipeId)) return false;
+            EnsureSpotRows();
+            foreach (var sp in spots) if (sp != null && sp.recipeId == recipeId) return true;
+            return false;
+        }
+
+        /// The spot whose bench the single-bench readers see: the first one
+        /// working, else the first finished, else the first selected, else
+        /// spot 0.
+        public SpotState ShownSpot
+        {
+            get
+            {
+                EnsureSpotRows();
+                foreach (var sp in spots) if (sp != null && sp.BenchBusy) return sp;
+                foreach (var sp in spots) if (sp != null && sp.benchState == BenchState.Finished) return sp;
+                foreach (var sp in spots) if (sp != null && sp.Selected) return sp;
+                return spots.Count > 0 ? spots[0] : null;
+            }
+        }
+
+        /// **Keep `spots` one row per spot, in order (2026-09-30).** Cheap
+        /// when nothing changed. The first time on a row with none (an OLD
+        /// save, a fresh row) it takes over the legacy single bench, the
+        /// single order and the phase-2 order queue, each onto the spot its
+        /// recipe belongs to: a Count line keeps its count, Repeat and Keep
+        /// lines become "until stopped" (auto-pause replaces keep-N). A
+        /// spot the game no longer has hands its bench and selection to the
+        /// spot its recipe now lives on, or puts the batch back in the bay /
+        /// on the rack -- nothing is lost. Returns whether anything changed.
+        public bool EnsureSpotRows()
+        {
+            if (spots == null) spots = new List<SpotState>();
+            var names = StationSpots.SpotsFor(planId);
+            bool same = spots.Count == names.Count;
+            for (int i = 0; same && i < names.Count; i++)
+                same = spots[i] != null && spots[i].spot == names[i];
+            if (same)
+            {
+                // JsonUtility loads a null string as "": back to null = idle.
+                foreach (var sp in spots) if (sp.recipeId != null && sp.recipeId.Length == 0) sp.recipeId = null;
+                return false;
+            }
+            if (names.Count == 0) return false;
+
+            bool fresh = spots.Count == 0;
+            var old = new List<SpotState>(spots);
+            spots.Clear();
+            foreach (var name in names)
+            {
+                SpotState keep = null;
+                foreach (var o in old) if (o != null && o.spot == name) { keep = o; break; }
+                if (keep != null) old.Remove(keep);
+                else keep = new SpotState { spot = name };
+                if (keep.recipeId != null && keep.recipeId.Length == 0) keep.recipeId = null;
+                if (keep.benchRecipe == null) keep.benchRecipe = "";
+                spots.Add(keep);
+            }
+            foreach (var o in old)
+            {
+                if (o == null) continue;
+                var r = o.Selected ? o.Recipe : null;
+                var to = SpotFor(r);
+                if (to != null && !to.Selected) { to.recipeId = o.recipeId; to.count = o.count; }
+                if (o.benchState != BenchState.Empty) PutBenchBack(o.benchRecipe, o.benchState, o.benchOut);
+            }
+
+            if (fresh)
+            {
+                // The legacy single bench.
+                if (benchState != BenchState.Empty && !string.IsNullOrEmpty(benchRecipe))
+                {
+                    var to = SpotFor(Economy.Recipes.Named(benchRecipe));
+                    if (to != null && to.benchState == BenchState.Empty)
+                    {
+                        to.benchRecipe = benchRecipe;
+                        to.benchState = benchState;
+                        to.progress01 = benchProgress;
+                        to.benchOut = benchOut;
+                    }
+                    else PutBenchBack(benchRecipe, benchState, benchOut);
+                }
+                // The legacy single order.
+                if (!string.IsNullOrEmpty(orderRecipe) && (orderRepeat || orderLeft > 0))
+                {
+                    var to = SpotFor(Economy.Recipes.Named(orderRecipe));
+                    if (to != null && !to.Selected)
+                    {
+                        to.recipeId = orderRecipe;
+                        to.count = orderRepeat ? 0 : orderLeft;
+                    }
+                }
+                // The phase-2 queue (2026-09-27), top line first per spot.
+                if (queue != null)
+                {
+                    foreach (var q in queue)
+                    {
+                        if (q == null) continue;
+                        var to = SpotFor(Economy.Recipes.Named(q.recipe));
+                        if (to == null || to.Selected) continue;
+                        if (q.mode == OrderMode.Count && q.n <= 0) continue;
+                        to.recipeId = q.recipe;
+                        to.count = q.mode == OrderMode.Count ? q.n : 0;
+                    }
+                    queue.Clear();
+                }
+            }
+            SyncLegacy();
+            return true;
+        }
+
+        /// The spot `r` is worked on at this station, or null (no recipe,
+        /// another station's recipe).
+        SpotState SpotFor(Economy.Recipe r)
+        {
+            if (r == null || r.station != planId) return null;
+            string name = StationSpots.SpotOf(r);
+            foreach (var sp in spots) if (sp != null && sp.spot == name) return sp;
+            return null;
+        }
+
+        /// A bench with nowhere to go: a finished batch onto the rack, a
+        /// loaded one's inputs back into the bay (over their caps if need
+        /// be -- they exist).
+        void PutBenchBack(string recipe, BenchState state, int outN)
+        {
+            var r = Economy.Recipes.Named(recipe);
+            if (r == null) return;
+            if (state == BenchState.Finished) { if (outN > 0) Rack(r.makes, true).whole += outN; }
+            else foreach (var line in r.takes) if (line.n > 0) Bay(line.res, true).whole += line.n;
+        }
+
+        /// **Rewrite the legacy mirror fields from the spots.**
+        public void SyncLegacy()
+        {
+            if (spots == null) return;
+            SpotState sel = null;
+            foreach (var sp in spots) if (sp != null && sp.Selected) { sel = sp; break; }
+            orderRecipe = sel != null ? sel.recipeId : "";
+            orderRepeat = sel != null && sel.count <= 0;
+            orderLeft = sel != null && sel.count > 0 ? sel.count : 0;
+            SpotState shown = null;
+            foreach (var sp in spots) if (sp != null && sp.BenchBusy) { shown = sp; break; }
+            if (shown == null) foreach (var sp in spots) if (sp != null && sp.benchState == BenchState.Finished) { shown = sp; break; }
+            if (shown == null) shown = sel;
+            if (shown == null && spots.Count > 0) shown = spots[0];
+            benchRecipe = shown != null ? shown.benchRecipe ?? "" : "";
+            benchState = shown != null ? shown.benchState : BenchState.Empty;
+            benchProgress = shown != null ? shown.progress01 : 0f;
+            benchOut = shown != null ? shown.benchOut : 0;
+        }
+
+        /// Output units sitting on finished benches that make `res`.
+        public int FinishedOf(string res)
+        {
+            int n = 0;
+            if (string.IsNullOrEmpty(res)) return 0;
+            EnsureSpotRows();
+            foreach (var sp in spots)
+                if (sp != null && sp.benchState == BenchState.Finished && sp.benchOut > 0 && sp.BenchMakes == res)
+                    n += sp.benchOut;
+            return n;
+        }
 
         public int InputCap
         {
@@ -168,7 +378,17 @@ namespace SeaSick.World
             get { int n = BuildPlans.Named(planId).outputSlots; return n > 0 ? n : DefaultOutputSlots; }
         }
 
-        public Economy.Recipe OrderRecipe => HasOrder ? Economy.Recipes.Named(orderRecipe) : null;
+        /// The first selected spot's recipe (2026-09-30: was the one order).
+        public Economy.Recipe OrderRecipe
+        {
+            get
+            {
+                EnsureSpotRows();
+                foreach (var sp in spots) if (sp != null && sp.Selected) return sp.Recipe;
+                return null;
+            }
+        }
+        /// The SHOWN bench's recipe (the legacy mirror, `ShownSpot`).
         public Economy.Recipe BenchRecipe =>
             string.IsNullOrEmpty(benchRecipe) ? null : Economy.Recipes.Named(benchRecipe);
         /// What the bench is making (or has made), or null when it is empty.
@@ -199,7 +419,7 @@ namespace SeaSick.World
         public int CountOf(string res)
         {
             int n = BayCount(res) + RackCount(res);
-            if (benchState == BenchState.Finished && benchOut > 0 && BenchMakes == res) n += benchOut;
+            n += FinishedOf(res);
             return n;
         }
 
@@ -208,7 +428,7 @@ namespace SeaSick.World
         public int SpendableOf(string res)
         {
             int n = RackCount(res);
-            if (benchState == BenchState.Finished && benchOut > 0 && BenchMakes == res) n += benchOut;
+            n += FinishedOf(res);
             return n;
         }
 
@@ -225,7 +445,7 @@ namespace SeaSick.World
             float n = 0f;
             var b = Bay(res); if (b != null) n += b.whole + b.part;
             var r = Rack(res); if (r != null) n += r.whole + r.part;
-            if (benchState == BenchState.Finished && benchOut > 0 && BenchMakes == res) n += benchOut;
+            n += FinishedOf(res);
             return n;
         }
 
@@ -236,16 +456,21 @@ namespace SeaSick.World
             {
                 int n = RackTotal;
                 if (bay != null) foreach (var s in bay) if (s != null) n += s.whole;
-                if (benchState == BenchState.Finished) n += benchOut;
+                EnsureSpotRows();
+                foreach (var sp in spots)
+                    if (sp != null && sp.benchState == BenchState.Finished) n += sp.benchOut;
                 return n;
             }
         }
 
+        /// Every spot stopped (2026-09-30). Benches are left as they are --
+        /// the ledger's `StopSpot` is the one that clears a bench.
         public void ClearOrder()
         {
-            orderRecipe = "";
-            orderLeft = 0;
-            orderRepeat = false;
+            EnsureSpotRows();
+            foreach (var sp in spots) sp?.Stop();
+            queue?.Clear();
+            SyncLegacy();
         }
 
         static OutpostStore Row(List<OutpostStore> list, string res, bool create)

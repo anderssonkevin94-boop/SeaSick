@@ -34,6 +34,12 @@ namespace SeaSick.World.Life
         /// logged at pickup, not at creation, so it only ever describes
         /// somebody who actually made it home (`Lives.MarkStranger`'s doc).
         public const string FoundCastaway = "FoundCastaway";
+        /// **Castaways at sea (Kevin, 2026-09-30).** A stranger pulled off a
+        /// floating board by the ship (`Voyage.CastawaySpawner`). `camp` is
+        /// the island they were found off, `other` the crew member who
+        /// hauled them in (may be empty). While a name has this and no
+        /// `WentAshore`, they are a passenger waiting for the next camp.
+        public const string PulledFromSea = "PulledFromSea";
         /// **Phase 7.** Landed at a camp other than `LifeRecord.homeCamp`
         /// (`Outpost.Station`) -- `other` carries the camp they came from.
         public const string Ferried = "Ferried";

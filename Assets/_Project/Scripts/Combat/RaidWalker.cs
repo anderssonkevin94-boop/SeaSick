@@ -116,6 +116,29 @@ namespace SeaSick.Combat
             }
         }
 
+        /// **An arrow bites (bows, 2026-09-30).** The same hp as a jab, but
+        /// he only turns on the archer when he could reach him: a ground
+        /// archer while this raider is already inside the defend perimeter
+        /// (as a jab would). Shot from a tower (`archer` null), or over a
+        /// wall he has not got through, he keeps at what he was doing --
+        /// breaking the wall, walking to a pile -- rather than try to walk
+        /// through the palisade after the man who shot him. Called by
+        /// `World.CampWorker.Archery` when its arrow lands.
+        public void TakeArrow(float damage, World.OutpostHand archer)
+        {
+            if (Dead || phase == Phase.Fleeing || phase == Phase.Recalled) return;
+            if (hp < 0f) hp = HpMax;
+            hp -= Mathf.Max(0f, damage);
+            if (hp <= 0f) { Killed(archer); return; }
+            if (archer == null || !InsideDefendPerimeterCached(camp)) return;
+            fightTarget = archer;
+            if (phase != Phase.Fighting)
+            {
+                StopBreaking();
+                phase = Phase.Fighting;
+            }
+        }
+
         /// **hp reaches zero.** Drops whatever loot is on his shoulder where
         /// he falls (docs: "a killed raider drops his loot where he
         /// falls" -- gone already if he had already delivered it to the
