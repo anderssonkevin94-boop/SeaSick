@@ -271,6 +271,11 @@ namespace SeaSick.UI.Sheets
 
         void OnSheetChanged()
         {
+            // The away sheet can open on the first frames of a load, before
+            // LateUpdate has built the layout (an NRE in the phone's dev
+            // console, 2026-09-30): build it now, or wait for LateUpdate.
+            if (card == null) EnsureBuilt();
+            if (card == null) return;
             built = null;
             framed = null;
             hug = false;

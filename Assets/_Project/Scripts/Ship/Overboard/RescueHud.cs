@@ -202,6 +202,13 @@ namespace SeaSick.Ship.Overboard
                 return;
             }
 
+            // An edge arrow for something on top of the ship points at the
+            // ship itself, and with a sheet open the IMGUI layer drew over
+            // it (2026-09-30 phase 6 check): no arrow and no hidden tap
+            // zone for either.
+            if (SeaSick.UI.Sheets.SheetHost.FrameOpen || SeaSick.UI.Sheets.Sheets.Current != null) return;
+            if (helm != null && NearShip(helm.transform.position, t.WorldPosition)) return;
+
             // Clamp to a band that prefers the TOP and SIDES over the
             // bottom, where the helm stick lives (build brief item 2) — the
             // clamp rect's own bottom edge stops at the screen's vertical
@@ -216,10 +223,34 @@ namespace SeaSick.Ship.Overboard
             var bounds = new Rect(margin, margin,
                 Screen.width - margin * 2f, Screen.height * 0.5f - margin);
             Vector2 edgePoint = ClampToRectEdge(centre, dir, bounds);
+            if (MarkerBlocked(edgePoint, u)) return;
 
             float dist = Vector3.Distance(cam.transform.position, t.WorldPosition);
             DrawArrow(edgePoint, dir, t.TimeLeft01, dist, u);
             DrawTapZone(edgePoint, tapHalf, t);
+        }
+
+        /// **Markers stand down near the ship (2026-09-30).** A target within
+        /// this many metres (flat) of the player ship is on the ship itself,
+        /// so its edge arrow would point at the hull and read as clutter.
+        public const float NearShipMetres = 25f;
+
+        public static bool NearShip(Vector3 ship, Vector3 target)
+        {
+            float dx = ship.x - target.x, dz = ship.z - target.z;
+            return dx * dx + dz * dz < NearShipMetres * NearShipMetres;
+        }
+
+        /// True when an IMGUI sea marker drawn at `gui` (GUI space) would
+        /// land on the sea HUD (top bar, alerts, helm, action card) or on an
+        /// open sheet. `SquallHud` shares it.
+        public static bool MarkerBlocked(Vector2 gui, int u)
+        {
+            if (SeaSick.UI.Sheets.SheetHost.FrameOpen || SeaSick.UI.Sheets.Sheets.Current != null) return true;
+            // The arrowhead plus its "NNm" label span roughly 3 units each way.
+            float r = u * 3f;
+            var box = new Rect(gui.x - r, gui.y - r, r * 2f, r * 2.6f);
+            return SeaSick.UI.Sheets.SeaHud.Overlaps(box);
         }
 
         /// Where a ray from `origin` toward `dir` first leaves `r`.

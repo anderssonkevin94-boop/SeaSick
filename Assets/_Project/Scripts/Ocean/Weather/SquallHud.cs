@@ -25,6 +25,9 @@ namespace SeaSick.Ocean
 
         const float EdgeMarginUnits = 2.6f;
 
+        SeaSick.Ship.HelmInput ship;
+        float nextShipLookup;
+
         void OnGUI()
         {
             if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;   // sea view only
@@ -53,6 +56,16 @@ namespace SeaSick.Ocean
             // low over the helm stick.
             var bounds = new Rect(margin, margin, Screen.width - margin * 2f, Screen.height * 0.5f - margin);
             Vector2 edgePoint = ClampToRectEdge(centre, rel, bounds);
+
+            // Not over an open sheet or the sea HUD rects, and not when the
+            // bank is already on the ship (2026-09-30 phase 6 check).
+            if (SeaSick.Ship.Overboard.RescueHud.MarkerBlocked(edgePoint, u)) return;
+            if (ship == null && Time.unscaledTime >= nextShipLookup)
+            {
+                ship = FindAnyObjectByType<SeaSick.Ship.HelmInput>();
+                nextShipLookup = Time.unscaledTime + 1f;
+            }
+            if (ship != null && SeaSick.Ship.Overboard.RescueHud.NearShip(ship.transform.position, dir.Centre)) return;
 
             if (Event.current.type != EventType.Repaint)
             {

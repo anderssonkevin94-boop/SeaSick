@@ -223,8 +223,16 @@ namespace SeaSick.UI.Sheets
         // Melvor screen: spots, grid, detail, the thumb row), **work** (the
         // worker + in and out + why it stopped) and **level** (the upgrade).
         // A building with nothing to make (a hut, the store) stays one page
-        // and simply hugs it. On the desk it is one tall page, no tabs.
-        public string[] TabLabels => StationPage.Hugging ? hugTabs : null;
+        // and simply hugs it. On the desk (2026-09-30) it pages the same way:
+        // the one tall page of worker + make + flow + upgrade ran 120-480 px
+        // past the side third, so the last dish row and the "Make ..." /
+        // "Build ..." / "Set as goal" buttons were cut.
+        public string[] TabLabels => Paged ? hugTabs : null;
+
+        /// **Does this station split into make / work / level pages?** On the
+        /// phone's hugging frame and on the desk's side third -- both too
+        /// short for the stacked page.
+        bool Paged => hugTabs != null && (StationPage.Hugging || HudLayout.Wide);
         public int Tab => tab;
         public void SetTab(int index) { tab = index; }
 
@@ -356,7 +364,7 @@ namespace SeaSick.UI.Sheets
             bayValue = benchValue = benchLabel = rackValue = null; bayIcon = rackIcon = null; ring = null;
             makeBuilt = false;
             hugged = StationPage.Hugging;
-            string on = hugged && hugTabs != null ? hugTabs[Mathf.Clamp(tab, 0, hugTabs.Length - 1)] : null;
+            string on = Paged ? hugTabs[Mathf.Clamp(tab, 0, hugTabs.Length - 1)] : null;
             bool all = on == null;
 
             root = StationPage.Root("st-page");
@@ -565,13 +573,24 @@ namespace SeaSick.UI.Sheets
         /// **How many grid rows fit**, planned from the band before building.
         /// Hugging: the half-screen body (`SheetHost.HugBodyBudget`) less the
         /// thumb row, the spot tiles and the detail -- on a 16 Pro that is
-        /// one row, and the cauldron's five dishes page as 3 + More. Desk:
-        /// every row (the tall column holds them).
+        /// one row, and the cauldron's five dishes page as 3 + More. Desk
+        /// (2026-09-30): the side third's `BandHeight`, More-paged the same way.
         int PlanRows(int most)
         {
             int need = Mathf.CeilToInt(most / (float)PerRow);
             if (need <= 1) return 1;
-            if (!hugged) return need;
+            if (!hugged)
+            {
+                // **Desk (2026-09-30):** the side third's page band, not "every
+                // row" -- a cauldron of dishes ran past it. The spots, the
+                // grid eyebrow (22 + gap) and the detail come off the band, the
+                // tab strip and thumb row are already in `BandHeight`; what
+                // does not fit pages through the More tile.
+                if (!Paged) return need;
+                float deskFixed = (multiSpot ? SpotRowPx : 0f) + 30f + DetailPx;
+                int deskFit = Mathf.FloorToInt((SheetHost.BandHeight - deskFixed) / TileRowPx);
+                return Mathf.Clamp(deskFit, 1, need);
+            }
             float budget = SheetHost.HugBodyBudget(hugTabs != null && hugTabs.Length > 1) - ThumbRowPx;
             float fixedPx = (multiSpot ? SpotRowPx : 0f) + DetailPx;
             int fit = Mathf.FloorToInt((budget - fixedPx) / TileRowPx);

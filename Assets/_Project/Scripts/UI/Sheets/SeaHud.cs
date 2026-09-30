@@ -19,7 +19,7 @@ namespace SeaSick.UI.Sheets
     ///   the Backpack, ship side, or its ship-only page with no camp) · the
     ///   aboard count (tap = the Ship sheet) · the sea-state word (calm ...
     ///   wild, "BREAKERS" / "broaching" in ember; off a fresh island "Island_7
-    ///   · 20% explored" instead, and no day) · Day N · ☰ (the pause menu).
+    ///   · 20%" instead (2026-09-30: the word "explored" cut off), and no day) · Day N · ☰ (the pause menu).
     ///   Replaces `HoldChip`, `PauseChip`'s Ledger/Menu rail and the sea
     ///   line of `HelmInput`'s panel.</item>
     /// <item>**One alert chip + "+N"** under it: "MAN OVERBOARD · Bo" (tap =
@@ -87,6 +87,15 @@ namespace SeaSick.UI.Sheets
             if (Time.frameCount - tickFrame > 1) return false;
             return TopRect.Contains(guiPoint) || AlertRect.Contains(guiPoint) || HelmRect.Contains(guiPoint)
                    || (cardTaps && SeaActions.Visible && SeaActions.Rect.Contains(guiPoint));
+        }
+
+        /// Does a GUI-space rect touch the sea HUD (2026-09-30, for the IMGUI
+        /// edge markers: rescue arrows, squall arrow)?
+        public static bool Overlaps(Rect guiRect)
+        {
+            if (Time.frameCount - tickFrame > 1) return false;
+            return TopRect.Overlaps(guiRect) || AlertRect.Overlaps(guiRect) || HelmRect.Overlaps(guiRect)
+                   || (cardTaps && SeaActions.Visible && SeaActions.Rect.Overlaps(guiRect));
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -629,7 +638,7 @@ namespace SeaSick.UI.Sheets
                     {
                         placeKey = pct;
                         placeIsland = isle;
-                        placeText.text = isle.name + " · " + pct + "% explored";
+                        placeText.text = isle.name + " · " + pct + "%";
                     }
                     return;
                 }

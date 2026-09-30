@@ -106,9 +106,10 @@ namespace SeaSick.UI.Sheets
             var root = CardKit.Page(out var col);
 
             var chips = CardKit.Chips(col);
-            WatchTiles.Set(WatchTiles.Chip(chips, "BORN", true), g.bornDay >= 0 ? "Day " + g.bornDay : "Unknown");
-            WatchTiles.Set(WatchTiles.Chip(chips, "DIED", false), "Day " + g.diedDay);
-            int lived = g.bornDay >= 0 ? Mathf.Max(0, g.diedDay - g.bornDay) : -1;
+            int born = Born(g), died = Died(g);
+            WatchTiles.Set(WatchTiles.Chip(chips, "BORN", true), born >= 0 ? "Day " + born : "Unknown");
+            WatchTiles.Set(WatchTiles.Chip(chips, "DIED", false), "Day " + died);
+            int lived = born >= 0 ? Mathf.Max(0, died - born) : -1;
             WatchTiles.Set(WatchTiles.Chip(chips, "LIVED", false),
                 lived < 0 ? "Unknown" : lived == 1 ? "1 day" : lived + " days");
 
@@ -219,12 +220,23 @@ namespace SeaSick.UI.Sheets
 
         // --- words ------------------------------------------------------------------------
 
+        /// **The day a death reads on the sheet (2026-09-30).** The record
+        /// stores `TimeOfDay.Day` -- the same counter the top bar shows -- but
+        /// a grave made before the calendar was re-anchored (a fast-forward
+        /// check, a save from the 180 s-day clock) can hold a day in the
+        /// future ("Day 503" on day 136). A death cannot be ahead of the
+        /// clock, so it is capped at today.
+        static int Died(GraveRecord g) => Mathf.Min(g.diedDay, TimeOfDay.Day);
+
+        /// The birth day, -1 unknown; capped at the death day for the same reason.
+        static int Born(GraveRecord g) => g.bornDay < 0 ? -1 : Mathf.Min(g.bornDay, Died(g));
+
         /// "Day 3 - Day 9", or "Day 9" when the birth is not known.
         static string Days(GraveRecord g) =>
-            g.bornDay >= 0 ? "Day " + g.bornDay + " – Day " + g.diedDay : "Day " + g.diedDay;
+            Born(g) >= 0 ? "Day " + Born(g) + " – Day " + Died(g) : "Day " + Died(g);
 
         /// "Day 3–9" for a list row.
         static string DaysShort(GraveRecord g) =>
-            g.bornDay >= 0 ? "Day " + g.bornDay + "–" + g.diedDay : "Day " + g.diedDay;
+            Born(g) >= 0 ? "Day " + Born(g) + "–" + Died(g) : "Day " + Died(g);
     }
 }
