@@ -22,6 +22,11 @@ ModelImporter:
   - first:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule
+      name: Crew_Skin
+    second: {fileID: 2100000, guid: 5b4eaf3e6988442fd9831d7aeeb43265, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
       name: Crew_Skin_Preview
     second: {fileID: 2100000, guid: 5b4eaf3e6988442fd9831d7aeeb43265, type: 2}
   materials:

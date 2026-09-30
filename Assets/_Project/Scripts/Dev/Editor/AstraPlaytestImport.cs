@@ -121,7 +121,10 @@ namespace SeaSick.Dev
             {
                 var old=root.transform.Find("Visual");if(old != null)Object.DestroyImmediate(old.gameObject);
                 var vis=Model(Art+"/Crew/Deckhand.fbx",root.transform);vis.name="Visual";
-                var size=BoundsOf(vis);
+                // Baked vertices, not Renderer.bounds: a skinned renderer's
+                // imported AABB is padded (v15: 0.11 m below the soles), which
+                // shrank him and floated his feet.
+                var size=SkinnedBounds(vis);
                 if(size.size.y < 1 || size.size.y > 3)throw new Exception("Crew import units wrong: " + size);
                 vis.transform.localScale=Vector3.one*(1.7f/size.size.y);
                 vis.transform.localPosition=Vector3.up*(-size.min.y*vis.transform.localScale.y);
@@ -149,9 +152,38 @@ namespace SeaSick.Dev
                 so.ApplyModifiedPropertiesWithoutUndo();
                 PrefabUtility.SaveAsPrefabAsset(vis,Runtime+"/DeckhandVisual.prefab");
                 PrefabUtility.SaveAsPrefabAsset(root,path);
-                log.Add("Crew: latest hatless mesh, 1.7 m, skin-only tint, new skeleton-bound idle/walk clips.");
+                log.Add("Crew: v15 Red Bandana mesh, 1.7 m, skin-only tint, skeleton-bound idle/walk clips.");
             }
             finally{PrefabUtility.UnloadPrefabContents(root);}
+        }
+
+        static Bounds SkinnedBounds(GameObject vis)
+        {
+            var b=new Bounds();bool any=false;var mesh=new Mesh();
+            try
+            {
+                foreach(var r in vis.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+                {
+                    r.BakeMesh(mesh,true);
+                    foreach(var v in mesh.vertices)
+                    {var w=r.transform.TransformPoint(v);if(!any){b=new Bounds(w,Vector3.zero);any=true;}else b.Encapsulate(w);}
+                }
+            }
+            finally{Object.DestroyImmediate(mesh);}
+            return any?b:BoundsOf(vis);
+        }
+
+        /// Degrees below horizontal the upper arms hang in Idle and Walk,
+        /// whatever the rest pose. The v5/v14 rig rested in an A-pose (57
+        /// degrees) and the clips rolled 24 more; v15 rests in a T-pose, so
+        /// the roll is measured from the rig instead of assumed.
+        const float ArmHang=81f;
+
+        static float RestDrop(Transform bone,Transform vis)
+        {
+            if(bone.childCount==0)return 0;
+            var d=vis.InverseTransformDirection(bone.GetChild(0).position-bone.position);
+            return Mathf.Atan2(-d.y,new Vector2(d.x,d.z).magnitude)*Mathf.Rad2Deg;
         }
 
         static AnimationClip MakeClip(GameObject vis,string name,bool walking)
@@ -173,7 +205,7 @@ namespace SeaSick.Dev
                     float t=i/32f,sign=bone.name.EndsWith(".L")?1f:-1f;
                     float wave=Mathf.Sin(t*Mathf.PI*2)*sign,pitch=0,roll=0;
                     if(bone.name.StartsWith("upper_arm"))
-                    {roll=-Mathf.Sign(vis.transform.InverseTransformPoint(bone.position).x)*24;pitch=walking?-wave*16:wave*1.2f;}
+                    {roll=-Mathf.Sign(vis.transform.InverseTransformPoint(bone.position).x)*(ArmHang-RestDrop(bone,vis.transform));pitch=walking?-wave*16:wave*1.2f;}
                     if(bone.name.StartsWith("forearm"))pitch=-8;
                     if(walking && bone.name.StartsWith("thigh"))pitch=wave*23;
                     if(walking && bone.name.StartsWith("shin"))pitch=-Mathf.Max(0,-wave)*28;
