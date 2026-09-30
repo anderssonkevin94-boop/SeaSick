@@ -197,6 +197,24 @@ namespace SeaSick.World
             return root;
         }
 
+        /// **Stand an already-raised building somewhere else (Kevin,
+        /// 2026-09-30: "I want to be able to turn and move buildings even
+        /// after they're built").** The same pose `Raise` gives a fresh one
+        /// -- `floorAt` is the plot's HIGHEST corner and an authored model
+        /// (the `Model` child `Dress` instantiates) is let down
+        /// `SinkIntoSlope` of the drop -- applied to the standing root, so
+        /// every marker, rack, pad and light under it comes along and every
+        /// reference to the building stays good. An extruded fallback keeps
+        /// the slab it was poured with (it cannot be re-poured in place);
+        /// every building the kit dresses today sinks instead.
+        public static void Repose(Transform root, Vector3 floorAt, Quaternion facing, float footing)
+        {
+            if (root == null) return;
+            Vector3 p = floorAt;
+            if (root.Find("Model") != null) p.y -= Mathf.Max(0f, footing) * SinkIntoSlope;
+            root.SetPositionAndRotation(p, facing);
+        }
+
         /// A watchtower carries a gun and can be shot at. Both exits of
         /// `Raise` come through here, for the same reason they share the
         /// `Building` line above.

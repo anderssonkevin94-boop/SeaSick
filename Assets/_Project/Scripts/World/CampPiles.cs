@@ -141,6 +141,18 @@ namespace SeaSick.World
             Refresh();
         }
 
+        /// **The fire or the store hut moved (2026-09-30, `Outpost.MoveBuilt`).**
+        /// A stack is only re-placed when its count changes, so forget every
+        /// drawn count: the next `Refresh` stands each ring stack round the
+        /// fire where it is now and each hut-side stack beside the hut where
+        /// it is now. Nothing is rebuilt that was not already drawn, and the
+        /// ledger is untouched.
+        public void Relay()
+        {
+            drawn.Clear();
+            hutDrawn.Clear();
+        }
+
         /// Bring the stacks up to what the ledger says. Cheap when nothing has
         /// changed: a stack is rebuilt only when its whole-unit count moves.
         public void Refresh()
@@ -284,11 +296,16 @@ namespace SeaSick.World
         /// missing, I can't see their gathered versions anywhere."* They
         /// were there, just unreadable as stone or food specifically, so
         /// each family now gets its own silhouette.
-        enum PileShape { Logs, Cairn, Courses, Bundle, Sacks, Heap }
+        ///
+        /// **Boards are planks, not logs (Astra resource kit v1, Kevin
+        /// approved 2026-09-30):** `Planks` is its own silhouette, flat golden
+        /// boards laid course on course, no longer the timber cylinders.
+        enum PileShape { Logs, Planks, Cairn, Courses, Bundle, Sacks, Heap }
 
         static PileShape ShapeFor(string resource)
         {
-            if (resource == Res.Timber || resource == Res.Boards) return PileShape.Logs;
+            if (resource == Res.Timber) return PileShape.Logs;
+            if (resource == Res.Boards) return PileShape.Planks;
             if (resource == Res.Stone || resource == Res.Ore) return PileShape.Cairn;
             // **Brick is the opposite of a cairn and that is the whole
             // point**, 2026-09-22: rough stone lies where it was tipped,
@@ -359,7 +376,7 @@ namespace SeaSick.World
             // A pile of six or more sacks earns one open crate beside it —
             // enough goods that some of it travelled boxed, not carried.
             if (shape == PileShape.Sacks && n >= 6)
-                BuildCrate(pile, resource, n);
+                BuildCrate(pile, resource, n, FoodShapeFor(resource) != null);
         }
 
         /// **One unit of `resource`**, the size it is in the pile by the fire,
@@ -409,8 +426,13 @@ namespace SeaSick.World
                 case PileShape.Logs:
                     BuildLog(stack, mat, row, col, tidy);
                     break;
+                case PileShape.Planks:
+                    // Astra resource kit v1: a flat board, not a log. The old
+                    // log stands in only if the mesh did not load.
+                    if (!BuildPlank(stack, i, row, col, tidy)) BuildLog(stack, mat, row, col, tidy, false);
+                    break;
                 case PileShape.Cairn:
-                    BuildCairnBlock(stack, mat, i, row, col, seed, tidy);
+                    BuildCairnBlock(stack, mat, resource, i, row, col, seed, tidy);
                     break;
                 case PileShape.Courses:
                     BuildBrickCourse(stack, mat, row, col);
@@ -419,7 +441,11 @@ namespace SeaSick.World
                     BuildShaft(stack, mat, i, n);
                     break;
                 case PileShape.Sacks:
-                    BuildSack(stack, resource, i, row, col);
+                    // Astra food kit v1 (2026-09-30): the actual food where
+                    // there is a model, the old sack where there is not.
+                    var food = FoodShapeFor(resource);
+                    if (food != null) BuildFood(stack, food, i, n, row, col, tidy);
+                    else BuildSack(stack, resource, i, row, col);
                     break;
                 default:
                     BuildHeapCube(stack, mat, i, row, col, tidy);
@@ -437,13 +463,26 @@ namespace SeaSick.World
             return go;
         }
 
-        static void BuildLog(Transform stack, Material mat, int row, int col, bool tidy)
+        static void BuildLog(Transform stack, Material mat, int row, int col, bool tidy, bool tryKit = true)
         {
             // Cross-piled, the way timber is actually stacked. Tidy (a deck
             // load): every course the same way, along z, so a lashed stack of
             // timber runs fore and aft and nothing stands up out of it.
-            var go = NewPrimitive(stack, PrimitiveType.Cylinder, mat);
             bool across = tidy || row % 2 == 1;
+
+            // Astra resource kit v1, Kevin approved 2026-09-30: the real log
+            // (`Timber_Unit`, 1.6 m x 0.24 m, base origin, long axis along z),
+            // same columns, same course height, same cross-piling -- an even
+            // course lies along x (a quarter turn), an odd one along z. The
+            // primitive below is the fallback if the mesh did not load.
+            if (tryKit && ResourceKit.Spawn(Res.Timber, false, stack,
+                    new Vector3(across ? (col - 1) * 0.32f : 0f,
+                                0.01f + row * 0.26f,
+                                across ? 0f : (col - 1) * 0.32f),
+                    across ? Quaternion.identity : Quaternion.Euler(0f, 90f, 0f)) != null)
+                return;
+
+            var go = NewPrimitive(stack, PrimitiveType.Cylinder, mat);
             go.transform.localScale = new Vector3(0.24f, 0.8f, 0.24f);
             go.transform.localRotation = Quaternion.Euler(
                 across ? 90f : 0f, across ? 0f : 90f, 0f);
@@ -451,6 +490,23 @@ namespace SeaSick.World
                 across ? (col - 1) * 0.32f : 0f,
                 0.13f + row * 0.26f,
                 across ? 0f : (col - 1) * 0.32f);
+        }
+
+        /// **One milled board of a pile** (Astra resource kit v1, Kevin approved
+        /// 2026-09-30: boards used to share the log cylinder). `Boards_Unit` is
+        /// 1.6 m x 0.25 m x 0.075 m, base origin, long axis along z. Three
+        /// boards a course side by side, each course laid on the last, so a
+        /// dozen is a low golden slab about 0.3 m high -- flat where the timber
+        /// beside it is round. Ashore each board sits a hair off true (a yaw
+        /// within +/-3.6 deg, a nudge along its length); tidy, lashed on a
+        /// deck, they are laid square. False if the mesh did not load.
+        static bool BuildPlank(Transform stack, int i, int row, int col, bool tidy)
+        {
+            float yaw = tidy ? 0f : ((i * 37) % 7 - 3) * 1.2f;
+            float slide = tidy ? 0f : ((i * 13) % 5 - 2) * 0.03f;
+            return ResourceKit.Spawn(Res.Boards, false, stack,
+                new Vector3((col - 1) * 0.28f, row * 0.078f, slide),
+                Quaternion.Euler(0f, yaw, 0f)) != null;
         }
 
         static void BuildHeapCube(Transform stack, Material mat, int i, int row, int col, bool tidy)
@@ -468,9 +524,26 @@ namespace SeaSick.World
         /// Stone/ore: irregular flattened blocks stacked lower and wider
         /// than the generic heap, the way a cairn of quarried rock actually
         /// sits — not masonry, not a grid of identical cubes.
-        static void BuildCairnBlock(Transform stack, Material mat, int i, int row, int col, int seed,
-            bool tidy)
+        static void BuildCairnBlock(Transform stack, Material mat, string resource, int i, int row, int col,
+            int seed, bool tidy)
         {
+            // Astra resource kit v1, Kevin approved 2026-09-30: the real chunk
+            // (`Stone_Unit` / `Ore_Unit`, about 0.49 x 0.43 x 0.31 m, base
+            // origin), in the same columns, spread and rise as the cubes it
+            // replaces. Ashore each is spun to any heading and given a slight
+            // size variation so a cairn is not a grid; tidy, it keeps its
+            // shape, yaw within +/-2 deg and no variation. No tilt: the unit
+            // has a flat base. The cube below is the fallback.
+            if (ResourceKit.Family(resource) != null)
+            {
+                float yawK = tidy ? (Hash01(seed + i * 7) - 0.5f) * 4f : Hash01(seed + i * 7) * 360f;
+                float sizeK = tidy ? 1f : Mathf.Lerp(0.85f, 1.1f, Hash01(seed + i * 3));
+                if (ResourceKit.Spawn(resource, false, stack,
+                        new Vector3((col - 1) * 0.5f, row * 0.20f, ((i % 5) - 2) * 0.14f),
+                        Quaternion.Euler(0f, yawK, 0f), sizeK) != null)
+                    return;
+            }
+
             var go = NewPrimitive(stack, PrimitiveType.Cube, mat);
 
             float sx = Mathf.Lerp(0.3f, 0.55f, Hash01(seed + i * 3));
@@ -500,6 +573,16 @@ namespace SeaSick.World
         /// what says "rock", and a brick stack has to say the opposite.
         static void BuildBrickCourse(Transform stack, Material mat, int row, int col)
         {
+            // Astra resource kit v1, Kevin approved 2026-09-30: the real brick
+            // (`Brick_Unit`, 0.36 x 0.18 x 0.12 m, base origin, long side along
+            // x), laid exactly as the cube was -- same bond, stagger and rise.
+            // The cube below is the fallback.
+            float shift = (row % 2 == 1) ? 0.19f : 0f;
+            if (ResourceKit.Spawn(Res.Brick, false, stack,
+                    new Vector3((col - 1) * 0.38f + shift, 0.01f + row * 0.13f, 0f),
+                    Quaternion.identity) != null)
+                return;
+
             var go = NewPrimitive(stack, PrimitiveType.Cube, mat);
             go.transform.localScale = new Vector3(0.36f, 0.12f, 0.18f);
             // Half a brick's shift on the odd courses, and a hair of gap
@@ -536,6 +619,148 @@ namespace SeaSick.World
         /// Shafts drawn in one bundle, whatever the pile holds.
         const int MaxBundle = 8;
 
+        // --- Astra food kit v1, Kevin approved 2026-09-30 -----------------------
+        //
+        // The seven raw ingredients are drawn as themselves, not as sacks:
+        // `Resources/Kits/Food/<Name>_Unit` (metre scale, base origin, one mesh
+        // on the shared GameColor material -- `FoodKitImport`). Cooked dishes,
+        // flour, biscuit, generic Food and Game keep the sack: a grilled fish
+        // drawn as a teal raw fish would be indistinguishable from the raw pile
+        // beside it. Count, columns, rows, the MaxDrawn cap and the crate at
+        // six are the sack rules unchanged; only the geometry differs.
+
+        /// One food, ready to instance: a private copy of the unit mesh,
+        /// lying down if it is tall and thin, re-centred on x/z with its base
+        /// at y = 0, plus the shared kit material.
+        sealed class FoodShape
+        {
+            public Mesh mesh;
+            public Material mat;
+            public Vector3 size;   // of the copy: x/z footprint, y height
+            public bool elongated; // yawed loosely with alternate ends flipped, not spun
+        }
+
+        /// Cached once per resource; a null entry means "no model / failed to
+        /// load", so the old sack is drawn and nothing is retried per frame.
+        static readonly Dictionary<string, FoodShape> foodShapes = new Dictionary<string, FoodShape>();
+
+        static bool HasFoodModel(string resource) =>
+            resource == Res.Potato || resource == Res.Carrot || resource == Res.Onion
+            || resource == Res.Wheat || resource == Res.Apple || resource == Res.Fish
+            || resource == Res.Meat;
+
+        static FoodShape FoodShapeFor(string resource)
+        {
+            if (!HasFoodModel(resource)) return null;
+            if (foodShapes.TryGetValue(resource, out var cached) && (cached == null || cached.mesh != null))
+                return cached;
+
+            FoodShape fs = null;
+            try
+            {
+                var prefab = Resources.Load<GameObject>("Kits/Food/" + resource + "_Unit");
+                var mf = prefab != null ? prefab.GetComponentInChildren<MeshFilter>(true) : null;
+                var src = mf != null ? mf.sharedMesh : null;
+                if (src != null && src.isReadable)
+                {
+                    var rend = mf.GetComponent<MeshRenderer>();
+                    fs = MakeFoodShape(src, mf.transform.localToWorldMatrix,
+                        rend != null ? rend.sharedMaterial : null);
+                }
+                else Debug.LogWarning($"[CampPiles] Kits/Food/{resource}_Unit is missing or not readable; drawing sacks.");
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[CampPiles] food model {resource} failed ({e.Message}); drawing sacks.");
+                fs = null;
+            }
+            foodShapes[resource] = fs;
+            return fs;
+        }
+
+        static FoodShape MakeFoodShape(Mesh src, Matrix4x4 node, Material kitMat)
+        {
+            // Measure first: a tall thin food (carrot, wheat) lies down in a
+            // pile, the way it is actually heaped.
+            var srcVerts = src.vertices;
+            var bounds = new Bounds(node.MultiplyPoint3x4(srcVerts[0]), Vector3.zero);
+            for (int i = 1; i < srcVerts.Length; i++) bounds.Encapsulate(node.MultiplyPoint3x4(srcVerts[i]));
+            bool lies = bounds.size.y > 2f * Mathf.Max(bounds.size.x, bounds.size.z);
+            var m = (lies ? Matrix4x4.Rotate(Quaternion.Euler(0f, 0f, 90f)) : Matrix4x4.identity) * node;
+
+            var verts = new Vector3[srcVerts.Length];
+            var box = new Bounds(m.MultiplyPoint3x4(srcVerts[0]), Vector3.zero);
+            for (int i = 0; i < verts.Length; i++)
+            {
+                verts[i] = m.MultiplyPoint3x4(srcVerts[i]);
+                box.Encapsulate(verts[i]);
+            }
+            // A sanity fence (metres): a wrong axis or unit lands here, and
+            // the pile draws sacks rather than a giant or invisible potato.
+            float longest = Mathf.Max(box.size.x, Mathf.Max(box.size.y, box.size.z));
+            if (longest < 0.03f || longest > 1.5f)
+                throw new System.Exception($"unit is {longest:F3} m long");
+            Vector3 shift = new Vector3(-box.center.x, -box.min.y, -box.center.z);
+            for (int i = 0; i < verts.Length; i++) verts[i] += shift;
+
+            var mesh = new Mesh { name = src.name + "_Pile", hideFlags = HideFlags.HideAndDontSave };
+            mesh.vertices = verts;
+            var srcNormals = src.normals;
+            if (srcNormals.Length == verts.Length)
+            {
+                var it = m.inverse.transpose;
+                var nrm = new Vector3[verts.Length];
+                for (int i = 0; i < nrm.Length; i++) nrm[i] = it.MultiplyVector(srcNormals[i]).normalized;
+                mesh.normals = nrm;
+            }
+            var srcColors = src.colors;
+            if (srcColors.Length == verts.Length) mesh.colors = srcColors;   // GameColor
+            var srcUv = src.uv;
+            if (srcUv.Length == verts.Length) mesh.uv = srcUv;
+            var tris = src.triangles;
+            if (m.determinant < 0f)
+                for (int i = 0; i + 2 < tris.Length; i += 3) { int t = tris[i]; tris[i] = tris[i + 2]; tris[i + 2] = t; }
+            mesh.triangles = tris;
+            mesh.RecalculateBounds();
+
+            return new FoodShape
+            {
+                mesh = mesh,
+                mat = kitMat,
+                size = box.size,
+                elongated = lies || Mathf.Max(box.size.x, box.size.z) > 1.4f * Mathf.Min(box.size.x, box.size.z),
+            };
+        }
+
+        /// The i-th food of an n-unit pile: the sack layout (three columns
+        /// along x, `row = i / 3`, a little depth stagger) with the pitch and
+        /// layer height taken from the food's own size, so apples nest and
+        /// fish lie side by side. A single unit sits on the pile's origin.
+        static void BuildFood(Transform stack, FoodShape food, int i, int n, int row, int col, bool tidy)
+        {
+            var mat = food.mat != null ? food.mat : MatFor(Res.Food, false);
+            var go = new GameObject("Food");
+            go.transform.SetParent(stack, false);
+            go.AddComponent<MeshFilter>().sharedMesh = food.mesh;
+            go.AddComponent<MeshRenderer>().sharedMaterial = mat;
+
+            float pitch = Mathf.Max(0.2f, food.size.x + 0.06f);
+            float layer = Mathf.Max(0.05f, food.size.y * 0.8f);   // rows nest a little
+            Vector3 pos;
+            if (n <= 1) pos = Vector3.zero;
+            else pos = new Vector3(
+                (col - 1) * pitch + (row % 2 == 1 ? pitch * 0.25f : -pitch * 0.25f),
+                row * layer,
+                ((i % 5) - 2) * 0.05f);
+            go.transform.localPosition = pos;
+
+            float yaw;
+            if (tidy) yaw = ((i * 37) % 5) - 2f;   // lashed on a deck: square, +/-2 deg
+            else if (food.elongated) yaw = ((i * 53) % 50) - 25f + ((i & 1) == 1 ? 180f : 0f);
+            else yaw = (i * 53) % 360;
+            go.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
+        }
+
         /// Food/game: squashed sacks with a darker "band" (a second, smaller
         /// sphere sharing its centre) rather than a bare coloured cube.
         static void BuildSack(Transform stack, string resource, int i, int row, int col)
@@ -559,13 +784,16 @@ namespace SeaSick.World
 
         /// One open crate: a box with a smaller, darker box let into the top
         /// to read as an open interior rather than a solid block.
-        static void BuildCrate(Transform stack, string resource, int afterIndex)
+        static void BuildCrate(Transform stack, string resource, int afterIndex, bool besideFood = false)
         {
             var wood = MatFor(Res.Boards, false);
             var dark = MatFor(resource, true);
 
             int row = afterIndex / 3, col = afterIndex % 3;
             Vector3 at = new Vector3((col - 1) * 0.42f + 0.5f, 0.2f + row * 0.1f, 0.35f);
+            // Real food is a low, wide pile (not sacks to sit against): the
+            // crate stands clear behind it, on the ground.
+            if (besideFood) at = new Vector3(0f, 0.2f, 0.7f);
 
             var body = NewPrimitive(stack, PrimitiveType.Cube, wood);
             body.transform.localScale = new Vector3(0.5f, 0.4f, 0.5f);

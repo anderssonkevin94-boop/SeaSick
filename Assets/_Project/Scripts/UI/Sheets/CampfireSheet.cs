@@ -64,7 +64,20 @@ namespace SeaSick.UI.Sheets
         {
             head = CardKit.Head("fire", "Campfire");
             FillHeader(L);
+            // Move / turn the fire, and the camp's centre with it (Kevin,
+            // 2026-09-30). Only a fire that stands: a fire still going up
+            // moves from its own blueprint's sheet.
+            MoveButton.AddTo(head.Root, outpost, FireOf(outpost));
             return head.Root;
+        }
+
+        /// The standing campfire, or null while it is still a blueprint.
+        static Building FireOf(Outpost o)
+        {
+            if (o == null) return null;
+            foreach (var b in o.Built)
+                if (b != null && b.Kind == BuildKind.Fire) return b;
+            return null;
         }
 
         void FillHeader(OutpostLedger l)

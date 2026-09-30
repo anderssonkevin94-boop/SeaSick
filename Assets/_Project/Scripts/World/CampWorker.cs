@@ -1548,8 +1548,9 @@ namespace SeaSick.World
         /// Astra's `Input_Pickup`/`Output_Dropoff` at a station (never the
         /// middle of the model, which is where the books' `fromAt`/`toAt`
         /// point), the resource's own stack by the fire (or the storage
-        /// building's door) for the store. Once per trip: nothing here moves
-        /// during one. A Field pickup is the body's own tree/prop and is
+        /// building's door) for the store. Once per trip -- nothing here moves
+        /// during one, unless the player moves the building itself
+        /// (`AimTripMime`, 2026-09-30). A Field pickup is the body's own tree/prop and is
         /// re-picked live in `HaulPickupSpot`.
         void BeginTripMime(OutpostHand r, HaulView view)
         {
@@ -1558,6 +1559,14 @@ namespace SeaSick.World
             mimeJoinedLate = view.picked;
             mimeRes = view.resource;
             mimeCount = Mathf.Max(1, view.count);
+            AimTripMime(r, view);
+        }
+
+        /// The two ends of the trip being drawn, as a body stands at them.
+        /// `BeginTripMime` once per trip; `OnBuildingMoved` again when the
+        /// building at one end was moved under it (2026-09-30).
+        void AimTripMime(OutpostHand r, HaulView view)
+        {
             // **Onto the rack, not into the bay** (2026-09-30): a catch goes
             // in the fishing hut's output box, and a meal off a rack is
             // eaten where it was picked up.

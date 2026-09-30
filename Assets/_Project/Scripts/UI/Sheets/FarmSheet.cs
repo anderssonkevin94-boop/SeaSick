@@ -71,6 +71,8 @@ namespace SeaSick.UI.Sheets
         public VisualElement BuildHeader()
         {
             header = new StationPage.Header(Title, true, () => StationPage.OpenLedgerFor(outpost));
+            // Move / turn the farm, field and all (Kevin, 2026-09-30).
+            MoveButton.AddTo(header.Root, outpost, building);
             return header.Root;
         }
 

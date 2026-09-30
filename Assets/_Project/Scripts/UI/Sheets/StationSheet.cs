@@ -147,6 +147,9 @@ namespace SeaSick.UI.Sheets
         public VisualElement BuildHeader()
         {
             header = new StationPage.Header(Title, hasMake, () => StationPage.OpenLedgerFor(outpost));
+            // Move / turn this building (Kevin, 2026-09-30) -- beside ✕,
+            // never in place of the page's own action.
+            MoveButton.AddTo(header.Root, outpost, building);
             return header.Root;
         }
 

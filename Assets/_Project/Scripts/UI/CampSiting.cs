@@ -428,6 +428,20 @@ namespace SeaSick.UI
         /// wants that row so it lifts the right one out of the queue.
         PendingBuild movingRow;
 
+        /// **...or WHICH standing building is being carried (Kevin,
+        /// 2026-09-30: "I want to be able to turn and move buildings even
+        /// after they're built. Don't allow this for the walls or
+        /// roads.").** Set by `BeginMove` from a building's sheet; the
+        /// verdict is `Outpost.CanMoveTo` and the ✓ is `Outpost.MoveBuilt`
+        /// -- free and instant, the same building stood at the new spot.
+        /// Everything else about the mode (ghost, drag, Turn, the bar) is the
+        /// new-building flow unchanged. Cancel leaves it where it was.
+        Building movingBuilt;
+        /// Was a standing building being carried? (`movingBuilt` reads null
+        /// once Unity destroys it -- a raid burning it mid-move -- and this
+        /// is how `Update` notices.)
+        bool carryingBuilt;
+
         /// **Thumb slack on the grab test, metres.**
         ///
         /// Kevin on the phone, 2026-09-23: *"when placing the blueprint I
@@ -471,6 +485,24 @@ namespace SeaSick.UI
         /// Start placing, moving `move` if it is a row already in the queue.
         public static void Begin(Outpost target, BuildPlan what, Transform shipTransform,
             PendingBuild move)
+            => BeginCore(target, what, shipTransform, move, null);
+
+        /// **Pick up a building that already stands (2026-09-30)** -- the
+        /// Move button on its sheet. Refused quietly for anything
+        /// `Outpost.CanMove` says no to (walls, gates, roads, ladders, a
+        /// pier, the dry dock, a tower on the wall): the sheets hide the
+        /// button for those, and this is the backstop.
+        public static void BeginMove(Outpost target, Building b, Transform shipTransform)
+        {
+            if (Instance == null || target == null || b == null) return;
+            if (!target.CanMove(b, out _)) return;
+            var plan = target.PlanOfBuilt(b);
+            if (string.IsNullOrEmpty(plan.id)) return;
+            BeginCore(target, plan, shipTransform, null, b);
+        }
+
+        static void BeginCore(Outpost target, BuildPlan what, Transform shipTransform,
+            PendingBuild move, Building built)
         {
             if (Instance == null || target == null) return;
             Instance.Cancel();
@@ -486,7 +518,9 @@ namespace SeaSick.UI
             Instance.heldYaw = Instance.outpost != null
                 ? Instance.outpost.AutoYaw(Instance.outpost.CampCentre + Vector3.forward * 10f) : 0f;
             Instance.movingRow = move;
-            Instance.moving = move != null;
+            Instance.movingBuilt = built;
+            Instance.carryingBuilt = built != null;
+            Instance.moving = move != null || built != null;
             // **Widen the camera's own reach to the whole island (2026-09-27,
             // "the whole island should be built if you want it to").** The
             // ghost's reach test no longer refuses anywhere on the island
@@ -512,8 +546,13 @@ namespace SeaSick.UI
             // `Outpost.IgnoreSite`. Cleared in `Cancel`, which every exit
             // from this mode goes through.
             if (Instance.outpost != null) Instance.outpost.IgnoreSite = move;
+            // ...and a standing building is not refused by its own ground
+            // (`Outpost.MovingBuilt`, cleared in `Cancel` the same way).
+            if (Instance.outpost != null && built != null) Instance.outpost.MovingBuilt = built;
             // A drawing being moved keeps the facing it had.
             if (move != null) Instance.heldYaw = move.yaw;
+            // So does a standing building: Turn steps on from its own yaw.
+            if (built != null) Instance.heldYaw = target.YawOfBuilt(built);
             // **The press that started this mode must not also finish it.**
             // See `IslandInput.TapDownFrame`: an IMGUI button is clicked in
             // `OnGUI`, after every `Update` of that frame, and the Input
@@ -590,6 +629,8 @@ namespace SeaSick.UI
         {
             if (moving && movingRow != null)
                 return OnGround(movingRow.x, movingRow.z);
+            if (moving && movingBuilt != null)
+                return OnGround(movingBuilt.transform.position.x, movingBuilt.transform.position.z);
 
             var cam = Camera.main;
             if (cam != null && GroundPick.FromScreen(cam,
@@ -708,7 +749,10 @@ namespace SeaSick.UI
             moving = false;
             dragging = false;
             movingRow = null;
+            movingBuilt = null;
+            carryingBuilt = false;
             if (outpost != null) outpost.IgnoreSite = null;
+            if (outpost != null) outpost.MovingBuilt = null;
             outpost = null;
             Refusal = "";
             ClearLine = "";
@@ -729,6 +773,9 @@ namespace SeaSick.UI
             // clears `CurrentIsland`): the drawing has no camp to go to.
             if (anchor != null && startIsland != null && anchor.CurrentIsland != startIsland)
             { Cancel(); return; }
+            // The building being carried is gone (burnt in a raid, say):
+            // there is nothing left to put down.
+            if (carryingBuilt && movingBuilt == null) { Cancel(); return; }
 
             // **A wall run is somebody else's frame.** Escape, Enter, the
             // tap and the ghost all belong to `WallSiting`; when it says it
@@ -869,10 +916,17 @@ namespace SeaSick.UI
                 // and the town reach does not apply to it. Anywhere else,
                 // exactly as before.
                 Vector3 node = want;
-                onWall = plan.id == OutpostLedger.WatchtowerId
+                // A MOVED tower stands free: joining the wall is what a new
+                // tower does (2026-09-30).
+                onWall = movingBuilt == null && plan.id == OutpostLedger.WatchtowerId
                     && outpost.FindWallNode(want, Outpost.WallTowerSnap, out node);
                 if (onWall) at = node;
-                valid = Test(at, out why);
+                // A standing building asks the move's own test -- the same
+                // `CanPlace`, minus its own ground, plus clear ground -- and
+                // the ✓ (`Outpost.MoveBuilt`) asks it again.
+                valid = movingBuilt != null
+                    ? outpost.CanMoveTo(movingBuilt, at, Yaw, out why)
+                    : Test(at, out why);
             }
             // `Yaw` reads `at`, so the ghost and the test are always asking
             // about the same rectangle on the same ground.
@@ -981,6 +1035,17 @@ namespace SeaSick.UI
         void Commit()
         {
             if (!valid) return;
+            if (movingBuilt != null)
+            {
+                // Free and instant: the same building, at the new spot.
+                if (!outpost.MoveBuilt(movingBuilt, at, Yaw, out string moveWhy))
+                {
+                    Refusal = moveWhy;
+                    return;
+                }
+                Cancel();
+                return;
+            }
             bool joinWall = onWall;
             Vector3 node = at;
             int wanted = outpost.Site(sited, at, Yaw, movingRow, out string siteWhy);

@@ -301,6 +301,37 @@ namespace SeaSick.Terrain
             return crops.PlantHere(at, yaw, beds);
         }
 
+        /// **A farm the player moved takes its field with it (Kevin,
+        /// 2026-09-30: "I want to be able to turn and move buildings even
+        /// after they're built").** Every runtime-planted bed (`PlantHere`,
+        /// the only kind with an `instance`) that `mine` claims is carried
+        /// rigidly from the old root pose to the new one -- the same spots
+        /// `FarmFields` plants at when the moved farm is raised on the next
+        /// load -- and re-seated on the ground there. Its harvest state rides
+        /// along; the island's own dressed wheat (welded, no instance) never
+        /// moves. Returns how many beds moved.
+        public int MoveBeds(Vector3 fromRoot, Quaternion fromRot, Vector3 toRoot, Quaternion toRot,
+            System.Func<Vector3, bool> mine)
+        {
+            var turn = toRot * Quaternion.Inverse(fromRot);
+            int moved = 0;
+            for (int i = 0; i < beds.Count; i++)
+            {
+                var b = beds[i];
+                if (b.instance == null || (mine != null && !mine(b.at))) continue;
+                Vector3 d = b.at - fromRoot;
+                d.y = 0f;
+                Vector3 p = toRoot + turn * d;
+                p.y = Island.TerrainHeight != null ? Island.TerrainHeight(p.x, p.z) : b.at.y;
+                b.instance.transform.position = new Vector3(p.x, p.y - 0.12f, p.z);
+                b.instance.transform.rotation = turn * b.instance.transform.rotation;
+                b.at = p;
+                beds[i] = b;
+                moved++;
+            }
+            return moved;
+        }
+
         public int PlantHere(Vector3 at, float yaw, int count)
         {
             var kit = new[] { SceneryKit.Get("Crop_0"), SceneryKit.Get("Crop_1"), SceneryKit.Get("Crop_2") };

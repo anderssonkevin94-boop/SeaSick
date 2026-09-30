@@ -5010,6 +5010,9 @@ namespace SeaSick.World
             why = "";
             foreach (var r in reserved)
             {
+                // A building being moved is not refused by the ground it is
+                // standing on (2026-09-30) -- see `MovingBuilt`.
+                if (movingReservation.HasValue && r == movingReservation.Value) continue;
                 float dx = p.x - r.x, dz = p.z - r.z;
                 float need = halfDiag + r.w;
                 if (dx * dx + dz * dz < need * need)

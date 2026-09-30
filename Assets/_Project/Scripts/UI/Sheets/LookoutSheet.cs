@@ -75,6 +75,9 @@ namespace SeaSick.UI.Sheets
         {
             head = new WatchTiles.Head("tower", "Watchtower");
             FillHeader(L);
+            // Move / turn THIS tower (Kevin, 2026-09-30); none for the
+            // camp-wide card, or a tower that is part of the wall.
+            MoveButton.AddTo(head.Root, outpost, tower);
             return head.Root;
         }
 
