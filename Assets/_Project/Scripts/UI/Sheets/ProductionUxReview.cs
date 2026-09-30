@@ -108,7 +108,10 @@ namespace SeaSick.UI.Sheets
             // regression that brought tabs back would still be caught.
             var labels = sheet.TabLabels;
             report.AppendLine("Tabs: " + (labels == null ? "none (one-page station card)" : string.Join(", ", labels)));
-            if (labels != null) failures++;
+            // 2026-09-30: a hugging frame (phone, land HUD) pages a station
+            // with recipes into make / work / orders / level on purpose
+            // (`SheetHost.HugsContent`); only the tall page must stay tabless.
+            if (labels != null && !SheetHost.HugsContent(sheet)) failures++;
             var root = SheetHost.Instance.GetComponent<UIDocument>().rootVisualElement;
             var body = root.Q(className:"sheet-body");
             var card = root.Q(className:"sheet-card");

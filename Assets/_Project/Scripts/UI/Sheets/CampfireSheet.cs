@@ -27,6 +27,14 @@ namespace SeaSick.UI.Sheets
     ///
     /// Nothing about cooking lives here: the Kitchen is the only kitchen.
     /// A view only: the one verb is `OutpostLedger.RaiseCampfire`.
+    ///
+    /// **Half a screen on the phone (Kevin, 2026-09-30: "not every menu
+    /// should be full screen... I would like to see the building").** In a
+    /// hugging frame (`SheetHost.HugsContent`) the same facts are packed:
+    /// FOOD days takes the chip row's first slot (the warmth ring's radius
+    /// is a constant), the raise's title moves onto its "opens" card rather
+    /// than an eyebrow of its own, and the larder is a thumb-row button
+    /// rather than a wide tile -- Larder · Overview · Raise to N.
     public sealed class CampfireSheet : ISheetFramed
     {
         readonly Outpost outpost;
@@ -86,31 +94,53 @@ namespace SeaSick.UI.Sheets
         ShortFix.Slot fixSlot;
         long costKey = long.MinValue;
 
+        /// Built for a hugging frame (see the class note).
+        bool hugged;
+        Label foodV;
+
         public VisualElement Build()
         {
             var root = CardKit.Page(out var col);
             costTiles.Clear();
             costKey = long.MinValue;
+            hugged = StationPage.Hugging;
+            warmthV = foodV = raiseEye = null;
+            food = null;
 
             var chips = CardKit.Chips(col);
-            warmthV = WatchTiles.Chip(chips, "WARMTH", true);
+            if (hugged) foodV = WatchTiles.Chip(chips, "FOOD", true);
+            else warmthV = WatchTiles.Chip(chips, "WARMTH", true);
             hutsV = WatchTiles.Chip(chips, "WARM HUTS", false);
             bedsV = WatchTiles.Chip(chips, "WARM BEDS", false);
 
-            raiseEye = CardKit.Eye(col, "RAISE", "have / need");
-            costGrid = CardKit.Grid(col);
-            fixSlot = new ShortFix.Slot(() => { costKey = long.MinValue; Refresh(); });
-            col.Add(fixSlot.button);
-            opens = new CardKit.Now(col, CardKit.GlyphIcon("fire"));
+            if (hugged)
+            {
+                // What the raise opens, titled with the raise itself, then
+                // its price and the fix for what is short.
+                opens = new CardKit.Now(col, CardKit.GlyphIcon("fire"));
+                costGrid = CardKit.Grid(col);
+                costGrid.style.marginTop = 8f;
+                fixSlot = new ShortFix.Slot(() => { costKey = long.MinValue; Refresh(); });
+                col.Add(fixSlot.button);
+            }
+            else
+            {
+                raiseEye = CardKit.Eye(col, "RAISE", "have / need");
+                costGrid = CardKit.Grid(col);
+                fixSlot = new ShortFix.Slot(() => { costKey = long.MinValue; Refresh(); });
+                col.Add(fixSlot.button);
+                opens = new CardKit.Now(col, CardKit.GlyphIcon("fire"));
 
-            CardKit.Eye(col, "FOOD", "tap for the larder");
-            var foodGrid = CardKit.Grid(col);
-            food = new CardKit.Tile(_ => OpenLarder(), false);
-            food.Root.AddToClassList("ck-tile--wide");
-            food.SetItem(Res.Food);
-            foodGrid.Add(food.Root);
+                CardKit.Eye(col, "FOOD", "tap for the larder");
+                var foodGrid = CardKit.Grid(col);
+                food = new CardKit.Tile(_ => OpenLarder(), false);
+                food.Root.AddToClassList("ck-tile--wide");
+                food.SetItem(Res.Food);
+                foodGrid.Add(food.Root);
+            }
 
             var acts = CardKit.Acts(root);
+            if (hugged) CardKit.Act(acts, "Larder", OpenLarder);
             overviewBtn = CardKit.Act(acts, "Overview", OpenOverview);
             raiseBtn = CardKit.Act(acts, "Raise", Raise, 1);
 
@@ -123,10 +153,10 @@ namespace SeaSick.UI.Sheets
             var l = L;
             if (l == null) return;
             FillHeader(l);
-            if (warmthV == null) return;
+            if (hutsV == null) return;
 
             // Warmth: the ring, the huts in it, the beds they give.
-            WatchTiles.Set(warmthV, $"{OutpostLedger.WarmHutRadius:0} m");
+            if (warmthV != null) WatchTiles.Set(warmthV, $"{OutpostLedger.WarmHutRadius:0} m");
             int huts = l.CountBuilt(BuildPlans.Hut.id);
             int warm = l.WarmHutCount;
             WatchTiles.Set(hutsV, $"{warm} / {huts}");
@@ -139,9 +169,18 @@ namespace SeaSick.UI.Sheets
 
             // Food: one tile, days of it.
             float days = SheetBits.FoodDays(l);
-            string big = hands == 0 ? "Nobody to feed" : days < 0f ? "They eat nothing" : $"{days:0.#} days of food";
-            food.Set(big, $"{l.FoodFill():0} meals kept · {hands} to feed");
-            food.Root.EnableInClassList("ck-tile--short", hands > 0 && days >= 0f && days < 1.5f);
+            bool shortFood = hands > 0 && days >= 0f && days < 1.5f;
+            if (food != null)
+            {
+                string big = hands == 0 ? "Nobody to feed" : days < 0f ? "They eat nothing" : $"{days:0.#} days of food";
+                food.Set(big, $"{l.FoodFill():0} meals kept · {hands} to feed");
+                food.Root.EnableInClassList("ck-tile--short", shortFood);
+            }
+            if (foodV != null)
+            {
+                WatchTiles.Set(foodV, hands == 0 ? "--" : days < 0f ? "none" : $"{days:0.#} d");
+                WatchTiles.Tone(foodV, hands == 0 ? 0 : shortFood || days < 0f ? 2 : 0);
+            }
         }
 
         void FillRaise(OutpostLedger l)
@@ -171,14 +210,15 @@ namespace SeaSick.UI.Sheets
             int lvl = l.CampfireLevel;
             if (next == null)
             {
-                WatchTiles.Set(raiseEye, "AS HIGH AS IT GOES");
+                if (raiseEye != null) WatchTiles.Set(raiseEye, "AS HIGH AS IT GOES");
                 WatchTiles.Show(costGrid, false);
                 opens.Set("The fire allows", CapsLine(lvl, lvl));
                 opens.Tone(0);
                 return;
             }
 
-            WatchTiles.Set(raiseEye, $"RAISE TO {RecipeGraph.Roman(next.level)} {next.name.ToUpperInvariant()}");
+            if (raiseEye != null)
+                WatchTiles.Set(raiseEye, $"RAISE TO {RecipeGraph.Roman(next.level)} {next.name.ToUpperInvariant()}");
             WatchTiles.Show(costGrid, true);
             for (int i = 0; i < next.cost.Length; i++)
             {
@@ -206,7 +246,10 @@ namespace SeaSick.UI.Sheets
             }
             string caps = CapsLine(lvl, next.level);
             if (caps.Length > 0) { if (sb.Length > 0) sb.Append(" · "); sb.Append(caps); }
-            opens.Set(StationPage.Cap(next.blurb ?? "Opens more"), sb.ToString());
+            if (hugged)
+                opens.Set($"Raise to {RecipeGraph.Roman(next.level)} {StationPage.Cap(next.name)}",
+                    sb.Length > 0 ? sb.ToString() : StationPage.Cap(next.blurb ?? "Opens more"));
+            else opens.Set(StationPage.Cap(next.blurb ?? "Opens more"), sb.ToString());
             opens.Tone(-1);
         }
 

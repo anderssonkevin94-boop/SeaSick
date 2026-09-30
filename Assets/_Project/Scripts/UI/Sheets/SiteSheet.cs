@@ -221,8 +221,15 @@ namespace SeaSick.UI.Sheets
                 // string, shared with the camp page (`FireSheet.Note`), so
                 // the two cannot say different things about the same
                 // drawing.
-                chips.Add(SheetKit.Text(Cap(p.Cleared ? p.PhaseLine : ClearingLine(p)),
-                    true, false, 13f));
+                //
+                // **Hugging (2026-09-30, half a screen on the phone)**: only
+                // the clearing line. "Stocking 3/6 logs" repeats the
+                // have/need chips under it and "building 40%" the big
+                // number over it.
+                bool hug = StationPage.Hugging;
+                if (!hug || !p.Cleared)
+                    chips.Add(SheetKit.Text(Cap(p.Cleared ? p.PhaseLine : ClearingLine(p)),
+                        true, false, 13f));
 
                 // **Have/need, one chip per material this site still
                 // wants** (2026-09-27 restyle: candidate #5). A blueprint
@@ -252,12 +259,13 @@ namespace SeaSick.UI.Sheets
                     chips.Add(SheetKit.Row(toks));
                 }
 
+                // Hugging: the chips already say what is still owed.
                 string need = !p.Stocked
-                    ? NeedSentence(timberLeft, stoneLeft, brickLeft)
+                    ? (hug ? "" : NeedSentence(timberLeft, stoneLeft, brickLeft))
                     : p.Complete
                         ? "Everything is in and it is going up."
                         : "Everything it wants is here; now they raise it.";
-                chips.Add(SheetKit.Note(crew + " " + need));
+                chips.Add(SheetKit.Note(need.Length > 0 ? crew + " " + need : crew));
                 // **The idle-hand ladder's own warning** (step 5, "find that
                 // resource") -- `OutpostLedger.StallReason`, the same line
                 // the camp-wide alert chip reads.

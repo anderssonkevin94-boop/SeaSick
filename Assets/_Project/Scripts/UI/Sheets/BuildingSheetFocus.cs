@@ -11,8 +11,16 @@ namespace SeaSick.UI.Sheets
         IslandCam islandCam;
         ChaseCamera rig;
 
+        /// **The sheets of things tapped in the world** -- every structure a
+        /// finger can land on. The camera keeps them in view above the sheet
+        /// (`Tick`) and, on the phone, their frame hugs its content at most
+        /// half the screen high (`SheetHost.HugsContent`, Kevin 2026-09-30:
+        /// *"I would like to see the building I'm pressing on when the menu
+        /// pops up"*). The fire, the watchtower, the pier, ladders, roads and
+        /// the dry dock joined the four building sheets that day.
         internal static bool IsBuilding(ISheet sheet) => sheet is StationSheet || sheet is FarmSheet
-            || sheet is SiteSheet || sheet is WallSheet;
+            || sheet is SiteSheet || sheet is WallSheet || sheet is CampfireSheet || sheet is LookoutSheet
+            || sheet is PierSheet || sheet is LadderSheet || sheet is RoadSheet || sheet is DryDockSheet;
 
         public void Tick(ISheet sheet)
         {
@@ -28,7 +36,12 @@ namespace SeaSick.UI.Sheets
             if (rig == null) rig = Object.FindFirstObjectByType<ChaseCamera>();
             if (islandCam == null || rig == null) return;
             if (islandCam.Grabbing) { pending = false; return; }
-            if (!islandCam.Ready || !SheetHost.FrameOpen) return;
+            // A hugging frame is hidden for the frame it is measured in and
+            // sits at the cap until then (`SheetHost.FrameSettled`): decide
+            // against the frame the player will actually see, so a short
+            // sheet (the Shelter's one card) does not move a camera that the
+            // cap would have called hidden.
+            if (!islandCam.Ready || !SheetHost.FrameOpen || !SheetHost.FrameSettled) return;
             pending = false;
 
             // **Leave the view alone unless the building is hidden (2026-09-29).**

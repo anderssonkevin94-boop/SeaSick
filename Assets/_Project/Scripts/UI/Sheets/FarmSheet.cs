@@ -45,10 +45,20 @@ namespace SeaSick.UI.Sheets
         public string Title => StationPage.Cap(plan.label);
         public Color Accent => SheetTheme.Moss;
         public bool WantsTallSheet => true;
-        public string[] TabLabels => null;
-        public int Tab => 0;
-        public void SetTab(int index) { }
         public VisualElement BuildActions() => null;
+
+        /// **Two pages in a hugging frame (Kevin, 2026-09-30: "not every
+        /// menu should be full screen").** On the phone the farm's sheet is
+        /// at most half the screen (`SheetHost.HugsContent`) so the field
+        /// stays in view: **plots** (the plot tiles, or the picked plot's
+        /// crops) and **work** (the farmhand, food out, why it stopped, the
+        /// upgrade when there is one). One tall page everywhere else.
+        public string[] TabLabels => StationPage.Hugging ? HugTabs : null;
+        public int Tab => tab;
+        public void SetTab(int index) { tab = index; }
+        int tab = -1;
+        static readonly string[] HugTabs = { "plots", "work" };
+        bool hugged;
 
         public Vector3 AnchorWorld => building != null
             ? building.transform.position
@@ -102,6 +112,7 @@ namespace SeaSick.UI.Sheets
 
         void FillPlots(OutpostLedger l)
         {
+            if (plotGrid == null) return;
             var list = l.PlotsOf(Mathf.Max(0, outpost.OrdinalOf(building)));
             long key = list.Count * 131L + pickedPlot;
             foreach (var p in list)
@@ -162,6 +173,14 @@ namespace SeaSick.UI.Sheets
 
             var pk = Picked();
             picker.style.display = pk != null ? DisplayStyle.Flex : DisplayStyle.None;
+            // Hugging: the picked plot's crops take the tiles' place (a
+            // back button returns), so the page stays half a screen.
+            if (hugged)
+            {
+                var tilesOn = pk != null ? DisplayStyle.None : DisplayStyle.Flex;
+                plotGrid.style.display = tilesOn;
+                bedsLine.style.display = tilesOn;
+            }
             if (pk == null) return;
             pickerTitle.text = $"Plot {pickedPlot + 1} · " + (string.IsNullOrEmpty(pk.crop) ? "empty" : ResDefs.Label(pk.crop));
             cropRow.Clear();
@@ -169,9 +188,23 @@ namespace SeaSick.UI.Sheets
             {
                 string crop = c.res;
                 bool ok = l.CropUnlocked(pk, crop, out string why);
-                var b = FarmBtn(ok ? $"{c.icon} {StationPage.Cap(ResDefs.Label(crop))}" : $"{c.icon} 🔒 {why}",
+                string cropName = StationPage.Cap(ResDefs.Label(crop));
+                // Hugging: three to a row, and a locked crop says only that
+                // it is locked -- the reason is the farm's level, on its tile.
+                string label = ok ? $"{c.icon} {cropName}"
+                    : hugged ? $"🔒 {cropName}" : $"{c.icon} 🔒 {why}";
+                var b = FarmBtn(label,
                     () => { L?.SetPlotCrop(Picked(), crop, Picked()?.repeat ?? true); plotKey = long.MinValue; Refresh(); });
                 b.SetEnabled(ok);
+                if (hugged)
+                {
+                    b.style.flexGrow = 0f;
+                    b.style.flexShrink = 0f;
+                    b.style.flexBasis = Length.Percent(31f);
+                    b.style.width = Length.Percent(31f);
+                    b.style.marginRight = Length.Percent(2f);
+                    b.style.fontSize = 15f;
+                }
                 if (pk.crop == crop) b.AddToClassList("st-seg-btn--on");
                 cropRow.Add(b);
             }
@@ -188,27 +221,38 @@ namespace SeaSick.UI.Sheets
 
         public VisualElement Build()
         {
+            worker = null; upgrade = null;
+            plotGrid = picker = cropRow = null; bedsLine = pickerTitle = pickerInfo = null; repeatBtn = null;
+            yieldLine = keptLine = stallLine = null;
+            plotKey = long.MinValue;
+            hugged = StationPage.Hugging;
+            bool plots = !hugged || tab <= 0, work = !hugged || tab >= 1;
+
             root = StationPage.Root("st-page");
             StationPage.FitToParent(root);
-            var scroll = new ScrollView(ScrollViewMode.Vertical);
-            scroll.AddToClassList("st-scroll");
-            scroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
-            scroll.verticalScrollerVisibility = ScrollerVisibility.Hidden;
-            scroll.touchScrollBehavior = ScrollView.TouchScrollBehavior.Clamped;
-            root.Add(scroll);
-            var col = new VisualElement();
-            col.AddToClassList("st-content");
-            scroll.Add(col);
+            var col = StationPage.Column(root);
 
             // 2. the farmhand
-            var ws = Section(col, null);
-            ws.style.marginTop = 0f;
-            worker = new StationPage.WorkerCard(outpost, planId, () => Refresh());
-            ws.Add(worker.Root);
+            if (work)
+            {
+                var ws = Section(col, null);
+                ws.style.marginTop = 0f;
+                worker = new StationPage.WorkerCard(outpost, planId, () => Refresh());
+                ws.Add(worker.Root);
+            }
+            if (plots) BuildPlots(col);
+            if (work) BuildWork(col);
 
+            Refresh();
+            return root;
+        }
+
+        void BuildPlots(VisualElement col)
+        {
             // 3. the plots (food rework, 2026-09-27): one tile per plot with
             // its own timer; tap a plot to pick its crop underneath.
-            var bs = Section(col, "PLOTS");
+            var bs = Section(col, hugged ? null : "PLOTS");
+            if (hugged) bs.style.marginTop = 0f;
             plotGrid = new VisualElement();
             plotGrid.style.flexDirection = FlexDirection.Row;
             plotGrid.style.flexWrap = Wrap.Wrap;
@@ -217,9 +261,28 @@ namespace SeaSick.UI.Sheets
             bs.Add(bedsLine);
             picker = StationPage.Card();
             picker.style.flexDirection = FlexDirection.Column;
-            picker.style.marginTop = 8f;
+            picker.style.marginTop = hugged ? 0f : 8f;
             pickerTitle = StationPage.Text("", "st-line");
-            picker.Add(pickerTitle);
+            if (hugged)
+            {
+                // The way back to the tiles the picker stands in for.
+                var head = new VisualElement();
+                head.style.flexDirection = FlexDirection.Row;
+                head.style.alignItems = Align.Center;
+                var back = FarmBtn("‹ Plots", () => { pickedPlot = -1; plotKey = long.MinValue; Refresh(); });
+                back.style.flexGrow = 0f;
+                back.style.flexBasis = StyleKeyword.Auto;
+                back.style.paddingLeft = 12f;
+                back.style.paddingRight = 12f;
+                back.style.marginTop = 0f;
+                back.style.marginRight = 10f;
+                head.Add(back);
+                pickerTitle.style.flexGrow = 1f;
+                pickerTitle.style.flexShrink = 1f;
+                head.Add(pickerTitle);
+                picker.Add(head);
+            }
+            else picker.Add(pickerTitle);
             cropRow = new VisualElement();
             cropRow.style.flexDirection = FlexDirection.Row;
             cropRow.style.flexWrap = Wrap.Wrap;
@@ -235,7 +298,10 @@ namespace SeaSick.UI.Sheets
             actions.Add(FarmBtn("Clear plot", () => { var p = Picked(); if (p != null) L?.SetPlotCrop(p, "", p.repeat); Refresh(); }));
             picker.Add(actions);
             bs.Add(picker);
+        }
 
+        void BuildWork(VisualElement col)
+        {
             // 4. food out
             var fs = Section(col, "FOOD OUT");
             var foodCard = StationPage.Card();
@@ -269,9 +335,6 @@ namespace SeaSick.UI.Sheets
                 upgrade = new StationPage.UpgradeCard(DoUpgrade, null, outpost);
                 col.Add(upgrade.Root);
             }
-
-            Refresh();
-            return root;
         }
 
         static VisualElement Section(VisualElement col, string eyebrow)
@@ -295,7 +358,7 @@ namespace SeaSick.UI.Sheets
         public void Refresh()
         {
             var l = L;
-            if (outpost == null || l == null || worker == null) return;
+            if (outpost == null || l == null || root == null) return;
             outpost.CatchUp();
             ResolveRaisedIndex();
             int level = outpost.LevelOfBuilding(building);
@@ -313,25 +376,31 @@ namespace SeaSick.UI.Sheets
                 if (first == null) first = h;
                 hands++;
             }
-            worker.Update(l, first, Mathf.Max(0, hands - 1));
+            worker?.Update(l, first, Mathf.Max(0, hands - 1));
 
             // 3. the plots
             FillPlots(l);
-            int ripe = lastRipe;
+            // The work page has no tiles: count ripe plots for the pill here.
+            int ripe = 0;
+            foreach (var p in l.PlotsOf(Mathf.Max(0, mine)))
+                if (p != null && p.state == PlotState.Ripe) ripe++;
 
             // 4. food out: crops in the store, and how long the camp eats.
-            int crops = 0;
-            foreach (var c in FoodBook.Crops) crops += l.StoreCountOf(c.res);
-            yieldLine.text = $"{crops} crops in store · carried in by the farmhand";
-            float days = SheetBits.FoodDays(l);
-            keptLine.text = days < 0f
-                ? SheetBits.FoodDaysLine(l)
-                : $"{l.FoodFill():0.#} meals of food · lasts {days:0.#} days";
-
-            // 5. why it's stopped
             string why = StationSheet.StallText(l, first, false);
-            stallLine.text = why;
-            stallLine.style.display = string.IsNullOrEmpty(why) ? DisplayStyle.None : DisplayStyle.Flex;
+            if (yieldLine != null)
+            {
+                int crops = 0;
+                foreach (var c in FoodBook.Crops) crops += l.StoreCountOf(c.res);
+                yieldLine.text = $"{crops} crops in store · carried in by the farmhand";
+                float days = SheetBits.FoodDays(l);
+                keptLine.text = days < 0f
+                    ? SheetBits.FoodDaysLine(l)
+                    : $"{l.FoodFill():0.#} meals of food · lasts {days:0.#} days";
+
+                // 5. why it's stopped
+                stallLine.text = why;
+                stallLine.style.display = string.IsNullOrEmpty(why) ? DisplayStyle.None : DisplayStyle.Flex;
+            }
 
             // the header
             if (header != null)

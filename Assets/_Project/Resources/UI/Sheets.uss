@@ -656,3 +656,64 @@
     flex-shrink: 0;
     overflow: hidden;
 }
+
+/* ---------------- the hugging frame (Kevin, 2026-09-30) ----------------
+ *
+ * "Not every menu should be full screen. This is so much empty space. And I
+ * would like to see the building I'm pressing on." On the phone with the land
+ * HUD up, a structure's sheet sits in a frame as tall as its content and never
+ * past half the screen (`SheetHost.HugsContent`, which puts `.sheet-fit` on the
+ * card). These rules condense the `.st` page kit inside it: a 48-unit header
+ * instead of 56, no second padded panel around the page, tighter section gaps,
+ * and the station's recipe card with its picture as an icon in the name row.
+ * Every touch target stays at 44 or more. Rules here sit in the root sheet and
+ * out-rank Station.uss / Hand.uss / Lookout.uss on specificity alone.
+ */
+.sheet-fit .sheet-frame-head { padding-top: 10px; }
+.sheet-fit .sheet-body { padding-top: 8px; padding-bottom: 10px; }
+.sheet-fit .st-page { padding: 0; background-color: rgba(0, 0, 0, 0); border-radius: 0; }
+
+.sheet-fit .st-head { margin-bottom: 8px; }
+.sheet-fit .st .st-square { width: 48px; height: 48px; border-radius: 12px; }
+.sheet-fit .st .lk-glyph-box { width: 48px; height: 48px; border-radius: 12px; }
+.sheet-fit .st .lk-glyph { width: 30px; height: 30px; }
+.sheet-fit .st .st-title { font-size: 24px; }
+.sheet-fit .st .st-sub { font-size: 15px; margin-top: 0; }
+.sheet-fit .st .st-pill { height: 32px; padding: 0 12px; }
+
+.sheet-fit .st .st-section { margin-top: 8px; }
+.sheet-fit .st .st-upgrade { margin-top: 10px; }
+.sheet-fit .st .st-btn { height: 48px; }
+.sheet-fit .st .st-seg-btn { height: 48px; }
+.sheet-fit .st .st-seg { padding: 3px; border-radius: 14px; }
+.sheet-fit .st .st-worker-person { min-height: 48px; }
+.sheet-fit .st .st-avatar { width: 44px; height: 44px; border-radius: 22px; }
+
+/* the compact recipe card: icon in the name row, smaller type */
+.sheet-fit .st .st-recipe { padding: 10px; }
+.sheet-fit .st .st-recipe--on { padding: 9px; }
+.sheet-fit .st .st-recipe--locked { padding: 12px; }
+.sheet-fit .st .st-recipe--row2 { margin-top: 8px; }
+.sheet-fit .st .st-name-row { align-items: center; justify-content: flex-start; margin-bottom: 4px; }
+.st-name-icon { width: 30px; height: 30px; margin-right: 6px; flex-shrink: 0; -unity-background-scale-mode: scale-to-fit; }
+.sheet-fit .st .st-recipe--locked .st-name-icon { opacity: 0.4; }
+.sheet-fit .st .st-recipe-name { font-size: 17px; flex-grow: 1; flex-shrink: 1; min-width: 0; }
+.sheet-fit .st .st-yield { font-size: 15px; }
+.sheet-fit .st .st-takes { margin-bottom: 4px; min-height: 20px; }
+.sheet-fit .st .st-takes-text { font-size: 14px; }
+.sheet-fit .st .st-recipe .st-small-icon { width: 18px; height: 18px; margin-right: 4px; }
+/* the running order's bar becomes a 4-unit strip along the card's foot */
+.sheet-fit .st .st-recipe .st-bar { position: absolute; left: 12px; right: 12px; bottom: 5px; height: 4px; margin: 0; border-radius: 2px; }
+.sheet-fit .st .st-recipe .st-bar-fill { height: 4px; }
+.sheet-fit .st .st-recipe-state { font-size: 14px; min-height: 18px; }
+.sheet-fit .st .st-dots { margin-top: 0; }
+.sheet-fit .st .st-dot-btn { height: 28px; }
+
+/* in and out */
+.sheet-fit .st .st-flow { padding: 8px 8px; }
+.sheet-fit .st .st-flow-icon { width: 36px; height: 36px; }
+.sheet-fit .st .st-ring { width: 36px; height: 36px; }
+
+/* The fishing hut's bench cell says where he is ("at the shore"), words not
+ * a percentage, so it wraps inside its third of the card (2026-09-30). */
+.st .st-flow-cell .st-flow-value--words { font-size: 16px; white-space: normal; -unity-text-align: middle-center; }

@@ -118,15 +118,8 @@ namespace SeaSick.UI.Sheets
             StationPage.FitToParent(root);
 
             // A safety net only: the phone band fits; a desk column can wheel.
-            var scroll = new ScrollView(ScrollViewMode.Vertical);
-            scroll.AddToClassList("st-scroll");
-            scroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
-            scroll.verticalScrollerVisibility = ScrollerVisibility.Hidden;
-            scroll.touchScrollBehavior = ScrollView.TouchScrollBehavior.Clamped;
-            root.Add(scroll);
-            var col = new VisualElement();
-            col.AddToClassList("st-content");
-            scroll.Add(col);
+            // In a hugging frame no scroll at all -- the tiles page instead.
+            var col = StationPage.Column(root);
 
             // --- why: chips
             var chips = WatchTiles.Box("hs-chips");
@@ -161,7 +154,8 @@ namespace SeaSick.UI.Sheets
             eye.Add(StationPage.Text("tap to post · tap again to relieve", "hs-eye-em"));
             col.Add(eye);
             // Chips + quiver card + eyebrow + dots + actions + gaps.
-            tiles = new WatchTiles(outpost, WatchTiles.PerPage(330f), ShowToast, Refresh);
+            tiles = new WatchTiles(outpost, StationPage.Hugging ? HugTilesPerPage() : WatchTiles.PerPage(330f),
+                ShowToast, Refresh);
             col.Add(tiles.Note);
             col.Add(tiles.Grid);
             col.Add(tiles.Dots);
@@ -189,6 +183,18 @@ namespace SeaSick.UI.Sheets
 
             Refresh();
             return root;
+        }
+
+        /// **Tiles a page in a hugging frame (2026-09-30)**: rows of three
+        /// (50 + 6 units) in what half the screen leaves under the chips
+        /// (30), the quiver card (12 + ~84 with a wrapped line), the eyebrow
+        /// (~32), the dots (36) and the thumb row (58) -- one row on the
+        /// phone, more on a taller one, never past three.
+        static int HugTilesPerPage()
+        {
+            const float Rest = 30f + 96f + 32f + 36f + 58f + 8f, Row = 56f;
+            int rows = Mathf.Clamp(Mathf.FloorToInt((SheetHost.HugBodyBudget(false) - Rest) / Row), 1, 3);
+            return rows * 3;
         }
 
         void ShowToast(string text)

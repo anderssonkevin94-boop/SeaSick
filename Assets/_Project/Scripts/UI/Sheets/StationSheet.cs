@@ -74,6 +74,10 @@ namespace SeaSick.UI.Sheets
             hasUpgrade = Techs.MaxLevel(planId) > 1;
             hasWorker = BuildPlans.HasPosition(planId) && hasMake;
             isStore = planId == BuildPlans.Storage.id;
+            if (hasMake)
+                hugTabs = hasUpgrade
+                    ? new[] { PageMake, PageWork, PageOrders, PageLevel }
+                    : new[] { PageMake, PageWork, PageOrders };
             ResolveRaisedIndex();
         }
 
@@ -118,12 +122,27 @@ namespace SeaSick.UI.Sheets
 
         public bool StillValid => outpost != null && outpost.Ledger != null && building != null;
 
-        // One page: no host tab strip, no host action row (the upgrade is a
-        // card on the page, the order is the segmented control).
-        public string[] TabLabels => null;
-        public int Tab => 0;
-        public void SetTab(int index) { }
+        // One page on a desk or a tall band: no host tab strip, no host
+        // action row (the upgrade is a card on the page, the order is the
+        // segmented control).
+        //
+        // **Pages in a hugging frame (Kevin, 2026-09-30).** On the phone the
+        // sheet is at most half the screen (`SheetHost.HugsContent`) so the
+        // building stays in view, and the production page -- worker,
+        // recipes, order, standing orders, in and out, upgrade -- is three
+        // half-screens tall. It splits along the lines it already had:
+        // **make** (recipes + the amount row + its fix), **work** (the
+        // worker + in and out + why it stopped), **orders** (standing
+        // orders), **level** (the upgrade). A building with nothing to make
+        // (a hut, the store) stays one page and simply hugs it.
+        public string[] TabLabels => StationPage.Hugging ? hugTabs : null;
+        public int Tab => tab;
+        public void SetTab(int index) { tab = index; }
         public VisualElement BuildActions() => null;
+
+        int tab = -1;
+        readonly string[] hugTabs;
+        const string PageMake = "make", PageWork = "work", PageOrders = "orders", PageLevel = "level";
 
         StationPage.Header header;
 
@@ -180,27 +199,34 @@ namespace SeaSick.UI.Sheets
         // the store
         Label[] storeLines;
         const int StoreLinesMax = 5;
+        const int StoreLinesHug = 3;
+
+        /// Built for a hugging frame (compact recipe cards, no eyebrows the
+        /// tab already says, one of `hugTabs` per page).
+        bool hugged;
 
         public VisualElement Build()
         {
             cards.Clear();
             orderFix = null;
             storeLines = null; stallLine = null; worker = null; upgrade = null;
+            // Every refresh target is re-bound by the page that builds it;
+            // the others stay null so `Refresh` skips them.
+            stopBtn = null; keepBtn = null; queueEyebrow = null; queueList = null; orderEyebrow = null;
+            queueKey = long.MinValue;
+            bayValue = benchValue = benchLabel = rackValue = null; bayIcon = rackIcon = null; ring = null;
+            dots = null;
+            hugged = StationPage.Hugging;
+            string on = hugged && hugTabs != null ? hugTabs[Mathf.Clamp(tab, 0, hugTabs.Length - 1)] : null;
+            bool all = on == null;
 
             root = StationPage.Root("st-page");
             // The host pins content at its natural height (flex-shrink 0),
             // so the page asks for exactly the band -- the scroll view
             // inside then has a bounded viewport to (almost never) scroll.
+            // In a hugging frame neither: the page is its content.
             StationPage.FitToParent(root);
-            var scroll = new ScrollView(ScrollViewMode.Vertical);
-            scroll.AddToClassList("st-scroll");
-            scroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
-            scroll.verticalScrollerVisibility = ScrollerVisibility.Hidden;
-            scroll.touchScrollBehavior = ScrollView.TouchScrollBehavior.Clamped;
-            root.Add(scroll);
-            var col = new VisualElement();
-            col.AddToClassList("st-content");
-            scroll.Add(col);
+            var col = StationPage.Column(root);
 
             bool first = true;
             VisualElement Section(string eyebrow, out Label eyebrowLabel)
@@ -219,20 +245,22 @@ namespace SeaSick.UI.Sheets
                 return s;
             }
 
-            if (hasWorker)
+            if (hasWorker && (all || on == PageWork))
             {
                 var s = Section(null, out _);
                 worker = new StationPage.WorkerCard(outpost, planId, () => Refresh(), CurrentStation);
                 s.Add(worker.Root);
             }
 
-            if (isStore)
+            if (isStore && (all || on == PageWork))
             {
-                var s = Section("ON THE RACKS", out _);
+                // Hugging: three lines, no eyebrow -- the Stores sheet is the
+                // racks' home, this is the glance.
+                var s = Section(hugged ? null : "ON THE RACKS", out _);
                 var card = StationPage.Card();
                 var lines = new VisualElement(); lines.AddToClassList("st-col");
                 card.Add(lines);
-                storeLines = new Label[StoreLinesMax];
+                storeLines = new Label[hugged ? StoreLinesHug : StoreLinesMax];
                 for (int i = 0; i < storeLines.Length; i++)
                 {
                     storeLines[i] = StationPage.Text("", "st-line");
@@ -241,14 +269,26 @@ namespace SeaSick.UI.Sheets
                 s.Add(card);
             }
 
-            if (hasMake)
+            if (hasMake && all)
             {
                 BuildRecipes(Section("RECIPES", out _));
-                BuildOrder(Section("ORDER", out orderEyebrow));
+                var os = Section("ORDER", out orderEyebrow);
+                BuildOrder(os);
+                BuildQueue(os);
                 BuildFlow(Section("IN AND OUT", out _));
             }
+            else if (hasMake)
+            {
+                if (on == PageMake)
+                {
+                    BuildRecipes(Section(null, out _));
+                    BuildOrder(Section(null, out _));
+                }
+                else if (on == PageOrders) BuildQueue(Section(null, out _));
+                else if (on == PageWork) BuildFlow(Section(null, out _));
+            }
 
-            if (hasUpgrade)
+            if (hasUpgrade && (all || on == PageLevel))
             {
                 upgrade = new StationPage.UpgradeCard(DoUpgrade, TogglePin, outpost);
                 if (first) upgrade.Root.style.marginTop = 0f;
@@ -264,7 +304,8 @@ namespace SeaSick.UI.Sheets
         void BuildRecipes(VisualElement s)
         {
             var recipes = Recipes.At(planId);
-            perPage = PerPage(recipes.Count);
+            // Hugging: one row of two compact cards, the amount row under it.
+            perPage = hugged ? 2 : PerPage(recipes.Count);
             var grid = new VisualElement();
             grid.AddToClassList("st-grid");
             s.Add(grid);
@@ -338,12 +379,22 @@ namespace SeaSick.UI.Sheets
             c.root = new VisualElement();
             c.root.AddToClassList("st-recipe");
 
-            var tile = new VisualElement(); tile.AddToClassList("st-tile");
-            c.icon = StationPage.Icon(r.makes, "st-tile-icon");
-            tile.Add(c.icon);
-            c.root.Add(tile);
-
             var nameRow = new VisualElement(); nameRow.AddToClassList("st-name-row");
+            if (hugged)
+            {
+                // **Compact card (2026-09-30)**: the 72-unit picture tile
+                // becomes an icon at the head of the name row -- the card
+                // keeps every fact and loses half its height.
+                c.icon = StationPage.Icon(r.makes, "st-name-icon");
+                nameRow.Add(c.icon);
+            }
+            else
+            {
+                var tile = new VisualElement(); tile.AddToClassList("st-tile");
+                c.icon = StationPage.Icon(r.makes, "st-tile-icon");
+                tile.Add(c.icon);
+                c.root.Add(tile);
+            }
             c.name = StationPage.Text(StationPage.Cap(r.label), "st-recipe-name");
             c.yield = StationPage.Text($"×{Mathf.Max(1, r.yield)}", "st-yield");
             nameRow.Add(c.name); nameRow.Add(c.yield);
@@ -547,19 +598,48 @@ namespace SeaSick.UI.Sheets
             seg.Add(stopBtn);
             s.Add(seg);
             orderFix = new ShortFix.Slot(() => Refresh());
+            // Hugging: the fix sits a little tighter under the amount row.
+            if (hugged) orderFix.button.style.marginTop = 6f;
             s.Add(orderFix.button);
+        }
 
-            // **Keep in stock (2026-09-27, food rework phase 2)**: queue the
-            // selected recipe as "keep 10"; the queue below is worked
-            // top-down, each line with its own N and status.
+        /// **Keep in stock (2026-09-27, food rework phase 2)**: queue the
+        /// selected recipe as "keep 10"; the queue below is worked top-down,
+        /// each line with its own N and status. Under the amount row on the
+        /// tall page; its own **orders** page in a hugging frame, where the
+        /// button shares the eyebrow's row so a level-3 queue still fits.
+        void BuildQueue(VisualElement s)
+        {
             keepBtn = new Button(QueueKeep) { text = "Keep 10 in stock" };
             keepBtn.AddToClassList("st-seg-btn");
-            keepBtn.style.marginTop = 8f;
             keepBtn.style.minHeight = TouchPx;
-            s.Add(keepBtn);
             queueEyebrow = StationPage.Text("STANDING ORDERS · TOP-DOWN", "st-eyebrow");
-            queueEyebrow.style.marginTop = 12f;
-            s.Add(queueEyebrow);
+            if (hugged)
+            {
+                var row = new VisualElement();
+                row.style.flexDirection = FlexDirection.Row;
+                row.style.alignItems = Align.Center;
+                queueEyebrow.style.flexGrow = 1f;
+                queueEyebrow.style.flexShrink = 1f;
+                queueEyebrow.style.marginBottom = 0f;
+                queueEyebrow.style.whiteSpace = WhiteSpace.Normal;
+                keepBtn.style.flexGrow = 0f;
+                keepBtn.style.flexBasis = StyleKeyword.Auto;
+                keepBtn.style.paddingLeft = 14f;
+                keepBtn.style.paddingRight = 14f;
+                keepBtn.style.marginLeft = 8f;
+                keepBtn.text = "Keep 10";
+                row.Add(queueEyebrow);
+                row.Add(keepBtn);
+                s.Add(row);
+            }
+            else
+            {
+                keepBtn.style.marginTop = 8f;
+                s.Add(keepBtn);
+                queueEyebrow.style.marginTop = 12f;
+                s.Add(queueEyebrow);
+            }
             queueList = new VisualElement();
             s.Add(queueList);
         }
@@ -593,7 +673,7 @@ namespace SeaSick.UI.Sheets
 
         void FillQueue(OutpostLedger l, StationStock st, string selected)
         {
-            if (queueList == null) return;
+            if (queueList == null || keepBtn == null) return;
             int si = StationIndexOf(l, st);
             var q = si >= 0 ? l.QueueAt(si) : null;
             int slots = si >= 0 ? l.QueueSlots(si) : 0;
@@ -601,7 +681,9 @@ namespace SeaSick.UI.Sheets
             bool canKeep = si >= 0 && sel != null && LockWhy(l, sel) == null
                 && (q.Count < slots || HasLine(q, selected));
             keepBtn.SetEnabled(canKeep);
-            queueEyebrow.text = $"STANDING ORDERS · {(q != null ? q.Count : 0)}/{slots} · TOP-DOWN";
+            queueEyebrow.text = hugged
+                ? $"STANDING ORDERS · {(q != null ? q.Count : 0)}/{slots}"
+                : $"STANDING ORDERS · {(q != null ? q.Count : 0)}/{slots} · TOP-DOWN";
 
             long key = si * 7919L + slots;
             var status = new List<string>();
@@ -630,6 +712,7 @@ namespace SeaSick.UI.Sheets
                 var card = StationPage.Card();
                 card.style.marginTop = 6f;
                 card.style.alignItems = Align.Center;
+                if (hugged) { card.style.paddingTop = 4f; card.style.paddingBottom = 4f; }
                 card.Add(StationPage.Icon(r?.makes, "st-small-icon"));
                 var colL = new VisualElement(); colL.AddToClassList("st-col");
                 colL.style.flexGrow = 1f;
@@ -685,7 +768,8 @@ namespace SeaSick.UI.Sheets
         {
             if (stopBtn == null) return;
             var sel = Recipes.Named(selected);
-            orderEyebrow.text = sel != null ? "ORDER · " + sel.label.ToUpperInvariant() : "ORDER";
+            if (orderEyebrow != null)
+                orderEyebrow.text = sel != null ? "ORDER · " + sel.label.ToUpperInvariant() : "ORDER";
             var order = st != null ? l.OrderAt(planId, st.ordinal) : default;
             bool active = order.Active && order.recipe != null;
             bool canOrder = st != null && sel != null && LockWhy(l, sel) == null;
@@ -798,6 +882,19 @@ namespace SeaSick.UI.Sheets
             ring.Value = p;
             benchValue.text = st.benchState == BenchState.Empty ? "empty" : $"{Mathf.RoundToInt(p * 100f)}%";
             benchLabel.text = st.benchState == BenchState.Finished ? "done, to the rack" : "on the bench";
+            // **The fisher fishes at the water (2026-09-30, 0a17d6c).** The
+            // fishing hut's bench is never used -- a catch is a trip from
+            // the shore into the box (`OutpostLedger.FishesAtShore`) -- so
+            // "empty" there was a lie while he stood at the water.
+            bool shore = OutpostLedger.FishesAtShore(st);
+            benchValue.EnableInClassList("st-flow-value--words", shore);
+            if (shore)
+            {
+                ring.Value = 0f;
+                bool fishing = hand != null && hand.Hauling && hand.haulFrom == HaulPlace.Shore;
+                benchValue.text = fishing ? "at the shore" : hand != null ? "at the hut" : "no fisher";
+                benchLabel.text = "fishing";
+            }
             rackValue.text = $"{st.RackTotal} / {st.OutputCap}";
             rackValue.EnableInClassList("st-cost--short", st.RackFull);
 
@@ -994,6 +1091,11 @@ namespace SeaSick.UI.Sheets
         /// inside has a bounded viewport rather than its content's height.
         public static void FitToParent(VisualElement page)
         {
+            // **Not in a hugging frame (2026-09-30).** There the host reads
+            // the page's natural height to size the card
+            // (`SheetHost.HugsContent`); a page pinned to its parent's height
+            // would measure as whatever the card already was, and never shrink.
+            if (Hugging) return;
             page.style.height = Length.Percent(100);
             page.RegisterCallback<AttachToPanelEvent>(_ =>
             {
@@ -1007,6 +1109,29 @@ namespace SeaSick.UI.Sheets
                 parent.RegisterCallback<GeometryChangedEvent>(__ => Fit());
                 Fit();
             });
+        }
+
+        /// True while the open sheet's frame hugs its content (phone, land
+        /// HUD, a structure's sheet -- `SheetHost.HugsContent`). Read while a
+        /// sheet builds: the host decides it before `Build` runs.
+        public static bool Hugging => SheetHost.HugsContent(Sheets.Current);
+
+        /// **The page's column**: straight into `root` in a hugging frame (it
+        /// is measured at its natural height and pages instead of scrolling),
+        /// otherwise inside the safety-net ScrollView the tall page had.
+        public static VisualElement Column(VisualElement root)
+        {
+            var col = new VisualElement();
+            col.AddToClassList("st-content");
+            if (Hugging) { root.Add(col); return col; }
+            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.AddToClassList("st-scroll");
+            scroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+            scroll.verticalScrollerVisibility = ScrollerVisibility.Hidden;
+            scroll.touchScrollBehavior = ScrollView.TouchScrollBehavior.Clamped;
+            root.Add(scroll);
+            scroll.Add(col);
+            return col;
         }
 
         public static Label Text(string text, string cls)
