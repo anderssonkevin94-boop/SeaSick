@@ -25,9 +25,23 @@ namespace SeaSick.Ship.Overboard
         /// run to its warning and fall like anybody else's.
         public static bool Blocks(CrewAgent agent) => !Done && !(triggered && chosen == agent);
 
+        /// **2026-09-30 Kevin: the first man overboard comes from the first
+        /// collision or enemy hit that throws a hand over**, not from sailing
+        /// for 90 s. `CrewAgent.ThrownOverboard` asks here; the first caller
+        /// gets true (a long swim timer, `Done` set once he is rescued), and
+        /// nobody after that until the run is over.
+        public static bool ClaimScripted()
+        {
+            if (Done || triggered) return false;
+            triggered = true;
+            return true;
+        }
+
         public static void Tick(CrewRoster roster, AnchorController anchor, float dt)
         {
             if (Done || triggered) return;
+            // Timed trigger is off by default (`OverboardTuning.firstTimeByTimer`).
+            if (!OverboardTuning.FirstTimeByTimer) return;
             // Total time under way, NOT reset by a rough patch or an anchor
             // stop: Kevin, 2026-09-28, *"i sailed around for over 90 seconds
             // and no one fell off"* -- ordinary sailing sits at roughness

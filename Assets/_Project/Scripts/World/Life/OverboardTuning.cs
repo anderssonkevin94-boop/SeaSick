@@ -11,6 +11,16 @@ namespace SeaSick.World.Life
     /// reference. **Missing asset = the code's own defaults** below.
     ///
     /// All numbers: first pass, tune by play.
+    ///
+    /// **2026-09-30 Kevin (playtest): "crew and cargo fall off waaaay too
+    /// easily when sailing ... It should be collisions or getting hit by
+    /// enemies that cause things to go overboard."** So the sailing-only
+    /// drains (roughness, ordinary heel, wave slams) are gated off or pushed
+    /// out to a near-capsize extreme (heel past ~45 degrees, sustained), and
+    /// the losses now come from the "Hits and collisions" block at the
+    /// bottom (`Ship/Overboard/HitOverboard.cs`, called from `HullIntegrity`).
+    /// Seasickness itself is unchanged: smoothness still drives how sick the
+    /// crew get, it just no longer throws anyone in the sea.
     /// </summary>
     [CreateAssetMenu(menuName = "SeaSick/Overboard Tuning", fileName = "OverboardTuning")]
     public class OverboardTuning : ScriptableObject
@@ -18,14 +28,14 @@ namespace SeaSick.World.Life
         [Header("Grip drain")]
         [Tooltip("SmoothnessMeter.Roughness01 below this drains nothing at all -- calm water is zero risk.")]
         public float calmRoughness = 0.15f;
-        [Tooltip("Grip lost per second, per unit of roughness above the calm threshold.")]
-        public float drainPerRoughness = 0.55f;
-        [Tooltip("Degrees of heel (hull roll) below this cost nothing.")]
-        public float heelFreeDeg = 10f;
+        [Tooltip("Grip lost per second, per unit of roughness above the calm threshold. 2026-09-30 Kevin: 0 = motion no longer costs grip (was 0.55).")]
+        public float drainPerRoughness = 0f;
+        [Tooltip("Degrees of heel (hull roll) below this cost nothing. 2026-09-30 Kevin: 45 = near-capsize only (was 10).")]
+        public float heelFreeDeg = 45f;
         [Tooltip("Grip lost per second, per degree of heel above the free band.")]
-        public float drainPerHeelDeg = 0.012f;
-        [Tooltip("Flat grip hit from a hard slam (HullIntegrity.LastImpactTime within the last 0.5s), scaled by impact speed / slamSpeedForFullHit.")]
-        public float slamDrainFlat = 0.35f;
+        public float drainPerHeelDeg = 0.03f;
+        [Tooltip("Flat grip hit from a hard slam (HullIntegrity.LastImpactTime within the last 0.5s), scaled by impact speed / slamSpeedForFullHit. 2026-09-30 Kevin: 0 = off (was 0.35); collisions throw people directly now, see the Hits and collisions block.")]
+        public float slamDrainFlat = 0f;
         [Tooltip("Impact speed (m/s) that counts as a full-severity slam for grip purposes.")]
         public float slamSpeedForFullHit = 6f;
         [Tooltip("Grip refilled per second whenever nothing above is draining -- the 'smooth sailing = safe' promise.")]
@@ -89,13 +99,13 @@ namespace SeaSick.World.Life
         [Tooltip("SmoothnessMeter.Roughness01 below this drains the LASHING meter nothing at all -- higher than calmRoughness, because a well-lashed hold rides out more than a queasy hand's grip does.")]
         public float lashCalmRoughness = 0.40f;
         [Tooltip("Lashing lost per second, per unit of roughness above lashCalmRoughness.")]
-        public float lashDrainPerRoughness = 0.35f;
+        public float lashDrainPerRoughness = 0f;
         [Tooltip("Degrees of heel below this cost the lashing nothing.")]
-        public float lashHeelFreeDeg = 16f;
+        public float lashHeelFreeDeg = 45f;
         [Tooltip("Lashing lost per second, per degree of heel above the free band.")]
-        public float lashDrainPerHeelDeg = 0.01f;
+        public float lashDrainPerHeelDeg = 0.03f;
         [Tooltip("Flat lashing hit from a hard slam (HullIntegrity.LastImpactTime within the last 0.5s), scaled by impact speed / slamSpeedForFullHit (shared with grip).")]
-        public float lashSlamDrainFlat = 0.5f;
+        public float lashSlamDrainFlat = 0f;
         [Tooltip("Lashing refilled per second whenever nothing above is draining.")]
         public float lashRefillPerSecond = 0.06f;
         [Tooltip("Units of the picked resource that slide off when the lashing meter empties (or fewer, if less than this is held).")]
@@ -129,7 +139,29 @@ namespace SeaSick.World.Life
         [Tooltip("Fewest OTHER hull sections (middles) the ship must have for a jolly boat to be launchable -- \"big ships only\".")]
         public int jollyBoatMinMiddleSections = 2;
 
+        [Header("Hits and collisions (2026-09-30 Kevin)")]
+        [Tooltip("Closing speed (m/s) of a hull collision (rocks, reef, shore, another ship) below which nobody and nothing goes over. HullIntegrity.freeImpactSpeed (2.5) only stops the hull being billed; this is the harder bar for losses.")]
+        public float impactMinSpeed = 4.5f;
+        [Tooltip("Closing speed (m/s) that counts as a full-strength collision (top speed is ~15).")]
+        public float impactFullSpeed = 12f;
+        [Tooltip("Chance a hand goes over from a collision just past impactMinSpeed.")]
+        public float impactCrewChanceMin = 0.15f;
+        [Tooltip("Chance a hand goes over from a full-strength collision. A very hard hit (75%+ strength) that succeeds throws two.")]
+        public float impactCrewChanceFull = 0.9f;
+        [Tooltip("Chance a crate slides off from a collision just past impactMinSpeed.")]
+        public float impactCargoChanceMin = 0.25f;
+        [Tooltip("Chance a crate slides off from a full-strength collision. Units in the crate scale with strength (at least 1, at most crateUnits).")]
+        public float impactCargoChanceFull = 1f;
+        [Tooltip("Chance a hand goes over per cannonball that hits the ship, before bulwarks / safety lines.")]
+        public float shotCrewChance = 0.08f;
+        [Tooltip("Chance a crate slides off per cannonball that hits the ship.")]
+        public float shotCargoChance = 0.15f;
+        [Tooltip("Real seconds after one hit-driven loss roll before the next can happen (a raking barrage is one bad moment, not ten).")]
+        public float hitCooldownSeconds = 1f;
+
         [Header("Scripted first time")]
+        [Tooltip("2026-09-30 Kevin: false (default) = the scripted first man-overboard no longer fires just from sailing 90 s; the FIRST collision or hit that throws a hand over is the scripted one instead (long swim timer). true = the old timed version.")]
+        public bool firstTimeByTimer = false;
         [Tooltip("Real seconds under way (calm-ish water) before the scripted first man-overboard fires.")]
         public float firstTimeSailSeconds = 90f;
         [Tooltip("Roughness01 ceiling for \"calm-ish\" while waiting for the scripted first time.")]
@@ -162,10 +194,10 @@ namespace SeaSick.World.Life
         static OverboardTuning D => Active;
 
         public static float CalmRoughness => D != null ? D.calmRoughness : 0.15f;
-        public static float DrainPerRoughness => D != null ? D.drainPerRoughness : 0.55f;
-        public static float HeelFreeDeg => D != null ? D.heelFreeDeg : 10f;
-        public static float DrainPerHeelDeg => D != null ? D.drainPerHeelDeg : 0.012f;
-        public static float SlamDrainFlat => D != null ? D.slamDrainFlat : 0.35f;
+        public static float DrainPerRoughness => D != null ? D.drainPerRoughness : 0f;
+        public static float HeelFreeDeg => D != null ? D.heelFreeDeg : 45f;
+        public static float DrainPerHeelDeg => D != null ? D.drainPerHeelDeg : 0.03f;
+        public static float SlamDrainFlat => D != null ? D.slamDrainFlat : 0f;
         public static float SlamSpeedForFullHit => D != null ? D.slamSpeedForFullHit : 6f;
         public static float RefillPerSecond => D != null ? D.refillPerSecond : 0.10f;
         public static float StormDrainMultiplierExtra => D != null ? D.stormDrainMultiplierExtra : 0.9f;
@@ -191,10 +223,10 @@ namespace SeaSick.World.Life
         public static float HaulSlipMultiple => D != null ? D.haulSlipMultiple : 1.6f;
         public static float RescuerRecoverSeconds => D != null ? D.rescuerRecoverSeconds : 6f;
         public static float LashCalmRoughness => D != null ? D.lashCalmRoughness : 0.40f;
-        public static float LashDrainPerRoughness => D != null ? D.lashDrainPerRoughness : 0.35f;
-        public static float LashHeelFreeDeg => D != null ? D.lashHeelFreeDeg : 16f;
-        public static float LashDrainPerHeelDeg => D != null ? D.lashDrainPerHeelDeg : 0.01f;
-        public static float LashSlamDrainFlat => D != null ? D.lashSlamDrainFlat : 0.5f;
+        public static float LashDrainPerRoughness => D != null ? D.lashDrainPerRoughness : 0f;
+        public static float LashHeelFreeDeg => D != null ? D.lashHeelFreeDeg : 45f;
+        public static float LashDrainPerHeelDeg => D != null ? D.lashDrainPerHeelDeg : 0.03f;
+        public static float LashSlamDrainFlat => D != null ? D.lashSlamDrainFlat : 0f;
         public static float LashRefillPerSecond => D != null ? D.lashRefillPerSecond : 0.06f;
         public static int CrateUnits => D != null ? D.crateUnits : 4;
         public static float FloatSeconds => D != null ? D.floatSeconds : 120f;
@@ -210,6 +242,16 @@ namespace SeaSick.World.Life
         public static float JollyBoatMaxShipSpeed => D != null ? D.jollyBoatMaxShipSpeed : 3f;
         public static float JollyBoatRowSpeed => D != null ? D.jollyBoatRowSpeed : 2.5f;
         public static int JollyBoatMinMiddleSections => D != null ? D.jollyBoatMinMiddleSections : 2;
+        public static float ImpactMinSpeed => D != null ? D.impactMinSpeed : 4.5f;
+        public static float ImpactFullSpeed => D != null ? D.impactFullSpeed : 12f;
+        public static float ImpactCrewChanceMin => D != null ? D.impactCrewChanceMin : 0.15f;
+        public static float ImpactCrewChanceFull => D != null ? D.impactCrewChanceFull : 0.9f;
+        public static float ImpactCargoChanceMin => D != null ? D.impactCargoChanceMin : 0.25f;
+        public static float ImpactCargoChanceFull => D != null ? D.impactCargoChanceFull : 1f;
+        public static float ShotCrewChance => D != null ? D.shotCrewChance : 0.08f;
+        public static float ShotCargoChance => D != null ? D.shotCargoChance : 0.15f;
+        public static float HitCooldownSeconds => D != null ? D.hitCooldownSeconds : 1f;
+        public static bool FirstTimeByTimer => D != null && D.firstTimeByTimer;
         public static float FirstTimeSailSeconds => D != null ? D.firstTimeSailSeconds : 90f;
         public static float FirstTimeMaxRoughness => D != null ? D.firstTimeMaxRoughness : 0.45f;
         public static float FirstTimeSwimSeconds => D != null ? D.firstTimeSwimSeconds : 240f;

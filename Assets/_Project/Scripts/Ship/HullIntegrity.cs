@@ -180,6 +180,10 @@ namespace SeaSick.Ship
             float shock = crewShock * Mathf.Clamp01(excess / 8f);
             if (crew == null) crew = GetComponentsInChildren<CrewAgent>(true);
             foreach (var c in crew) if (c != null) c.Jolt(shock);
+
+            // 2026-09-30 Kevin: a hard collision (not sailing) is what sends
+            // crew and cargo overboard. See `HitOverboard`.
+            SeaSick.Ship.Overboard.HitOverboard.FromCollision(transform, transform.position, closingSpeed);
         }
 
         /// Is there sand under the keel at `p`, and which way is deep water?
@@ -504,6 +508,9 @@ namespace SeaSick.Ship
 
             if (crew == null) crew = GetComponentsInChildren<CrewAgent>(true);
             foreach (var c in crew) if (c != null) c.Jolt(shotShock);
+
+            // 2026-09-30 Kevin: so is an enemy hit. See `HitOverboard`.
+            SeaSick.Ship.Overboard.HitOverboard.FromShot(transform, point, amount);
 
             Splinters(point);
         }

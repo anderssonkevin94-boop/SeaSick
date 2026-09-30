@@ -16,6 +16,12 @@ namespace SeaSick.Ship.Overboard
     ///
     /// Ticked from `CrewRoster.Update`, one call per ship per frame, the
     /// same place `FirstOverboard.Tick` already runs.
+    ///
+    /// **2026-09-30 Kevin: cargo no longer slides off from ordinary sailing.**
+    /// The roughness and slam drains are 0 and the heel free band is 45
+    /// degrees (`OverboardTuning`), so this meter only empties in a
+    /// near-capsize. Crates now go over from hard collisions and enemy hits
+    /// (`HitOverboard` -> `FromImpact`).
     public static class CargoLashing
     {
         static float lashing01 = 1f;
@@ -61,7 +67,7 @@ namespace SeaSick.Ship.Overboard
             if (lashing01 <= 0f)
             {
                 lashing01 = 1f;
-                TrySlideCargo(motor, heel >= 0f ? NormalizeDeg(motor.transform.eulerAngles.z) : 0f);
+                TrySlideCargo(motor, NormalizeDeg(motor.transform.eulerAngles.z), OverboardTuning.CrateUnits);
             }
         }
 
@@ -75,13 +81,26 @@ namespace SeaSick.Ship.Overboard
         {
             if (motor == null) return;
             lashing01 = 1f;
-            TrySlideCargo(motor, NormalizeDeg(motor.transform.eulerAngles.z));
+            TrySlideCargo(motor, NormalizeDeg(motor.transform.eulerAngles.z), OverboardTuning.CrateUnits);
+        }
+
+        /// **A hit or collision knocks a crate loose** (2026-09-30 Kevin).
+        /// `strength01` scales how many units are in the crate (at least 1,
+        /// at most `crateUnits`); `side` is which side of the ship it goes
+        /// over (positive = starboard/right, 0 = either, picked at random).
+        public static void FromImpact(ShipMotor motor, float strength01, float side)
+        {
+            if (motor == null) return;
+            int units = Mathf.Clamp(Mathf.CeilToInt(OverboardTuning.CrateUnits * Mathf.Clamp01(strength01)),
+                1, Mathf.Max(1, OverboardTuning.CrateUnits));
+            if (Mathf.Approximately(side, 0f)) side = Random.value < 0.5f ? -1f : 1f;
+            TrySlideCargo(motor, side, units);
         }
 
         /// One crate over the side — weighted by count, so the resource the
         /// hold is fullest of is the one likeliest to slide, same reasoning
         /// as a real deck load.
-        static void TrySlideCargo(ShipMotor motor, float heelDeg)
+        static void TrySlideCargo(ShipMotor motor, float heelDeg, int maxUnits)
         {
             var voyage = Object.FindFirstObjectByType<VoyageManager>();
             if (voyage == null || voyage.TotalHeld <= 0) return;
@@ -90,7 +109,7 @@ namespace SeaSick.Ship.Overboard
             if (string.IsNullOrEmpty(resource)) return;
 
             int have = voyage.HeldOf(resource);
-            int amount = Mathf.Min(OverboardTuning.CrateUnits, have);
+            int amount = Mathf.Min(maxUnits, have);
             if (amount <= 0) return;
 
             int taken = voyage.RemoveLoot(amount, resource);

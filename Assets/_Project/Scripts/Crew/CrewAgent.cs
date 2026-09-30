@@ -1010,6 +1010,36 @@ namespace SeaSick.Crew
             GoOverboardAt(worldPos, wasScripted);
         }
 
+        /// **A collision or an enemy hit throws this hand into the sea**
+        /// (2026-09-30 Kevin: only hits and collisions do this, not sailing;
+        /// see `Ship/Overboard/HitOverboard.cs`). Skips the grip/warning
+        /// sequence and drops them over the rail at once, on the side the
+        /// hit came from (`side` > 0 starboard, < 0 port, 0 = their own
+        /// side). False if this hand is not somebody who can go over right
+        /// now (ashore, hauling a swimmer in, out in the jolly boat).
+        public bool ThrownOverboard(float side)
+        {
+            if (Puppeted || AtCamp || !IsAboard) return false;
+            if (state == State.HaulGoing || state == State.Hauling || state == State.HaulReturning
+                || state == State.JollyBoatDuty) return false;
+
+            Vector3 worldPos = transform.position;
+            if (ship != null)
+            {
+                Vector3 local = ship.InverseTransformPoint(transform.position);
+                float s = Mathf.Approximately(side, 0f) ? local.x : side;
+                if (Mathf.Approximately(s, 0f)) s = UnityEngine.Random.value < 0.5f ? -1f : 1f;
+                worldPos = ship.TransformPoint(new Vector3(Mathf.Sign(s) * (OverboardTuning.HullHalfBeamMetres + 1f), 0.3f, local.z));
+            }
+            if (Ocean.OceanSampler.Ready) worldPos.y = Ocean.OceanSampler.SampleImmediate(worldPos).height;
+
+            forcedTrip = false;
+            scriptedTrip = false;
+            warnActive = false;
+            GoOverboardAt(worldPos, FirstOverboard.ClaimScripted());
+            return true;
+        }
+
         /// **Dev panel (5b)**: skip the whole grip/warning sequence and drop
         /// this hand straight in the water a fixed distance off the ship's
         /// SIDE (whichever side her own rail is on) -- for testing Throw
