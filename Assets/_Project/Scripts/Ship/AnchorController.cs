@@ -945,6 +945,10 @@ namespace SeaSick.Ship
                 var here = Outpost.Of(isle);
                 if (here != null) { here.CatchUp(); here.ShowHands(true); }
             }
+            // **Fog (2026-09-30):** the strip of shore she lies off is seen
+            // from the deck; the rest of a fresh island waits for a landing
+            // party to walk it (`IslandFog`, `GatherParty` Explore).
+            if (isle != null) IslandFog.For(isle)?.RevealShoreNear(transform.position);
             motor.Anchored = true;
             timer = dropTime;
             CurrentState = timer > 0f ? State.Dropping : State.Anchored;
@@ -998,13 +1002,18 @@ namespace SeaSick.Ship
         GatherParty party;
         GatherParty Party => party != null ? party : (party = GatherParty.For(this));
 
+        /// **"Landing party" (2026-09-30)**, where "⛏ Send gather party"
+        /// was: one thumb row above Cast off that opens
+        /// `LandingPartySheet` (Explore · Gather · Hunt). Kevin, on the old
+        /// sheet: *"horrible ui ... this whole interaction needs to be re
+        /// worked."*
         void DrawGatherParty(ref Prompts.Stack stack, float bh, GUIStyle buttonStyle)
         {
             if (CurrentIsland == null || CampSiting.Placing) return;
             var r = stack.Next(bh);
             UIBlocker.Block(r);
-            if (GUI.Button(r, "⛏  Send gather party", buttonStyle))
-                SeaSick.UI.Sheets.GatherPartySheet.Open(this, Party);
+            if (GUI.Button(r, "Landing party", buttonStyle))
+                SeaSick.UI.Sheets.LandingPartySheet.Open(this);
         }
 
         void SendAshore()
@@ -1212,9 +1221,9 @@ namespace SeaSick.Ship
         {
             if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
-            // The gather party's sheet owns the bottom of the screen while
+            // The landing party's sheet owns the bottom of the screen while
             // it is up.
-            if (SeaSick.UI.Sheets.GatherPartySheet.IsOpen) return;
+            if (SeaSick.UI.Sheets.LandingPartySheet.IsOpen) return;
             // Two panels offering to cast off in the same corner of the
             // screen is a choice nobody wants to make -- the same rule the
             // dock prompt already applies against the beach one.
@@ -1355,17 +1364,21 @@ namespace SeaSick.Ship
                     var primary = stack.Next(bh);
                     UIBlocker.Block(primary);
 
-                    // A gather party out: the recall is the party's, and the
-                    // line under it says why there is no cast-off.
+                    // A landing party out: the recall is the party's, the row
+                    // above it opens the sheet (their progress), and the line
+                    // says why there is no cast-off.
                     if (party != null && party.Out)
                     {
-                        if (GUI.Button(primary, party.Recalling
-                                ? "⛏  coming back aboard…"
-                                : Desk ? "⛏  Recall party   (space)" : "⛏  Recall party", buttonStyle)) RecallCrew();
+                        if (party.Recalling) GUI.Label(primary, "coming back aboard…", infoStyle);
+                        else if (GUI.Button(primary, Desk ? "Call them back   (space)" : "Call them back", buttonStyle)) RecallCrew();
+                        var open = stack.Next(bh);
+                        UIBlocker.Block(open);
+                        if (GUI.Button(open, "Landing party", buttonStyle))
+                            SeaSick.UI.Sheets.LandingPartySheet.Open(this);
                         int out_ = party.Ashore;
-                        if (partyText.Changed(HudLabel.Key(party.DeliveredUnits, out_,
-                                party.Recalling ? 1 : 0, party.Target)))
-                            partyText.Set($"{party.StatusLine}\n{out_} hand{(out_ == 1 ? "" : "s")} ashore — recall first to cast off");
+                        if (partyText.Changed(HudLabel.Key(party.DeliveredUnits + party.Kills * 1000, out_,
+                                party.Recalling ? 1 : 0, Mathf.FloorToInt(party.Elapsed))))
+                            partyText.Set($"{party.StatusLine}\n{out_} hand{(out_ == 1 ? "" : "s")} ashore — call them back to cast off");
                         GUI.Label(stack.Next(u * 3.2f), partyText.Content, infoStyle);
                         break;
                     }

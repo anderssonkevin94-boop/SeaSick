@@ -248,7 +248,7 @@ namespace SeaSick.Ship
                 volume.ShapeAt(glob,p,Quaternion.LookRotation(transform.forward),new Vector3(.30f,.035f,.65f)*s,Color.Lerp(settings.waterColor,settings.foamColor,.7f));
             }
         }
-        void OnDisable(){ReleaseQueries();SuppressLegacy(false);ResetHistory();if(surface!=null){surface.root.SetActive(false);volume.root.SetActive(false);}}
+        void OnDisable(){ReleaseQueries();SuppressLegacy(false);ResetHistory();if(surface!=null&&surface.root)surface.root.SetActive(false);if(volume!=null&&volume.root)volume.root.SetActive(false);}
         void OnDestroy(){ReleaseQueries();SuppressLegacy(false);surface?.Dispose();volume?.Dispose();if(feeder)feeder.Owner=null;}
     }
 }

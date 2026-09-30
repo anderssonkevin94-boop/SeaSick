@@ -368,8 +368,12 @@ namespace SeaSick.UI.Sheets
         /// upgrade card is a third of the screen, the building stays in
         /// view above it. Lists (Build, Camp, People, Food...) keep their
         /// tall band -- "not every menu". Desk: unchanged.
+        /// **The landing party sheet hugs too (2026-09-30)**, camp or no camp:
+        /// it is opened off a fresh island (no land HUD), and Kevin's mockup
+        /// keeps the island visible above a half-height card.
         public static bool HugsContent(ISheet s) =>
-            s != null && !HudLayout.Wide && MidnightLandHud.Active && BuildingSheetFocus.IsBuilding(s);
+            s != null && !HudLayout.Wide
+            && ((MidnightLandHud.Active && BuildingSheetFocus.IsBuilding(s)) || s is LandingPartySheet);
 
         /// The hugging frame's ceiling: its top edge sits at most this
         /// fraction of the safe height above the safe bottom, header included.
@@ -877,8 +881,10 @@ namespace SeaSick.UI.Sheets
             // the same 74 pt when the first campfire is placed at an island
             // that has no camp (and so no land HUD) yet.
             // So is the Next card's lone "Make camp" at an island with no camp.
+            // And so is the landing party sheet (2026-09-30), the same card
+            // scale as every house sheet though no camp exists yet.
             runtimePanel.referenceResolution = (MidnightLandHud.Active || ThumbBar.PlacementActive
-                                                || NextCard.NoCampShowing) && !HudLayout.Wide
+                                                || NextCard.NoCampShowing || LandingPartySheet.IsOpen) && !HudLayout.Wide
                 ? new Vector2Int(430, 932) : originalResolution;
             // Before the land HUD: the food notice and the ledger drawer
             // stack on this frame's `ThumbBar.ReservePanel`.

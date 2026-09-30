@@ -185,6 +185,7 @@ namespace SeaSick.Terrain
             // PREVIOUS run.
             IslandScenery.Report.Clear();
             IslandFind.ResetForPlay();   // same reason: finds and the taken list are statics
+            IslandFog.ResetForPlay();    // same reason: every island's fog grid (2026-09-30)
             NatureGroundAtlas.Reset();   // same reason: every island's painted ground
 
             Vector3 home = homePoint != null ? homePoint.position : Vector3.zero;

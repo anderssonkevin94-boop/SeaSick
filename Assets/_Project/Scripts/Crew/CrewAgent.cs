@@ -228,13 +228,16 @@ namespace SeaSick.Crew
             // phase 8: out in the jolly boat -- unavailable the whole round trip
             JollyBoatDuty,
             // ashore
-            GoingAshore, ToNode, Chopping, ToShip, Idling, Boarding
+            GoingAshore, ToNode, Chopping, ToShip, Idling, Boarding,
+            // 2026-09-30: a landing party's walk (explore stop, hunt stalk)
+            Errand
         }
         State state = State.Station;
 
         /// Ashore covers the whole work loop, not just standing about.
         public bool IsAshore => state == State.ToNode || state == State.Chopping
-            || state == State.ToShip || state == State.Idling || state == State.GoingAshore;
+            || state == State.ToShip || state == State.Idling || state == State.GoingAshore
+            || state == State.Errand;
         /// The ship this hand walks back to while ashore (set by `GoAshore`);
         /// null for a hand who has never been ashore. Read by the shipyard's
         /// refit guard, which will not rebuild a deck a hand is out of.
@@ -271,6 +274,36 @@ namespace SeaSick.Crew
         /// camp's pile, which is the difference from the plain shore party.
         Ship.GatherParty party;
         public Ship.GatherParty Party => party;
+
+        /// **A landing party's errand (2026-09-30).** Explore and hunt
+        /// parties (`GatherParty.Gathers` false) walk to places the party
+        /// names (`NextErrand`) instead of sources: on arrival the party says
+        /// how long he stands there (`ErrandReached` / `ErrandDone`, a jab,
+        /// a flop), then he asks again; nothing more means walk aboard.
+        public bool OnErrand => state == State.Errand;
+        float errandWait;
+
+        /// Move the errand's end point (a beast that walks on).
+        public void RetargetErrand(Vector3 at)
+        {
+            if (state != State.Errand || path.Count == 0) return;
+            path[path.Count - 1] = at;
+        }
+
+        /// Pick up `units` of `res` for the party and walk it to the hold.
+        /// `showLoad` false when something else is drawn in his arms (a
+        /// carcass on his shoulders, `HunterProps`).
+        public void PartyCarry(string res, int units, bool showLoad)
+        {
+            if (party == null) return;
+            ReleaseNode();
+            carriedCount = Mathf.Max(1, units);
+            if (showLoad) PickUp(res);
+            else carriedResource = res;
+            PathToShip(hold != null ? hold.DropPoint
+                : (ship != null ? ship.TransformPoint(stationLocal) : transform.position));
+            state = State.ToShip;
+        }
 
         /// Units in his arms right now (0 when empty), for the party's
         /// "in hand" count.
@@ -333,6 +366,22 @@ namespace SeaSick.Crew
 
         void SeekWork(bool fromDeck)
         {
+            if (party != null && !party.Gathers)
+            {
+                // Explore / hunt: the party names the next place, or nothing
+                // -- and nothing means walk home over the plank.
+                if (!party.NextErrand(this, out Vector3 at))
+                {
+                    PathToShip(ship != null ? ship.TransformPoint(stationLocal) : transform.position);
+                    state = State.Boarding;
+                    return;
+                }
+                if (fromDeck) PathToShore(at);
+                else SetPath(at);
+                errandWait = 0f;
+                state = State.Errand;
+                return;
+            }
             if (party != null)
             {
                 // The party decides: the next source it wants worked, claimed
@@ -790,6 +839,36 @@ namespace SeaSick.Crew
                         SeekWork(true);
                     }
                     break;
+
+                case State.Errand:
+                {
+                    if (party == null) { ReturnAboard(); break; }
+                    if (errandWait > 0f)
+                    {
+                        // Standing at it: a jab, a draw, a flop. Face the spot.
+                        Vector3 face = path.Count > 0 ? path[path.Count - 1] - transform.position : transform.forward;
+                        face.y = 0f;
+                        if (face.sqrMagnitude > 0.01f)
+                            transform.rotation = Quaternion.LookRotation(face, Vector3.up);
+                        errandWait -= dt;
+                        if (errandWait <= 0f)
+                        {
+                            float again = party.ErrandDone(this);
+                            if (state != State.Errand) break;
+                            if (again > 0f) errandWait = again;
+                            else SeekWork();
+                        }
+                        break;
+                    }
+                    if (FollowPath(dt, party.ErrandStandOff(this)))
+                    {
+                        float wait = party.ErrandReached(this);
+                        if (state != State.Errand) break;
+                        if (wait > 0f) errandWait = wait;
+                        else SeekWork();
+                    }
+                    break;
+                }
 
                 case State.Idling:
                     // Nothing to cut — wait on the beach, and pick work back up

@@ -164,7 +164,7 @@ namespace SeaSick.UI.Sheets
             {
                 var camp = MidnightLandHud.Camp;
                 bool blocked = ThumbBar.PlacementActive || Sheets.Current != null || CampSiting.Placing
-                               || GatherPartySheet.IsOpen || SeaLedger.IsOpen;
+                               || SeaLedger.IsOpen;
                 bool noCamp = false, want;
                 if (blocked) want = false;
                 else if (MidnightLandHud.Active)

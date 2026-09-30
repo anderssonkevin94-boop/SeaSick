@@ -48,6 +48,13 @@ namespace SeaSick.UI.Menus
             // Ashore the ledger drawer's gear is the way in (2026-09-27): no
             // second button for the same menu.
             if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
+            // **Off a fresh island, neither (2026-09-30).** Kevin: stray
+            // "Ledger" / "Menu" chips over the anchored-at-Island_3 screen.
+            // Stopped off an island with no camp, the way in is the Landing
+            // party sheet's ☰ (the anchor prompt's "Landing party" row opens
+            // it) and Esc on a desk (`GameMenus.PollEscape`); both chips come
+            // back the moment she casts off.
+            if (SeaSick.UI.Sheets.LandingPartySheet.Offered(SeaSick.UI.Sheets.Sheets.Anchor)) return;
 
             // **The ledger at sea (2026-09-27)**: the sea twin of the land
             // drawer's ☰, top of the rail while she is under way. Takes the

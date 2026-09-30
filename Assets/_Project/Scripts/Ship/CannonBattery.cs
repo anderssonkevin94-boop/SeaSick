@@ -569,6 +569,24 @@ namespace SeaSick.Ship
             return best;
         }
 
+        /// **The fire buttons only show with an enemy in range (2026-09-30).**
+        /// A lock that holds, or the nearest hostile (`NearestHostile`: an
+        /// enemy ship or a sea beast, never a friendly tower) within 1.5x the
+        /// guns' flat reach (at least 60 m). Looked up 4x a second, not per
+        /// IMGUI event.
+        bool EnemyInRange()
+        {
+            if (Time.unscaledTime < nextEnemyLook) return enemyInRange;
+            nextEnemyLook = Time.unscaledTime + 0.25f;
+            if (self == null) self = GetComponent<Combat.PlayerHull>();
+            var locked = AutoFireTarget;
+            if (locked != null && locked.Alive) return enemyInRange = true;
+            var t = NearestHostile(transform.position, out float dist, self);
+            return enemyInRange = t != null && dist <= Mathf.Max(GunRange, 40f) * 1.5f;
+        }
+        bool enemyInRange;
+        float nextEnemyLook;
+
         void OnGUI()
         {
             if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
@@ -582,6 +600,10 @@ namespace SeaSick.Ship
             // A hull with no gun-port stations is not carrying guns, and two
             // buttons reading "no crew" are two buttons in a thumb's way.
             if (allGuns.Count == 0) return;
+            // Nothing to shoot, no fire buttons (Kevin, 2026-09-30: the
+            // "◀ port 1/1 ready / stbd ▶" chips stacked over the landing
+            // party at a quiet island). Q / E still fire on a desk.
+            if (!EnemyInRange()) return;
 
             int u = SeaSick.UI.HudLayout.Unit;
             // Wide enough for "stbd ▶ 2/2" and for "no crew" — at 5.6 both
