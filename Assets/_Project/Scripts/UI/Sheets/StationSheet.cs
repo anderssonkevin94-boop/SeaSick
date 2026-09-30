@@ -40,10 +40,8 @@ namespace SeaSick.UI.Sheets
     /// rebuilt on that timer.
     public class StationSheet : ISheetFramed
     {
-        /// **The ☰ hook.** Whoever owns the Ledger drawer sets this
-        /// (`StationSheet.OpenLedger = ledgerDrawer.Open`, `MidnightLandHud`).
-        /// Until it does, ☰ falls back to the camp overview's own hook, then
-        /// to the camp overview sheet itself (`StationPage.OpenLedgerFor`).
+        /// **The old ☰ hook**, unused since the ledger drawer went
+        /// (2026-09-30): ☰ opens the Camp sheet (`StationPage.OpenLedgerFor`).
         public static System.Action OpenLedger;
 
         readonly Outpost outpost;
@@ -1173,15 +1171,9 @@ namespace SeaSick.UI.Sheets
         public static string Cap(string s) =>
             string.IsNullOrEmpty(s) ? "" : char.ToUpperInvariant(s[0]) + s.Substring(1);
 
-        /// ☰: the drawer when its owner has wired the hook, else the camp
-        /// overview (the drawer's own first row) -- never a dead button.
-        public static void OpenLedgerFor(Outpost camp)
-        {
-            if (StationSheet.OpenLedger != null) { StationSheet.OpenLedger(); return; }
-            if (CampOverviewSheet.OpenLedger != null) { CampOverviewSheet.OpenLedger(); return; }
-            var overview = camp != null ? LedgerDrawer.CampOverview(camp) : null;
-            if (overview != null) Sheets.Open(overview);
-        }
+        /// ☰: the Camp sheet (`CampPages.OpenLedger`, the one chokepoint) --
+        /// never a dead button.
+        public static void OpenLedgerFor(Outpost camp) => CampPages.OpenLedger(null, camp);
 
         public static string IslandName(Outpost o)
         {

@@ -116,8 +116,6 @@ namespace SeaSick.UI
         public static bool SheetBlocked(Vector2 guiPoint)
         {
             if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return true;
-            // The ledger drawer's scrim covers the whole screen while open.
-            if (Sheets.MidnightLandHud.Active && Sheets.LedgerDrawer.IsOpen) return true;
             if (Sheets.SeaLedger.IsOpen) return true;   // the sea drawer's scrim, likewise
             // The thumb bar and the placement card (zero rects while hidden;
             // placement shows them with no camp, so this is not gated on Active).

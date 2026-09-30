@@ -190,13 +190,13 @@ namespace SeaSick.UI.Sheets
             return new CampfireSheet(camp);
         }
 
-        /// The camp's overview (`CampOverviewSheet`), on the same terms as
+        /// The camp hub (`CampSheet`), on the same terms as
         /// `CampfireFor`: a camp, or at least a fire going up.
         static ISheet OverviewFor(Outpost camp)
         {
             if (camp == null || camp.Ledger == null) return null;
             if (!camp.HasCamp && !camp.Building) return null;
-            return new CampOverviewSheet(camp);
+            return new CampSheet(camp);
         }
 
         internal static ISheet ShipFor()

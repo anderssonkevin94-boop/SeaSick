@@ -47,8 +47,11 @@ namespace SeaSick.UI.Sheets
     public sealed class BackpackSheet : ISheetFramed
     {
         readonly Outpost camp;
+        readonly bool startShipSide;
 
-        public BackpackSheet(Outpost o) { camp = o; }
+        /// `shipSide`: open scrolled to "On the ship" (the Ship sheet's link
+        /// row); the Camp hub and the top bar open on the island.
+        public BackpackSheet(Outpost o, bool shipSide = false) { camp = o; startShipSide = shipSide; }
 
         // --- ISheet / ISheetFramed -------------------------------------------
 
@@ -60,8 +63,6 @@ namespace SeaSick.UI.Sheets
         public int Tab => 0;
         public void SetTab(int index) { }
         public bool WantsTallSheet => true;
-        public VisualElement BuildActions() => null;
-
         OutpostLedger L => camp != null ? camp.Ledger : null;
 
         // --- built once ----------------------------------------------------------
@@ -76,6 +77,12 @@ namespace SeaSick.UI.Sheets
         Label sub;
         Label awayLine, orderLine;
         Label islandMeta, shipMeta, islandEmpty, shipEmpty;
+        Label infoLine, workshopLine;
+        Button loadBtn, deckBtn;
+        string selected;
+        bool keepFired;
+        VisualElement shipHead;
+        ScrollView scrollView;
         VisualElement islandGrid, shipGrid;
         readonly Dictionary<string, Tile> islandTiles = new Dictionary<string, Tile>();
         readonly Dictionary<string, Tile> shipTiles = new Dictionary<string, Tile>();
@@ -96,6 +103,7 @@ namespace SeaSick.UI.Sheets
             islandTiles.Clear(); shipTiles.Clear();
             islandShown.Clear(); shipShown.Clear();
             orderKey = long.MinValue;
+            shipScrolled = false;
 
             var root = new VisualElement();
             root.AddToClassList("pack-body");
@@ -107,6 +115,10 @@ namespace SeaSick.UI.Sheets
             orderLine.AddToClassList("pack-empty");
             orderLine.style.whiteSpace = WhiteSpace.Normal;
             root.Add(orderLine);
+            infoLine = new Label();
+            infoLine.AddToClassList("pack-empty");
+            infoLine.style.whiteSpace = WhiteSpace.Normal;
+            root.Add(infoLine);
 
             // Scrolls only when both lists outgrow the tall card; tiles are
             // three to a row to keep that rare.
@@ -115,6 +127,7 @@ namespace SeaSick.UI.Sheets
             scroll.verticalScrollerVisibility = ScrollerVisibility.Hidden;
             scroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
             root.Add(scroll);
+            scrollView = scroll;
 
             scroll.Add(SectionHead("On the island", out islandMeta));
             islandEmpty = new Label("Nothing in the store or the hold.");
@@ -123,8 +136,13 @@ namespace SeaSick.UI.Sheets
             islandGrid = new VisualElement();
             islandGrid.AddToClassList("pack-grid");
             scroll.Add(islandGrid);
+            workshopLine = new Label();
+            workshopLine.AddToClassList("pack-empty");
+            workshopLine.style.whiteSpace = WhiteSpace.Normal;
+            scroll.Add(workshopLine);
 
-            scroll.Add(SectionHead("On the ship", out shipMeta));
+            shipHead = SectionHead("On the ship", out shipMeta);
+            scroll.Add(shipHead);
             shipEmpty = new Label("Nothing in the store or the hold.");
             shipEmpty.AddToClassList("pack-empty");
             scroll.Add(shipEmpty);
@@ -133,7 +151,29 @@ namespace SeaSick.UI.Sheets
             scroll.Add(shipGrid);
 
             Refresh();
+            if (startShipSide)
+                shipHead.RegisterCallback<GeometryChangedEvent>(_ =>
+                {
+                    if (scrollView == null || shipScrolled || scrollView.resolvedStyle.height <= 1f) return;
+                    shipScrolled = true;
+                    scrollView.ScrollTo(shipHead);
+                });
             return root;
+        }
+
+        bool shipScrolled;
+
+        /// The thumb row: Deck cargo (a hold setting) and **Load all** (the
+        /// ship's old pill). Built once; `Refresh` re-texts them.
+        public VisualElement BuildActions()
+        {
+            deckBtn = SheetKit.Btn("Deck cargo", ToggleDeck, false, true);
+            loadBtn = SheetKit.Btn("Load all", LoadPressed, true);
+            deckBtn.style.minHeight = 44f;
+            loadBtn.style.minHeight = 44f;
+            var row = SheetKit.Actions(deckBtn, loadBtn);
+            FillActions(camp != null ? camp.Ledger : null);
+            return row;
         }
 
         static VisualElement SectionHead(string title, out Label meta)
@@ -158,8 +198,10 @@ namespace SeaSick.UI.Sheets
             t.root = new VisualElement();
             t.root.AddToClassList("pack-tile");
 
-            var top = new VisualElement { pickingMode = PickingMode.Ignore };
+            var top = new VisualElement();
             top.AddToClassList("pack-tile-top");
+            // Tap = details; a long press on an island tile = what stays ashore.
+            WireTap(top, res, onShip);
             var tex = ItemIconSet.Get(res);
             if (tex != null)
             {
@@ -172,7 +214,8 @@ namespace SeaSick.UI.Sheets
             top.Add(t.count);
             t.root.Add(top);
 
-            var name = new Label(StationPage.Cap(ResDefs.Label(res))) { pickingMode = PickingMode.Ignore };
+            var name = new Label(StationPage.Cap(ResDefs.Label(res)));
+            WireTap(name, res, onShip);
             name.AddToClassList("pack-tile-name");
             t.root.Add(name);
 
@@ -250,6 +293,134 @@ namespace SeaSick.UI.Sheets
             return l.cargo != null ? l.cargo.HeldOf(res) : 0;
         }
 
+        // --- tile tap / hold, thumb row -------------------------------------------
+
+        /// Tap selects the kind for the detail line; holding an ISLAND tile
+        /// cycles its keep (all sails -> half stays -> all stays), what the
+        /// Ship sheet's ashore grid used to do.
+        void WireTap(VisualElement el, string res, bool onShip)
+        {
+            IVisualElementScheduledItem timer = null;
+            Vector2 down = Vector2.zero;
+            el.RegisterCallback<PointerDownEvent>(e =>
+            {
+                keepFired = false;
+                down = e.position;
+                timer?.Pause();
+                if (onShip) return;
+                timer = el.schedule.Execute(() => { keepFired = true; CycleKeep(res); });
+                timer.ExecuteLater(550);
+            });
+            el.RegisterCallback<PointerUpEvent>(_ => timer?.Pause());
+            el.RegisterCallback<PointerLeaveEvent>(_ => timer?.Pause());
+            el.RegisterCallback<PointerCancelEvent>(_ => timer?.Pause());
+            // A drag is the list scrolling, not a hold.
+            el.RegisterCallback<PointerMoveEvent>(e =>
+            {
+                if (((Vector2)e.position - down).sqrMagnitude > 100f) timer?.Pause();
+            });
+            el.RegisterCallback<ClickEvent>(_ =>
+            {
+                if (keepFired) { keepFired = false; return; }
+                selected = selected == res ? null : res;
+                RefreshInfo(L);
+            });
+        }
+
+        void CycleKeep(string res)
+        {
+            var l = L;
+            if (l == null) return;
+            int ashore = l.StoreCountOf(res);
+            int cap = CampLoading.StopAt(res);
+            if (cap < 0) CampLoading.SetStopAt(res, ashore / 2);
+            else if (cap > 0) CampLoading.SetStopAt(res, 0);
+            else CampLoading.SetStopAt(res, -1);
+            selected = res;
+            Refresh();
+        }
+
+        void LoadPressed()
+        {
+            if (CampLoading.Busy) { CampLoading.Cancel(); Refresh(); return; }
+            if (camp == null) return;
+            CampLoading.Begin(camp, SheetBits.Voyage, SheetBits.Hold);
+            Refresh();
+        }
+
+        void ToggleDeck()
+        {
+            var v = SheetBits.Voyage;
+            if (v == null) return;
+            v.TakeDeckCargo = !v.TakeDeckCargo;
+            Refresh();
+        }
+
+        void FillActions(OutpostLedger l)
+        {
+            if (loadBtn == null || deckBtn == null) return;
+            var v = SheetBits.Voyage;
+            bool alongside = camp != null && CampLoading.Alongside(camp);
+            int room = CampLoading.RoomAboard(v);
+            string lt = CampLoading.Busy ? "Stop loading" : alongside ? "Load all" : "Moor to load";
+            if (loadBtn.text != lt) loadBtn.text = lt;
+            loadBtn.SetEnabled(CampLoading.Busy || (alongside && room > 0));
+            string dt = v == null ? "Deck cargo" : v.TakeDeckCargo ? "Deck cargo · on" : "Deck cargo · off";
+            if (deckBtn.text != dt) deckBtn.text = dt;
+            deckBtn.SetEnabled(v != null);
+        }
+
+        static string TierWord(ResTier t) => t switch
+        {
+            ResTier.Raw => "raw",
+            ResTier.Treated => "treated",
+            _ => "item",
+        };
+
+        static string SourceWord(ResSource s) => s switch
+        {
+            ResSource.Gathered => "gathered",
+            ResSource.Hunted => "hunted",
+            ResSource.Drop => "from hunts",
+            _ => "made",
+        };
+
+        const string InfoHint = "Tap a tile for details · hold an island tile to keep some ashore";
+
+        void RefreshInfo(OutpostLedger l)
+        {
+            if (infoLine == null) return;
+            if (string.IsNullOrEmpty(selected) || l == null || !ResDefs.TryGet(selected, out var def))
+            {
+                infoLine.text = InfoHint;
+                return;
+            }
+            int cap = CampLoading.StopAt(selected);
+            string keep = cap < 0 ? "all can sail" : cap == 0 ? "all stays ashore" : "keeps " + cap + " ashore";
+            string blurb = string.IsNullOrEmpty(def.blurb) ? "" : " " + def.blurb;
+            infoLine.text = StationPage.Cap(def.label) + " · " + TierWord(def.tier) + ", " + SourceWord(def.source)
+                + " · island " + IslandCount(l, selected) + " · ship " + ShipCount(l, selected) + " · " + keep + "." + blurb;
+        }
+
+        /// One line for goods in workshop boxes: in the camp's total
+        /// (`CountOf`) but not in the store, so not carriable from here.
+        readonly System.Text.StringBuilder sb = new System.Text.StringBuilder();
+        void RefreshWorkshops(OutpostLedger l)
+        {
+            sb.Clear();
+            int kinds = 0;
+            foreach (var d in ResDefs.All)
+            {
+                int n = l.CountOf(d.id) - l.StoreCountOf(d.id);
+                if (n <= 0) continue;
+                if (++kinds > 4) { sb.Append(" · …"); break; }
+                if (sb.Length > 0) sb.Append(" · ");
+                sb.Append(n).Append(' ').Append(ResDefs.Label(d.id));
+            }
+            workshopLine.text = sb.Length > 0 ? "In workshop boxes (not carried): " + sb : "";
+            workshopLine.style.display = sb.Length > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
         // --- refresh -----------------------------------------------------------------
 
         public void Refresh()
@@ -272,7 +443,20 @@ namespace SeaSick.UI.Sheets
             }
 
             islandMeta.text = "holds " + l.ceilingPer + " of each";
-            shipMeta.text = v != null ? v.TotalHeld + " / " + v.HoldCapacity : "";
+            if (v == null) shipMeta.text = "";
+            else
+            {
+                // One string: "12 / 34 · room 22" (the Ship sheet's hold line
+                // used to glue two labels together with no gap).
+                int limit = v.TakeDeckCargo ? v.MaxHold : v.HoldCapacity;
+                int room = CampLoading.RoomAboard(v);
+                shipMeta.text = v.TotalHeld + " / " + limit + (CampLoading.Busy
+                    ? " · loading, room for " + room
+                    : room > 0 ? " · room " + room : " · full");
+            }
+            FillActions(l);
+            RefreshInfo(l);
+            RefreshWorkshops(l);
 
             // **Both sections list the SAME set in the SAME order** (the
             // union: anything in the store or the hold, or with an order or
@@ -346,6 +530,7 @@ namespace SeaSick.UI.Sheets
             int have = onShip ? ShipCount(l, res) : IslandCount(l, res);
             t.count.text = MidnightLandHud.CompactCount(have);
             t.root.EnableInClassList("pack-tile--dim", have <= 0);
+            t.root.EnableInClassList("pack-tile--full", !onShip && have >= l.ceilingPer);
 
             // Coming here: the order the other side is sending plus armfuls
             // already walking this way. Leaving: this side's standing order.
@@ -359,6 +544,9 @@ namespace SeaSick.UI.Sheets
                 pend = "+" + (inOrder == OutpostLedger.TransferAll ? "all" : (inOrder + inWalking).ToString());
             if (outOrder > 0)
                 pend += (pend.Length > 0 ? " " : "") + "−" + (outOrder == OutpostLedger.TransferAll ? "all" : outOrder.ToString());
+            // An idle island tile shows what stays ashore, when set.
+            int keepCap = onShip ? -1 : CampLoading.StopAt(res);
+            if (pend.Length == 0 && keepCap >= 0) pend = keepCap == 0 ? "keep all" : "keep " + keepCap;
             t.pending.text = pend;
 
             string stall = l.TransferStall(res, true) ?? l.TransferStall(res, false);

@@ -286,12 +286,12 @@ namespace SeaSick.UI.Sheets
 
         void OpenLarder()
         {
-            if (outpost != null) Sheets.Open(new LarderSheet(outpost));
+            if (outpost != null) Sheets.Open(new FoodSheet(outpost));
         }
 
         void OpenOverview()
         {
-            if (outpost != null) Sheets.Open(new CampOverviewSheet(outpost));
+            if (outpost != null) Sheets.Open(new CampSheet(outpost));
         }
     }
 }

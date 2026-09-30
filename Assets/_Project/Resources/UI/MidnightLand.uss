@@ -354,3 +354,8 @@
     translate: 0 150%;
 }
 .ledger-layer--open.thumb-ledger-bottom > .ledger-drawer { translate: 0 0; }
+
+/* ---------------- Backpack, the only cargo screen (2026-09-30, island UI phase 4) ----------------
+   A pile at the store's ceiling turns its count ember (the old Stores bank's
+   low/full colouring). */
+.pack-tile--full .pack-tile-count { color: rgb(246, 146, 128); }

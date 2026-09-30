@@ -14,7 +14,7 @@ namespace SeaSick.UI.Sheets
     ///
     /// **One chip and a count since 2026-09-30** (island UI phase 2): the
     /// most urgent alert, then "+N" for the rest, which opens the Camp
-    /// ledger where they all live. An alert the Next card above the thumb
+    /// sheet where they all live (NEEDS YOU, each with its fix button). An alert the Next card above the thumb
     /// bar is already showing (`NextCard.AlertText`) is left out here, so
     /// nothing is said twice. Chips are built once and re-texted on the
     /// 0.25 s tick (DEV-TOOLS: a rebuilt element loses the tap it was in
@@ -47,6 +47,10 @@ namespace SeaSick.UI.Sheets
 
         public AlertStrip(VisualElement root)
         {
+            // The chips' rules live in Ledger.uss (the ledger drawer that used
+            // to add it to the root is gone since phase 4).
+            var style = Resources.Load<StyleSheet>("UI/Ledger");
+            if (style != null && !root.styleSheets.Contains(style)) root.styleSheets.Add(style);
             row = new VisualElement();
             row.AddToClassList("ledger-alerts");
             row.pickingMode = PickingMode.Ignore;
@@ -61,12 +65,19 @@ namespace SeaSick.UI.Sheets
                 chips[i] = chip;
             }
             // "+N": the rest, in the Camp ledger.
-            more = new Button(() => LedgerDrawer.ToggleActive());
+            more = new Button(OpenCamp);
             more.AddToClassList("ledger-chip");
             more.AddToClassList("ledger-chip--more");
             more.tooltip = "More that needs you: open Camp";
             more.style.display = DisplayStyle.None;
             row.Add(more);
+        }
+
+        /// "+N": the Camp sheet, where every alert is listed with its fix.
+        static void OpenCamp()
+        {
+            var camp = MidnightLandHud.Camp;
+            if (camp != null && camp.Ledger != null) Sheets.Open(new CampSheet(camp));
         }
 
         void Tap(int index)

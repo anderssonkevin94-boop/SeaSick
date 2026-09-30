@@ -153,3 +153,72 @@
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
 .cp-fix:active { background-color: rgb(120, 176, 204); }
+
+/* --- Food sheet (island UI phase 4, 2026-09-30): the rations switch, thumb-sized --- */
+.fd-rations { margin: 0 0 4px 0; }
+.fd-rations .sheet-seg-btn { height: 44px; flex-grow: 1; font-size: 15px; }
+
+/* --- The Camp sheet (CampSheet, island UI phase 4, 2026-09-30) ---
+   NEEDS YOU rows, the fire's cost rows, the link / Raise buttons, the
+   building rows' status. The goal chain reuses Overview.uss (`ov-`). */
+.cs-list { flex-direction: column; flex-shrink: 0; }
+.cs-block { flex-direction: column; flex-shrink: 0; margin-bottom: 4px; }
+
+.cs-alert {
+    flex-direction: row; align-items: center; min-height: 56px; padding: 6px 6px 6px 12px; margin: 0 0 6px 0;
+    flex-shrink: 0;
+    background-color: rgb(26, 48, 64); border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 12px;
+}
+.cs-alert--warn { border-color: rgb(201, 147, 57); }
+.cs-alert--bad { border-color: rgb(246, 146, 128); }
+.cs-alert--raid { border-color: rgb(228, 98, 58); background-color: rgb(58, 30, 24); }
+.cs-alert-text {
+    flex-grow: 1; flex-shrink: 1; min-width: 0; font-size: 14px; white-space: normal; color: rgb(232, 242, 246);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.cs-alert .cp-fix { min-width: 96px; max-width: 150px; }
+
+.cs-cost { flex-direction: row; align-items: center; min-height: 40px; padding: 0 4px; margin: 0 0 4px 0; flex-shrink: 0; }
+.cs-cost-icon {
+    width: 28px; height: 28px; flex-shrink: 0; margin-right: 8px;
+    -unity-background-scale-mode: scale-to-fit;
+}
+.cs-cost-name {
+    width: 86px; flex-shrink: 0; font-size: 14px; color: rgb(232, 242, 246);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.cs-cost-track {
+    flex-grow: 1; flex-shrink: 1; height: 10px; margin: 0 10px;
+    background-color: rgb(19, 34, 46); border-radius: 5px; overflow: hidden;
+}
+.cs-cost-fill { height: 10px; background-color: rgb(164, 210, 232); border-radius: 5px; }
+.cs-cost--short .cs-cost-fill { background-color: rgb(240, 195, 106); }
+.cs-cost-qty {
+    width: 56px; flex-shrink: 0; font-size: 14px; -unity-text-align: middle-right; color: rgb(232, 242, 246);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.cs-cost--short .cs-cost-qty { color: rgb(246, 146, 128); }
+
+.cs-link {
+    min-height: 44px; margin: 4px 0 0 0; padding: 0 12px; flex-shrink: 0;
+    border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 10px; font-size: 14px; white-space: normal;
+    background-color: rgb(19, 34, 46); color: rgb(164, 210, 232); -unity-text-align: middle-left;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.cs-link:active { background-color: rgb(32, 57, 72); }
+.cs-raise {
+    min-height: 48px; margin: 6px 0 0 0; flex-shrink: 0; border-width: 0; border-radius: 10px; font-size: 15px;
+    background-color: rgb(164, 210, 232); color: rgb(11, 23, 32);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.cs-raise:active { background-color: rgb(120, 176, 204); }
+
+/* a building row's status, on the right of a `cp-hand` button */
+.cs-st {
+    margin-left: 8px; flex-shrink: 0; max-width: 46%; font-size: 13px; white-space: normal;
+    -unity-text-align: middle-right; color: rgb(127, 151, 166);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.cs-st--bad { color: rgb(246, 146, 128); }
+.cs-st--ok { color: rgb(159, 224, 194); }
+.cs-st--info { color: rgb(164, 210, 232); }

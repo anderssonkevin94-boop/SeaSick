@@ -29,10 +29,8 @@ namespace SeaSick.UI.Sheets
         readonly VisualElement top;
         readonly Label mood, people, food, day;
         readonly HudGlyph moodFace, foodTrend;
-        readonly BuildingStatusLabels buildingStatus;
         readonly CampStatusHud campStatus;
         readonly AlertStrip alerts;
-        readonly LedgerDrawer ledgerDrawer;
         float nextUpdate;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -78,18 +76,15 @@ namespace SeaSick.UI.Sheets
             foodTrend.AddToClassList("land-trend");
             food.parent.Add(foodTrend);
             day = new Label(); day.AddToClassList("land-day"); top.Add(day);
-            buildingStatus = new BuildingStatusLabels(root);
             campStatus = new CampStatusHud(root);
             alerts = new AlertStrip(root);
             // **No GoalBar since 2026-09-30** (island UI phase 2): a pinned
             // goal is the Next card's "YOUR GOAL" above the thumb bar
             // (`NextCard`); the pin itself (`GoalPin`) is unchanged.
             // **No ☰ since 2026-09-30** (island UI restructure 1A): the top
-            // bar is status only, and the ledger drawer opens from the thumb
-            // bar's Camp button at the bottom (`ThumbBar`). Added last, so
-            // the drawer and its scrim draw over everything else in this
-            // document (the thumb bar itself is added after it by SheetHost).
-            ledgerDrawer = new LedgerDrawer(root);
+            // bar is status only, and the Camp sheet opens from the thumb
+            // bar's Camp button at the bottom (`ThumbBar`); the bottom
+            // ledger drawer is gone since phase 4.
         }
 
         /// One tappable chip: icon, then (when `withLabel`) the number.
@@ -119,12 +114,11 @@ namespace SeaSick.UI.Sheets
             bool active = Active;
             root.EnableInClassList("midnight-land", active);
             top.style.display = active ? DisplayStyle.Flex : DisplayStyle.None;
-            ledgerDrawer.Tick(active, root, alerts.LastCount);
             if (!active)
             {
                 NavigationRect = ResourcesRect = Rect.zero;
                 campStatus.Tick(Camp, false, SheetHost.PanelScale);
-                buildingStatus.Hide(); alerts.Hide(); return;
+                alerts.Hide(); return;
             }
             float scale = SheetHost.PanelScale;
             var safe = Screen.safeArea;
@@ -154,7 +148,6 @@ namespace SeaSick.UI.Sheets
                 claim = Union(claim, NextCard.Rect);
                 HudLayout.ClaimSheet(claim);
             }
-            buildingStatus.Tick(Camp, scale);
             if (Time.unscaledTime < nextUpdate) return;
             nextUpdate = Time.unscaledTime + .25f;
             alerts.Refresh(Camp);
@@ -361,7 +354,7 @@ namespace SeaSick.UI.Sheets
         {
             var c = camp;
             Sheets.Close();
-            if (c != null) Sheets.Open(new StoresSheet(c));
+            if (c != null) Sheets.Open(new BackpackSheet(c));
         }
     }
 }

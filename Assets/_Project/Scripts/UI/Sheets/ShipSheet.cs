@@ -8,31 +8,31 @@ using UnityEngine.UIElements;
 
 namespace SeaSick.UI.Sheets
 {
-    /// **The Manifest, on one page (2026-09-27, menu rework #7).**
+    /// **The Ship sheet, slimmed (2026-09-30, island UI phase 4).**
     ///
-    /// It was three tabs (hold / cargo / crew, each paging itself) under four
-    /// equal buttons, and `FireSheet` embedded a second copy of all three.
-    /// Now it is one Midnight `.st` card, as Kevin approved in the mockup:
+    /// It was the Manifest: pills, a hold card (Load all, Deck cargo), an
+    /// "Ashore" goods grid and the crew. Rule 3 ("one home per topic") gave
+    /// every good and every cargo control to the Backpack, so this is now:
     ///
     /// 1. **header** -- ship glyph, where she lies, a pill (at the pier /
     ///    at anchor, "· home" at her home berth);
     /// 2. **pills** -- Shipyard (its blocker in the pill itself: there is no
     ///    hover on a phone), Make home berth (tap twice), Repair hull when
     ///    there is something to mend;
-    /// 3. **the hold card** -- "Hold n / cap", the bar, what loading is
-    ///    doing, and two pills: Load all (Stop while loading) · Deck cargo;
-    /// 4. **Ashore** -- the camp's goods as item tiles: tap = load that kind
-    ///    (`CampLoading.BeginOne`), hold = cycle what stays ashore
-    ///    (all sails / half / none, `CampLoading.SetStopAt`);
-    /// 5. **Crew** -- villager tiles, aboard first (blue border): tap an
+    /// 3. **one link row** -- "Cargo · 12/34 ->", which opens the Backpack on
+    ///    the ship side (`BackpackSheet`); dimmed while no camp lies
+    ///    alongside;
+    /// 4. **Crew** -- villager tiles, aboard first (blue border): tap an
     ///    aboard one to put them ashore (`Outpost.Station`), an ashore one to
     ///    bring them aboard (`Outpost.Recall`);
-    /// 6. **thumb row** -- All ashore · **Cast off**.
+    /// 5. **thumb row** -- All ashore · **Cast off**.
     ///
     /// A grid longer than its six tiles pages: its last tile turns "More".
+    /// (The old hold line glued "Hold 0 / 34" to "Room for 34" with no gap;
+    /// that card is gone, and the Backpack's ship head is one string.)
     public class ShipSheet : ISheetFramed
     {
-        public string Title => "Manifest";
+        public string Title => "Ship";
         public string[] TabLabels => null;
         public int Tab => 0;
         public void SetTab(int index) { }
@@ -73,7 +73,7 @@ namespace SeaSick.UI.Sheets
 
         public VisualElement BuildHeader()
         {
-            head = CardKit.Head("ship", "Manifest");
+            head = CardKit.Head("ship", "Ship");
             FillHeader();
             return head.Root;
         }
@@ -101,10 +101,9 @@ namespace SeaSick.UI.Sheets
 
         VisualElement pills;
         Button yardPill, homePill, repairPill;
-        Label holdT, holdS;
-        CardKit.Bar holdBar;
-        Button loadPill, deckPill;
-        Paged cargo, crew;
+        Button cargoLink;
+        Label cargoLinkT, cargoLinkArrow;
+        Paged crew;
         Button ashoreBtn;
         VisualElement root, toast;
         Label toastText;
@@ -125,24 +124,23 @@ namespace SeaSick.UI.Sheets
             repairPill = CardKit.Pill(pills, "Repair hull", () => { SheetBits.ToggleRepair(Anchor); Refresh(); });
             col.Add(pills);
 
-            // --- the hold
-            var card = StationPage.Card();
-            card.AddToClassList("ck-card");
-            holdT = StationPage.Text("", "hs-now-t");
-            holdS = StationPage.Text("", "hs-now-s");
-            card.Add(holdT);
-            holdBar = new CardKit.Bar(card);
-            card.Add(holdS);
-            var holdPills = WatchTiles.Box("ck-pills");
-            holdPills.pickingMode = PickingMode.Position;
-            loadPill = CardKit.Pill(holdPills, "Load all", LoadPressed, "ice");
-            deckPill = CardKit.Pill(holdPills, "Deck cargo", ToggleDeck);
-            card.Add(holdPills);
-            col.Add(card);
-
-            // --- ashore
-            CardKit.Eye(col, "ASHORE", "tap to load · hold: keep some");
-            cargo = new Paged(CardKit.Grid(col), false, TapCargo, HoldCargo);
+            // --- the one cargo link: goods live in the Backpack
+            cargoLink = new Button(OpenCargo);
+            cargoLink.AddToClassList("st-btn");
+            cargoLink.style.flexDirection = FlexDirection.Row;
+            cargoLink.style.alignItems = Align.Center;
+            cargoLink.style.justifyContent = Justify.SpaceBetween;
+            cargoLink.style.minHeight = 48f;
+            cargoLink.style.marginTop = 8f;
+            cargoLink.style.paddingLeft = 14f;
+            cargoLink.style.paddingRight = 14f;
+            cargoLinkT = new Label { pickingMode = PickingMode.Ignore };
+            cargoLinkT.style.whiteSpace = WhiteSpace.NoWrap;
+            cargoLinkArrow = new Label("→") { pickingMode = PickingMode.Ignore };
+            cargoLink.text = "";
+            cargoLink.Add(cargoLinkT);
+            cargoLink.Add(cargoLinkArrow);
+            col.Add(cargoLink);
 
             // --- crew
             CardKit.Eye(col, "CREW", "tap to move aboard / ashore");
@@ -184,8 +182,7 @@ namespace SeaSick.UI.Sheets
             FillHeader();
             if (root == null) return;
             FillPills();
-            FillHold(Voyage, camp);
-            FillCargo(camp);
+            FillCargoLink(Voyage, camp);
             FillCrew(camp);
         }
 
@@ -268,101 +265,32 @@ namespace SeaSick.UI.Sheets
             FillHeader();
         }
 
-        // --- the hold -------------------------------------------------------------------
+        // --- the cargo link -------------------------------------------------------------
 
-        void FillHold(VoyageManager v, Outpost camp)
+        /// "Cargo · 12/34 ->". The count is the hold's held / limit (the
+        /// deck-cargo limit when it is on); the whole row opens the Backpack
+        /// while a camp lies alongside, and is dimmed (a toast says why) otherwise.
+        void FillCargoLink(VoyageManager v, Outpost camp)
         {
-            if (v == null) { WatchTiles.Set(holdT, "No hold"); return; }
-            int room = CampLoading.RoomAboard(v);
-            int limit = v.TakeDeckCargo ? v.MaxHold : v.HoldCapacity;
-            WatchTiles.Set(holdT, $"Hold {v.TotalHeld} / {limit}");
-            holdBar.Set(limit > 0 ? (float)v.TotalHeld / limit : 0f, v.Overloaded ? CardKit.Ember : CardKit.Ice);
-            WatchTiles.Set(holdS, CampLoading.Busy
-                ? $"Loading · {CampLoading.Moved} aboard, room for {room}"
-                : room > 0
-                    ? $"Room for {room} · Load all takes the best first"
-                    : v.TakeDeckCargo
-                        ? "She is stuffed · nothing more will fit"
-                        : "The hold is at her line · deck cargo takes more");
-
-            bool alongside = camp != null && CampLoading.Alongside(camp);
-            string lt = CampLoading.Busy ? "Stop loading" : alongside ? "Load all" : "Moor to load";
-            if (loadPill.text != lt) loadPill.text = lt;
-            loadPill.SetEnabled(CampLoading.Busy || (alongside && room > 0));
-            CardKit.PillTone(loadPill, CampLoading.Busy ? "bad" : "ice");
-
-            string dt = v.TakeDeckCargo ? $"Deck cargo on · {v.MaxHold}" : "Deck cargo off";
-            if (deckPill.text != dt) deckPill.text = dt;
-            CardKit.PillTone(deckPill, v.TakeDeckCargo ? "wait" : null);
+            if (cargoLink == null) return;
+            int limit = v == null ? 0 : v.TakeDeckCargo ? v.MaxHold : v.HoldCapacity;
+            string t = v == null ? "Cargo · no hold" : "Cargo · " + v.TotalHeld + "/" + limit;
+            if (cargoLinkT.text != t) cargoLinkT.text = t;
+            bool open = camp != null && (camp.HasCamp || camp.Building) && camp.Ledger != null;
+            cargoLink.style.opacity = open ? 1f : 0.6f;
+            WatchTiles.Show(cargoLinkArrow, open);
         }
 
-        void LoadPressed()
-        {
-            if (CampLoading.Busy) { CampLoading.Cancel(); Refresh(); return; }
-            var camp = Camp;
-            if (camp == null) return;
-            if (!CampLoading.Begin(camp, Voyage, Hold)) ShowToast("Nothing to load");
-            Refresh();
-        }
-
-        void ToggleDeck()
-        {
-            var v = Voyage;
-            if (v == null) return;
-            v.TakeDeckCargo = !v.TakeDeckCargo;
-            if (v.TakeDeckCargo) ShowToast("She'll swim low and take water");
-            Refresh();
-        }
-
-        // --- ashore: the camp's goods ------------------------------------------------------
-
-        readonly List<string> ids = new List<string>();
-
-        void FillCargo(Outpost camp)
-        {
-            var l = camp != null ? camp.Ledger : null;
-            ids.Clear();
-            if (l != null)
-                foreach (var s in l.stores)
-                    if (s != null && s.whole > 0 && !string.IsNullOrEmpty(s.resource)) ids.Add(s.resource);
-            cargo.Fill(ids, (t, res) =>
-            {
-                int have = l.CountOf(res);
-                int cap = CampLoading.StopAt(res);
-                string keep = cap < 0 ? "Load" : cap <= 0 ? "keep all" : $"keep {cap}";
-                t.SetItem(res);
-                t.Set(StationPage.Cap(CampLoading.Lower(res)), $"{have} · {keep}");
-                t.State(false);
-                t.Root.EnableInClassList("hs-tile--out", cap == 0);
-            }, camp == null ? "No camp alongside" : "The camp is holding nothing");
-        }
-
-        void TapCargo(string res)
+        void OpenCargo()
         {
             var camp = Camp;
-            if (camp == null) return;
-            if (!CampLoading.Alongside(camp)) { ShowToast("Moor alongside to load"); return; }
-            if (CampLoading.StopAt(res) == 0) { ShowToast($"All {CampLoading.Lower(res)} stays ashore · hold to change"); return; }
-            if (!CampLoading.BeginOne(camp, Voyage, Hold, res)) ShowToast("No room aboard");
-            Refresh();
-        }
-
-        /// Long press: what SAILS -- all → half (keep half of what is piled
-        /// now) → none (keep the lot) → all.
-        void HoldCargo(string res)
-        {
-            var l = Camp != null ? Camp.Ledger : null;
-            if (l == null) return;
-            int ashore = l.CountOf(res);
-            int cap = CampLoading.StopAt(res);
-            string name = CampLoading.Lower(res);
-            if (cap < 0) { CampLoading.SetStopAt(res, ashore / 2); ShowToast($"Half the {name} sails, half stays"); }
-            else if (cap > 0) { CampLoading.SetStopAt(res, 0); ShowToast($"All {name} stays ashore"); }
-            else { CampLoading.SetStopAt(res, -1); ShowToast($"All {name} can sail"); }
-            Refresh();
+            if (camp == null || !(camp.HasCamp || camp.Building)) { ShowToast("Moor at a camp to move goods"); return; }
+            Sheets.Open(new BackpackSheet(camp, true));
         }
 
         // --- crew --------------------------------------------------------------------------
+
+        readonly List<string> ids = new List<string>();
 
         void FillCrew(Outpost camp)
         {

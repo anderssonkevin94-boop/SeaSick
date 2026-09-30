@@ -4,10 +4,12 @@ using UnityEngine.UIElements;
 
 namespace SeaSick.UI.Sheets
 {
-    /// **Shared bits of the Ledger drawer's CAMP pages, 2026-09-27**
-    /// (`BuildSheet`, `PeopleSheet`): the stylesheet, the header (☰, title,
-    /// subtitle, ✕) in the Overview/Station look, and the building glyph.
-    /// Nothing here decides anything; it only draws.
+    /// **Shared bits of the Camp pages, 2026-09-27** (`BuildSheet`,
+    /// `WorkersSheet`, the readout sheets): the stylesheet, the header (☰,
+    /// title, subtitle, ✕) in the Overview/Station look, the building glyph
+    /// and (since 2026-09-30, when the ledger drawer went) the painted ☰ /
+    /// gear / ✕ pictograms. **The ☰ opens the Camp sheet** (`CampSheet`, the
+    /// one camp hub). Nothing here decides anything; it only draws.
     internal static class CampPages
     {
         static StyleSheet style;
@@ -25,7 +27,8 @@ namespace SeaSick.UI.Sheets
             return e;
         }
 
-        /// ☰ · title / subtitle · ✕. `menu` opens the Ledger drawer.
+        /// ☰ · title / subtitle · ✕. The ☰ opens the Camp sheet
+        /// (`OpenLedger`; `menu` is kept for the callers' signatures).
         public static VisualElement Header(string titleText, out Label subtitle, Action menu)
         {
             var head = new VisualElement();
@@ -33,9 +36,9 @@ namespace SeaSick.UI.Sheets
             head.AddToClassList("cp-head");
             Styled(head);
 
-            var burger = new Button(() => menu?.Invoke()) { text = "", tooltip = "Ledger" };
+            var burger = new Button(() => menu?.Invoke()) { text = "", tooltip = "Camp" };
             burger.AddToClassList("cp-head-btn");
-            burger.Add(new LedgerDrawer.Glyph(LedgerDrawer.Glyph.Kind.Menu));
+            burger.Add(new Glyph(Glyph.Kind.Menu));
             head.Add(burger);
 
             var words = Classed(new VisualElement(), "cp-head-words");
@@ -89,12 +92,62 @@ namespace SeaSick.UI.Sheets
             return head;
         }
 
-        /// The drawer, through whichever hook is set (the page's own, else
-        /// the station page's), so ☰ is never a dead button.
+        /// **The ☰ chokepoint (2026-09-30, island UI phase 4).** Every sheet
+        /// header's ☰ / back button lands here and opens the Camp sheet.
+        /// `own` is the old per-sheet drawer hook, now unused; it stays so
+        /// the callers (`CampPages.Header(..., () => OpenLedger(hook, camp))`)
+        /// did not have to change.
         public static void OpenLedger(Action own, SeaSick.World.Outpost camp)
         {
-            if (own != null) { own(); return; }
-            StationPage.OpenLedgerFor(camp);
+            if (camp == null || camp.Ledger == null) return;
+            Sheets.Open(new CampSheet(camp));
+        }
+
+        /// The ☰, gear and ✕ pictograms, painted (no font glyphs). Moved
+        /// here from the deleted `LedgerDrawer` (2026-09-30); styled by the
+        /// `ledger-glyph` rule in Ledger.uss.
+        internal sealed class Glyph : VisualElement
+        {
+            public enum Kind { Menu, Gear, Close }
+            readonly Kind kind;
+
+            public Glyph(Kind kind)
+            {
+                this.kind = kind;
+                pickingMode = PickingMode.Ignore;
+                AddToClassList("ledger-glyph");
+                generateVisualContent += Draw;
+            }
+
+            void Draw(MeshGenerationContext ctx)
+            {
+                var p = ctx.painter2D;
+                float s = Mathf.Min(contentRect.width, contentRect.height) / 24f;
+                if (s <= 0f) return;
+                Vector2 V(float x, float y) => new Vector2(x * s, y * s);
+                void Line(float x, float y, float a, float b)
+                { p.BeginPath(); p.MoveTo(V(x, y)); p.LineTo(V(a, b)); p.Stroke(); }
+                p.strokeColor = MidnightLandHud.Pearl;
+                p.lineCap = LineCap.Round;
+                switch (kind)
+                {
+                    case Kind.Menu:
+                        p.lineWidth = 2.4f * s;
+                        Line(4, 6, 20, 6); Line(4, 12, 20, 12); Line(4, 18, 20, 18);
+                        break;
+                    case Kind.Close:
+                        p.lineWidth = 2.6f * s;
+                        Line(6, 6, 18, 18); Line(18, 6, 6, 18);
+                        break;
+                    default:
+                        p.lineWidth = 2.2f * s;
+                        p.BeginPath(); p.Arc(V(12, 12), 3f * s, 0, 360); p.Stroke();
+                        Line(12, 2, 12, 5); Line(12, 19, 12, 22); Line(2, 12, 5, 12); Line(19, 12, 22, 12);
+                        Line(4.9f, 4.9f, 7f, 7f); Line(17f, 17f, 19.1f, 19.1f);
+                        Line(4.9f, 19.1f, 7f, 17f); Line(17f, 7f, 19.1f, 4.9f);
+                        break;
+                }
+            }
         }
 
         /// **A building, drawn** (roof, walls, door), in ice -- the mockup's

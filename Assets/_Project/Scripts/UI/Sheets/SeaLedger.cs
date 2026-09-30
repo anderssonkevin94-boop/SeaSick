@@ -7,8 +7,8 @@ using UnityEngine.UIElements;
 namespace SeaSick.UI.Sheets
 {
     /// **The ledger at sea, 2026-09-27.** Kevin: *"let's do it."* The land
-    /// drawer (`LedgerDrawer`) is camp-first and ashore-only; this is its
-    /// SEA-first twin, in the same look (`Resources/UI/Ledger.uss`, the same
+    /// ledger was a camp-first drawer (replaced by the Camp sheet,
+    /// `CampSheet`, 2026-09-30); this is its SEA-first twin, in the same look (`Resources/UI/Ledger.uss`, the same
     /// classes), opened from the rail's **Ledger** button while she is under
     /// way (`Menus.PauseChip`). A separate class on purpose: the land drawer's
     /// CAMP rows are another session's, and a mode flag through them would
@@ -104,12 +104,12 @@ namespace SeaSick.UI.Sheets
             var gear = new Button(() => { Close(); SeaSick.UI.Menus.GameMenus.TogglePause(); });
             gear.AddToClassList("ledger-head-btn");
             gear.tooltip = "Settings and save";
-            gear.Add(new LedgerDrawer.Glyph(LedgerDrawer.Glyph.Kind.Gear));
+            gear.Add(new CampPages.Glyph(CampPages.Glyph.Kind.Gear));
             head.Add(gear);
             var close = new Button(Close);
             close.AddToClassList("ledger-head-btn");
             close.tooltip = "Close the ledger";
-            close.Add(new LedgerDrawer.Glyph(LedgerDrawer.Glyph.Kind.Close));
+            close.Add(new CampPages.Glyph(CampPages.Glyph.Kind.Close));
             head.Add(close);
             drawer.Add(head);
 

@@ -22,7 +22,7 @@ namespace SeaSick.UI.Sheets
     /// </list>
     ///
     /// Shown with the bar's own visibility (an island camp, no sheet open,
-    /// nothing being placed) and not over the open ledger drawer. Before a
+    /// nothing being placed). Before a
     /// camp exists there is no bar and no land HUD: at an anchored island
     /// with a surveyed site and no fire the card stands alone in the bar's
     /// slot as step 1, "Make camp", replacing the anchor prompt's old IMGUI
@@ -168,7 +168,7 @@ namespace SeaSick.UI.Sheets
                 bool noCamp = false, want;
                 if (blocked) want = false;
                 else if (MidnightLandHud.Active)
-                    want = ThumbBar.Visible && !LedgerDrawer.IsOpen && camp != null;
+                    want = ThumbBar.Visible && camp != null;
                 else
                     // No camp yet: the land HUD is off because there is no
                     // fire or blueprint (`SuppressLegacy`), not because the
@@ -236,7 +236,7 @@ namespace SeaSick.UI.Sheets
                         if (c.CanComplete) model.Part("ready", NextTone.Met);
                         else if (c.total > 0) model.Part($"{c.ready}/{c.total} ready", NextTone.Short);
                         var at = camp;
-                        model.tap = () => Sheets.Open(new CampOverviewSheet(at));
+                        model.tap = () => Sheets.Open(new CampSheet(at));   // its YOUR GOAL section
                         return true;
                     }
                 }

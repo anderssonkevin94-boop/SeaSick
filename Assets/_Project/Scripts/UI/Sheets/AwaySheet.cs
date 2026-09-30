@@ -146,7 +146,7 @@ namespace SeaSick.UI.Sheets
                 var camp = c.camp;
                 top.RegisterCallback<ClickEvent>(_ =>
                 {
-                    if (camp != null && camp.Ledger != null) Sheets.Open(new CampOverviewSheet(camp));
+                    if (camp != null && camp.Ledger != null) Sheets.Open(new CampSheet(camp));
                 });
             }
             card.Add(top);

@@ -86,12 +86,12 @@ namespace SeaSick.UI.Sheets
         Label subtitle;
 
         public VisualElement BuildHeader() =>
-            CampPages.Header("Mood", out subtitle, () => CampPages.OpenLedger(PeopleSheet.OpenLedger, outpost));
+            CampPages.Header("Mood", out subtitle, () => CampPages.OpenLedger(WorkersSheet.OpenLedger, outpost));
 
         public VisualElement BuildActions() =>
             SheetKit.Actions(SheetKit.Btn("All people", () =>
             {
-                if (outpost != null) Sheets.Open(new PeopleSheet(outpost, PeopleSheet.Filter.Unhappy));
+                if (outpost != null) Sheets.Open(new WorkersSheet(outpost, WorkersSheet.Filter.Unhappy));
             }));
 
         // --- body ----------------------------------------------------------------

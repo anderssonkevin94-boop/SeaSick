@@ -62,7 +62,7 @@ namespace SeaSick.UI.Sheets
             Rect.Contains(guiPoint) || CardRect.Contains(guiPoint) || NextCard.Blocks(guiPoint);
 
         /// Something stacked on the bar (the Next card) raises the reserve
-        /// so the food notice and the ledger drawer sit above it too. Called
+        /// so the food notice sits above it too. Called
         /// after the bar's own tick, the same frame.
         internal static void RaiseReserve(float panelUnits)
         {
@@ -171,18 +171,22 @@ namespace SeaSick.UI.Sheets
 
         // --- presses ---
 
-        static void PressCamp() => LedgerDrawer.ToggleActive();
+        /// **Camp opens the Camp sheet (2026-09-30, phase 4)**, the one camp
+        /// hub that replaced the ledger drawer.
+        static void PressCamp()
+        {
+            var camp = MidnightLandHud.Camp;
+            if (camp != null && camp.Ledger != null) Sheets.Open(new CampSheet(camp));
+        }
 
         static void PressBuild()
         {
-            LedgerDrawer.CloseActive();
             var camp = MidnightLandHud.Camp;
             if (camp != null) Sheets.Open(new BuildSheet(camp));
         }
 
         static void PressShip()
         {
-            LedgerDrawer.CloseActive();
             var sheet = SheetBootstrap.ShipFor();
             if (sheet != null) Sheets.Open(sheet);
         }
@@ -212,7 +216,7 @@ namespace SeaSick.UI.Sheets
                 bar.pickingMode = PickingMode.Position;
                 root.Add(bar);
 
-                camp = Btn(Glyph.Kind.Camp, "Camp", PressCamp, false, out _, "The camp ledger: overview, stores, people, gather, make");
+                camp = Btn(Glyph.Kind.Camp, "Camp", PressCamp, false, out _, "The camp: what needs you, the fire, the buildings, people, stores");
                 build = Btn(Glyph.Kind.Build, "Build", PressBuild, true, out _, "Build: put up a new building");
                 ship = Btn(Glyph.Kind.Ship, "Ship", PressShip, false, out _, "The ship: hold, crew, chart");
                 cancel = Btn(Glyph.Kind.Cancel, "Cancel", PressCancel, false, out _, "Stop placing");
@@ -263,7 +267,7 @@ namespace SeaSick.UI.Sheets
             }
 
             /// Once a frame from `SheetHost.LateUpdate`, BEFORE the land HUD
-            /// ticks, so the food notice and the ledger drawer read this
+            /// ticks, so the food notice reads this
             /// frame's reserve.
             public void Tick(VisualElement root)
             {
@@ -279,7 +283,6 @@ namespace SeaSick.UI.Sheets
                     seen = -1;
                 }
                 if (placing != shownPlacing || seen != stamp) Apply(placing);
-                if (!placing) camp.EnableInClassList("thumb-btn--on", LedgerDrawer.IsOpen);
 
                 float scale = SheetHost.PanelScale;
                 var safe = Screen.safeArea;

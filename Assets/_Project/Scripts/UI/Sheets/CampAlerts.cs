@@ -11,8 +11,8 @@ namespace SeaSick.UI.Sheets
     /// The same facts `FireSheet.CampWarning` joins into one line (builders
     /// short, angry hands, nobody on watch, idle hands), plus the raid and
     /// the food clock, each carrying WHERE it gets fixed. `AlertStrip` shows
-    /// the first three under the resource bar; the ledger drawer's Overview
-    /// row counts them. Ordered by how soon it hurts: a raid on the sand,
+    /// the first three under the resource bar; the Camp sheet lists them all
+    /// (NEEDS YOU), each with its fix button. Ordered by how soon it hurts: a raid on the sand,
     /// then an empty food pile, then the watch, then single hands, then
     /// the camp's missing places (no beds, store full), then angry hands.
     public static class CampAlerts
@@ -24,6 +24,10 @@ namespace SeaSick.UI.Sheets
             public string text;
             public Tone tone;
             public Func<ISheet> open;
+            /// **What the fix button says (2026-09-30, Camp sheet):** "Assign Bo",
+            /// "Build a hut", "Make gate", "Open". Null or empty = the sheet
+            /// labels it "Fix".
+            public string fixLabel;
         }
 
         /// True while `alerts` holds a live raid line for this camp (phase
@@ -55,15 +59,15 @@ namespace SeaSick.UI.Sheets
             if (l == null) return;
 
             if (RaidLive(camp, out string raid))
-                into.Add(new Alert { text = raid, tone = Tone.Raid, open = () => new RaidSheet(camp) });
+                into.Add(new Alert { text = raid, tone = Tone.Raid, open = () => new RaidSheet(camp), fixLabel = "Open" });
 
             if (l.hands.Count > 0)
             {
                 float days = SheetBits.FoodDays(l);
                 if (l.Hungry)
-                    into.Add(new Alert { text = "Out of food · hands hungry", tone = Tone.Bad, open = () => Larder(camp) });
+                    into.Add(new Alert { text = "Out of food · hands hungry", tone = Tone.Bad, open = () => Larder(camp), fixLabel = "Food" });
                 else if (days >= 0f && days < 1f)
-                    into.Add(new Alert { text = "Food · under a day", tone = Tone.Bad, open = () => Larder(camp) });
+                    into.Add(new Alert { text = "Food · under a day", tone = Tone.Bad, open = () => Larder(camp), fixLabel = "Food" });
             }
 
             // **Walled off (2026-09-30)**: Kevin's catch-up closed a palisade
@@ -80,7 +84,7 @@ namespace SeaSick.UI.Sheets
                 var at = l.HandAt(walled);
                 into.Add(new Alert
                 {
-                    text = "Walled off · needs a gate", tone = Tone.Bad,
+                    text = "Walled off · needs a gate", tone = Tone.Bad, fixLabel = "Make gate",
                     open = () =>
                     {
                         var seg = camp.NearestWall(at);
@@ -94,7 +98,7 @@ namespace SeaSick.UI.Sheets
             // (`OutpostLedger.Guard`), and the alert said "Nobody on watch"
             // while he stood at the tower -- his sheet names the slowness.
             if (l.HasWatchtower && SheetBits.Lookout(l) == null)
-                into.Add(new Alert { text = "Nobody on watch", tone = Tone.Warn, open = () => new LookoutSheet(camp) });
+                into.Add(new Alert { text = "Nobody on watch", tone = Tone.Warn, open = () => new LookoutSheet(camp), fixLabel = "Assign" });
 
             // One chip per stuck hand -- the hand is where the fix is (his
             // orders). A hunter with no spear gets the forge instead: the
@@ -108,14 +112,14 @@ namespace SeaSick.UI.Sheets
                 if (h.walkingIn) continue;
                 if (h.order == OutpostOrder.Gather && h.target == Res.Game && l.HunterBlocker() != null)
                 {
-                    into.Add(new Alert { text = "No spear · no hunting", tone = Tone.Bad, open = () => Forge(camp) });
+                    into.Add(new Alert { text = "No spear · no hunting", tone = Tone.Bad, open = () => Forge(camp), fixLabel = "Make spear" });
                     continue;
                 }
                 if (!l.Stalled(h) && string.IsNullOrEmpty(h.bodyBlocked)) continue;
                 string why = l.StallReason(h);
                 if (string.IsNullOrEmpty(why)) continue;
                 string who = h.name;
-                into.Add(new Alert { text = who + " · " + Short(why), tone = Tone.Bad, open = () => new HandSheet(camp, who) });
+                into.Add(new Alert { text = who + " · " + Short(why), tone = Tone.Bad, open = () => new HandSheet(camp, who), fixLabel = "Open" });
             }
             if (idle > 0)
             {
@@ -124,14 +128,15 @@ namespace SeaSick.UI.Sheets
                 {
                     text = idle == 1 ? who + " · idle" : $"{idle} hands idle",
                     tone = Tone.Warn,
-                    open = () => idle == 1 ? new HandSheet(camp, who) : People(camp, PeopleSheet.Filter.Stuck),
+                    fixLabel = idle == 1 ? "Assign " + who : "Assign",
+                    open = () => idle == 1 ? new HandSheet(camp, who) : People(camp, WorkersSheet.Filter.Stuck),
                 });
             }
             if (l.TimberStarved || l.StoneStarved)
                 into.Add(new Alert
                 {
                     text = "Builders short of " + (l.TimberStarved ? "timber" : "stone"),
-                    tone = Tone.Warn, open = () => ShortSite(camp),
+                    tone = Tone.Warn, open = () => ShortSite(camp), fixLabel = "Open",
                 });
             // Two more "the camp is short of a place" chips (2026-09-30, island
             // UI phase 3, rule 2: every problem carries its fix). Both open the
@@ -141,13 +146,13 @@ namespace SeaSick.UI.Sheets
                 into.Add(new Alert
                 {
                     text = $"{bedless} hand{(bedless == 1 ? "" : "s")} {(bedless == 1 ? "has" : "have")} no bed",
-                    tone = Tone.Warn, open = () => BuildList(camp, BuildPlans.Hut.id),
+                    tone = Tone.Warn, open = () => BuildList(camp, BuildPlans.Hut.id), fixLabel = "Build a hut",
                 });
             if (StoreFullText(l, out string full))
-                into.Add(new Alert { text = full, tone = Tone.Warn, open = () => BuildList(camp, BuildPlans.Storage.id) });
+                into.Add(new Alert { text = full, tone = Tone.Warn, open = () => BuildList(camp, BuildPlans.Storage.id), fixLabel = "Build storage" });
             int angry = l.AngryCount;
             if (angry > 0)
-                into.Add(new Alert { text = $"{angry} hand{(angry == 1 ? "" : "s")} angry", tone = Tone.Warn, open = () => People(camp, PeopleSheet.Filter.Unhappy) });
+                into.Add(new Alert { text = $"{angry} hand{(angry == 1 ? "" : "s")} angry", tone = Tone.Warn, open = () => People(camp, WorkersSheet.Filter.Unhappy), fixLabel = "Open" });
         }
 
         /// Living hands past the camp's beds (`HousingCapacity`); 0 when
@@ -231,11 +236,11 @@ namespace SeaSick.UI.Sheets
 
         /// Camp › People (2026-09-27; was the campfire sheet's hands tab),
         /// opened on a filter (idle → Stuck, angry → Unhappy; menu rework #4).
-        internal static ISheet People(Outpost camp, PeopleSheet.Filter filter = PeopleSheet.Filter.All) =>
-            camp != null ? new PeopleSheet(camp, filter) : null;
+        internal static ISheet People(Outpost camp, WorkersSheet.Filter filter = WorkersSheet.Filter.All) =>
+            camp != null ? new WorkersSheet(camp, filter) : null;
 
         /// The food chips (menu rework #4): the Larder, not the roster.
-        internal static ISheet Larder(Outpost camp) => camp != null ? new LarderSheet(camp) : null;
+        internal static ISheet Larder(Outpost camp) => camp != null ? new FoodSheet(camp) : null;
 
         /// "Builders short of X" (menu rework #5): the blueprint the
         /// builders are serving (`OutpostLedger.Focus`), on its own site
