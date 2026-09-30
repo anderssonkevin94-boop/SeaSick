@@ -615,6 +615,15 @@ namespace SeaSick.World
                 wait = 0f;
             }
 
+            // **Never under the ground (2026-09-30).** Something outside the
+            // camp that moves a body (a deck snap, `CrewAgent.Start`) can
+            // leave it buried, and a body that then never steps -- pinned by
+            // the wall guard, working at a pickup, holding at a full store --
+            // is never re-grounded by `Walk`. `BodyAt` already refuses to
+            // book a spot that deep (`Outpost.WalkerSpotOk`), so the books
+            // still have him where he really was: put the body back there.
+            HealBuried(r);
+
             // **This body is the walker** (2026-09-27): where he stands is
             // where the books have him, and the ledger leaves his legs to him.
             camp.Ledger?.BodyAt(r, transform.position);
@@ -741,6 +750,31 @@ namespace SeaSick.World
                 case OutpostOrder.Work: TickWork(r, dt); return;
                 default: TickErrand(r, dt); return;
             }
+        }
+
+        /// Deeper than this under the terrain is buried, not a foot on a slope.
+        const float BuriedMetres = 1f;
+
+        /// **A buried body goes back to where the books have him
+        /// (2026-09-30)** -- his booked spot (`OutpostLedger.HandAt`, which
+        /// `BodyAt` never overwrote with the buried one), on the ground;
+        /// straight up where he stands if that spot is buried too. One
+        /// terrain sample a frame. See the call in `Update`.
+        void HealBuried(OutpostHand r)
+        {
+            if (!camp.HasGround) return;
+            Vector3 p = transform.position;
+            if (p.y >= camp.GroundAt(p) - BuriedMetres) return;
+            Vector3 to = p;
+            var ledger = camp.Ledger;
+            if (ledger != null && r.wHas)
+            {
+                Vector3 booked = ledger.HandAt(r);
+                if (camp.WalkerSpotOk(booked, false)) to = booked;
+            }
+            to.y = WorkerPad.Foot(to, camp.GroundAt(to));
+            transform.position = to;
+            ClearRoute();
         }
 
         /// Nothing to do: stand where the camp put you, and shift about a bit

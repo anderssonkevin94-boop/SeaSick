@@ -586,7 +586,18 @@ namespace SeaSick.Crew
             if (tintRenderers == null || tintRenderers.Length == 0)
                 tintRenderers = FindSkinRenderers();
             if (animator == null) animator = GetComponentInChildren<Animator>();
-            transform.localPosition = stationLocal;
+            // **Not at a camp (2026-09-30).** Kevin's phone: villagers "glitched
+            // under the ground", sheets busy/stuck. A body whose FIRST
+            // activation is at a camp -- every born villager
+            // (`BornVillager.Make` clones it inactive under the outpost), and
+            // any body first shown there -- ran this snap one frame after
+            // `ArrangeHands` had stood it by the fire, and the deck's
+            // `stationLocal` under the outpost's transform (sea level, the
+            // island's edge) put it ~5 m under the terrain 50 m out, often
+            // the far side of the palisade: pinned by the wall guard it never
+            // took a step and so was never re-grounded. The same `AtCamp`
+            // guard every other deck snap already has.
+            if (!AtCamp) transform.localPosition = stationLocal;
             // Seeded off the name so a given crew member always breaks at the
             // same point — variety between people, not between playthroughs.
             pukeJitter = (Mathf.Abs(DisplayName.GetHashCode() % 100) / 100f - 0.5f) * 0.08f;

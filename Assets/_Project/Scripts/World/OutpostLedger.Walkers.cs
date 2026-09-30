@@ -570,9 +570,16 @@ namespace SeaSick.World
         /// no NEW trip starts off-hours -- every dispatch spends a budget
         /// that is still 0 then. Busy hands (downed, pouting...) are left
         /// at their honest zero.
+        ///
+        /// **A pouting hand's meal (2026-09-30)** is finished at full pace
+        /// too, watched: `StepStations` already does that for the invisible
+        /// walker, and the body now walks it (`CampWorker.TickPout`) --
+        /// with his honest zero the stoop at the store never ended and he
+        /// stood there starving.
         float FinishScale(OutpostHand h)
         {
             float s = TripScale(h);
+            if (s <= 0f && h != null && h.pouting && h.eating && h.Hauling) return 1f;
             if (s > 0f || h == null || h.Busy || !h.Hauling || h.orderOverride) return s;
             return DayNightWorkScale <= 0f ? 1f : s;
         }
