@@ -256,7 +256,16 @@ namespace SeaSick.Ship
 
         public bool Rowing { get; set; }
         public float RowSpeed => rowSpeed;
-        public float OarPower01 => roster != null ? roster.Labour01 : 1f;
+        public float OarPower01 => roster != null
+            ? Mathf.Max(HandlingTuning.captainAloneThrottle, roster.Labour01) : 1f;
+        /// The most the telegraph can order, either way, in units of full ahead.
+        /// **Captain alone can sail** (2026-09-30): with no hands aboard it is
+        /// `HandlingTuning.captainAloneThrottle` (she sails slowly and steers);
+        /// with any crew it is the burn ceiling, as it always was.
+        public float ThrottleCeiling => roster != null && roster.CrewCount == 0
+            ? Mathf.Min(overdrive, HandlingTuning.captainAloneThrottle) : overdrive;
+        /// True when nobody but the captain is aboard (the HUD hint reads this).
+        public bool SailingAlone => roster != null && roster.CrewCount == 0;
         public Vector3? AutopilotTarget { get; set; }
         public float CurrentSpeed { get; private set; }
         public float Heading => transform.eulerAngles.y;
@@ -676,10 +685,15 @@ namespace SeaSick.Ship
             // Ahead clamps at the OVERDRIVE ceiling, not at 1: the burn notch
             // is an order above full ahead, and the ramp walks to it the same
             // way it walks to any other.
-            ThrottleOrder = Mathf.Clamp(ThrottleOrder, -1f, overdrive);
+            // 2026-09-30 **Captain alone can sail**: with 0 hands `Labour01` was
+            // 0, so the ramp never moved and a crewless ship drifted. The
+            // ceiling is the captain floor with nobody aboard, and the ramp
+            // never runs slower than the floor either.
+            float ceiling = ThrottleCeiling;
+            ThrottleOrder = Mathf.Clamp(ThrottleOrder, -Mathf.Min(1f, ceiling), ceiling);
             if (roster == null) { Throttle = ThrottleOrder; return; }
             Throttle = Mathf.MoveTowards(
-                Throttle, ThrottleOrder, sailTrimRate * roster.Labour01 * dt);
+                Throttle, ThrottleOrder, sailTrimRate * OarPower01 * dt);
         }
 
         void Update()

@@ -319,7 +319,7 @@ namespace SeaSick.UI.Sheets
                 t.Set(who, sub);
                 t.State(isAboard);
                 t.Root.EnableInClassList("hs-tile--out", isAboard ? !camped : camp == null || camp.BodyNamed(who) == null);
-            }, "Nobody aboard or ashore");
+            }, "Sailing alone: slow. Hands make her faster."); // 2026-09-30: the captain alone can sail
 
             ashoreBtn.SetEnabled(aboard > 0 && camped);
         }

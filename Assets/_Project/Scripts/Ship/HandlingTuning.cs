@@ -45,6 +45,12 @@ namespace SeaSick.Ship
         /// ShipMotor.turnHeel = 5 (measured 24.6 deg steady on the brig).
         ///                                                          range 0..20
         public static float turnHeelDegrees = 6f;
+        /// **Captain alone can sail** (Kevin, 2026-09-30): the fraction of full
+        /// ahead/astern the telegraph can reach with NO hands aboard, and the
+        /// least the oars and the throttle ramp ever scale to when the crew
+        /// are sick or at the rail. Hands lift the ceiling to full, as before;
+        /// nothing ever drops below this.                          range 0.1..1
+        public static float captainAloneThrottle = 0.35f;
         /// Multiplies acceleration (propulsive side only).          range 0.3..3
         public static float accelScale = 2.15f;
         /// Multiplies top speed.                                  range 0.5..1.5
