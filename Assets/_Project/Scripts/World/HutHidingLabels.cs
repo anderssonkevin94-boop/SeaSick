@@ -37,6 +37,13 @@ namespace SeaSick.World
             SceneManager.sceneLoaded += OnSceneLoaded;
         }
 
+        static bool RaidOn(Outpost o)
+        {
+            var party = RaidParty.Active;
+            if (party != null && party.Camp == o) return true;
+            return RaidDirector.Incoming(o) != null && RaidDirector.WarnedOf(o);
+        }
+
         static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
             instance = null;
@@ -59,6 +66,10 @@ namespace SeaSick.World
             foreach (var o in Outpost.All)
             {
                 if (o == null || o.Ledger == null || o.Ledger.hands == null) continue;
+                // Only while raiders are coming or ashore (Kevin, 2026-09-30):
+                // hands asleep in a hut are inside too, and "2 hiding" over
+                // sleepers made no sense.
+                if (!RaidOn(o)) continue;
                 foreach (var h in o.Ledger.hands)
                 {
                     if (h == null || !h.hiddenInHut) continue;

@@ -147,6 +147,10 @@ namespace SeaSick.Ship
             if (!Flooding && !overloaded) return;
 
             if (voyage == null || voyage.TotalHeld <= 0) return;
+            // Not over the camp (Kevin, 2026-09-30): the anchored ship's
+            // jettison button floated over the island as a stray
+            // "over the side · 5" pill. It is a sea control.
+            if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
             // Same IMGUI-blind-spot suppression as the rest of the HUD
             // (2026-09-26 review): a "jettison cargo" prompt is exactly the
             // kind of thumb-reachable button that must not poke through a

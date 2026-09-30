@@ -5,8 +5,11 @@ using UnityEngine.UIElements;
 
 namespace SeaSick.UI.Sheets
 {
-    // Pooled BUILDING annotations and station assignment buttons ("No worker · Assign",
-    // "Needs supplies", "Output full"). No per-villager status words (Kevin, 2026-09-30).
+    // Pooled station assignment buttons over buildings ("No worker · Assign"). No
+    // per-villager status words (Kevin, 2026-09-30), and no text-only signs either:
+    // "Needs supplies", "Output full" and the blueprint warnings made the screen
+    // "busy and muddy" (Kevin, 2026-09-30) -- they live on the building's sheet,
+    // the Camp drawer and the alert strip.
     internal sealed class BuildingStatusLabels
     {
         const int Limit = 12;
@@ -82,20 +85,8 @@ namespace SeaSick.UI.Sheets
                     var building = camp.Built[i];
                     if (building == null) continue;
                     string status = Status(camp.Ledger, camp.Ledger.StationForRaised(i));
-                    if (status != null) warnings.Add((building.transform.position, status, camp.Ledger.StationForRaised(i)));
+                    if (status == "No worker") warnings.Add((building.transform.position, status, camp.Ledger.StationForRaised(i)));
                 }
-                // **A blueprint nothing can supply** (Kevin, 2026-09-27): a
-                // small warning over the site; the reason is on its sheet.
-                var sites = camp.Ledger != null ? camp.Ledger.sites : null;
-                if (sites != null)
-                    foreach (var site in sites)
-                    {
-                        string issue = camp.Ledger.SiteIssueShort(site);
-                        if (issue == null) continue;
-                        var at = site.At;
-                        at.y = camp.GroundAt(at);
-                        warnings.Add((at, issue, null));
-                    }
             }
             occupied.Clear();
             int count = 0;
