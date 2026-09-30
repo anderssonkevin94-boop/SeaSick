@@ -357,6 +357,19 @@ namespace SeaSick.CameraRig
         /// the lower half of the screen with it.
         public static bool Engaged { get; private set; }
 
+        /// **When the player last moved the view by hand (2026-09-30, island
+        /// UI phase 6 gesture hints).** `Time.unscaledTime` of the last drag
+        /// pan (`GrabMove`, or a held arrow key), the last zoom or turn
+        /// (`ZoomAt`, `OrbitAbout`, `Nudge`), and the last double-tap fly
+        /// (`FlyTo`); -1 before the first. `GestureHintPill` reads them to
+        /// retire "Drag to look around" / "Double-tap the ground to fly
+        /// there" once each gesture has been done. Written only; nothing here
+        /// reads them back.
+        public static float PannedAt = -1f, LookedAt = -1f, FlewAt = -1f;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetGestureStamps() => PannedAt = LookedAt = FlewAt = -1f;
+
         /// **An extra disc `ClampPivot` may also reach, on top of the
         /// ship/island ones (2026-09-27).** Null and 0 do nothing -- see
         /// `Outpost.WallExtentFromCentre` and `ClampPivot`'s own comment.
@@ -548,6 +561,7 @@ namespace SeaSick.CameraRig
             MovePivot(delta);
             HoldUnder(screen, grabPoint, 3);
             Record(Pivot);
+            if (delta.sqrMagnitude > 1e-6f) PannedAt = LookedAt = Time.unscaledTime;
         }
 
         /// **Slide the pivot until `world` sits under `screen` in the pose that
@@ -636,6 +650,7 @@ namespace SeaSick.CameraRig
 
             Ground = wantGround = g1;
             SetPivot(RotateAbout(scaled, c, azimuthDeg, t0, azimuthDeg, t1));
+            LookedAt = Time.unscaledTime;
             // The rigid answer, then what the yield did to it -- see `HoldUnder`.
             if (overGround) HoldUnder(screen, c, 2);
         }
@@ -653,6 +668,7 @@ namespace SeaSick.CameraRig
             // half is dropped at the door -- see `IslandCamLock`.
             if (IslandCamLock.locked) dTiltDeg = 0f;
             Drive();
+            LookedAt = Time.unscaledTime;
             if (!orbiting)
             {
                 KillMotion();
@@ -748,6 +764,7 @@ namespace SeaSick.CameraRig
             if (!focus.HasValue) return;
             PanTo(ClampPivot(h) - focus.Value);
             ZoomTo(Mathf.Min(Ground, Feel.flyToGround));
+            FlewAt = Time.unscaledTime;
         }
 
         /// Held-key motion, in the frame's own axes: x right, z up the screen,
@@ -762,6 +779,8 @@ namespace SeaSick.CameraRig
             if (x == 0f && z == 0f && orbit == 0f && tilt == 0f && zoom == 0f) return;
             Drive();
             KillMotion();
+            LookedAt = Time.unscaledTime;
+            if (x != 0f || z != 0f) PannedAt = LookedAt;
 
             if (x != 0f || z != 0f)
             {

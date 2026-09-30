@@ -34,6 +34,9 @@ namespace SeaSick.UI.Sheets
         bool shown = true;
         bool refusing;
 
+        /// On screen this frame (the gesture hint stands aside for it).
+        public bool Shown => shown;
+
         public CarryPill(VisualElement root)
         {
             holder = new VisualElement { pickingMode = PickingMode.Ignore };
@@ -92,7 +95,9 @@ namespace SeaSick.UI.Sheets
             if (width > MaxWidth) { left += (width - MaxWidth) * 0.5f; width = MaxWidth; }
             holder.style.left = left;
             holder.style.width = width;
-            holder.style.bottom = Mathf.Max(bottom, ThumbBar.ReservePanel);
+            // Above the food-draft notice too, when one is up (2026-09-30:
+            // the pill sat across "Food low -- villagers gathering food").
+            holder.style.bottom = Mathf.Max(bottom, Mathf.Max(ThumbBar.ReservePanel, CampStatusHud.TopPanel));
         }
     }
 }

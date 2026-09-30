@@ -52,7 +52,17 @@ namespace SeaSick.UI.Sheets
             message = null; nextRefresh = 0f;
         }
 
-        public void Hide() { footer.style.display = DisplayStyle.None; }
+        public void Hide() { footer.style.display = DisplayStyle.None; TopPanel = 0f; }
+
+        /// **Top of the food-draft notice, in panel units up from the panel's
+        /// bottom; 0 while it is hidden (2026-09-30).** `GestureHintPill`
+        /// stacks above it rather than hiding for as long as a draft lasts
+        /// (one can last days). Written by the last `Tick`, one frame stale
+        /// for anything ticked before the land HUD.
+        public static float TopPanel { get; private set; }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetTop() => TopPanel = 0f;
 
         public Rect Tick(Outpost camp, bool active, float scale)
         {
@@ -80,6 +90,7 @@ namespace SeaSick.UI.Sheets
             // Use actual wrapped height after layout, with a first-frame fallback.
             float height = footer.resolvedStyle.height;
             if (float.IsNaN(height) || height <= 0) height = 64f;
+            TopPanel = bottom + height;
             return new Rect(safe.xMin + 8f / scale, Screen.height - (bottom + height) / scale,
                 safe.width - 16f / scale, height / scale);
         }

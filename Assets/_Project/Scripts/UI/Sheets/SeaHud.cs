@@ -190,6 +190,9 @@ namespace SeaSick.UI.Sheets
                 seaItem.AddToClassList("sea-top-place");
                 top.Add(seaItem);
                 dayItem = Box("sea-top-item");
+                // Never the one that gives way (2026-09-30: "BREAKERS" cut
+                // it to "Day 1..."); the sea word shrinks first.
+                dayItem.AddToClassList("sea-top-day");
                 dayText = Text(dayItem, "sea-top-text");
                 dayText.AddToClassList("sea-top-text--plain");
                 top.Add(dayItem);
@@ -518,7 +521,10 @@ namespace SeaSick.UI.Sheets
                 // (the chart is where the mockup's chip would be).
                 float chipTop = AlertTop;
                 var chart = ChartInstrument.ScreenRect;
-                if (!wide && chart.height > 0f && chart.x < laneX + 120f * ppd)
+                // On a desk too (2026-09-30): there the chip hugs the safe
+                // left edge (`CombatHud.Place`), right on the chart.
+                float chipX = wide ? safe.xMin + CombatHud.Side * ppd : laneX;
+                if (chart.height > 0f && chart.x < chipX + 120f * ppd)
                     chipTop = Mathf.Max(chipTop, (chart.yMax - guiTop) / ppd + 30f);
                 CombatHud.TopPx = chipTop;
 
@@ -526,6 +532,10 @@ namespace SeaSick.UI.Sheets
                 var h0 = Helm();
                 bool hintOn = helmOn && h0 != null && !CombatHud.Visible
                               && GestureHints.ShowOnce(GestureHints.Stick, h0.StickInUse);
+                // Retires after `GestureHints.ShowSeconds` on screen even if
+                // the stick is never used (Kevin, 2026-09-30: every hint
+                // "auto-hides after the gesture is done once, or after ~6 s").
+                if (hintOn && GestureHints.Shown(GestureHints.Stick, Time.unscaledDeltaTime)) hintOn = false;
                 Show(hint, ref hintShown, hintOn);
                 if (hintOn)
                 {
@@ -540,6 +550,13 @@ namespace SeaSick.UI.Sheets
 
                 // --- keep what is left of the IMGUI HUD above all of this
                 float reserve = Mathf.Max(cardTop, helmOn ? safe.yMin + (HelmBottom + helmH) * ppd : 0f) - safe.yMin;
+                // The combat row sits above the helm row: the reserve covers it
+                // too (2026-09-30), and it is the one rect `HudOverlapProbe`
+                // sees for both -- the row used to declare its own rect inside
+                // this one, which the probe (rightly) reads as two placed
+                // panels on top of each other.
+                if (CombatHud.Visible && CombatHud.Rect.height > 0f)
+                    reserve = Mathf.Max(reserve, Screen.height - CombatHud.Rect.yMin - safe.yMin);
                 if (reserve > 1f)
                 {
                     HudLayout.Place(HudLayout.Slot.Wheel, laneW, Mathf.Max(1f, reserve - HudLayout.Pad));
@@ -660,7 +677,10 @@ namespace SeaSick.UI.Sheets
 
                 var hull = motor != null ? motor.GetComponent<HullIntegrity>() : null;
                 int pct = hull != null ? Mathf.RoundToInt(hull.Integrity01 * 100f) : 100;
-                if (pct < 100) { count++; if (first == AlertKind.None) first = AlertKind.Hull; }
+                // Below 95 % only (2026-09-30): one scrape put an ember "Hull
+                // 99% · repair" up for the rest of the voyage. The Ship sheet
+                // still shows every point.
+                if (pct < 95) { count++; if (first == AlertKind.None) first = AlertKind.Hull; }
 
                 var v = SheetBits.Voyage;
                 bool over = v != null && v.Overloaded && v.TotalHeld > 0;

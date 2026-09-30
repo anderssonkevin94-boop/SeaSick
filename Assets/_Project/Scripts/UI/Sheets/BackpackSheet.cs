@@ -440,6 +440,7 @@ namespace SeaSick.UI.Sheets
         {
             var l = L;
             if (l == null) return;
+            GestureHints.MarkDone(GestureHints.Keep);
             int ashore = l.StoreCountOf(res);
             int cap = CampLoading.StopAt(res);
             if (cap < 0) CampLoading.SetStopAt(res, ashore / 2);
@@ -503,6 +504,9 @@ namespace SeaSick.UI.Sheets
 
         const string InfoHint = "Tap a tile for details · hold an island tile to keep some ashore";
         const string ShipOnlyHint = "What she carries. Tap a tile for details.";
+        const string KeepHint = "Hold a tile to keep some ashore";
+        /// When the keep hint was last drawn (-1: not showing).
+        float hintAt = -1f;
 
         void RefreshInfo(OutpostLedger l)
         {
@@ -516,6 +520,24 @@ namespace SeaSick.UI.Sheets
                     : ShipOnlyHint;
                 return;
             }
+            // **The one-time hold hint (2026-09-30, island UI phase 6).** The
+            // first open with island tiles, the info line becomes a calm pill,
+            // "Hold a tile to keep some ashore" (`GestureHints.Keep`), until a
+            // hold cycles a keep (`CycleKeep`) or it has stood ~6 s on screen.
+            // Same slot as the line it replaces, so nothing re-lays out.
+            bool hint = !onShipPage && scratch.Count > 0 && string.IsNullOrEmpty(selected)
+                        && !GestureHints.IsDone(GestureHints.Keep);
+            float now = Time.unscaledTime;
+            if (hint)
+            {
+                float dt = hintAt >= 0f ? now - hintAt : 0f;
+                hintAt = now;
+                if (GestureHints.Shown(GestureHints.Keep, dt)) hint = false;
+            }
+            else hintAt = -1f;
+            infoLine.EnableInClassList("pack-hint", hint);
+            infoLine.EnableInClassList("pack-empty", !hint);
+            if (hint) { infoLine.text = KeepHint; return; }
             if (string.IsNullOrEmpty(selected) || l == null || !ResDefs.TryGet(selected, out var def))
             {
                 infoLine.text = InfoHint;

@@ -116,7 +116,12 @@ namespace SeaSick.UI.Sheets
             // too, where there is no camp and so no land HUD: without the
             // class its frame fell back to the cream sea card under the
             // page's pale midnight text (2026-09-30 screenshot pass).
-            root.EnableInClassList("midnight-land", active || LandingPartySheet.IsOpen);
+            // **And every sheet at sea (2026-09-30, phase 6 pass).** The Ship
+            // sheet ("at sea") and the ship-only Backpack open with no camp
+            // too, and came up as a cream card with a white, unreadable
+            // title. Every sheet is the house (midnight) look now; the class
+            // only scopes `.sheet-*` rules, so nothing else at sea moves.
+            root.EnableInClassList("midnight-land", active || LandingPartySheet.IsOpen || Sheets.Current != null);
             top.style.display = active ? DisplayStyle.Flex : DisplayStyle.None;
             if (!active)
             {

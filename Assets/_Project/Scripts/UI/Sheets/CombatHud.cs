@@ -395,9 +395,10 @@ namespace SeaSick.UI.Sheets
                 else ChipRect = Rect.zero;
 
                 Visible = true;
-                // Put the row on the overlap probe's record (the IMGUI HUD
-                // avoids nothing here; this is for `HudOverlapProbe`).
-                HudLayout.Declare("CombatHud", Rect);
+                // Not declared on its own any more (2026-09-30): `SeaHud`'s
+                // Wheel reserve, ticked right after, grows to cover this row,
+                // and that reserve is what the IMGUI HUD and
+                // `HudOverlapProbe` see.
             }
         }
     }

@@ -382,3 +382,24 @@
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
 .carry-pill--no .carry-text { color: rgb(246, 146, 128); }
+
+/* ---------------- one-time gesture hints (island UI restructure 6, 2026-09-30) ----------------
+   GestureHintPill.cs: the carry pill's shape, calmer -- a see-through slate,
+   a faint ice rim, lighter type -- so it reads as a whisper, not an order.
+   Never takes a touch. BackpackSheet's info line borrows .hint-pill as a
+   one-off label (.pack-hint) the first time it opens with island tiles. */
+.hint-pill {
+    min-height: 38px; padding: 6px 16px;
+    background-color: rgba(22, 41, 58, 0.86); border-color: rgba(164, 210, 232, 0.55); border-width: 1px;
+}
+.hint-text {
+    font-size: 16px; color: rgb(214, 232, 240);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
+.pack-hint {
+    align-self: center; margin: 2px 0 6px 0; padding: 5px 14px; min-height: 0;
+    font-size: 14px; color: rgb(214, 232, 240); -unity-text-align: middle-center;
+    background-color: rgba(22, 41, 58, 0.86); border-width: 1px; border-color: rgba(164, 210, 232, 0.55);
+    border-radius: 16px;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}

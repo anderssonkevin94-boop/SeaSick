@@ -54,6 +54,8 @@ namespace SeaSick.UI.Sheets
         readonly Label label;
         readonly Label reason;
         readonly CarryPill carry;
+        /// The one-time gesture hints (2026-09-30), in the carry pill's spot.
+        readonly GestureHintPill hints;
         bool shown = true;
         float textFor = -999f;
         float bannerFor = -999f;
@@ -91,6 +93,7 @@ namespace SeaSick.UI.Sheets
 
             root.Add(card);
             carry = new CarryPill(root);
+            hints = new GestureHintPill(root);
             Hide();
         }
 
@@ -117,6 +120,7 @@ namespace SeaSick.UI.Sheets
         {
             Banner.UiDrawing = Time.unscaledTime;
             carry.Tick(root);
+            hints.Tick(root, carry.Shown);
 
             var camp = CampToasts.Here();
             bool party = GatherParty.ReportFresh

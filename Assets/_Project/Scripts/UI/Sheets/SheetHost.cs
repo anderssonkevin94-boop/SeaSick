@@ -721,7 +721,10 @@ namespace SeaSick.UI.Sheets
             var size = HudLayout.Wide
                 ? new Vector2(safe.width * Third - Margin * 2f, safe.height - Margin * 2f
                     - (MidnightLandHud.Active ? (MidnightLandHud.NavHeight + MidnightLandHud.TopHeight + 24f) / PanelScale : 0f))
-                : new Vector2(safe.width - Margin * 2f, safe.height * (MidnightLandHud.Active ? .46f : Third) - Margin * 2f);
+                // Upright, every frame is the land's .46 now (2026-09-30, phase 6
+                // pass): the Ship sheet "at sea" planned its crew row for it and
+                // the old sea third cut the crew cards under "All ashore".
+                : new Vector2(safe.width - Margin * 2f, safe.height * .46f - Margin * 2f);
             // **The hugging frame's ceiling (2026-09-30).** Half the safe
             // height, measured from the safe bottom -- the same 10-unit lift
             // `Place` gives every land frame -- so its top can never pass the
@@ -1014,11 +1017,13 @@ namespace SeaSick.UI.Sheets
             }
 
             // GUI space (origin top-left), for `HudLayout`.
-            if (MidnightLandHud.Active)
+            // At sea too, upright (2026-09-30): the same size the pages plan
+            // for (`FrameSizeScreen`), not the old sea third.
+            if (MidnightLandHud.Active || !HudLayout.Wide)
             {
                 var size = FrameSizeScreen();
                 w = size.x; h = size.y;
-                yBottom += (MidnightLandHud.NavHeight + 10f) / PanelScale;
+                if (MidnightLandHud.Active) yBottom += (MidnightLandHud.NavHeight + 10f) / PanelScale;
             }
             // **The hugging frame (2026-09-30)**: as tall as its content, never
             // past the cap `FrameSizeScreen` gave. Bottom-anchored, so it

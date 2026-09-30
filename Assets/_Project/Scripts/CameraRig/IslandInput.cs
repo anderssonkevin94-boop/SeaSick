@@ -379,6 +379,16 @@ namespace SeaSick.CameraRig
             pickupCandidate = null;
         }
 
+        /// **When the last single tap on the world landed (2026-09-30,
+        /// island UI phase 6).** `Time.unscaledTime`, -1 before the first. A
+        /// sheet open within a moment of it was opened by a building (or
+        /// hand) tap, which retires the "Drag to look around" hint
+        /// (`GestureHintPill`); a sheet opened any other way does not.
+        public static float WorldTapAt = -1f;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetWorldTap() => WorldTapAt = -1f;
+
         void RegisterTap(Vector2 pos, int downFrame, bool allowConsequence)
         {
             TapThisFrame = true;
@@ -400,6 +410,7 @@ namespace SeaSick.CameraRig
             if (allowConsequence)
             {
                 bool isDouble = GestureClassifier.IsDoubleTap(lastTapPos, lastTapTime, pos, Time.unscaledTime, Screen.height);
+                if (!isDouble) WorldTapAt = Time.unscaledTime;
                 if (isDouble) cam.FlyTo(pos);
                 else if (World.Life.GravePlacementFlow.TryOpenStoryAt(pos))
                 {
