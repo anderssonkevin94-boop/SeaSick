@@ -4,6 +4,7 @@ using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 using SeaSick.World;
+using SeaSick.Ship.SeaLife;
 using Random = UnityEngine.Random;
 
 namespace SeaSick.Terrain
@@ -715,18 +716,39 @@ namespace SeaSick.Terrain
                 var root = new GameObject("Reef_" + i);
                 root.transform.position = pos;
                 int rocks = Random.Range(2, 5);
-                for (int r = 0; r < rocks; r++)
+                // Astra's reef clusters (sea discovery kit v1, Kevin approved
+                // 2026-09-30): ONE mesh per reef, picked from the world seed
+                // and the reef's index by `SeaKit.ReefName` (a pure hash, no
+                // `Random` draw). Each is authored to a unit horizontal
+                // radius with its origin on the mean waterline and a
+                // submerged skirt, so it scales uniformly by the very
+                // `radius` `Reef.Configure` gets: the visible rock and the
+                // hazard share one footprint. Static, no bob, no collider.
+                // The seeded stream is what the rest of the world is built
+                // from, so the old rolls are still drawn (and dropped): every
+                // reef and spawn after this one lands exactly where it did.
+                var art = SeaKit.Spawn(SeaKit.ReefName(world.seed, i), root.transform, Vector3.zero);
+                if (art != null)
                 {
-                    var rock = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    Destroy(rock.GetComponent<Collider>());
-                    rock.transform.SetParent(root.transform, false);
-                    float rs = radius * Random.Range(0.45f, 0.85f);
-                    rock.transform.localScale = new Vector3(rs, rs * Random.Range(0.8f, 1.5f), rs);
-                    float ra = Random.Range(0f, Mathf.PI * 2f);
-                    float rd = Random.Range(0f, radius * 0.55f);
-                    rock.transform.localPosition = new Vector3(Mathf.Sin(ra) * rd, Random.Range(-0.4f, 0.9f), Mathf.Cos(ra) * rd);
-                    rock.transform.localRotation = Quaternion.Euler(Random.Range(-18f, 18f), Random.Range(0f, 360f), Random.Range(-18f, 18f));
-                    rock.GetComponent<MeshRenderer>().sharedMaterial = rockMat;
+                    for (int r = 0; r < rocks * 8; r++) _ = Random.value;
+                    art.transform.localScale = Vector3.one * radius;
+                    art.transform.localRotation = Quaternion.Euler(0f, SeaKit.ReefYaw(world.seed, i), 0f);
+                }
+                else
+                {
+                    for (int r = 0; r < rocks; r++)
+                    {
+                        var rock = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                        Destroy(rock.GetComponent<Collider>());
+                        rock.transform.SetParent(root.transform, false);
+                        float rs = radius * Random.Range(0.45f, 0.85f);
+                        rock.transform.localScale = new Vector3(rs, rs * Random.Range(0.8f, 1.5f), rs);
+                        float ra = Random.Range(0f, Mathf.PI * 2f);
+                        float rd = Random.Range(0f, radius * 0.55f);
+                        rock.transform.localPosition = new Vector3(Mathf.Sin(ra) * rd, Random.Range(-0.4f, 0.9f), Mathf.Cos(ra) * rd);
+                        rock.transform.localRotation = Quaternion.Euler(Random.Range(-18f, 18f), Random.Range(0f, 360f), Random.Range(-18f, 18f));
+                        rock.GetComponent<MeshRenderer>().sharedMaterial = rockMat;
+                    }
                 }
                 var foam = GameObject.CreatePrimitive(PrimitiveType.Quad);
                 Destroy(foam.GetComponent<Collider>());

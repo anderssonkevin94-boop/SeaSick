@@ -1,5 +1,6 @@
 using SeaSick.Ocean;
 using SeaSick.Ship;
+using SeaSick.Ship.SeaLife;
 using UnityEngine;
 
 namespace SeaSick.Voyage
@@ -70,23 +71,53 @@ namespace SeaSick.Voyage
             // Anything we still hold is an orphan by the time we get here: a
             // domain reload takes the registry's static list with it.
             Release();
-            crateHandles = BindSet(crates, "SalvageCrate", CrateShape, crateMat);
-            flotsamHandles = BindSet(flotsam, "Flotsam", PlankShape, plankMat);
+            crateHandles = BindSet(crates, "SalvageCrate", CrateShape, crateMat, isCrate: true);
+            flotsamHandles = BindSet(flotsam, "Flotsam", PlankShape, plankMat, isCrate: false);
         }
 
-        OceanProbeRegistry.Handle[] BindSet(Transform[] set, string name, Vector3 shape, Material mat)
+        /// Astra's sea discovery kit v1 (Kevin approved 2026-09-30): a crate
+        /// floater is the `SalvageCluster` (approved crate, two broken boards),
+        /// a flotsam floater one of the board pieces, picked by its index so
+        /// the sea shows a mix of lashed bundles, long and short boards
+        /// without drawing from `Random`. The art is authored surface-centred
+        /// (cluster: crate bottom .22 m under the origin), and the floater
+        /// root still rides the wave at +.15 m, so the art child is lowered
+        /// `ArtDrop` to sit in the water instead of hovering. Movement, pickup
+        /// and respawn belong to the root and are unchanged. When a model is
+        /// missing the old cube is built.
+        const float ArtDrop = 0.12f;
+
+        static string FlotsamModel(int i)
+        {
+            switch (i % 4)
+            {
+                case 0: return SeaKit.LashedBoardBundle;
+                case 1: return SeaKit.BrokenBoardLong;
+                case 2: return SeaKit.BrokenBoardShort;
+                default: return SeaKit.BrokenBoardLong;
+            }
+        }
+
+        OceanProbeRegistry.Handle[] BindSet(Transform[] set, string name, Vector3 shape, Material mat, bool isCrate)
         {
             var handles = new OceanProbeRegistry.Handle[set.Length];
             for (int i = 0; i < set.Length; i++)
             {
                 if (set[i] == null)
                 {
-                    var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    go.name = name;
-                    Object.Destroy(go.GetComponent<Collider>());
-                    go.transform.localScale = shape;
-                    go.GetComponent<MeshRenderer>().sharedMaterial = mat;
+                    var go = new GameObject(name);
                     go.transform.SetParent(transform, true);
+                    var art = SeaKit.Spawn(isCrate ? SeaKit.SalvageCluster : FlotsamModel(i),
+                        go.transform, new Vector3(0f, -ArtDrop, 0f));
+                    if (art == null)
+                    {
+                        var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                        cube.name = "Placeholder";
+                        Object.Destroy(cube.GetComponent<Collider>());
+                        cube.transform.SetParent(go.transform, false);
+                        cube.transform.localScale = shape;
+                        cube.GetComponent<MeshRenderer>().sharedMaterial = mat;
+                    }
                     set[i] = go.transform;
                     Respawn(set[i]);
                     rebuilt++;

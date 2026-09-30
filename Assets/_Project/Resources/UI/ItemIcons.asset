@@ -36,6 +36,13 @@ MonoBehaviour:
   - shot
   - rope
   - sail
+  - Apple
+  - Carrot
+  - Fish
+  - Meat
+  - Onion
+  - Potato
+  - Wheat
   icons:
   - {fileID: 2800000, guid: 51162246725c84e6292ae6fca3984ede, type: 3}
   - {fileID: 2800000, guid: ede6f851718d34630bea487377f3491c, type: 3}
@@ -60,3 +67,10 @@ MonoBehaviour:
   - {fileID: 2800000, guid: 5375a16424ffa4d8f9b6d454c2c29779, type: 3}
   - {fileID: 2800000, guid: eabf6e573559b41118ee247dc39659bc, type: 3}
   - {fileID: 2800000, guid: cb76d60accba14aeea7d060e4d72782c, type: 3}
+  - {fileID: 2800000, guid: f0d648f19c13b4bcd9123c3e291007d9, type: 3}
+  - {fileID: 2800000, guid: ab952b7094820404eb0c83f383a93be5, type: 3}
+  - {fileID: 2800000, guid: fd16436d2a78a45f59d2b4610055d850, type: 3}
+  - {fileID: 2800000, guid: 1c8b4fde9e2dc4e769081894b5b95d37, type: 3}
+  - {fileID: 2800000, guid: af7e0d1e4205d4a479abe00e87b58658, type: 3}
+  - {fileID: 2800000, guid: 23e9ad54d1ce645ed9639293e37a5d31, type: 3}
+  - {fileID: 2800000, guid: 40508ddadc2dc4bd1901385a56694725, type: 3}

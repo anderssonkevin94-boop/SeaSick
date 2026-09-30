@@ -244,9 +244,10 @@ namespace SeaSick.World
             return best;
         }
 
-        /// Shaft plus a knapped stone head bound on with sinew, or a longer,
-        /// thinner iron head. Built once per kind, hung off the ROOT with
-        /// local scale 1, so it is in body metres.
+        /// The stone or iron spear (`ToolKit` mesh; fallback: a shaft plus a
+        /// knapped stone head bound on with sinew, or a longer, thinner iron
+        /// head). Built once per kind, hung off the ROOT with local scale 1,
+        /// so it is in body metres.
         void EnsureSpear(string res)
         {
             if (spear != null && spearFor == res) return;
@@ -256,6 +257,19 @@ namespace SeaSick.World
 
             var root = new GameObject(iron ? "HunterSpear_Iron" : "HunterSpear_Stone");
             root.transform.SetParent(transform, false);
+
+            // **Astra's worker tools v1, Kevin approved 2026-09-30:** her
+            // stone / iron spear, true metres in the tool frame (grip at the
+            // origin, .65 m of butt below and the haft to 1.15 m above, the
+            // head on top of that -- `ButtBelow` / `HeadAbove` are the mesh's
+            // own numbers), at identity so `PlaceSpear` poses it as it did
+            // the primitives. The primitives below stay as the fallback if
+            // the mesh fails to load.
+            if (ToolKit.Attach(iron ? ToolKit.SpearIron : ToolKit.SpearStone, root.transform, false))
+            {
+                spear = root;
+                return;
+            }
 
             var wood = Mat("spear_shaft", new Color(0.47f, 0.33f, 0.20f));
             var shaft = Prim(PrimitiveType.Cylinder, root.transform,

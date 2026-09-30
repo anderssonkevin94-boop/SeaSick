@@ -279,6 +279,18 @@ namespace SeaSick.World
             for (int i = 0; i < n; i++)
             {
                 int row = i / 3, col = i % 3;
+
+                // Astra resource kit v1, Kevin approved 2026-09-30: the real
+                // log (`Timber_Unit`, base origin, long axis along z) in the
+                // same columns and courses, cross-piled -- an odd course lies
+                // along z, an even one along x. The count is still the build
+                // progress above. The cylinder below is the fallback.
+                bool lay = row % 2 == 1;
+                if (ResourceKit.Spawn(Res.Timber, false, stack,
+                        new Vector3(lay ? (col - 1) * 0.3f : 0f, 0.01f + row * 0.24f, lay ? 0f : (col - 1) * 0.3f),
+                        lay ? Quaternion.identity : Quaternion.Euler(0f, 90f, 0f)) != null)
+                    continue;
+
                 var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 var col2 = go.GetComponent<Collider>();
                 if (col2 != null) Destroy(col2);

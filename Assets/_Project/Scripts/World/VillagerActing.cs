@@ -933,11 +933,19 @@ namespace SeaSick.World
             const float spacing = 0.15f;
             for (int i = 0; i < n; i++)
             {
-                var log = Prim(PrimitiveType.Cylinder, root,
-                    new Vector3(0.16f, 0.58f, 0.16f), mat);
                 float x = (i - (n - 1) * 0.5f) * spacing;
                 float y = (i % 2 == 0) ? 0f : 0.05f;
                 float z = ((i % 3) - 1) * 0.02f;
+                // Astra resource kit v1, Kevin approved 2026-09-30: the real
+                // carried log (`Timber_CarryUnit`, 1.16 m, centre grip, long
+                // axis z), at the same spacing, stagger and lean the cylinder
+                // had (the lean is a yaw of the log about the shoulder). The
+                // cylinder below is the fallback.
+                if (ResourceKit.Spawn(Res.Timber, true, root, new Vector3(x, y, z),
+                        Quaternion.Euler(0f, (i % 2 == 0 ? -1f : 1f) * (3f + i), 0f)) != null)
+                    continue;
+                var log = Prim(PrimitiveType.Cylinder, root,
+                    new Vector3(0.16f, 0.58f, 0.16f), mat);
                 log.transform.localPosition = new Vector3(x, y, z);
                 log.transform.localRotation =
                     Quaternion.Euler(90f, 0f, (i % 2 == 0 ? 1f : -1f) * (3f + i));
@@ -951,6 +959,15 @@ namespace SeaSick.World
             var mat = Mat(fine ? "planks_fine" : "planks", Res.Colour(Res.Boards));
             for (int i = 0; i < n; i++)
             {
+                // Astra resource kit v1, Kevin approved 2026-09-30: the real
+                // carried board (`Boards_CarryUnit`, 0.46 x 0.13 x 0.035 m,
+                // centre grip, carried across the arms), stacked exactly as
+                // the cube was. Fine boards wear the same mesh. The cube
+                // below is the fallback.
+                if (ResourceKit.Spawn(Res.Boards, true, root,
+                        new Vector3(0.015f * (i % 2 == 0 ? 1 : -1), 0.045f * i, 0f),
+                        Quaternion.Euler(0f, (i % 2 == 0 ? 2f : -2f), 0f)) != null)
+                    continue;
                 var plank = Prim(PrimitiveType.Cube, root,
                     new Vector3(0.46f, 0.035f, 0.13f), mat);
                 plank.transform.localPosition =
@@ -967,12 +984,18 @@ namespace SeaSick.World
             var mat = Mat("stones", Res.Colour(Res.Stone));
             for (int i = 0; i < n; i++)
             {
-                var stone = Prim(PrimitiveType.Cube, root, Vector3.one * 0.19f, mat);
                 int row = i / 2, col = i % 2;
-                stone.transform.localPosition = new Vector3(
-                    (col - 0.5f) * 0.17f, row * 0.16f, -0.02f * row);
-                stone.transform.localRotation = Quaternion.Euler(
+                var at = new Vector3((col - 0.5f) * 0.17f, row * 0.16f, -0.02f * row);
+                var tilt = Quaternion.Euler(
                     (i % 2 == 0 ? 8f : -6f), 10f * (i % 3 - 1), (i % 2 == 0 ? -5f : 7f));
+                // Astra resource kit v1, Kevin approved 2026-09-30: the real
+                // carried stone (`Stone_CarryUnit`, about 0.2 m, centre
+                // grip), in the same places and tilts. The cube below is the
+                // fallback.
+                if (ResourceKit.Spawn(Res.Stone, true, root, at, tilt) != null) continue;
+                var stone = Prim(PrimitiveType.Cube, root, Vector3.one * 0.19f, mat);
+                stone.transform.localPosition = at;
+                stone.transform.localRotation = tilt;
             }
         }
 
@@ -983,10 +1006,17 @@ namespace SeaSick.World
             var mat = Mat("bricks", Res.Colour(Res.Brick));
             for (int i = 0; i < n; i++)
             {
+                var at = new Vector3(0f, 0.09f * i, 0.01f * i);
+                var yaw = Quaternion.Euler(0f, (i % 2) * 4f, 0f);
+                // Astra resource kit v1, Kevin approved 2026-09-30: the real
+                // carried brick (`Brick_CarryUnit`, 0.17 x 0.085 x 0.10 m,
+                // centre grip), stacked true as the cube was. The cube below
+                // is the fallback.
+                if (ResourceKit.Spawn(Res.Brick, true, root, at, yaw) != null) continue;
                 var brick = Prim(PrimitiveType.Cube, root,
                     new Vector3(0.17f, 0.085f, 0.10f), mat);
-                brick.transform.localPosition = new Vector3(0f, 0.09f * i, 0.01f * i);
-                brick.transform.localRotation = Quaternion.Euler(0f, (i % 2) * 4f, 0f);
+                brick.transform.localPosition = at;
+                brick.transform.localRotation = yaw;
             }
         }
 
@@ -995,6 +1025,31 @@ namespace SeaSick.World
         {
             var mat = Mat("sack_" + what, Res.Colour(what));
             float scale = n <= 1 ? 1f : 0.82f;
+
+            // Astra food kit v1 (2026-09-30): a food that has a model
+            // (`Resources/Kits/Food/<Name>_Unit`, base origin) is carried as
+            // itself, two to a row in the sack layout's rows; dishes, flour,
+            // ore and the rest keep the sack. Ore stays in sacks on purpose.
+            Vector3 foodSize = ResourceKit.FoodSize(what);
+            if (foodSize.sqrMagnitude > 0f)
+            {
+                float k = n <= 1 ? 0.8f : 0.65f;
+                float cellX = Mathf.Clamp(Mathf.Max(foodSize.x, foodSize.z) * k * 1.05f, 0.14f, 0.32f);
+                float cellY = Mathf.Clamp(foodSize.y * k * 0.9f, 0.08f, 0.2f);
+                bool all = true;
+                for (int i = 0; i < n; i++)
+                {
+                    int row = i / 2, col = i % 2;
+                    var at = new Vector3((col - 0.5f) * cellX, -0.05f + row * cellY, 0f);
+                    var yaw = Quaternion.Euler(0f, 18f + i * 6f, 0f);
+                    if (ResourceKit.SpawnFood(what, root, at, yaw, k) == null) { all = false; break; }
+                }
+                if (all) return;
+                // A model that would not load: clear the partial load and
+                // fall through to the sacks, so nothing is ever invisible.
+                for (int c = root.childCount - 1; c >= 0; c--) Destroy(root.GetChild(c).gameObject);
+            }
+
             for (int i = 0; i < n; i++)
             {
                 var sack = Prim(PrimitiveType.Cube, root,
@@ -1006,9 +1061,14 @@ namespace SeaSick.World
             }
         }
 
-        /// A tool in the hand. Primitive on purpose: at the zoom a camp is
-        /// read from, a haft and a head is a recognisable axe and anything
-        /// more is polygons nobody will ever see.
+        /// A tool in the hand. **Astra's worker tools v1, Kevin approved
+        /// 2026-09-30:** each tool is her single mesh (`ToolKit`, authored in
+        /// the tool frame below at true metres, so it is hung at identity and
+        /// never scaled -- the `Hammer_Reach` ... `Saw_Face` numbers ARE the
+        /// mesh's grip-to-face distances). The boxes below are the FALLBACK,
+        /// built only if a mesh fails to load: primitive on purpose, since at
+        /// the zoom a camp is read from a haft and a head is a recognisable
+        /// axe.
         ///
         /// **The tool frame** (what `PoseTool` places): the origin is the
         /// middle of the fist, +Y runs up the haft to the head, +Z is the
@@ -1024,6 +1084,11 @@ namespace SeaSick.World
             root.transform.SetParent(transform, false);
             root.transform.localScale = Vector3.one;
             var tr = root.transform;
+
+            string kit = m == Mode.Hammer ? ToolKit.Hammer : m == Mode.Chop ? ToolKit.Axe
+                : m == Mode.Saw ? ToolKit.Saw : m == Mode.Hoe ? ToolKit.Hoe
+                : m == Mode.Stir ? ToolKit.StirPaddle : null;
+            if (kit != null && ToolKit.Attach(kit, tr, true)) return root;
 
             var wood = Mat("tool_haft", new Color(0.44f, 0.31f, 0.19f));
             var iron = Mat("tool_iron", new Color(0.42f, 0.44f, 0.48f));

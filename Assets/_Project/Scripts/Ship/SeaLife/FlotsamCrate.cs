@@ -77,25 +77,48 @@ namespace SeaSick.Ship.SeaLife
                 unit.transform.localPosition = CargoVisual.StackSlot(i, 2, 0.55f, 0.35f);
             }
 
-            // A couple of plank primitives scattered around the crate — the
-            // "wreckage" read, not just a tidy stack of goods.
+            // A couple of broken boards scattered around the crate — the
+            // "wreckage" read, not just a tidy stack of goods. Astra's board
+            // pieces (sea discovery kit v1, Kevin approved 2026-09-30) replace
+            // the old cube planks: short (1.25 m) or long (2.15 m), authored
+            // surface-centred, so they sit a hair under the crate root's +.1 m
+            // bob offset to lie in the water. The cargo units above are the
+            // resource's own and are not touched. Same random draws as before
+            // (count, angle, radius, yaw) plus one for which board.
             int planks = Random.Range(1, 3);
             for (int i = 0; i < planks; i++)
             {
+                float ang = Random.Range(0f, 360f);
+                float r = Random.Range(0.5f, 1.1f);
+                float yaw = Random.Range(0f, 360f);
+                bool longBoard = Random.value < 0.5f;
+                var pos = new Vector3(Mathf.Cos(ang * Mathf.Deg2Rad) * r, -BoardDrop, Mathf.Sin(ang * Mathf.Deg2Rad) * r);
+
+                var board = SeaKit.Spawn(longBoard ? SeaKit.BrokenBoardLong : SeaKit.BrokenBoardShort,
+                    visualRoot.transform, pos);
+                if (board != null)
+                {
+                    board.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
+                    continue;
+                }
+
                 var plank = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 plank.name = "Plank";
                 var col = plank.GetComponent<Collider>();
                 if (col != null) Object.Destroy(col);
                 plank.transform.SetParent(visualRoot.transform, false);
                 plank.transform.localScale = new Vector3(1.6f, 0.06f, 0.22f);
-                float ang = Random.Range(0f, 360f);
-                float r = Random.Range(0.5f, 1.1f);
-                plank.transform.localPosition = new Vector3(Mathf.Cos(ang * Mathf.Deg2Rad) * r, 0f, Mathf.Sin(ang * Mathf.Deg2Rad) * r);
-                plank.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
+                plank.transform.localPosition = new Vector3(pos.x, 0f, pos.z);
+                plank.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
                 var mr = plank.GetComponent<MeshRenderer>();
                 if (mr != null) mr.sharedMaterial = PlankMat();
             }
         }
+
+        /// How far the surface-centred board art is lowered from the crate
+        /// root (which floats .1 m above the wave), putting the board's
+        /// centre .04 m above the water rather than hovering.
+        const float BoardDrop = 0.06f;
 
         static Material plankMat;
         static Material PlankMat()

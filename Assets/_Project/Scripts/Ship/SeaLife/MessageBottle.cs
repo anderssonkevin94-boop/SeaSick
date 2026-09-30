@@ -65,8 +65,18 @@ namespace SeaSick.Ship.SeaLife
             return b;
         }
 
+        /// Astra's message bottle (sea discovery kit v1, Kevin approved
+        /// 2026-09-30): a broad glass bottle .34 m across and .82 m long, lying
+        /// at its authored 14 deg (the tilt is in the mesh, not added here),
+        /// with parchment and cork. The model's origin is its middle, so the
+        /// root's existing surface +.1 m bob offset is the waterline the art
+        /// was authored for, and the root's 25 deg/s spin turns the tilted
+        /// bottle about its own middle. No pickup range was changed to match
+        /// its larger size. If the model is missing the old cylinder is drawn.
         void BuildVisual()
         {
+            if (SeaKit.Spawn(SeaKit.MessageBottle, transform, Vector3.zero) != null) return;
+
             var v = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             v.name = "Bottle";
             var col = v.GetComponent<Collider>();
