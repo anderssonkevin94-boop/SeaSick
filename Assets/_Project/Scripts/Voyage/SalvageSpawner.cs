@@ -1,6 +1,7 @@
 using SeaSick.Ocean;
 using SeaSick.Ship;
 using SeaSick.Ship.SeaLife;
+using SeaSick.World;
 using UnityEngine;
 
 namespace SeaSick.Voyage
@@ -20,6 +21,9 @@ namespace SeaSick.Voyage
         [SerializeField] float spawnRingMin = 80f;
         [SerializeField] float spawnRingMax = 320f;
         [SerializeField] float despawnDistance = 450f;
+        /// Metres of water a floater needs under it to spawn -- keeps it off
+        /// islands, beaches and skerries (see `Respawn`).
+        [SerializeField] float minSpawnDepth = 2f;
 
         static readonly Vector3 CrateShape = Vector3.one * 1.1f;
         static readonly Vector3 PlankShape = new Vector3(0.35f, 0.15f, 2.2f);
@@ -38,6 +42,8 @@ namespace SeaSick.Voyage
 
         bool warnedNotBuilt;
         int rebuilt;
+        System.Random rng;
+        bool placedBlind;
 
         void Start()
         {
@@ -163,6 +169,7 @@ namespace SeaSick.Voyage
         {
             if (ship == null) return;
             if (!EnsureFloaters()) return;
+            if (placedBlind) RecheckBlind();
 
             float t = Time.time;
             Vector3 shipPos = ship.transform.position;
@@ -264,14 +271,86 @@ namespace SeaSick.Voyage
             }
         }
 
+        /// A floater goes back into the sea somewhere on the ring around the
+        /// ship -- and only into the SEA (2026-09-30 screenshot pass: salvage
+        /// clusters were sitting inside islands). A spot counts when the
+        /// seabed is `minSpawnDepth` under it at the centre and at four points
+        /// `SpawnFootprint` out, so the cluster art is not half in a beach or
+        /// a skerry. `SpawnTries` candidates, then give up for this frame by
+        /// parking it past `despawnDistance`: `UpdateFloater` respawns it
+        /// again next frame, which spreads a bad run over frames instead of
+        /// looping here.
+        ///
+        /// Draws come from this spawner's own RNG, seeded by the world seed,
+        /// so a world lays the same salvage for the same ship path instead of
+        /// sharing `UnityEngine.Random` with everything else in the frame.
+        ///
+        /// Before the populator has published `Island.TerrainHeight` (it
+        /// builds in slices, after our `Start`) there is nothing to ask; the
+        /// first candidate is taken and `placedBlind` has `Update` check the
+        /// whole set again once the terrain is there.
         void Respawn(Transform f)
         {
             Vector3 basePos = ship != null ? ship.transform.position : Vector3.zero;
-            float ang = Random.Range(0f, 360f) * Mathf.Deg2Rad;
-            float dist = Random.Range(spawnRingMin, spawnRingMax);
-            f.position = new Vector3(
-                basePos.x + Mathf.Sin(ang) * dist, 0f,
-                basePos.z + Mathf.Cos(ang) * dist);
+            var random = Rng();
+            var height = Island.TerrainHeight;
+            if (height == null) placedBlind = true;
+
+            Vector3 p = basePos;
+            for (int attempt = 0; attempt < SpawnTries; attempt++)
+            {
+                float ang = (float)random.NextDouble() * Mathf.PI * 2f;
+                float dist = Mathf.Lerp(spawnRingMin, spawnRingMax, (float)random.NextDouble());
+                p = new Vector3(basePos.x + Mathf.Sin(ang) * dist, 0f, basePos.z + Mathf.Cos(ang) * dist);
+                if (height == null || DeepEnough(height, p))
+                {
+                    f.position = p;
+                    return;
+                }
+            }
+            Vector3 away = p - basePos;
+            away.y = 0f;
+            if (away.sqrMagnitude < 0.01f) away = Vector3.forward;
+            f.position = basePos + away.normalized * (despawnDistance + 10f);
+        }
+
+        const int SpawnTries = 8;
+        const float SpawnFootprint = 2.5f;
+
+        bool DeepEnough(System.Func<float, float, float> height, Vector3 p)
+        {
+            float floor = -minSpawnDepth;
+            return height(p.x, p.z) < floor
+                && height(p.x + SpawnFootprint, p.z) < floor
+                && height(p.x - SpawnFootprint, p.z) < floor
+                && height(p.x, p.z + SpawnFootprint) < floor
+                && height(p.x, p.z - SpawnFootprint) < floor;
+        }
+
+        /// The spawner's RNG, made on first use (and again after a domain
+        /// reload, which drops plain C# fields) from the world seed.
+        System.Random Rng()
+        {
+            if (rng == null)
+            {
+                var pop = FindAnyObjectByType<SeaSick.Terrain.TerrainWorldPopulator>();
+                int seed = pop != null && pop.world != null ? pop.world.seed : 0;
+                rng = new System.Random(unchecked(seed * 486187739 + 0x5A17));
+            }
+            return rng;
+        }
+
+        /// Floaters placed before the terrain existed get one look once it
+        /// does; any that landed on land or in the shallows go again.
+        void RecheckBlind()
+        {
+            var height = Island.TerrainHeight;
+            if (height == null) return;
+            placedBlind = false;
+            for (int i = 0; i < crates.Length; i++)
+                if (crates[i] != null && !DeepEnough(height, crates[i].position)) Respawn(crates[i]);
+            for (int i = 0; i < flotsam.Length; i++)
+                if (flotsam[i] != null && !DeepEnough(height, flotsam[i].position)) Respawn(flotsam[i]);
         }
     }
 }
