@@ -93,6 +93,15 @@ namespace SeaSick.Save
             public float eaten, hungryDays, stalledDays;
             public string stall;
             public int hands, unhappy;
+            /// **The report's sections (2026-09-30, `AwaySummary`).** Gross
+            /// where the ledger books it, else the net diff: made products,
+            /// gathered raw, spent, eaten -- each one row per resource -- and
+            /// what happened (raids, deaths, joined, downed), worst first.
+            public List<AwaySummary.Line> made = new List<AwaySummary.Line>();
+            public List<AwaySummary.Line> gathered = new List<AwaySummary.Line>();
+            public List<AwaySummary.Line> spent = new List<AwaySummary.Line>();
+            public List<AwaySummary.Line> ate = new List<AwaySummary.Line>();
+            public List<AwaySummary.Event> events = new List<AwaySummary.Event>();
         }
 
         public class Report
@@ -123,7 +132,8 @@ namespace SeaSick.Save
                 get
                 {
                     foreach (var c in camps)
-                        if (c.built.Count > 0 || c.got.Count > 0 || c.eaten > 0f || c.hungryDays > 0f || c.stall != null) return true;
+                        if (c.built.Count > 0 || c.got.Count > 0 || c.eaten > 0f || c.hungryDays > 0f || c.stall != null
+                            || c.made.Count > 0 || c.gathered.Count > 0 || c.spent.Count > 0 || c.ate.Count > 0 || c.events.Count > 0) return true;
                     return false;
                 }
             }
@@ -231,6 +241,8 @@ namespace SeaSick.Save
             var camps = new List<Outpost>();
             var watched = new List<Outpost>();
             var prevAway = new List<OutpostLedger.Absence>();
+            var snaps = new List<AwaySummary.Snapshot>();
+            var told = new HashSet<string>();   // names already in an event, so a death is told once
             var threat0 = new List<float>();
             foreach (var o in Outpost.All)
             {
@@ -238,6 +250,7 @@ namespace SeaSick.Save
                 o.CatchUp();   // settle to now and bind router/ceiling first
                 if (o.Watched) { watched.Add(o); o.ShowHands(false); }
                 camps.Add(o);
+                snaps.Add(AwaySummary.Take(o));   // the report is this against what the camp holds after
                 var L = o.Ledger;
                 prevAway.Add(L.away);
                 threat0.Add(L.threat);
@@ -325,6 +338,7 @@ namespace SeaSick.Save
                     var L = o.Ledger;
                     var rec = L.away;
                     Fill(rep.camps[i], rec, L);
+                    AwaySummary.Fill(rep.camps[i], snaps[i], o, rec, told);
                     L.threat = threat0[i];
                     var prev = prevAway[i];
                     if (prev != null && prev.Open) Merge(prev, rec);

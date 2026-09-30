@@ -130,3 +130,26 @@
     flex-shrink: 0;
 }
 .ck-seg { margin-top: 8px; flex-shrink: 0; }
+
+/* --- the "Welcome back" report (2026-09-30, Melvor-style) --------------- */
+/* One card per camp; item rows are icon · name · +N; events are tinted
+ * bars, the worst first. Numbers are 20 px on the phone. */
+
+.aw-col { flex-direction: column; flex-grow: 1; padding-bottom: 8px; }
+.aw-top { flex-direction: row; align-items: center; min-height: 48px; flex-shrink: 0; }
+.st .aw-eye { margin-top: 12px; margin-bottom: 4px; }
+
+.aw-row { flex-direction: row; align-items: center; min-height: 40px; flex-shrink: 0; }
+.aw-ico { width: 34px; height: 34px; margin-right: 10px; flex-shrink: 0; -unity-background-scale-mode: scale-to-fit; }
+.st .aw-name { font-size: 18px; flex-grow: 1; flex-shrink: 1; white-space: normal; }
+.st .aw-num { font-size: 21px; margin-left: 10px; flex-shrink: 0; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
+.st .aw-num--good { color: rgb(127, 200, 173); }
+.st .aw-num--out { color: rgb(240, 195, 106); }
+
+.aw-ev { flex-direction: row; align-items: center; margin-top: 6px; padding: 8px 12px; border-left-width: 5px; border-radius: 10px; flex-shrink: 0; background-color: rgb(14, 26, 36); }
+.aw-ev--bad { border-color: rgb(246, 146, 128); background-color: rgb(42, 26, 26); }
+.aw-ev--warn { border-color: rgb(240, 195, 106); background-color: rgb(38, 32, 18); }
+.aw-ev--good { border-color: rgb(127, 200, 173); }
+.st .aw-ev-t { font-size: 18px; white-space: normal; flex-shrink: 1; }
+.st .aw-ev--bad .aw-ev-t, .st .aw-hungry { color: rgb(246, 146, 128); }
+.st .aw-ev--warn .aw-ev-t { color: rgb(240, 195, 106); }
