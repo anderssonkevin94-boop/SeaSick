@@ -174,6 +174,9 @@ namespace SeaSick.World
                 postRoot.SetParent(transform, false);
             }
 
+            // Did any post come, go or turn? Then the one merged post mesh
+            // is made again (2026-09-30, `WallVisual.BakePosts`).
+            bool postsChanged = false;
             var stale = new List<long>();
             foreach (var pair in posts)
                 if (pair.Value == null || !nodes.TryGetValue(pair.Key, out var n) || n.covered)
@@ -182,6 +185,7 @@ namespace SeaSick.World
             {
                 if (posts[key] != null) WallVisual.Kill(posts[key].gameObject);
                 posts.Remove(key);
+                postsChanged = true;
             }
 
             foreach (var pair in nodes)
@@ -191,11 +195,16 @@ namespace SeaSick.World
                 float yaw = WallVisual.NodeYaw(n.outgoing);
                 if (posts.TryGetValue(pair.Key, out var p))
                 {
-                    p.rotation = Quaternion.Euler(0f, yaw, 0f);
+                    var turn = Quaternion.Euler(0f, yaw, 0f);
+                    if (Quaternion.Angle(p.rotation, turn) > 0.01f) postsChanged = true;
+                    p.rotation = turn;
                     continue;
                 }
-                posts[pair.Key] = WallVisual.Post(postRoot, n.at, yaw).transform;
+                posts[pair.Key] = WallVisual.PostMarker(postRoot, n.at, yaw).transform;
+                postsChanged = true;
             }
+
+            if (postsChanged) WallVisual.BakePosts(postRoot, posts.Values);
         }
 
         static void AddEnd(Dictionary<long, Node> nodes, Vector3 at, Vector3 outward, bool gateHere)
@@ -216,6 +225,23 @@ namespace SeaSick.World
             if (Camp == null) return;
             foreach (var n in nodes.Values)
                 if (!n.covered && Camp.WallTowerAt(n.at) != null) n.covered = true;
+        }
+
+        /// **Draw every segment and post again from scratch** (2026-09-30):
+        /// for `Dev/WallDrawCost`'s A/B of `WallVisual.Merge` in one frame
+        /// state. Nothing in the game calls it; a redraw never moves a wall.
+        internal void RedrawAll()
+        {
+            foreach (var p in posts.Values) if (p != null) WallVisual.Kill(p.gameObject);
+            posts.Clear();
+            if (postRoot != null)
+            {
+                var old = postRoot.Find("Batched");
+                if (old != null) { old.SetParent(null, false); WallVisual.Kill(old.gameObject); }
+            }
+            segs.RemoveAll(s => s == null);
+            foreach (var s in segs) s.Redraw(s.WholeVisual, s.BrokenVisual, -1);
+            Refresh();
         }
 
         /// The standing posts, for checks.

@@ -134,7 +134,10 @@ namespace SeaSick.Dev
             mi.addCollider = false;
             mi.generateSecondaryUV = false;
             mi.meshCompression = ModelImporterMeshCompression.Off;
-            mi.isReadable = false;
+            // Read/Write ON since 2026-09-30: `WallVisual` merges the pieces
+            // into one mesh per segment at runtime, which a player build can
+            // only do from a CPU-readable mesh.
+            mi.isReadable = true;
             mi.preserveHierarchy = true;
             mi.materialImportMode = ModelImporterMaterialImportMode.ImportStandard;
             mi.materialLocation = ModelImporterMaterialLocation.InPrefab;

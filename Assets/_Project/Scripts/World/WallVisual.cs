@@ -33,6 +33,24 @@ namespace SeaSick.World
     /// rails on -X**, root at the start (the post: its CENTRE at the root).
     /// Everything below is written in that frame and never looks at the
     /// FBX's axes again.
+    ///
+    /// **Batched, 2026-09-30.** A kit piece is one renderer with three or
+    /// four materials, and a 22-segment ring stood as ~220 of them: ~730
+    /// draw calls at camp view on the phone, about half the frame. A
+    /// segment's pieces are now never instantiated: each state (Whole /
+    /// Broken) is merged into ONE mesh with one submesh per material
+    /// (`Batch`), and the chain's posts into one more (`BakePosts`), so a
+    /// segment is at most four draws whatever its length. The mesh is made
+    /// when the drawing is -- a segment raised, a neighbour changing its
+    /// fit, a gate made -- and never on a breach or a mend, which stay a
+    /// `SetActive` between the two pre-merged states. The gate module
+    /// (`GateLeaves` animates it) and blueprint ghosts (tinted piece by
+    /// piece) still instantiate their pieces. Merging, not GPU instancing:
+    /// the toon shader is SRP-Batcher compatible, and the SRP Batcher only
+    /// makes each draw cheaper (and wins over instancing for it), while
+    /// the kit's 3 run variants, 2 fillers and 4 materials would split
+    /// instancing into a dozen small groups. Colliders are untouched --
+    /// the pieces never had any (`BuildingFactory.RaiseWall`'s one box).
     public static class WallVisual
     {
         /// The kit's stake pitch, and so the smallest piece.
@@ -129,6 +147,161 @@ namespace SeaSick.World
 
         static GameObject Kit(string name) => Resources.Load<GameObject>("Palisade/" + name);
 
+        // --- the batch (2026-09-30) -----------------------------------------
+
+        /// One kit piece's drawing, in its wrapper's frame: every submesh
+        /// with its material, and the renderer settings the merged one
+        /// copies. Read once per prefab.
+        sealed class PieceMesh
+        {
+            public readonly List<(Mesh mesh, int sub, Material mat, Matrix4x4 m)> parts
+                = new List<(Mesh, int, Material, Matrix4x4)>();
+            public UnityEngine.Rendering.ShadowCastingMode shadows = UnityEngine.Rendering.ShadowCastingMode.On;
+            public bool receive = true;
+            public int layer;
+            /// False when a mesh cannot be read on the CPU (a player build
+            /// of an FBX imported without Read/Write): that piece is
+            /// instantiated as before rather than merged into nothing.
+            public bool mergeable = true;
+        }
+
+        /// Merge pieces at all. On in the game; `Dev/WallDrawCost` turns it
+        /// off and redraws (`WallChain.RedrawAll`) for a same-frame A/B.
+        internal static bool Merge = true;
+
+        static readonly Dictionary<GameObject, PieceMesh> pieceMeshes = new Dictionary<GameObject, PieceMesh>();
+
+        static PieceMesh MeshOf(GameObject prefab)
+        {
+            if (pieceMeshes.TryGetValue(prefab, out var pm)) return pm;
+            pm = new PieceMesh();
+            Matrix4x4 toRoot = prefab.transform.worldToLocalMatrix;
+            bool first = true;
+            foreach (var r in prefab.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                var f = r.GetComponent<MeshFilter>();
+                if (f == null || f.sharedMesh == null) continue;
+                var mesh = f.sharedMesh;
+                if (!mesh.isReadable) pm.mergeable = false;
+                var mats = r.sharedMaterials;
+                var m = toRoot * f.transform.localToWorldMatrix;
+                for (int i = 0; i < mesh.subMeshCount && i < mats.Length; i++)
+                    if (mats[i] != null) pm.parts.Add((mesh, i, mats[i], m));
+                if (first)
+                {
+                    pm.shadows = r.shadowCastingMode;
+                    pm.receive = r.receiveShadows;
+                    pm.layer = r.gameObject.layer;
+                    first = false;
+                }
+            }
+            if (pm.parts.Count == 0) pm.mergeable = false;
+            pieceMeshes[prefab] = pm;
+            return pm;
+        }
+
+        /// **Pieces gathered for one holder, merged into one renderer with
+        /// a submesh per material.** Everything is in the holder's frame.
+        sealed class Batch
+        {
+            readonly Transform holder;
+            readonly List<Material> order = new List<Material>();
+            readonly Dictionary<Material, List<CombineInstance>> byMat
+                = new Dictionary<Material, List<CombineInstance>>();
+            PieceMesh look;
+
+            public Batch(Transform holder) { this.holder = holder; }
+
+            /// False when the piece cannot be merged; the caller then
+            /// instantiates it.
+            public bool Add(GameObject prefab, Matrix4x4 pose)
+            {
+                var pm = MeshOf(prefab);
+                if (!pm.mergeable) return false;
+                if (look == null) look = pm;
+                foreach (var p in pm.parts)
+                {
+                    if (!byMat.TryGetValue(p.mat, out var list))
+                    {
+                        list = new List<CombineInstance>();
+                        byMat[p.mat] = list;
+                        order.Add(p.mat);
+                    }
+                    list.Add(new CombineInstance { mesh = p.mesh, subMeshIndex = p.sub, transform = pose * p.m });
+                }
+                return true;
+            }
+
+            /// Merge what was gathered into a "Batched" child of the holder.
+            public void Finish(string name)
+            {
+                if (order.Count == 0) return;
+                var perMat = new CombineInstance[order.Count];
+                var temp = new Mesh[order.Count];
+                int verts = 0;
+                for (int i = 0; i < order.Count; i++)
+                {
+                    var list = byMat[order[i]];
+                    foreach (var ci in list) verts += ci.mesh.vertexCount;   // an upper bound
+                    temp[i] = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+                    temp[i].CombineMeshes(list.ToArray(), true, true, false);
+                    perMat[i] = new CombineInstance { mesh = temp[i], transform = Matrix4x4.identity };
+                }
+                var mesh = new Mesh
+                {
+                    name = name,
+                    indexFormat = verts > 65000
+                        ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16,
+                };
+                mesh.CombineMeshes(perMat, false, false, false);
+                mesh.RecalculateBounds();
+                mesh.UploadMeshData(true);   // drawn only from here on; no CPU copy kept
+                foreach (var t in temp) Kill(t);
+
+                var go = new GameObject("Batched");
+                go.layer = look.layer;
+                go.transform.SetParent(holder, false);
+                go.AddComponent<MeshFilter>().sharedMesh = mesh;
+                var r = go.AddComponent<MeshRenderer>();
+                r.sharedMaterials = order.ToArray();
+                r.shadowCastingMode = look.shadows;
+                r.receiveShadows = look.receive;
+                go.AddComponent<WallBatchMesh>().mesh = mesh;
+            }
+        }
+
+        /// **A post that is only a place (2026-09-30)**: the chain keeps
+        /// one per node as before (`HasPostAt`, the turning), but the drawing
+        /// is `BakePosts`'s one merged mesh. Falls back to a real post when
+        /// the kit cannot be merged.
+        public static GameObject PostMarker(Transform parent, Vector3 node, float yaw)
+        {
+            if (!loaded) Load();
+            if (!Merge || !MeshOf(post).mergeable) return Post(parent, node, yaw);
+            var go = new GameObject(post.name);
+            go.transform.SetParent(parent, false);
+            go.transform.SetPositionAndRotation(node + Vector3.down * PostSink,
+                Quaternion.Euler(0f, yaw, 0f));
+            return go;
+        }
+
+        /// **Every post of a chain as one mesh** under `postRoot`, replacing
+        /// the last one. `WallChain.Refresh` calls it when a post came,
+        /// went or turned.
+        public static void BakePosts(Transform postRoot, IEnumerable<Transform> markers)
+        {
+            if (!loaded) Load();
+            var old = postRoot.Find("Batched");
+            if (old != null) { old.SetParent(null, false); Kill(old.gameObject); }
+            if (!Merge || !MeshOf(post).mergeable) return;
+            var batch = new Batch(postRoot);
+            Matrix4x4 toRoot = postRoot.worldToLocalMatrix;
+            foreach (var t in markers)
+                if (t != null && t.GetComponent<Renderer>() == null && t.childCount == 0)
+                    batch.Add(post, toRoot * t.localToWorldMatrix);
+            batch.Finish("WallPosts batch");
+        }
+
         // --- the fit ---------------------------------------------------------
 
         /// Which way the rails face: toward `centre`. The segment root is
@@ -170,6 +343,14 @@ namespace SeaSick.World
             whole = Holder(root, "Whole");
             broken = withBroken ? Holder(root, "Broken") : null;
             var s = new Span(a, b, fit.flip, ground);
+            // A standing segment is merged; a ghost (no broken state) is
+            // not -- it is tinted piece by piece and redrawn as the thumb
+            // drags.
+            if (withBroken && Merge)
+            {
+                s.batches[whole] = new Batch(whole);
+                s.batches[broken] = new Batch(broken);
+            }
             float L = s.L;
 
             if (fit.gate)
@@ -182,8 +363,8 @@ namespace SeaSick.World
                 // make a whole quarter: that post is 0.38 m deep and hides
                 // it, where a gap beside it would be a hole.
                 float side = (L - GateSpan) * 0.5f;
-                s.Place(whole, gate, side, GateSpan).AddComponent<GateLeaves>().Fit();
-                if (broken != null) s.Place(broken, gateBroken, side, GateSpan);
+                s.Spawn(whole, gate, side, GateSpan).AddComponent<GateLeaves>().Fit();
+                if (broken != null) s.Spawn(broken, gateBroken, side, GateSpan);
                 if (side > Eps)
                 {
                     foreach (var h in new[] { whole, broken })
@@ -218,6 +399,8 @@ namespace SeaSick.World
                     s.Tile(broken, u0 + 2f * third, u1, false, tB);
                 }
             }
+
+            foreach (var batch in s.batches.Values) batch.Finish("Palisade batch");
 
             if (fit.ownPosts && !(fit.gate && GateOnNode(L)))
             {
@@ -289,6 +472,10 @@ namespace SeaSick.World
             readonly uint seed;
             public readonly float L;
 
+            /// The holders whose pieces are merged rather than
+            /// instantiated (2026-09-30); empty for a ghost.
+            public readonly Dictionary<Transform, Batch> batches = new Dictionary<Transform, Batch>();
+
             public float Yaw => Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
 
             public Span(Vector3 a, Vector3 b, bool flip, System.Func<Vector3, float> ground)
@@ -321,17 +508,35 @@ namespace SeaSick.World
 
             /// One piece over [u, u + len]. Its root is its START end, so a
             /// flipped piece (rails to the right) is turned round and rooted
-            /// at the far end of its span instead.
-            public GameObject Place(Transform holder, GameObject prefab, float u, float len)
+            /// at the far end of its span instead. Into the holder's batch
+            /// when it has one, else a piece of its own.
+            public void Place(Transform holder, GameObject prefab, float u, float len)
+            {
+                Pose(u, len, out var pos, out var rot);
+                if (holder != null && batches.TryGetValue(holder, out var batch)
+                    && batch.Add(prefab, Matrix4x4.TRS(pos, rot, Vector3.one)))
+                    return;
+                Spawn(holder, prefab, u, len);
+            }
+
+            /// The same, always as its own object (the gate module).
+            public GameObject Spawn(Transform holder, GameObject prefab, float u, float len)
             {
                 var go = Object.Instantiate(prefab, holder, false);
                 go.name = prefab.name;
+                Pose(u, len, out var pos, out var rot);
+                go.transform.localPosition = pos;
+                go.transform.localRotation = rot;
+                return go;
+            }
+
+            void Pose(float u, float len, out Vector3 pos, out Quaternion rot)
+            {
                 float y = Mathf.Min(GroundAt(u), Mathf.Min(GroundAt(u + 0.5f * len), GroundAt(u + len)))
                     - midY - Sink;
                 float z = u - 0.5f * L;
-                go.transform.localPosition = new Vector3(0f, y, flip ? z + len : z);
-                go.transform.localRotation = flip ? Quaternion.Euler(0f, 180f, 0f) : Quaternion.identity;
-                return go;
+                pos = new Vector3(0f, y, flip ? z + len : z);
+                rot = flip ? Quaternion.Euler(0f, 180f, 0f) : Quaternion.identity;
             }
 
             /// Whole quarter-metres over [u0, u1], the tiled span centred in

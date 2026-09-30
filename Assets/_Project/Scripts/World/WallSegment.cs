@@ -66,6 +66,8 @@ namespace SeaSick.World
         int fitKey = -1;
 
         internal int FitKey => fitKey;
+        internal Transform WholeVisual => whole;
+        internal Transform BrokenVisual => broken;
 
         /// Metres from the line within which a point counts as "on" this
         /// segment. Half the post step, so two parallel runs a step apart
