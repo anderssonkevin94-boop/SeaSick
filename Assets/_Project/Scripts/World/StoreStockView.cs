@@ -73,7 +73,7 @@ namespace SeaSick.World
             int b = Capped(Held(Res.Boards), boardsSlots.Count);
             if (b != shownBoards) { SetShown(boardsSlots, b); shownBoards = b; }
 
-            int f = Capped(ledger != null ? Mathf.CeilToInt(ledger.FoodFill(true)) : 0, foodSlots.Count);
+            int f = Capped(ledger != null ? Mathf.CeilToInt(ledger.FoodFill(true, storeOnly: true)) : 0, foodSlots.Count);
             if (f != shownFood) { SetShown(foodSlots, f); shownFood = f; }
 
             // Cargo stays hidden: the kit's own README says its resource

@@ -245,6 +245,7 @@ namespace SeaSick.World
             {
                 case HaulPlace.Store: return StoreAt(out at);
                 case HaulPlace.Station: return StationPlace(station, out at);
+                case HaulPlace.Shore: return ShoreOf(station, out at, out _);
                 case HaulPlace.Site:
                     if (site == null) return false;
                     at = new Vector3(site.x, 0f, site.z);
@@ -762,7 +763,8 @@ namespace SeaSick.World
                 resource = h.haulRes,
                 count = h.haulCount,
                 from = h.haulFrom,
-                fromStation = h.haulFrom == HaulPlace.Station ? h.haulFromStation : -1,
+                fromStation = h.haulFrom == HaulPlace.Station || h.haulFrom == HaulPlace.Shore
+                    ? h.haulFromStation : -1,
                 to = h.haulTo,
                 toStation = h.haulTo == HaulPlace.Station ? h.haulToStation : -1,
                 leg = h.Leg,
@@ -857,6 +859,9 @@ namespace SeaSick.World
             if (h.haulTo == HaulPlace.Station && stations != null
                 && h.haulToStation >= 0 && h.haulToStation < stations.Count)
                 dest = stations[h.haulToStation];
+            // **A catch lands in the hut's output box** (2026-09-30), never
+            // its input bay and never the store: `LandCatch`.
+            if (dest != null && h.haulFrom == HaulPlace.Shore) { LandCatch(h, dest); return; }
             if (dest != null) { dest.Bay(h.haulRes, true).whole += h.haulCount; ClearHaul(h); return; }
 
             var st = Store(h.haulRes, true);
@@ -1436,6 +1441,8 @@ namespace SeaSick.World
         /// rack home when there is no more raw.
         void WorkerDay(OutpostHand h, StationStock s, int si, ref float budget)
         {
+            // The fisher works at the water, not at a bench (2026-09-30).
+            if (FishesAtShore(s)) { CatchDay(h, s, si, ref budget); return; }
             for (int guard = 0; guard < 128 && budget > Eps; guard++)
             {
                 if (h.Hauling) { if (!AdvanceHaul(h, ref budget)) break; continue; }
@@ -1692,6 +1699,11 @@ namespace SeaSick.World
             // no order is still a station with nothing to make.
             if (r == null) return "no order given";
             if (h.Hauling) return null;
+            if (FishesAtShore(s))
+            {
+                string shoreCause = CatchStallCause(s);
+                if (shoreCause != null) return shoreCause;
+            }
             if (r.tool != null && HeldOf(r.tool) <= 0f) return $"needs a {Friendly(r.tool)} in the pile";
             int si = stations.IndexOf(s);
             foreach (var line in r.takes)

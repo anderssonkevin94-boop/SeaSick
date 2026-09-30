@@ -1558,7 +1558,12 @@ namespace SeaSick.World
             mimeJoinedLate = view.picked;
             mimeRes = view.resource;
             mimeCount = Mathf.Max(1, view.count);
-            mimeDrop = TripEnd(view.to, view.toStation, view.toAt, view.resource, true, out mimeFace);
+            // **Onto the rack, not into the bay** (2026-09-30): a catch goes
+            // in the fishing hut's output box, and a meal off a rack is
+            // eaten where it was picked up.
+            bool toRack = view.from == HaulPlace.Shore
+                || (r.eating && view.from == HaulPlace.Station && view.to == HaulPlace.Station);
+            mimeDrop = TripEnd(view.to, view.toStation, view.toAt, view.resource, !toRack, out mimeFace);
             if (view.from != HaulPlace.Field)
                 mimePick = TripEnd(view.from, view.fromStation, view.fromAt, view.resource,
                     view.from == HaulPlace.Station && r.haulFromBay, out mimePickFace);
@@ -1616,6 +1621,12 @@ namespace SeaSick.World
                     // its store point, and matching the hut against that
                     // found nothing and sent the load to the fire ring.
                     return StoreSpot(res, out face);
+                case HaulPlace.Shore:
+                    // **The fisher's spot at the water's edge** (2026-09-30):
+                    // the books' own point (`Outpost.SaveShoreSpots` found it
+                    // on this very ground), facing out over the water.
+                    if (camp.Ledger != null && camp.Ledger.ShoreOf(station, out _, out var sea)) face = sea;
+                    return Grounded(at);
                 case HaulPlace.Ship:
                     // **The foot of the gangway** (2026-09-24 transfers): the
                     // books' own point (`ICargoSide.GangwayAt` -- the plank's
@@ -1840,7 +1851,9 @@ namespace SeaSick.World
         {
             var ledger = camp.Ledger;
             var st = ledger != null && r.order == OutpostOrder.Work ? ledger.StationOfHand(r) : null;
-            if (st == null || st.removed)
+            // The fisher has no bench to watch (2026-09-30): every catch is a
+            // walked trip into the box (`TickHaul`), never a bench carry.
+            if (st == null || st.removed || OutpostLedger.FishesAtShore(st))
             {
                 benchRow = null;
                 jobCarried = owedCarry = false;

@@ -966,6 +966,13 @@ namespace SeaSick.World
         /// opens the post cells it stands over.
         static float GateOpenHalf => WallVisual.GateSpan * 0.5f + 0.1f;
 
+        /// **Bumped every time the wall layer is re-laid (2026-09-30)** --
+        /// a build, a raise, a breach, a gate swap. A cache of "can a hand
+        /// get from here to there" (the fishing hut's shore spot,
+        /// `Outpost.SaveShoreSpots`) keys on it and re-asks only when it
+        /// moves: one int compare a tick, never a search.
+        public int WallRevision { get; private set; }
+
         /// **Lay every standing segment, from scratch.** Palisade: both
         /// flags on every cell of its supercover. Gate: the raider flag on
         /// every cell and the hand flag on the cells outside the gate module
@@ -977,6 +984,7 @@ namespace SeaSick.World
         void RelayWalls(WallSegment except)
         {
             if (wall == null) return;
+            WallRevision++;
             System.Array.Clear(wall, 0, wall.Length);
             if (camp == null) return;
             var walls = camp.Walls;

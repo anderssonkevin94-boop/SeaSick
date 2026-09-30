@@ -453,6 +453,7 @@ namespace SeaSick.UI.Sheets
                 string load = $"{h.haulCount} {ResDefs.Label(h.haulRes)}";
                 if (h.HuntTrip && !h.huntKilled) { main = "Out after game"; icon = Res.Game; }
                 else if (h.haulPicked) main = $"Carrying {load} to the {PlaceName(l, h.haulTo, h.haulToStation)}";
+                else if (h.haulFrom == HaulPlace.Shore) main = "Fishing at the shore";
                 else main = $"Fetching {load} from the {PlaceName(l, h.haulFrom, h.haulFromStation)}";
                 sub = DoingLine(l, h);
             }
@@ -494,6 +495,7 @@ namespace SeaSick.UI.Sheets
             {
                 case 0: return "fetch";
                 case 1:
+                    if (h.haulFrom == HaulPlace.Shore) return "fish";
                     if (h.haulFrom != HaulPlace.Field) return "load";
                     if (h.haulRes == Res.Game) return "hunt";
                     if (h.haulRes == Res.Timber) return "cut";
@@ -511,6 +513,7 @@ namespace SeaSick.UI.Sheets
                 case HaulPlace.Store: return "store";
                 case HaulPlace.Site: return "site";
                 case HaulPlace.Field: return "island";
+                case HaulPlace.Shore: return "shore";
                 case HaulPlace.Station:
                 {
                     var list = l.Stations;

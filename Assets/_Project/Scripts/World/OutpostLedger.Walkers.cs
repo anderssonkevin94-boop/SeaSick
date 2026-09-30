@@ -128,7 +128,11 @@ namespace SeaSick.World
             h.haulPlaced = true;
             h.haulFromX = fa.x; h.haulFromZ = fa.z;
             h.haulToX = ta.x; h.haulToZ = ta.z;
-            h.workLeft = HandleSeconds + (from == HaulPlace.Field ? n * GatherSecondsPerUnit(res) : 0f);
+            // A catch (2026-09-30) is the fishing itself at the shore spot:
+            // the recipe's own timer, nothing added -- the catch rate is the
+            // one the bench had.
+            h.workLeft = from == HaulPlace.Shore ? CatchSeconds(fromStation)
+                : HandleSeconds + (from == HaulPlace.Field ? n * GatherSecondsPerUnit(res) : 0f);
             h.haulPicked = picked;
             if (picked)
             {
@@ -288,6 +292,11 @@ namespace SeaSick.World
                     }
                     break;
                 }
+                case HaulPlace.Shore:
+                    // **The catch** (2026-09-30): the sea never runs dry; the
+                    // fish is on his line the moment the timer is done.
+                    got = want;
+                    break;
                 default:
                     got = want;          // a site's cleared log: already in hand
                     break;

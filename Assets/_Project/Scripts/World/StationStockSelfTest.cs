@@ -454,6 +454,7 @@ namespace SeaSick.World
             Transfers(sb, ref fails);
             Deposits(sb, ref fails);
             Delivery(sb, ref fails);
+            Fishing(sb, ref fails);
 
             sb.AppendLine(fails == 0 ? "ALL PASS" : $"{fails} FAILED");
             if (fails == 0) Debug.Log(sb.ToString()); else Debug.LogError(sb.ToString());
@@ -746,6 +747,73 @@ namespace SeaSick.World
                   .Append(same ? "step size made no difference: " : "books DRIFT with step size: ")
                   .AppendLine($"0.02 d {BusyState(f)} | 0.1 d {BusyState(m)} | 1 d {BusyState(g)}");
             }
+        }
+
+        /// **The fisher at the water (2026-09-30).** A fishing hut 15 m off
+        /// the store with its shore spot 6 m beyond it: catches land in the
+        /// box one by one, the box never passes its capacity, and the box
+        /// goes to the store whole (`Res.FishArmful`). Then a camp with no
+        /// food in the store and fish in the box: the box counts as food,
+        /// `BestMeal` sees it, and a hungry hand eats.
+        static void Fishing(StringBuilder sb, ref int fails)
+        {
+            string hut = BuildPlans.FishingHut.id;
+            var l = new OutpostLedger { ceilingPer = 1000, stationsMigrated = true, campfireLevel = 1 };
+            l.SetCentre(Vector3.zero);
+            l.raised.Add(new BuiltBuilding { planId = hut, x = 15f });
+            l.built.Add(hut);
+            l.hands.Add(new OutpostHand { name = "Fisher", order = OutpostOrder.Work, target = hut });
+            l.Store(Res.Food, true).whole = 1000;
+            l.lastTicked = 0.0;
+            l.EnsureStations();
+            int si = l.StationIndex(hut, 0);
+            l.SetShore(si, true, new Vector3(21f, 0f, 0f), new Vector3(23f, 0f, 0f), "", new Vector3(15f, 0f, 0f), 0);
+            bool ordered = l.PlaceOrder(hut, "fish", OutpostLedger.RepeatOrder);
+            var st = l.StationAt(si);
+            double now = l.lastTicked;
+            int cap = st != null ? st.OutputCap : 0, maxBox = 0;
+            // The smallest landing of fish in the store (a step's rise):
+            // the box goes whole, so never below its capacity.
+            int minLanding = int.MaxValue, prevStore = 0;
+            bool fromShore = false;
+            for (int i = 0; i < 120 && st != null; i++)
+            {
+                Advance(l, ref now, 0.05);
+                maxBox = Mathf.Max(maxBox, st.RackTotal);
+                var f = l.hands[0];
+                if (f.Hauling && f.haulFrom == HaulPlace.Shore) fromShore = true;
+                int inStore = l.StoreCountOf(Res.Fish);
+                if (inStore > prevStore) minLanding = Mathf.Min(minLanding, inStore - prevStore);
+                prevStore = inStore;
+            }
+            int made = l.CountOf(Res.Fish) + l.CarriedOf(Res.Fish);
+            int stored = l.StoreCountOf(Res.Fish);
+            Gate(sb, ref fails, "fish-caught-at-shore", ordered && fromShore && made >= 1,
+                $"order {ordered}, catch trips from the shore {fromShore}, {made} fish in 6 days");
+            Gate(sb, ref fails, "fish-box-capacity", st != null && maxBox <= cap,
+                $"box peaked at {maxBox} of {cap}");
+            Gate(sb, ref fails, "fish-box-whole-to-store",
+                Res.Armful(Res.Fish) >= cap && (stored == 0 || minLanding >= cap),
+                $"armful {Res.Armful(Res.Fish)}, {stored} in the store, smallest landing "
+                + (minLanding == int.MaxValue ? "none" : minLanding.ToString()));
+
+            var m = new OutpostLedger { ceilingPer = 1000, stationsMigrated = true, campfireLevel = 1 };
+            m.SetCentre(Vector3.zero);
+            m.raised.Add(new BuiltBuilding { planId = hut, x = 15f });
+            m.built.Add(hut);
+            m.hands.Add(new OutpostHand { name = "Hungry", order = OutpostOrder.Idle, full = 0f });
+            m.lastTicked = 0.0;
+            m.EnsureStations();
+            var box = m.StationOf(hut);
+            if (box != null) box.Rack(Res.Fish, true).whole = 3;
+            float fill = m.FoodFill();
+            string meal = m.BestMeal();
+            double nm = m.lastTicked;
+            for (int i = 0; i < 10; i++) Advance(m, ref nm, 0.02);
+            var hungry = m.hands[0];
+            Gate(sb, ref fails, "fish-box-is-food",
+                fill > 0f && meal == Res.Fish && hungry.lastMeal == Res.Fish && hungry.full > 0f,
+                $"fill {fill:0.##} with an empty store, best meal {meal ?? "none"}, ate {hungry.lastMeal}, full {hungry.full:0.00}");
         }
 
         /// A sawmill 15 m from the store (the fire square at 0,0), one

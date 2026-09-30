@@ -58,22 +58,27 @@ namespace SeaSick.World
 
         // --- the total, for every gauge --------------------------------------
 
-        /// **Fill units of food in the store** -- one is a hand fed for a
-        /// day. Saved dishes are left out unless asked for.
-        public float FoodFill(bool includeSaved = false)
+        /// **Fill units of food the camp can eat** -- one is a hand fed for a
+        /// day. The store, and **station output racks since 2026-09-30**
+        /// (fish in the fishing hut's box, a dish on the kitchen's rack: a
+        /// hungry hand walks to either, `StartMealTrip`), never a bay.
+        /// Saved dishes are left out unless asked for. `storeOnly`: the
+        /// store's own, for a view drawing the store (`StoreStockView`).
+        public float FoodFill(bool includeSaved = false, bool storeOnly = false)
         {
             float f = 0f;
             foreach (var e in FoodBook.Edibles)
             {
                 if (!includeSaved && DishSaved(e.res)) continue;
                 var s = Store(e.res);
-                if (s == null) continue;
-                f += (s.whole + s.part) * FoodBook.Fill(e.res);
+                float n = s != null ? s.whole + s.part : 0f;
+                if (!storeOnly) n += RackCountOf(e.res);
+                f += n * FoodBook.Fill(e.res);
             }
             return f;
         }
 
-        /// Fill of cooked dishes only.
+        /// Fill of cooked dishes only (store and racks, as `FoodFill`).
         public float CookedFill()
         {
             float f = 0f;
@@ -81,7 +86,8 @@ namespace SeaSick.World
             {
                 if (e.raw || DishSaved(e.res)) continue;
                 var s = Store(e.res);
-                if (s != null) f += (s.whole + s.part) * FoodBook.Fill(e.res);
+                float n = (s != null ? s.whole + s.part : 0f) + RackCountOf(e.res);
+                f += n * FoodBook.Fill(e.res);
             }
             return f;
         }
@@ -112,7 +118,8 @@ namespace SeaSick.World
                     var e = FoodBook.Edibles[i];
                     if (e.raw != (pass == 0) || DishSaved(e.res)) continue;
                     float per = FoodBook.Fill(e.res);
-                    while (paid < fill - 1e-4f && StoreFree(e.res) > 0)
+                    // Store, then racks (`Take`'s own order), 2026-09-30.
+                    while (paid < fill - 1e-4f && StoreFree(e.res) + RackFree(e.res) > 0)
                     {
                         Take(e.res, 1);
                         paid += per;
@@ -173,7 +180,7 @@ namespace SeaSick.World
 
         // --- eating ------------------------------------------------------------
 
-        /// **The meal a hungry hand walks to the store for**: the best
+        /// **The meal a hungry hand walks to the store (or a rack) for**: the best
         /// allowed dish (highest fill, then its bonus) with a unit nobody is
         /// already walking to take; raw only when no dish is left. Null when
         /// the store has nothing edible for him.
@@ -185,7 +192,8 @@ namespace SeaSick.World
                 foreach (var e in FoodBook.Edibles)
                 {
                     if (e.raw != (pass == 1) || DishSaved(e.res)) continue;
-                    if (StoreFree(e.res) <= 0) continue;
+                    // A free unit in the store or on a rack (2026-09-30).
+                    if (StoreFree(e.res) + RackFree(e.res) <= 0) continue;
                     float score = FoodBook.Fill(e.res) + 0.01f * (FoodBook.MoodPerDay(e.res) + FoodBook.WorkBonus(e.res));
                     if (score > bestScore) { bestScore = score; best = e.res; }
                 }
@@ -243,8 +251,9 @@ namespace SeaSick.World
                         // dropped for the meal; a load in his arms is
                         // finished first (he is caught on a later step).
                         if (h.Hauling) CancelPlanned(h);
-                        StartTimedTrip(h, meal, 1, HaulPlace.Store, -1, HaulPlace.Store, -1);
-                        h.eating = true;
+                        // From the store, or a station's rack (the fishing
+                        // hut's box) when the store has none, 2026-09-30.
+                        if (StartMealTrip(h, meal)) h.eating = true;
                     }
                 }
 
@@ -273,7 +282,8 @@ namespace SeaSick.World
             if (logHungryToday) hungryLoggedDay = today;
         }
 
-        /// **The meal is eaten where it was picked up** (the store), on
+        /// **The meal is eaten where it was picked up** (the store, or the
+        /// station whose rack it came off), on
         /// arrival: fullness up by its fill, its bonus now his. A meal that
         /// was never picked up (somebody beat him to it) is simply no meal.
         void EatMeal(OutpostHand h)

@@ -50,6 +50,15 @@ namespace SeaSick.World
         /// `OutpostLedger.groundLoads` (the same way `Station`'s index is
         /// into `Stations`). Appended LAST too, for the same save reason.
         Ground,
+        /// **The fishing hut's spot at the water's edge (2026-09-30).**
+        /// Kevin: *"I want the fisherman to walk to the closest water when
+        /// he fishes. After catching a fish he places it in the product part
+        /// of his building."* A catch trip is `Shore -> Station`: he walks
+        /// to the hut's shore spot (`StationStock.shoreX/Z`, found by
+        /// `Outpost.SaveShoreSpots`), fishes there for the catch's timer,
+        /// and carries it to the hut's output box. The index is the
+        /// station's, as for `Station`. Appended LAST, for the save reason.
+        Shore,
     }
 
     /// **A production station's own stock, one per BUILT instance
@@ -122,6 +131,25 @@ namespace SeaSick.World
         public string orderRecipe = "";
         public int orderLeft;
         public bool orderRepeat;
+
+        /// **Where this station's worker fishes (2026-09-30, the fishing hut
+        /// only).** 0 = not looked for yet (an old save, a probe's ledger:
+        /// he fishes beside the hut until `Outpost.SaveShoreSpots` has
+        /// looked), 1 = found (`shoreX/Z` is the dry spot he stands on,
+        /// `waterX/Z` what he faces), 2 = no reachable water (`shoreWhy`
+        /// says why; no catch trips until the walls or the hut change).
+        /// Saved, so an unwatched camp keeps fishing where it last did.
+        /// Old saves: 0, the box empty -- JsonUtility-safe.
+        public int shore;
+        public float shoreX, shoreZ, waterX, waterZ;
+        /// Where the hut stood when `shore` was worked out: a different
+        /// hut behind the same row (a demolish shifted the ordinals) is
+        /// looked for again.
+        public float shoreForX, shoreForZ;
+        public string shoreWhy = "";
+        /// `CampPath.WallRevision` the spot was checked against. Not saved:
+        /// a loaded camp re-checks once against its fresh grid.
+        [System.NonSerialized] public int shoreRev = int.MinValue;
 
         /// **Flagged guess** for a station plan whose `inputSlots` is 0.
         public const int DefaultInputSlots = 6;

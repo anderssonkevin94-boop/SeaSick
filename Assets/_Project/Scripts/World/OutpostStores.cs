@@ -236,11 +236,19 @@ namespace SeaSick.World
             Arrows => 12,
             Meals => 4,
             Potato => 6, Carrot => 6, Onion => 6, Wheat => 5, Apple => 6,
-            Fish => 5, Meat => 3, Flour => 4,
+            Fish => FishArmful, Meat => 3, Flour => 4,
             BakedPotato => 4, GrilledFish => 4, GrilledMeat => 4, RoastCarrots => 4, Bread => 6,
             VegStew => 3, FishPie => 4, HuntersStew => 4,
             _ => 3,
         };
+
+        /// **Fish go all at once (Kevin, 2026-09-30):** *"For the fish in
+        /// particular he will carry all the fish at once since they aren't
+        /// that heavy compared to logs."* A full fishing-hut box is ONE trip
+        /// to the store, the fisher's or an idle hand's (both go through
+        /// `OutpostLedger.RackChore`, capped by this) -- so the armful is
+        /// never below the hut's output capacity, whatever that is tuned to.
+        public static int FishArmful => System.Math.Max(8, BuildPlans.FishingHut.outputSlots);
 
         /// Colour of a pile of it, for the stacks by the fire.
         public static Color Colour(string r) => r switch

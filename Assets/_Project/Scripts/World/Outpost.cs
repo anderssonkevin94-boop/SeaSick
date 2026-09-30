@@ -212,6 +212,9 @@ namespace SeaSick.World
             // path grid while it exists (2026-09-27).
             if (ledger.router == null) ledger.router = WalkedMetres;
             WireWalkerGuard();
+            // Where each fishing hut's fisher stands to fish (2026-09-30),
+            // before the tick plans a catch trip there. `Outpost.Shore.cs`.
+            SaveShoreSpots();
             ledger.Tick(TimeOfDay.Seconds);
             FeedTheFire();
 
