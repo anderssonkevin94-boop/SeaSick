@@ -13,9 +13,14 @@ namespace SeaSick.Ship.Modular
         readonly List<Bounds> obstacles=new List<Bounds>();readonly Dictionary<int,Route> routes=new Dictionary<int,Route>();
         Transform ship;public int NodeCount=>nodes.Count;public int LadderLinks{get;private set;}
         public void Clear(){routes.Clear();nodes.Clear();floors.Clear();obstacles.Clear();}
-        public void Build(Transform vessel,ShipyardPlan plan,Cannon[] guns)
+        /// `reserved`: ship-local boxes the walk graph must stay out of on top
+        /// of the guns and walls -- the deck cargo sockets
+        /// (`ShipCargoDisplay`, 2026-09-30), reserved whether or not a prop
+        /// stands there, so the graph never changes as the hold fills.
+        public void Build(Transform vessel,ShipyardPlan plan,Cannon[] guns,IList<Bounds> reserved=null)
         {
             Clear();LadderLinks=0;ship=vessel;var cfg=plan.config;float offset=plan.viewOffset.z;
+            if(reserved!=null)obstacles.AddRange(reserved);
             foreach(var gun in guns)
             {
                 var p=gun.transform.localPosition;
@@ -64,6 +69,18 @@ namespace SeaSick.Ship.Modular
                 {var box=mf.GetComponent<BoxCollider>();if(box==null)box=mf.gameObject.AddComponent<BoxCollider>();box.center=mf.sharedMesh.bounds.center;box.size=mf.sharedMesh.bounds.size;}
             // Land is not a ramp for these either (same exclusion as the hull box; HullIntegrity's shore wall grounds her).
             HullIntegrity.ExcludeLand(ship.gameObject);
+        }
+        /// The guns, walls and reserved boxes the walk graph avoids, ship-local.
+        public IReadOnlyList<Bounds> Obstacles=>obstacles;
+        /// **Deck height under (x, z), ship-local** (2026-09-30, for the cargo
+        /// sockets): the walkable floor nearest `nearY` within `within`
+        /// metres, from the same floor triangles the walk graph is built on.
+        public bool FloorY(float x,float z,float nearY,float within,out float y)
+        {
+            y=0;float best=within;bool found=false;
+            foreach(var tri in floors)
+                if(Height(tri,x,z,out float h)&&Mathf.Abs(h-nearY)<=best){best=Mathf.Abs(h-nearY);y=h;found=true;}
+            return found;
         }
         void Link(int a,int b){nodes[a].edges.Add(b);nodes[b].edges.Add(a);}
         bool Blocked(Vector3 p)

@@ -34,6 +34,21 @@ namespace SeaSick.Ship.Modular
             foreach(var hand in ship.GetComponentsInChildren<CrewAgent>())
             {var c=hand.GetComponent<CapsuleCollider>();if(c==null)c=hand.gameObject.AddComponent<CapsuleCollider>();c.isTrigger=true;c.radius=.22f;c.height=1.65f;c.center=Vector3.up*.825f;}
             var nav=view.GetComponent<CoasterNavigation>();if(nav==null)nav=view.gameObject.AddComponent<CoasterNavigation>();nav.Build(ship.transform,plan, guns);
+            // Astra ship cargo, Kevin approved 2026-09-29 (in the game 2026-09-30): the hold shown as
+            // barrels, sacks and crates in deck sockets planned on the first graph, then reserved in the
+            // final one so no route ever runs through them. Decoration: a fault here never fails a refit.
+            try
+            {
+                var cargoAt=ShipCargoDisplay.Plan(view,plan.assembly,nav,ship.transform,out var cargoSides,out var cargoSections);
+                if(cargoAt.Count>0)
+                {
+                    var reserved=new System.Collections.Generic.List<Bounds>();
+                    foreach(var p in cargoAt)reserved.Add(ShipCargoDisplay.Reserve(p));
+                    nav.Build(ship.transform,plan,guns,reserved);
+                }
+                ShipCargoDisplay.Install(view,ship.transform,cargoAt,cargoSides,cargoSections);
+            }
+            catch(System.Exception e){Debug.LogException(e);}
             var roster=ship.GetComponent<CrewRoster>();
             var posted=new System.Collections.Generic.HashSet<CrewAgent>();
             var occupied=new System.Collections.Generic.List<Vector3>();

@@ -18,7 +18,6 @@ Approved art waiting for Claude to implement in SeaSick. This is the active hand
 | [Sea discovery kit](#sea-discovery-kit) | sea-discovery-v1 | 2026-09-30 | Approved art — awaiting import and waterline/visibility checks |
 | [Worker tools](#worker-tools) | worker-tools-v1 | 2026-09-30 | Approved art — awaiting import and animation checks |
 | [Resource kit](#resource-kit) | resource-kit-v1 | 2026-09-30 | Approved art — awaiting import and gameplay checks |
-| [Ship cargo — barrels, sacks and crates](#ship-cargo--barrels-sacks-and-crates) | barrels/sacks V1, crates V2 | 2026-09-29 | Approved art — awaiting Claude import and Unity checks |
 | [Ship with one rear module F18](#ship-with-one-rear-module-f18) | f-coaster-v18/timber-top-band | 2026-09-29 | Approved rear-module boat; F19 rear + middle also approved |
 | [Kitchen Lvl 1](#kitchen-lvl-1) | kitchen-chunky-lvl1-v4 | 2026-09-28 | Approved art — awaiting implementation and Unity checks |
 
@@ -91,19 +90,6 @@ Warm timber top band, navy exterior, aligned structural ribs, a steering-only re
 Original F14 and frozen F10 remain preserved. Scale: 0.5 metres per source unit; source +X bow, +Y port, +Z up. Game mapping and individual export positions are in the manifest. Review cannons and crew are separate from ship exports.
 
 Remaining integration: reusable wall sections/runtime stacking, width/height configuration checks, cannon recoil, crew colliders/navigation, lighting and iPhone playtesting. Current validation covers static art, sampled wheel clearance and export fidelity.
-
-## Ship cargo — barrels, sacks and crates
-
-Kevin approved the barrel and sack designs from V1, then the rebuilt V2 crates, on 2026-09-29. Import the exact revisions below. V1 crates are rejected.
-
-- Editable source: `art-staging/ship-cargo-v1/ship-cargo.blend`.
-- Approved objects: `Cargo_Barrel_Large`, `Cargo_Barrel_Small`, `Cargo_Sack_Cream`, `Cargo_Sack_Ochre`. Individual FBX and GLB exports with these names are in the same directory.
-- Preview: `art-staging/ship-cargo-v1/cargo-set.png`; package notes and bounds: `README.md`, `manifest.json`; GLB attribute checks: `export-validation.json`.
-- Real metres, bottom-centred pivots. Do not apply the ship authoring 0.5 scale. Preserve UV0, normals and linear GameColor; use vertex-colour-aware PBR materials with the package's wood, iron, cloth and rope responses.
-- **Approved crates:** `Cargo_Box_Large` and `Cargo_Box_Small` from `art-staging/ship-cargo-v2/ship-cargo.blend`; individual matching FBX/GLB files in that folder. Use V2 only. Dark timber frames, recessed light panels, a closed continuous shell and no projecting lid battens.
-- Crate preview: `art-staging/ship-cargo-v2/cargo-deck-group.png`; exact bounds/counts in `manifest.json`, checks in `validation.json`, notes in `README.md`. Each crate has one material primitive and 1,444 triangles. The barrel/sack copies in V2 have verified identical exported geometry, normals, UVs and colors to approved V1.
-- Still required: Unity import/material verification, cargo inventory display sockets, walk/ladder/cannon clearance, simple collision and navigation integration, and phone readability/performance. Use simple collision shapes where appropriate; do not substitute mesh colliders for the high-detail render mesh. Models are not yet installed in the game. Claude should retain this queue entry until integration and relevant checks pass.
-
 
 ## Resource kit
 
