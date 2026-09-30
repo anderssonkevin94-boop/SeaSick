@@ -15,7 +15,9 @@ Approved art waiting for Claude to implement in SeaSick. This is the active hand
 
 | Asset | Approved revision | Approved on | Status |
 | --- | --- | --- | --- |
-| [Large swimming fish](#large-swimming-fish) | large-fish-v1 + swim loop | 2026-09-29 | Approved art and animation — awaiting Unity integration |
+| [Sea discovery kit](#sea-discovery-kit) | sea-discovery-v1 | 2026-09-30 | Approved art — awaiting import and waterline/visibility checks |
+| [Worker tools](#worker-tools) | worker-tools-v1 | 2026-09-30 | Approved art — awaiting import and animation checks |
+| [Resource kit](#resource-kit) | resource-kit-v1 | 2026-09-30 | Approved art — awaiting import and gameplay checks |
 | [Ship cargo — barrels, sacks and crates](#ship-cargo--barrels-sacks-and-crates) | barrels/sacks V1, crates V2 | 2026-09-29 | Approved art — awaiting Claude import and Unity checks |
 | [Ship with one rear module F18](#ship-with-one-rear-module-f18) | f-coaster-v18/timber-top-band | 2026-09-29 | Approved rear-module boat; F19 rear + middle also approved |
 | [Kitchen Lvl 1](#kitchen-lvl-1) | kitchen-chunky-lvl1-v4 | 2026-09-28 | Approved art — awaiting implementation and Unity checks |
@@ -80,6 +82,8 @@ Read current `BuildPlan`, `Recipe`, `StationStockView` and `CampWorker` before i
 
 ## Ship with one rear module F18
 
+**Status 2026-09-30:** superseded in game by the modular coaster family (F30 hulls, commit ee49d41), which grew out of this F18/F19 line; kept here until Kevin confirms F30 is the approved successor.
+
 Kevin approved F18 as the boat with one module at the back on 2026-09-29. Source: `art-staging/f-coaster-v18/timber-top-band/ship.blend`; exports and assembly manifest are in that folder's `models/` and `manifest.json`. Previews: `hero.png` and `empty-port-closed.png`. Kevin subsequently approved F19 with the raised middle module. Its source is `art-staging/f-coaster-v19/rear-and-middle/ship.blend`, with separate exports and manifest alongside it. F20 adds the raised bow as a separate variant awaiting review.
 
 Warm timber top band, navy exterior, aligned structural ribs, a steering-only rear deck, turning stairs and lower gun bays with timber trim and hinged covers. `cannon_present` on each cover root drives the Blender cover and review cannon visibility. Bind this to equipment occupancy in Unity; drivers do not transfer through FBX.
@@ -100,18 +104,48 @@ Kevin approved the barrel and sack designs from V1, then the rebuilt V2 crates, 
 - Crate preview: `art-staging/ship-cargo-v2/cargo-deck-group.png`; exact bounds/counts in `manifest.json`, checks in `validation.json`, notes in `README.md`. Each crate has one material primitive and 1,444 triangles. The barrel/sack copies in V2 have verified identical exported geometry, normals, UVs and colors to approved V1.
 - Still required: Unity import/material verification, cargo inventory display sockets, walk/ladder/cannon clearance, simple collision and navigation integration, and phone readability/performance. Use simple collision shapes where appropriate; do not substitute mesh colliders for the high-detail render mesh. Models are not yet installed in the game. Claude should retain this queue entry until integration and relevant checks pass.
 
-## Large swimming fish
 
-Kevin approved the fish and its swimming animation on 2026-09-29. Use `art-staging/large-fish-v1/`.
+## Resource kit
 
-- **Game export:** `large-fish-rigged.fbx` — one skinned mesh, five bones, 940 triangles, 506 weighted vertices.
-- **Editable source:** `large-fish.blend`; generator: `tools/blender/large_fish_v1.py`.
-- **Approved previews:** `fish-preview.png`, `fish-top.png`, animated `fish-swimming.gif`. These are Blender renders, not in-game underwater captures.
-- **Animation:** `Swim_Slow_Loop`, two seconds at 24fps, no root translation. Use Generic rig and Loop Time; use the imported clip's full duration rather than assuming frame offsets. FBX round-trip confirmed movement and matching loop endpoints.
-- **Materials:** preserve `GameColor` vertex colors and faceted normals; deep teal/turquoise back, pale dorsal stripe and belly, gold eyes. Prefer the existing vertex-color art shader and consolidate palette submeshes during import where practical. No textures required.
-- **Scale/orientation:** approximately 5.9m long, metres. Source faces Blender +X; FBX uses Y-up/-Z export-forward. Verify and align the imported art child to the gameplay movement root's +Z.
-- **Behavior:** intended to swim below the water. Suggested initial treatment is a single ambient fish with broad turns and restrained speed; spawning/movement are not included. Keep the entire dorsal fin below the locally sampled surface.
-- **Remaining checks:** import rig/clip/materials, test underwater visibility with the actual ocean shader, check phone silhouette and performance, then connect movement/spawning. Do not fake submersion by floating the model above opaque water. No gameplay collider or combat behavior has been requested.
-- **Notes/checks:** `README.md`, `validation.json`, `export-check.json` in the package.
+Kevin approved `art-staging/resource-kit-v1/` on 2026-09-30. Five families: Timber, Boards, Stone, Ore, Brick.
 
-Keep this entry until the fish is integrated and the underwater/animation checks pass.
+- **Source:** `resource-kit.blend`; reproducible generator `tools/blender/resource_kit_v1.py`.
+- **Exact game exports:** `{Timber,Boards,Stone,Ore,Brick}_{Unit,CarryUnit,Carry,Stack}.fbx` in that package (20 files). Import individual FBXs, not the Blender review layout.
+- **Approved appearance:** `resource-kit-review.png`; reduced review `resource-kit-small.png`. Dark bark/light cut ends, golden flat boards, pale rough stone, dark ore with broad copper-colored facets, terracotta bricks. Preserve these large color regions and silhouettes.
+- **Material:** single shared vertex-color material, `GameColor`, flat normals; no textures. Individual units range from 52 to 156 triangles. All 20 FBX round trips preserve triangle counts and colors; no tested boundary edges or zero-area faces in source exports. See `manifest.json`, `export-validation.json`.
+- **Scale and pivots:** true metres. Unit/Stack bottom-centre, CarryUnit/Carry centre grip. CarryUnit is already resized for existing carrying dimensions. Do not multiply by old primitive scale again. Check FBX axis alignment; long stock boards/logs run along Blender Y, carry boards across the arms. Exact dimensions in manifest and README.
+- **Runtime contract:** replace geometry in CampPiles/CargoVisual, VillagerActing and BuildSite while preserving runtime layout/count ownership. Boards must become planks rather than sharing the log visual. Use Unit for changing stock/build-site piles; CarryUnit repeated up to the existing six-item cap for carried loads. Preserve construction completion representation. Fixed Carry bundles and Stack examples are for review/static decoration, not replacements for dynamic counts. Ore currently travels in sacks; retaining that behavior is valid, and the ore carry mesh is optional.
+- **Integration checks:** phone zoom and lighting, hand/face/shoulder clearance during work and walking, empty/partial/full stock, exact visible load counts, build progress, floating cargo, shared materials/batching. Existing carry anchors and sizes are documented in `README.md`. No gameplay or colliders included.
+
+Keep queued until integrated and checked in game.
+
+## Worker tools
+
+Kevin approved `art-staging/worker-tools-v1/` on 2026-09-30. Seven models for six roles, preserving stone and iron spear variants.
+
+- **Exact exports:** `Axe.fbx`, `Hammer.fbx`, `Saw.fbx`, `Hoe.fbx`, `StirPaddle.fbx`, `SpearStone.fbx`, `SpearIron.fbx` in the approved package.
+- **Source:** `worker-tools.blend`; generator `tools/blender/worker_tools_v1.py`. Import individual FBXs, not the Blender review layout.
+- **Visual target:** `worker-tools-review.png`, individual named PNGs; contact-sheet tools are independently framed, not shown at equal scale.
+- **Materials:** one vertex-color material per mesh, preserve `GameColor` and flat normals. Warm wood, dark grips/iron, broad light working edges. No textures. 148–252 triangles each. All seven FBX round trips verified; source checks found no boundary edges or zero-area faces. See `manifest.json` and `export-validation.json`.
+- **Tool frame:** fist-centred origin, game +Y up haft, +Z working face, X swing axis. Source maps game (x,y,z) to Blender (x,-z,y), exported Y-up/-Z-forward. Verify imported axes and mirrored-side posing before replacing primitives. Metres; parent to body at unit scale, not scaled deckhand bones. Do not apply old primitive dimensions as additional scaling.
+- **Animation contract:** preserve VillagerActing.PoseTool reach/face values: Hammer .30/.10m; Axe .56/.13m; Saw .33/.055m; Hoe 1.02/.14m. Stir head at Y .66m. Preserve offhand offsets (.11m axe, .42m hoe). HunterProps spear haft extends .65m below / 1.15m above grip; retain resource-specific stone/iron selection. Existing procedural poses animate these rigid meshes; no new clips required.
+- **Remaining checks:** all work strokes, saw contact, hoe ground strike, pot clearance, hand/face clearance, two-hand grips, spear carrying/jabs, mirrored worker sides, phone readability and shared-material batching. No gameplay/collider changes included. Full instructions in package README.
+
+Keep queued until integrated and animation checks pass.
+
+## Sea discovery kit
+
+Kevin approved `art-staging/sea-discovery-v1/` on 2026-09-30.
+
+- **Exact exports:** `MessageBottle.fbx`, `SalvageCluster.fbx`, `LashedBoardBundle.fbx`, `BrokenBoardShort.fbx`, `BrokenBoardLong.fbx`, `ReefSplitPeak.fbx`, `ReefLowLedge.fbx`, `ReefLeaningTeeth.fbx`.
+- **Source:** `sea-discovery.blend`; generator `tools/blender/sea_discovery_v1.py`. Import individual FBXs, not the Blender review layout.
+- **Approved previews:** `sea-discovery-review.png`, `sea-discovery-small.png`, individual named PNGs. These are independently framed Blender renders, not in-game water captures.
+- **Geometry:** boards 32 triangles each; bundle 208; bottle 504; reefs 168 each; salvage cluster 1,508. All eight FBX round trips preserve triangle counts and GameColor. See `manifest.json` and `export-validation.json`.
+- **Materials:** opaque new meshes use GameColor/flat normals with one shared vertex-color material. Bottle has separate transparent green glass and opaque parchment/cork. Blender Mix Shader does not transfer: explicitly remap glass to mobile URP transparency, alpha approximately .26–.35, green tint, no depth write or scene-color refraction. Verify sorting against ocean and fog.
+- **Approved crate reuse:** SalvageCluster uses the unchanged Cargo_Box_Large mesh from `art-staging/ship-cargo-v2/ship-cargo.blend`, posed .22m lower with new broken boards. Preserve approved V2 colors/materials; original crate export remains authoritative for standalone use. Avoid duplicate shared crate assets.
+- **Waterline/scale:** metres; FBX Y-up/-Z-forward. Bottle body approximately .34m diameter/.82m long, intentionally enlarged from placeholder for phone readability, tilted 14 degrees, root intended for existing surface +.1m offset. Boards are surface-centred, 1.25m/2.15m class. Verify art-child offsets against existing surface +.15m salvage posing; do not alter ocean physics.
+- **Reef contract:** unit horizontal radius, origin mean waterline, .5m submerged skirt. Scale to existing Reef.Configure(radius), preserving hazard footprint, spawn clearance and separate runtime foam. Reefs stay static; check waves do not expose skirt bottoms.
+- **Runtime ownership:** preserve MessageBottle drift/lifetime/hauling/resolution. Preserve SalvageSpawner batched probes/respawn. FlotsamCrate keeps resource-specific 1–3 CargoVisual units; replace decorative boards without changing resource identities/counts. SalvageCluster is a static composition, not a replacement for every live resource type.
+- **Remaining checks:** bottle sorting and message visibility, phone-distance recognition, waterline offsets, crate fidelity, dynamic cargo counts, reef hazard/foam fit and phone performance. Full inspected contracts in package `README.md`. No scene, spawning, physics or collider changes included.
+
+Keep queued until integrated and relevant checks pass.
