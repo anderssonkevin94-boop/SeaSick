@@ -120,6 +120,11 @@ namespace SeaSick.UI
             // The thumb bar and the placement card (zero rects while hidden;
             // placement shows them with no camp, so this is not gated on Active).
             if (Sheets.ThumbBar.Blocks(guiPoint)) return true;
+            // The sea combat row (Fire port / Lock / Fire stbd, phase 6) and its note.
+            if (Sheets.CombatHud.Blocks(guiPoint)) return true;
+            // The sea HUD (phase 6): top bar, alert chip, helm row, and the
+            // action card while it is a button.
+            if (Sheets.SeaHud.Blocks(guiPoint)) return true;
             if (Sheets.MidnightLandHud.Active && (Sheets.MidnightLandHud.NavigationRect.Contains(guiPoint)
                 || Sheets.MidnightLandHud.ResourcesRect.Contains(guiPoint))) return true;
             return Sheets.SheetHost.FrameOpen

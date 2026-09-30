@@ -32,7 +32,8 @@ namespace SeaSick.Voyage
         OceanProbeRegistry.Handle[] flotsamHandles;
         Material crateMat;
         Material plankMat;
-        float messageUntil;
+        string salvageText;
+        int salvageTextFor = int.MinValue;
         GUIStyle style;
 
         bool warnedNotBuilt;
@@ -245,7 +246,16 @@ namespace SeaSick.Voyage
             if (isCrate && dist < pickupRadius)
             {
                 voyage.AddSalvage(salvageValue);
-                messageUntil = Time.time + 1.8f;
+                // Kevin, 2026-09-30 (island UI phase 6): the pickup was an
+                // IMGUI toast of its own; it is the game's one notice toast
+                // now (`Banner` -> `PartyReportToast`, UI Toolkit). Not a
+                // prompt: sailing over the wreckage is the whole action.
+                if (salvageText == null || salvageTextFor != salvageValue)
+                {
+                    salvageTextFor = salvageValue;
+                    salvageText = "+" + salvageValue + " timber";
+                }
+                SeaSick.Ship.Overboard.Banner.Show(salvageText, 1.8f);
                 Respawn(f);
             }
             else if (dist > despawnDistance)
@@ -262,27 +272,6 @@ namespace SeaSick.Voyage
             f.position = new Vector3(
                 basePos.x + Mathf.Sin(ang) * dist, 0f,
                 basePos.z + Mathf.Cos(ang) * dist);
-        }
-
-        void OnGUI()
-        {
-            // Draw-only panel: skip the non-Repaint events. See StatusHUD for
-            // the measurement — IMGUI runs OnGUI once per event, and the
-            // discarded passes were the game's biggest source of GC garbage.
-            if (Event.current.type != EventType.Repaint) return;
-            if (Time.time > messageUntil) return;
-            // Same IMGUI-blind-spot suppression as the rest of the HUD
-            // (2026-09-26 review: "+2 timber" floated over the Home card --
-            // this is what that was, not `CampToasts`/`ReturnSummary`).
-            if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen
-                || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
-            // High and centred under the compass, not a full-width strip
-            // across the middle of the water. The rect was the whole screen
-            // width at 0.62 of its height -- text centred in it, but a full
-            // -width rect over the sea all the same, and 0.02 off the jettison
-            // button that used to live at 0.60.
-            var r = SeaSick.UI.HudLayout.ToastRow(SeaSick.UI.UITheme.Unit * 2f);
-            GUI.Label(r, $"+{salvageValue} timber", SeaSick.UI.UITheme.Toast);
         }
     }
 }

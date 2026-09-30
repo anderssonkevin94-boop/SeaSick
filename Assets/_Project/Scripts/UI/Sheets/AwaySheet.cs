@@ -19,9 +19,29 @@ namespace SeaSick.UI.Sheets
     /// thumb row is "Back to camp". On a resume it opens while the catch-up
     /// runs and shows the progress until the report is in. Reads only;
     /// decides nothing. The work timing is dev text: editor only.
+    ///
+    /// **Also the voyage report (2026-09-30, island UI phase 6).** Sailing
+    /// away and back closes an absence on the camp; `ReturnSummary` (the toast
+    /// on arrival) opens this sheet for it with `AwaySummary.FromAbsence`: the
+    /// same blocks, titled "While you were gone" and timed in game days, with
+    /// no catch-up progress and no "Raids wait for you" footer.
     public class AwaySheet : ISheetFramed
     {
-        public string Title => "Welcome back";
+        readonly AwayProgress.Report voyage;
+        readonly string voyageSub;
+
+        /// The time-away report (`AwayProgress.Last`).
+        public AwaySheet() { }
+
+        /// A voyage's report (`AwaySummary.FromAbsence`); `sub` is the
+        /// header's line ("Away 2.3 days").
+        public AwaySheet(AwayProgress.Report voyageReport, string sub)
+        {
+            voyage = voyageReport;
+            voyageSub = sub;
+        }
+
+        public string Title => voyage != null ? "While you were gone" : "Welcome back";
         public Color Accent => SheetTheme.Moss;
         public bool WantsTallSheet => true;
         public string[] TabLabels => null;
@@ -73,7 +93,7 @@ namespace SeaSick.UI.Sheets
         public void Refresh()
         {
             if (col == null) return;
-            if (AwayProgress.Running)
+            if (voyage == null && AwayProgress.Running)
             {
                 col.Clear();
                 filled = false;
@@ -84,10 +104,11 @@ namespace SeaSick.UI.Sheets
             if (filled) return;
             filled = true;
             col.Clear();
-            var r = AwayProgress.Last;
+            var r = voyage ?? AwayProgress.Last;
             if (r == null) { col.Add(Note("Nothing happened.")); return; }
 
-            header?.SetSub("Away " + AwayProgress.Span(r.awaySeconds) + (r.capped ? " · capped at 12 h" : ""));
+            header?.SetSub(voyage != null ? voyageSub
+                : "Away " + AwayProgress.Span(r.awaySeconds) + (r.capped ? " · capped at 12 h" : ""));
 
             // Busiest camp first: events weigh most, then how much was moved.
             var camps = new List<AwayProgress.CampReport>(r.camps);
@@ -101,8 +122,9 @@ namespace SeaSick.UI.Sheets
             }
             if (shown == 0) col.Add(Note("Quiet while you were away: nothing was made, gathered or built."));
 
-            col.Add(Note((r.capped ? "Time away counts up to 12 h. " : "") + "Raids wait for you."
-                + (Application.isEditor ? $"  ({r.Timing})" : "")));
+            if (voyage == null)
+                col.Add(Note((r.capped ? "Time away counts up to 12 h. " : "") + "Raids wait for you."
+                    + (Application.isEditor ? $"  ({r.Timing})" : "")));
         }
 
         static int Weight(AwayProgress.CampReport c) =>

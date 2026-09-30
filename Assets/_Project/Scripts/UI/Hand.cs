@@ -829,58 +829,47 @@ namespace SeaSick.UI
             // left lying on the grass under nothing is worse than no ring.
             if (cursor != null && Held == null && shownFrame != Time.frameCount)
                 cursor.Hide();
+
+            // The carry line outranks the anchor's IMGUI prompt while it has
+            // something to say (`Prompts.Rank.Hand`): with a man dangling from
+            // the cursor the one thing the game is asking is where to put him
+            // down. Bid every frame; the pill itself is UI Toolkit.
+            if (Held != null || CarryLine(out _, out _)) Prompts.Claim(Prompts.Rank.Hand);
         }
 
-        readonly HudLabel line = new HudLabel();
-        string lineFrom;
-        bool lineAllowed;
-
-        /// The verb, in the one slot the HUD keeps for "what is the game
-        /// asking me to do". It outranks the anchor while somebody is held,
-        /// because with a man dangling from the cursor that is the only
-        /// question on screen.
+        /// **The carry line (UI Toolkit since 2026-09-30, island UI phase 6).**
+        /// The verb, for the pill `Sheets.CarryPill` draws near the top of the
+        /// thumb area -- the one slot the HUD keeps for "what is the game
+        /// asking me to do". While somebody is held it is what letting go
+        /// here would do ("Bo -- cut timber", "put Bo at the smithy", "back
+        /// aboard") or why it is refused (`allowed` false: "not in the sea").
         ///
-        /// It goes in the prompt slot rather than beside the cursor for a
+        /// It is a pill at the bottom, not text beside the cursor, for a
         /// reason that is about phones: on a one-handed portrait screen the
         /// thumb is ON the thing being aimed at, so text drawn there is text
         /// nobody can read.
-        void OnGUI()
+        ///
+        /// Empty-handed, the Hand still has two things to say on a desktop
+        /// (a mouse hovers): the campfire is tappable ("build") and so is
+        /// the DRAWING ("blueprint"). `IslandInput` drives `HoverAt` every
+        /// idle mouse frame, so `memo` is live then; on a touch screen nobody
+        /// hovers, `shownFrame` goes stale and nothing is said. Everything
+        /// else empty-handed says nothing (the ground, a tree, a ship's rail
+        /// have no affordance without a body to drop).
+        ///
+        /// Returns false when there is nothing to say. Allocates nothing: the
+        /// words are the target's own cached strings.
+        public bool CarryLine(out string text, out bool allowed)
         {
-            // Empty-handed, the Hand still has one thing to say: the
-            // campfire is tappable. `IslandInput` drives `HoverAt` every
-            // idle frame so `memo` is live even with nobody held; every
-            // other empty-handed target says nothing here (the ground, a
-            // tree, a ship's rail have no affordance without a body to
-            // drop), so this is the one exception, not a general hover
-            // prompt.
-            bool holding = Held != null;
-            // Empty-handed, two things are tappable: the fire (the build
-            // menu) and the DRAWING (its own panel -- what it still wants,
-            // cancel, move). Everything else empty-handed still says nothing.
-            if (!holding && memo.kind != HandTarget.Kind.Fire
-                         && memo.kind != HandTarget.Kind.Blueprint) return;
-            // Bid on EVERY event. A caller that bids only on Repaint owns the
-            // slot on repaint frames and has lost it by the mouse-up.
-            if (!Prompts.Claim(Prompts.Rank.Hand)) return;
-            if (Event.current.type != EventType.Repaint) return;
-
-            var t = memo;
-            bool ok = t.Allowed;
-            string src = ok ? t.verb : t.refusal;
-            if (string.IsNullOrEmpty(src)) return;
-
-            // Rebuilt only when the words change: IMGUI generates a text mesh
-            // for every string it is handed, and the verb under a still cursor
-            // is the same four words for as long as it is still.
-            if (ok != lineAllowed || !ReferenceEquals(src, lineFrom))
-            {
-                lineFrom = src;
-                lineAllowed = ok;
-                line.Set(ok ? src : "✕  " + src);
-            }
-
-            var stack = Prompts.Begin();
-            GUI.Label(stack.Next(HudLayout.Unit * 2.7f), line.Content, UITheme.Small2Centered);
+            text = null;
+            allowed = true;
+            if (Held == null
+                && (Time.frameCount - shownFrame > 1
+                    || (memo.kind != HandTarget.Kind.Fire && memo.kind != HandTarget.Kind.Blueprint)))
+                return false;
+            allowed = memo.Allowed;
+            text = allowed ? memo.verb : memo.refusal;
+            return !string.IsNullOrEmpty(text);
         }
     }
 }

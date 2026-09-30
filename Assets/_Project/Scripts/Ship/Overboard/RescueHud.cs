@@ -66,6 +66,7 @@ namespace SeaSick.Ship.Overboard
                 nextHelmLookup = Time.time + 1f;
             }
             TickBoarding(Time.deltaTime);
+            OfferCard();
         }
 
         // ------------------------------------------------- sail-over pickup
@@ -173,8 +174,8 @@ namespace SeaSick.Ship.Overboard
                     .CompareTo(Vector3.Distance(b.NearestHullSide(), b.WorldPosition));
             });
 
-            DrawSteeringLine(u);
-            DrawBoarding(u);
+            // "steering to X" and "X is climbing aboard" are the sea action
+            // card's now (`OfferCard`, from Update).
         }
 
         static readonly List<IOverboardTarget> inReach = new List<IOverboardTarget>();
@@ -294,23 +295,54 @@ namespace SeaSick.Ship.Overboard
 
         // ------------------------------------------------- steer readout ----
 
-        void DrawSteeringLine(int u)
+        // --- the sea action card (Kevin, 2026-09-30, island UI phase 6) -----
+        //
+        // The IMGUI "steering to X" box (Screen.height * 0.19) and the
+        // green-filled "X is climbing aboard" / "Hauling in X" bars at
+        // `BottomClustersTop` are offers to the sea HUD's one action card
+        // (`UI.Sheets.SeaActions`): a boarding timer is information with its
+        // fill as the card's bar (it needs no tap: keep her alongside), and a
+        // steer is the card with ONE tap, "stop steering" (the throttle stays
+        // the player's, as ever). The markers on the water stay IMGUI: they
+        // are pinned to the swimmer, not HUD.
+
+        readonly SeaSick.UI.Sheets.SeaActions.Joined steerTitle = new SeaSick.UI.Sheets.SeaActions.Joined();
+        readonly SeaSick.UI.Sheets.SeaActions.Joined climbTitle = new SeaSick.UI.Sheets.SeaActions.Joined();
+        System.Action cancelSteer;
+
+        void OfferCard()
         {
-            if (helm == null || !helm.SteeringToward) return;
-            string label = "steering to " + helm.SteerTargetName;
-            var style = new GUIStyle(GUI.skin.label)
+            if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
+            const int P = SeaSick.UI.Sheets.SeaActions.PriorityRescue;
+
+            // The fullest boarding timer: someone is coming aboard.
+            IOverboardTarget best = null;
+            float bestF = -1f;
+            foreach (var kv in boarding)
             {
-                fontSize = Mathf.RoundToInt(u * 0.95f),
-                fontStyle = FontStyle.Bold,
-                alignment = TextAnchor.MiddleCenter,
-            };
-            style.normal.textColor = Color.white;
-            float w = Mathf.Min(Screen.width - u * 2f, u * 20f);
-            // Below the top bar and alert chips, not over the FEEL/LIFE buttons.
-            var r = new Rect((Screen.width - w) * 0.5f, Screen.height * 0.19f, w, u * 1.7f);
-            if (Event.current.type == EventType.Repaint) GUI.Box(r, "");
-            GUI.Label(r, label, style);
+                if (kv.Key == null || kv.Key.Resolved) continue;
+                float f = Mathf.Clamp01(kv.Value / Mathf.Max(0.01f, BoardTime));
+                if (f > bestF) { bestF = f; best = kv.Key; }
+            }
+            if (best != null)
+            {
+                bool person = best.RescuePriority == 0;
+                SeaSick.UI.Sheets.SeaActions.Offer(P + 10, person ? "MAN OVERBOARD" : "IN THE WATER",
+                    person ? climbTitle.Of(best.Label, " is climbing aboard") : climbTitle.Of("Hauling in ", best.Label),
+                    "Keep her alongside", null, false, bestF);
+                return;
+            }
+
+            if (helm != null && helm.SteeringToward)
+            {
+                if (cancelSteer == null) cancelSteer = CancelSteer;
+                SeaSick.UI.Sheets.SeaActions.Offer(P, "STEERING TO",
+                    steerTitle.Of("Steering to ", helm.SteerTargetName),
+                    "Your thumb keeps the throttle · tap to stop steering", cancelSteer);
+            }
         }
+
+        void CancelSteer() { if (helm != null) helm.CancelSteerToward(); }
 
         // ------------------------------------------------- throw line -------
 
@@ -327,35 +359,6 @@ namespace SeaSick.Ship.Overboard
         /// where "Throw line" always has.
         /// "Anna is climbing aboard" with a filling bar, bottom-centre where
         /// the Throw line button used to be. Not a button: nothing to press.
-        void DrawBoarding(int u)
-        {
-            if (boarding.Count == 0) return;
-            float h = Mathf.Max(u * 2.4f, 48f);
-            float w = Mathf.Min(HudLayout.Safe.width - HudLayout.Pad * 2f, u * 26f);
-            var safe = HudLayout.Safe;
-            float y = HudLayout.BottomClustersTop - HudLayout.Gap - h;
-            foreach (var kv in boarding)
-            {
-                if (kv.Key == null || kv.Key.Resolved) continue;
-                var rect = new Rect(safe.x + (safe.width - w) * 0.5f, y, w, h);
-                float f = Mathf.Clamp01(kv.Value / Mathf.Max(0.01f, BoardTime));
-                UITheme.Rect(rect, new Color(0f, 0f, 0f, 0.55f));
-                UITheme.Rect(new Rect(rect.x, rect.y, rect.width * f, rect.height), new Color(0.3f, 0.75f, 0.4f, 0.85f));
-                var style = new GUIStyle(GUI.skin.label)
-                {
-                    fontSize = Mathf.RoundToInt(u * 0.95f),
-                    alignment = TextAnchor.MiddleCenter,
-                };
-                style.normal.textColor = Color.white;
-                GUI.Label(rect, kv.Key.RescuePriority == 0
-                    ? kv.Key.Label + " is climbing aboard"
-                    : "Hauling in " + kv.Key.Label, style);
-                y -= h + HudLayout.Gap;
-            }
-        }
-
-        /// **Unused since 2026-09-28** (sail-over pickup replaced the
-        /// button); kept for the jolly boat's sake of the shared haul code.
         void DrawThrowLines(int u)
         {
             if (inReach.Count == 0 || helm == null) return;

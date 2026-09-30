@@ -359,3 +359,26 @@
    A pile at the store's ceiling turns its count ember (the old Stores bank's
    low/full colouring). */
 .pack-tile--full .pack-tile-count { color: rgb(246, 146, 128); }
+
+/* ---------------- the carry pill (island UI restructure 6, 2026-09-30) ----------------
+   What letting go of the villager in the Hand would do, in the thumb lane just
+   above the bar / Next card. CarryPill.cs sets left/width/bottom. Never takes a
+   touch (picking mode Ignore in code). Ember for a target that refuses. */
+.carry-holder {
+    position: absolute; flex-direction: row; justify-content: center; align-items: flex-end;
+    margin: 0; padding: 0;
+}
+.carry-pill {
+    flex-direction: row; align-items: center; flex-shrink: 1; min-height: 44px;
+    margin: 0; padding: 6px 18px;
+    background-color: rgb(22, 41, 58);
+    border-width: 1.5px; border-color: rgb(164, 210, 232); border-radius: 22px;
+}
+.carry-pill--no { border-color: rgb(228, 98, 58); background-color: rgb(42, 26, 26); }
+.carry-cross { width: 18px; height: 18px; margin: 0 8px 0 0; flex-shrink: 0; }
+.carry-text {
+    margin: 0; padding: 0; font-size: 18px; color: rgb(232, 242, 246); white-space: normal;
+    flex-shrink: 1; -unity-text-align: middle-center;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.carry-pill--no .carry-text { color: rgb(246, 146, 128); }

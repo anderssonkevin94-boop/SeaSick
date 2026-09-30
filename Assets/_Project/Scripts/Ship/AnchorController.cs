@@ -3,7 +3,6 @@ using SeaSick.UI;
 using SeaSick.Voyage;
 using SeaSick.World;
 using UnityEngine;
-using SheetsHud = global::SeaSick.UI.Sheets.Sheets;
 
 namespace SeaSick.Ship
 {
@@ -93,25 +92,14 @@ namespace SeaSick.Ship
         /// The sheet HUD's door onto the repair toggle the prompt button flips.
         public bool Repairing => repairing;
         public void ToggleRepair() => repairing = !repairing;
-        GUIStyle buttonStyle, infoStyle;
-
-        // Every readout on this prompt, cached.
-        //
-        // IMGUI calls OnGUI once per EVENT — Layout, Repaint, one per mouse
-        // move — so the interpolations below ran several times a frame to
-        // produce the same sentence. See StatusHUD for the measurement. Each
-        // of these rebuilds only when what it SAYS changes: the anchor timers
-        // on the tenth of a second they show, the hull on the whole percent,
-        // the harvest on the whole unit.
-        readonly HudLabel landText = new HudLabel();
-        readonly HudLabel timerText = new HudLabel();
-        readonly HudLabel repairText = new HudLabel();
-        readonly HudLabel statusText = new HudLabel();
-        readonly HudLabel deckCargoText = new HudLabel();
-        readonly HudLabel partyText = new HudLabel();
 
         void Start()
         {
+            // Converted once: `SeaActions.Offer` is called every frame and
+            // must not allocate a delegate each time.
+            tapLand = TapLand;
+            tapAlongside = TapAlongside;
+
             motor = GetComponent<ShipMotor>();
             hull = GetComponent<HullIntegrity>();
             hold = GetComponent<ShipHold>();
@@ -157,6 +145,15 @@ namespace SeaSick.Ship
             {
                 case State.Underway:
                 {
+                    // **A bigger sea action owns the key (2026-09-30).** The
+                    // sea card shows ONE offer, the highest priority
+                    // (`SeaActions`); a castaway outranks landing, so space
+                    // must not run her ashore while the card is asking for a
+                    // rescue. Last frame's winner: this frame's offers are
+                    // still coming in.
+                    if (SeaSick.UI.Sheets.SeaActions.HasOffer
+                        && SeaSick.UI.Sheets.SeaActions.Current.priority > SeaSick.UI.Sheets.SeaActions.PriorityLand)
+                        break;
                     // A dock beats a beach. If you have brought her within
                     // reach of her berth, coming alongside is what you meant;
                     // running her up the sand thirty metres away is not.
@@ -184,7 +181,7 @@ namespace SeaSick.Ship
                     // Recall, even when the repair button is holding the
                     // primary slot — getting the crew back is the command that
                     // moves the voyage on.
-                    RecallCrew();
+                    CallThemBack();
                     break;
             }
         }
@@ -489,6 +486,16 @@ namespace SeaSick.Ship
                     if (timer <= 0f) GetUnderway();
                     break;
 
+                case State.Anchored:
+                    // **Repairs run wherever she lies stopped (2026-09-30,
+                    // island UI phase 6).** They only ran `Ashore`, the state
+                    // the retired "send crew ashore" row put her in -- so the
+                    // Ship sheet's "Repair hull" pill (the one repair button
+                    // left) flipped a flag that did nothing at anchor or at a
+                    // pier. The hands mend her from the deck.
+                    Repair(dt);
+                    break;
+
                 case State.Ashore:
                     Repair(dt);
                     // Top up as they work inland and fell what they were
@@ -502,7 +509,9 @@ namespace SeaSick.Ship
                             if (Ours(c) && !c.IsAboard) { at += c.transform.position; n++; }
                         if (n > 0) StockTheWood(at / n);
                     }
-                    if (AllAboard()) { CurrentState = State.Anchored; repairing = false; }
+                    // Repairs carry on at anchor now (see `Anchored` above),
+                    // so the crew coming back no longer stops them.
+                    if (AllAboard()) CurrentState = State.Anchored;
                     break;
             }
 
@@ -517,16 +526,17 @@ namespace SeaSick.Ship
             // somewhere they might stay. Emptying the deck before the player
             // has been asked takes the decision away and then offers it.
             //
-            // The feature is not gone: "send crew ashore" is still one tap in
-            // the prompt stack, and that button was always the way to send
-            // them back out after a recall. It is an ACTION now rather than a
-            // consequence of arriving.
+            // Crew go ashore through the landing party (`LandingPartySheet`,
+            // the thumb bar's "Landing party"); the old "send crew ashore"
+            // row was retired 2026-09-30 (island UI phase 6) -- the party's
+            // Gather is crew working ashore, with a say in who and how much.
             if (landingPending && CurrentState == State.Anchored
                 && gangway != null && gangway.Ready)
             {
                 landingPending = false;
             }
 
+            OfferSeaAction();
             UpdateCameraFocus();
         }
 
@@ -564,7 +574,7 @@ namespace SeaSick.Ship
                 // At a camp's pier the plank crosses from her side onto the
                 // pier HEAD -- a short hop, not the length of the pier --
                 // and the shore party walks the pier the rest of the way
-                // (see `SendAshore`). At home it stays inboard as before:
+                // (see `PartyLanding`). At home it stays inboard as before:
                 // the home pier has its own arrival and the plank was never
                 // part of it.
                 if (gangway != null)
@@ -1013,11 +1023,11 @@ namespace SeaSick.Ship
         GatherParty Party => party != null ? party : (party = GatherParty.For(this));
 
         /// **A raider in range (2026-09-30).** The combat lock's dial and the
-        /// helm take the bottom of the screen then, and the landing party's
-        /// row stacked over both: it stands down until the fight is over
-        /// (the party runs for the ship on its own when raiders come near).
-        /// Asked once a frame, not per IMGUI event.
-        bool CombatNear
+        /// helm take the bottom of the screen then: the thumb bar's "Landing
+        /// party" stands down until the fight is over (the party runs for
+        /// the ship on its own when raiders come near), and Cast off / Call
+        /// them back stay. Asked once a frame however often it is read.
+        public bool CombatNear
         {
             get
             {
@@ -1030,52 +1040,27 @@ namespace SeaSick.Ship
         bool combatNear;
         int combatNearFrame = -1;
 
-        /// **"Landing party" (2026-09-30)**, where "⛏ Send gather party"
-        /// was: one thumb row above Cast off that opens
-        /// `LandingPartySheet` (Explore · Gather · Hunt). Kevin, on the old
-        /// sheet: *"horrible ui ... this whole interaction needs to be re
-        /// worked."*
-        void DrawGatherParty(ref Prompts.Stack stack, float bh, GUIStyle buttonStyle)
+        // "Landing party" and the old "send crew ashore" rows were IMGUI
+        // here until 2026-09-30 (island UI phase 6). The landing party is the
+        // thumb bar's primary off a fresh island now (`ThumbBar`, anchored
+        // mode, opening `LandingPartySheet`); "send crew ashore" (the whole
+        // crew, unasked, for timber) is retired -- the party's Gather is
+        // crew working ashore.
+
+        /// True from the landing press until the plank is down: she is still
+        /// coming alongside, and Cast off waits (`CastOff` refuses it too).
+        public bool LandingPending => landingPending;
+
+        /// "Call them back" -- the thumb bar's recall while a landing party
+        /// (or any of her hands) is ashore; what space does in that state.
+        public void CallThemBack()
         {
-            if (CurrentIsland == null || CampSiting.Placing || CombatNear) return;
-            var r = stack.Next(bh);
-            UIBlocker.Block(r);
-            if (GUI.Button(r, "Landing party", buttonStyle))
-                SeaSick.UI.Sheets.LandingPartySheet.Open(this);
-        }
-
-        void SendAshore()
-        {
-            if (CurrentIsland == null) return;
-            // Land them at the foot of the plank, then they find their own work.
-            //
-            // At a pier the plank only reaches the HEAD now (she lies beyond
-            // it, not beside it) -- `gangway.LandingPoint` is the head, not
-            // somewhere to start cutting wood. `CrewAgent.PathToShore` routes
-            // every trip through `gangway.LandingPoint` before the final
-            // point regardless, so handing it the pier's ROOT instead walks
-            // them off the ship, onto the head, down the pier, and only then
-            // to work -- exactly "step onto the head, walk the pier to root"
-            // -- with no pathing changes needed on the crew's side.
-            Vector3 landing = CurrentDock != null
-                ? CurrentDock.Landing
-                : (gangway != null && gangway.Ready
-                    ? gangway.LandingPoint
-                    : CurrentIsland.ShorePoint(0, 1, transform.position));
-
-            // Stand harvest nodes on the real trees around the landing, so
-            // the crew cut the wood that is actually drawn rather than the
-            // handful of prop trees. 1.9% of an island's trees used to be
-            // cuttable; see SceneryWood.
-            StockTheWood(landing);
-
-            for (int i = 0; i < crew.Length; i++)
-            {
-                if (!Ours(crew[i])) continue;   // a camp's own hands stay put
-                Vector3 spread = transform.right * ((i - (crew.Length - 1) * 0.5f) * 2.2f);
-                crew[i].GoAshore(landing + spread, CurrentIsland, hold, gangway, voyage);
-            }
-            CurrentState = State.Ashore;
+            if (CurrentState != State.Ashore) return;
+            // Already turned for home: a second order would re-route
+            // explorers already on their straightest way back (the bar's
+            // hint says "Coming back aboard…" meanwhile).
+            if (Party.Out && party.Recalling) return;
+            RecallCrew();
         }
 
         float restockIn;
@@ -1163,303 +1148,161 @@ namespace SeaSick.Ship
         }
 
         // --- UI -------------------------------------------------------------
+        //
+        // **No IMGUI drawn here (2026-09-30, island UI phase 6).** Kevin
+        // approved mockup "8c · Anchored off a fresh island". What this
+        // controller used to draw as a stack of IMGUI pills over the helm
+        // now lives in two UI Toolkit places:
+        //
+        // * **Under way** -- "Land here", "Come alongside", "slow down",
+        //   "sheer cliff" and the (dead, 0 s) drop/weigh countdowns are
+        //   OFFERS to the sea action card (`SeaActions`, drawn by `SeaHud`),
+        //   made every frame from `Update` (`OfferSeaAction`).
+        // * **Stopped off a fresh island** -- Landing party · Ship · Cast off
+        //   (Call them back while anyone is ashore) are the thumb bar's
+        //   anchored mode (`ThumbBar`), with the Next card's "Make camp"
+        //   above it; "coming alongside…", "looking over the ground…" and
+        //   the party's progress are the bar's hint line.
+        //
+        // Retired with the IMGUI: "send crew ashore" (the landing party's
+        // Gather), the deck cargo row (the Backpack's Ship tab), the ashore
+        // "repair hull" row (the Ship sheet's Repair pill, which now works at
+        // anchor too) and the IMGUI "Make camp" fallback (the Next card).
+        // At a camp the thumb bar's Camp · Build · Ship is unchanged and Cast
+        // off stays in the Ship sheet; at home the home panel owns leaving.
 
-        /// The greed switch. Off, the crew fill her to the marked line and
-        /// stop. On, they keep piling it on deck. Deliberately only reachable
-        /// while anchored: overloading is a decision you make in harbour, and
-        /// then have to live with all the way home.
-        ///
-        /// It takes a row off the prompt stack rather than offsetting itself
-        /// from the button above it. It used to sit at `secondary.y + 2.3u`
-        /// with a height of 1.8u, and the button below it started at
-        /// `secondary.y + 3.2u` — so the toggle covered the top 0.9u of "cast
-        /// off", on a screen where the next thing you do is cast off.
-        /// **Make camp**, the one verb an island has before it has a fire.
-        ///
-        /// A row on the anchor's own stack, the row above leaving, because
-        /// until the fire is sited nothing else can offer it: the sheet HUD
-        /// only takes an island that has a fire or the drawing of one
-        /// (`SheetBootstrap.FireFor`), and there is no campfire in the world
-        /// to tap. A second `Prompts` bidder would lose the slot to this one
-        /// anyway, so it lives in the stack that already owns it. The tap
-        /// starts siting exactly as the old camp bar's button did; from there
-        /// the bottom placement bar ("Make camp here" -- Cancel, Turn, "Light
-        /// the fire") is `CampSiting`'s, and this row hides while it runs.
-        ///
-        /// Before the survey has decided, or where it found no ground, a line
-        /// says so instead of a button that could not work.
-        void DrawMakeCamp(ref Prompts.Stack stack, int u, float bh,
-            GUIStyle buttonStyle, GUIStyle infoStyle)
+        /// The frame this controller last offered the sea card something.
+        int offeredFrame = -10;
+
+        /// **The only IMGUI left: a bid, never a draw.** The shared bottom
+        /// prompt slot (`Prompts`) went to the anchor whenever it had
+        /// something to say, which kept `Bilge`'s "over the side" pill away
+        /// from the landing controls. Those controls are UI Toolkit now,
+        /// but they sit where that pill would, so the anchor still takes the
+        /// slot -- and draws nothing in it -- while it offers the sea card
+        /// or the anchored thumb bar is up. The Hand still outranks it.
+        /// Bid on every event (see `Prompts`).
+        void OnGUI()
         {
-            if (CurrentIsland == null || CampSiting.Placing) return;
-            var camp = Outpost.Of(CurrentIsland);
-            if (camp == null)
-            {
-                GUI.Label(stack.Next(u * 1.8f), Outpost.Surveying(CurrentIsland)
-                    ? "looking over the ground…"
-                    : "no ground here will take a camp", infoStyle);
-                return;
-            }
-            if (camp.HasCamp || camp.Building) return;
-            // The Next card's step 1 ("Make camp", island UI phase 2) is the
-            // way to the fire while it shows; this row is only the fallback.
-            if (SeaSick.UI.Sheets.NextCard.Visible) return;
-            var r = stack.Next(bh);
-            UIBlocker.Block(r);
-            if (GUI.Button(r, MakeCampLabel, buttonStyle))
-                CampSiting.Begin(camp, BuildPlans.Campfire,
-                    motor != null ? motor.transform : null);
+            if (Time.frameCount - offeredFrame <= 1 || SeaSick.UI.Sheets.ThumbBar.AnchoredActive)
+                Prompts.Claim(Prompts.Rank.Anchor);
         }
 
-        /// Built once: every part of it is a constant.
-        static readonly string MakeCampLabel =
-            $"🔥  Make camp — {BuildPlans.Campfire.cost} logs";
-
-        void DrawDeckCargoToggle(ref Prompts.Stack stack, int u,
-            GUIStyle buttonStyle, GUIStyle infoStyle)
-        {
-            if (voyage == null) return;
-
-            var r = stack.Next(u * 1.8f);
-            UIBlocker.Block(r);
-
-            var style = voyage.TakeDeckCargo ? UITheme.ButtonPressed : buttonStyle;
-            if (deckCargoText.Changed(HudLabel.Key(voyage.TakeDeckCargo ? 1 : 0,
-                                                   voyage.MaxHold, voyage.HoldCapacity)))
-                deckCargoText.Set(voyage.TakeDeckCargo
-                    ? $"◉  deck cargo — to {voyage.MaxHold}"
-                    : $"◎  deck cargo — stop at {voyage.HoldCapacity}");
-            if (GUI.Button(r, deckCargoText.Content, style)) voyage.TakeDeckCargo = !voyage.TakeDeckCargo;
-
-            if (voyage.TakeDeckCargo)
-                GUI.Label(stack.Next(u * 1.6f),
-                    "she'll swim low and take water", infoStyle);
-        }
-
-        /// The one contextual prompt, bottom centre, through `Prompts`.
-        ///
-        /// It used to place its own buttons at `h − 4.2u − bh` and hope. At
-        /// the shipping portrait aspect that put "come alongside" 34 px inside
-        /// `CombatLock`'s "space · lock on" — two live buttons overlapping, one
-        /// of which puts the ship somewhere. Position is no longer this
-        /// class's to choose: it bids a priority and draws in the rows it is
-        /// handed.
-        /// Keyboard hints ("(space)", "(S)") only on a desk-shaped window
+        /// Keyboard hints ("space", "S") only on a desk-shaped window
         /// (`HudLayout.Wide`); a phone gets the touch wording alone (Kevin,
         /// 2026-09-27: dev leftovers on the phone).
         static bool Desk => SeaSick.UI.HudLayout.Wide;
         static string KeyHint(string hint) => Desk ? hint : "";
 
-        void OnGUI()
+        // The sea card's taps, converted to delegates once (`Start`). Each
+        // re-checks everything (`TryLand` / `TryComeAlongside` refuse unless
+        // she is under way, near enough and slow enough), so a second press
+        // -- the card's own click racing the space bar -- is a no-op.
+        System.Action tapLand, tapAlongside;
+        void TapLand() => TryLand(out _);
+        void TapAlongside() => TryComeAlongside();
+
+        // The offer's words, rebuilt only when what they SAY changes (a new
+        // island or pier, a speed or beach verdict flipping, the window's
+        // shape): the card is offered every frame and must not allocate.
+        Object offerAt;
+        int offerKey = int.MinValue;
+        string offerEyebrow = "", offerTitle = "", offerDetail = "";
+
+        const string TitleLand = "Land here";
+        const string TitleCliff = "Sheer cliff";
+        const string TitleAlongside = "Come alongside";
+        const string TitleDropping = "Dropping anchor…";
+        const string TitleWeighing = "Weighing anchor…";
+
+        bool OfferStale(Object at, int key)
+        {
+            if (at == offerAt && key == offerKey) return false;
+            offerAt = at;
+            offerKey = key;
+            return true;
+        }
+
+        string SlowText => $"Slow to under {approachSpeedLimit:0.#} m/s" + KeyHint("  ·  S");
+
+        static string Upper(Object o) => o != null ? o.name.ToUpperInvariant() : "";
+
+        /// **The anchor's offers to the sea action card**, once a frame from
+        /// `Update`, at `SeaActions.PriorityLand` (200): what the IMGUI
+        /// prompt's under-way rows said, as one card above the thumb. Never
+        /// a disabled button: too fast or a cliff is an information card
+        /// (`enabled: false`) that says what is needed instead.
+        void OfferSeaAction()
         {
             if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
-            if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
-            // The landing party's sheet owns the bottom of the screen while
-            // it is up.
-            if (SeaSick.UI.Sheets.LandingPartySheet.IsOpen) return;
-            // Two panels offering to cast off in the same corner of the
-            // screen is a choice nobody wants to make -- the same rule the
-            // dock prompt already applies against the beach one.
+            // The home panel owns the screen and the leaving while it is up.
             if (voyage != null && voyage.AtHome) return;
-
-            // What is in reach is worked out BEFORE bidding. Underway with
-            // open water all round this controller has nothing to say, and a
-            // claim it never draws in would silently mute the combat lock and
-            // the jettison button behind it.
-            Dock dock = null;
-            Island isle = null;
-            if (CurrentState == State.Underway)
-            {
-                dock = DockInRange();
-                if (dock == null)
-                {
-                    isle = IslandInRange();
-                    if (isle == null) return;
-                }
-            }
-
-            // Bid on EVERY event, not only Repaint: a caller that bids on
-            // repaint alone owns the slot on repaint frames and has lost it by
-            // the mouse-up that would have pressed its own button.
-            if (!Prompts.Claim(Prompts.Rank.Anchor)) return;
-
-            // Ledger-style pills (2026-09-27 restyle): #13222E, an ice rim,
-            // round ends -- the land HUD's look, still drawn in IMGUI.
-            buttonStyle = UITheme.Pill;
-            infoStyle = UITheme.Small2Centered;
-            bool sheetHud = SheetsHud.SuppressLegacy;
-
-            int u = HudLayout.Unit;
-            float bh = u * 2.7f;
-            // Rows stack upward, so the first row asked for is the one nearest
-            // the thumb. The action you take most often gets it.
-            var stack = Prompts.Begin();
+            const int P = SeaSick.UI.Sheets.SeaActions.PriorityLand;
+            // Stamped on every offer below; `OnGUI` holds the prompt slot
+            // while it is fresh.
+            int frame = Time.frameCount;
 
             switch (CurrentState)
             {
-                case State.Underway:
-                {
-                    var primary = stack.Next(bh);
-                    // The dock's own prompt, which replaces the beach one
-                    // rather than sitting beside it -- two ways to stop in
-                    // the same thirty metres is a choice nobody wants to make.
-                    if (dock != null)
-                    {
-                        bool slow = motor.CurrentSpeed <= approachSpeedLimit;
-                        UIBlocker.Block(primary);
-                        GUI.enabled = slow;
-                        if (GUI.Button(primary, slow
-                                ? (Desk ? "⚓  Come alongside   (space)" : "⚓  Come alongside")
-                                : (Desk ? "slow down to come alongside  (S)" : "slow down to come alongside"), buttonStyle))
-                            ComeAlongside(dock);
-                        GUI.enabled = true;
-                        return;
-                    }
-
-                    bool beach = CanLandHere(isle);
-                    bool slowEnough = motor.CurrentSpeed <= approachSpeedLimit;
-                    // Three of the four readings are literals; only the named
-                    // resource has to be built, and only when the island under
-                    // the bow changes.
-                    bool res = isle.HasResources;
-                    if (landText.Changed(HudLabel.Key(beach ? 1 : 0, (slowEnough ? 1 : 0) + (Desk ? 2 : 0),
-                            res ? 1 : 0, res && isle.ResourceName != null
-                                         ? isle.ResourceName.GetHashCode() : 0)))
-                        landText.Set(!beach
-                            ? "sheer cliff — find a beach"
-                            : slowEnough
-                                ? (res
-                                    ? $"⚓  Land here — {isle.ResourceName}" + KeyHint("   (space)")
-                                    : "⚓  Land here — rest" + KeyHint("   (space)"))
-                                : "slow down to land" + KeyHint("  (S)"));
-                    UIBlocker.Block(primary);
-                    GUI.enabled = slowEnough && beach;
-                    if (GUI.Button(primary, landText.Content, buttonStyle)) Land(isle);
-                    GUI.enabled = true;
-                    break;
-                }
-
-                // One tenth of a second is what these show, so that — not the
-                // float — is the key: ten strings a second instead of one per
-                // event.
+                // Both timers are 0 s today (anchoring is immediate), so
+                // these are for a tuning that brings them back: a progress
+                // bar on the card, not a ticking IMGUI label.
                 case State.Dropping:
-                    if (timerText.Changed(HudLabel.Key(0, Mathf.RoundToInt(timer * 10f))))
-                        timerText.Set($"dropping anchor…  {timer:F1}s");
-                    GUI.Label(stack.Next(bh), timerText.Content, infoStyle);
-                    break;
-
+                    if (OfferStale(CurrentIsland, 1)) { offerEyebrow = Upper(CurrentIsland); offerDetail = "Letting go"; }
+                    offeredFrame = frame;
+                    SeaSick.UI.Sheets.SeaActions.Offer(P, offerEyebrow, TitleDropping, offerDetail, null, false,
+                        dropTime > 0f ? Mathf.Clamp01(1f - timer / dropTime) : 1f);
+                    return;
                 case State.Weighing:
-                    if (timerText.Changed(HudLabel.Key(1, Mathf.RoundToInt(timer * 10f))))
-                        timerText.Set($"weighing anchor…  {timer:F1}s");
-                    GUI.Label(stack.Next(bh), timerText.Content, infoStyle);
+                    if (OfferStale(CurrentIsland, 2)) { offerEyebrow = Upper(CurrentIsland); offerDetail = "Getting under way"; }
+                    offeredFrame = frame;
+                    SeaSick.UI.Sheets.SeaActions.Offer(P, offerEyebrow, TitleWeighing, offerDetail, null, false,
+                        weighTime > 0f ? Mathf.Clamp01(1f - timer / weighTime) : 1f);
+                    return;
+                case State.Underway:
                     break;
-
-                case State.Anchored:
-                {
-                    if (landingPending)
-                    {
-                        GUI.Label(stack.Next(bh), "coming alongside…", infoStyle);
-                        break;
-                    }
-                    // Crew are back aboard: cast off, or put them ashore again.
-                    var primary = stack.Next(bh);
-                    UIBlocker.Block(primary);
-                    if (GUI.Button(primary, Desk ? "⚓  Cast off   (space)" : "⚓  Cast off", buttonStyle)) WeighAnchor();
-
-                    if (!sheetHud) DrawMakeCamp(ref stack, u, bh, buttonStyle, infoStyle);
-                    if (!sheetHud) DrawGatherParty(ref stack, bh, buttonStyle);
-
-                    // While the sheet HUD is up, the ship's own sheet carries
-                    // the shore party, the deck cargo and the repairs. Only
-                    // "cast off" stays here, because leaving is the one
-                    // decision that is about the VOYAGE rather than the camp
-                    // -- and because a player who wants to go should never
-                    // have to find an object to tap first.
-                    if (!sheetHud && CurrentIsland != null && CurrentIsland.HasResources)
-                    {
-                        var secondary = stack.Next(bh);
-                        UIBlocker.Block(secondary);
-                        if (GUI.Button(secondary, "send crew ashore", buttonStyle)) SendAshore();
-                    }
-
-                    // Deck cargo is the ship's sheet's once there is a camp;
-                    // before that it is a row here.
-                    if (!sheetHud) DrawDeckCargoToggle(ref stack, u, buttonStyle, infoStyle);
-                    break;
-                }
-
-                case State.Ashore:
-                {
-                    // Recall is always the bottom row, in every state that
-                    // offers it. A button that moves depending on whether the
-                    // hull happens to need timber is a button you have to read
-                    // before pressing.
-                    var primary = stack.Next(bh);
-                    UIBlocker.Block(primary);
-
-                    // A landing party out: the recall is the party's, the row
-                    // above it opens the sheet (their progress), and the line
-                    // says why there is no cast-off.
-                    if (Party.Out)
-                    {
-                        if (party.Recalling) GUI.Label(primary, "coming back aboard…", infoStyle);
-                        else if (GUI.Button(primary, Desk ? "Call them back   (space)" : "Call them back", buttonStyle)) RecallCrew();
-                        // A raider in range: only the recall stays (the lock
-                        // dial and the helm need the room).
-                        if (CombatNear) break;
-                        var open = stack.Next(bh);
-                        UIBlocker.Block(open);
-                        if (GUI.Button(open, "Landing party", buttonStyle))
-                            SeaSick.UI.Sheets.LandingPartySheet.Open(this);
-                        int out_ = party.Ashore;
-                        if (partyText.Changed(HudLabel.Key(party.DeliveredUnits + party.Kills * 1000, out_,
-                                party.Recalling ? 1 : 0, Mathf.FloorToInt(party.Elapsed))))
-                            partyText.Set($"{party.StatusLine}\n{out_} hand{(out_ == 1 ? "" : "s")} ashore — call them back to cast off");
-                        GUI.Label(stack.Next(u * 3.2f), partyText.Content, infoStyle);
-                        break;
-                    }
-
-                    if (GUI.Button(primary, Desk ? "recall crew aboard   (space)" : "recall crew aboard", buttonStyle)) RecallCrew();
-
-                    if (!sheetHud) DrawMakeCamp(ref stack, u, bh, buttonStyle, infoStyle);
-
-                    bool canRepair = !sheetHud && hull != null && hull.NeedsRepair && voyage != null
-                        && voyage.AmountOf("Timber") > 0;
-                    if (canRepair || (repairing && !sheetHud))
-                    {
-                        var secondary = stack.Next(bh);
-                        UIBlocker.Block(secondary);
-                        // Whole percent is what P0 prints; the float under it
-                        // moves every frame a plank goes on.
-                        if (repairText.Changed(HudLabel.Key(repairing ? 1 : 0,
-                                Mathf.RoundToInt(hull.Integrity01 * 100f))))
-                            repairText.Set(repairing
-                                ? $"stop repairs — hull {hull.Integrity01:P0}"
-                                : $"repair hull ({hull.Integrity01:P0}) — uses timber");
-                        if (GUI.Button(secondary, repairText.Content, buttonStyle)) repairing = !repairing;
-                    }
-
-                    if (!sheetHud) DrawDeckCargoToggle(ref stack, u, buttonStyle, infoStyle);
-
-                    // What is left reads as a whole unit, so it only needs a
-                    // new string when a unit actually comes out of the ground
-                    // — not on every event while the crew work.
-                    bool harvesting = CurrentIsland != null && CurrentIsland.HasResources;
-                    if (statusText.Changed(HudLabel.Key(harvesting ? 1 : 0, repairing ? 1 : 0,
-                            harvesting ? Mathf.RoundToInt(CurrentIsland.Remaining) : 0,
-                            harvesting && CurrentIsland.ResourceName != null
-                                ? CurrentIsland.ResourceName.GetHashCode() : 0)))
-                    {
-                        string status = harvesting
-                            ? $"harvesting {CurrentIsland.ResourceName} — {CurrentIsland.Remaining:F0} left"
-                            : "the crew rests on solid ground";
-                        if (repairing) status += "   ·   repairing hull";
-                        statusText.Set(status);
-                    }
-                    GUI.Label(stack.Next(u * 1.8f), statusText.Content, infoStyle);
-                    break;
-                }
+                default:
+                    return;
             }
+
+            bool slow = motor != null && motor.CurrentSpeed <= approachSpeedLimit;
+            int desk = Desk ? 8 : 0;
+
+            // The pier's own offer replaces the beach one rather than sitting
+            // beside it -- two ways to stop in the same thirty metres is a
+            // choice nobody wants to make. A dock beats a beach, as on space.
+            var dock = DockInRange();
+            if (dock != null)
+            {
+                if (OfferStale(dock, 3 | (slow ? 4 : 0) | desk))
+                {
+                    var at = Island.Nearest(dock.Berth);
+                    offerEyebrow = dock.IsHome ? "HOME BERTH" : (at != null ? Upper(at) + " · PIER" : "PIER");
+                    offerTitle = TitleAlongside;
+                    offerDetail = slow ? "Tie up at the pier" + KeyHint("  ·  space") : SlowText;
+                }
+                offeredFrame = frame;
+                SeaSick.UI.Sheets.SeaActions.Offer(P, offerEyebrow, offerTitle, offerDetail,
+                    slow ? tapAlongside : null, slow);
+                return;
+            }
+
+            var isle = IslandInRange();
+            if (isle == null) return;
+            bool beach = CanLandHere(isle);
+            bool res = isle.HasResources;
+            if (OfferStale(isle, 16 | (slow ? 4 : 0) | desk | (beach ? 32 : 0) | (res ? 64 : 0)))
+            {
+                offerEyebrow = Upper(isle);
+                offerTitle = beach ? TitleLand : TitleCliff;
+                offerDetail = !beach ? "Find a beach to land"
+                    : !slow ? SlowText
+                    : (res && !string.IsNullOrEmpty(isle.ResourceName) ? isle.ResourceName : "Rest ashore")
+                      + KeyHint("  ·  space");
+            }
+            bool can = beach && slow;
+            offeredFrame = frame;
+            SeaSick.UI.Sheets.SeaActions.Offer(P, offerEyebrow, offerTitle, offerDetail, can ? tapLand : null, can);
         }
     }
 }

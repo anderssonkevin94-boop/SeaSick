@@ -201,6 +201,66 @@ namespace SeaSick.Save
             ev.Sort((a, b) => b.rank.CompareTo(a.rank));
         }
 
+        /// **A voyage's absence as the same report (2026-09-30, island UI
+        /// phase 6).** The ship sailing away and back closes an `Absence` on
+        /// the camp (`Outpost.LastReturn`); the old IMGUI "while you were
+        /// gone" card read it. `AwaySheet` now shows it, so it is cast into
+        /// the shape the sheet already draws: one camp, `Report.awaySeconds`
+        /// in GAME seconds (the sheet's sub line says days, not minutes).
+        /// Only what the absence booked: goods gathered / made (gross `got`),
+        /// buildings raised, hands who joined, raids, and food eaten or
+        /// missed as events (the ledger keeps fill, not items, for food).
+        /// Reads only.
+        public static AwayProgress.Report FromAbsence(Outpost o, OutpostLedger.Absence a, double nowSeconds)
+        {
+            var rep = new AwayProgress.Report();
+            if (o == null || a == null) return rep;
+            rep.awaySeconds = System.Math.Max(0.0, nowSeconds - a.sinceSeconds);
+            rep.simSeconds = rep.awaySeconds;
+            var c = new AwayProgress.CampReport
+            {
+                camp = o,
+                name = o.Island == null ? "camp" : o.Island.IsHome ? "Home" : o.Island.gameObject.name,
+            };
+            rep.camps.Add(c);
+
+            for (int k = 0; k < a.res.Count && k < a.got.Count; k++)
+            {
+                int n = Mathf.FloorToInt(a.got[k]);
+                if (n < 1) continue;
+                var line = new Line { res = a.res[k], n = n };
+                if (ResDefs.IsRaw(a.res[k])) c.gathered.Add(line); else c.made.Add(line);
+            }
+            Sort(c.made); Sort(c.gathered);
+
+            foreach (var id in a.raised)
+            {
+                var p = BuildPlans.Named(id);
+                c.built.Add(!string.IsNullOrEmpty(p.label) ? p.label : id);
+            }
+
+            var ev = c.events;
+            if (a.raids > 0)
+            {
+                var lost = new System.Text.StringBuilder();
+                for (int k = 0; k < a.raidRes.Count && k < a.raidGot.Count; k++)
+                    if (a.raidGot[k] > 0)
+                        lost.Append(lost.Length > 0 ? ", " : "").Append(ResDefs.Counted(a.raidRes[k], a.raidGot[k]));
+                string times = a.raids == 1 ? "Raided" : $"Raided {a.raids} times";
+                if (lost.Length > 0) ev.Add(new Event { tone = 2, rank = 80, text = $"{times}: lost {lost}" });
+                else ev.Add(new Event { tone = 0, rank = 20, text = $"{times}: nothing taken" });
+            }
+            foreach (var n in a.born)
+                if (!string.IsNullOrEmpty(n))
+                    ev.Add(new Event { tone = 0, rank = 30, text = $"{n} joined the camp" });
+            if (a.eaten >= 1f)
+                ev.Add(new Event { tone = 0, rank = 10, text = $"Ate {Mathf.FloorToInt(a.eaten)} food" });
+            if (a.hungryDays > 0.05f)
+                ev.Add(new Event { tone = 1, rank = 50, text = $"Went hungry for {a.hungryDays:0.#} days" });
+            ev.Sort((x, y) => y.rank.CompareTo(x.rank));
+            return rep;
+        }
+
         static void Sort(List<Line> l) => l.Sort((a, b) => b.n.CompareTo(a.n));
 
         /// " (killed in a raid)" -- or nothing when the cause is unknown.

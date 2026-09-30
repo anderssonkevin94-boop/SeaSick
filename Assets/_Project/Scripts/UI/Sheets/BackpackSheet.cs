@@ -54,6 +54,14 @@ namespace SeaSick.UI.Sheets
     /// "Island 1/2", "Island 2/2" ... in the strip, the same way the station
     /// sheets page. No scrolling anywhere. The thumb row is **Load all** on
     /// both pages and **Deck cargo** only on the ship page (a hold setting).
+    ///
+    /// **Ship only, with no camp (Kevin, 2026-09-30, island UI phase 6).**
+    /// At sea, or anchored off an island with no camp, the sea top bar's hold
+    /// count opens this with `camp == null`: only the Ship tab(s), the hold's
+    /// contents as tiles with no -/+ (nothing can be carried with no camp
+    /// alongside), "held / limit" in the head, and **Deck cargo** as the only
+    /// thumb-row button. What the retired IMGUI HoldChip list and deck-cargo
+    /// row did at sea.
     /// </summary>
     public sealed class BackpackSheet : ISheetFramed
     {
@@ -62,13 +70,26 @@ namespace SeaSick.UI.Sheets
 
         /// `shipSide`: open on the Ship tab (the Ship sheet's link row); the
         /// Camp hub and the top bar open on the Island tab.
-        public BackpackSheet(Outpost o, bool shipSide = false) { camp = o; startShipSide = shipSide; onShipPage = shipSide; }
+        public BackpackSheet(Outpost o, bool shipSide = false)
+        {
+            // A camp that is not a camp (a fresh island's outpost) is no
+            // camp here: nothing ashore can be carried.
+            if (o != null && (o.Ledger == null || !(o.HasCamp || o.Building))) o = null;
+            camp = o; shipOnly = o == null;
+            startShipSide = shipSide || shipOnly; onShipPage = shipSide || shipOnly;
+        }
+
+        /// No camp: the hold only (see the class notes).
+        readonly bool shipOnly;
 
         // --- ISheet / ISheetFramed -------------------------------------------
 
         public string Title => "Backpack";
-        public Vector3 AnchorWorld => camp != null ? camp.CampCentre : Vector3.zero;
-        public bool StillValid => camp != null && camp.Ledger != null && (camp.HasCamp || camp.Building);
+        public Vector3 AnchorWorld => camp != null ? camp.CampCentre
+            : SheetBits.Anchor != null ? SheetBits.Anchor.transform.position : Vector3.zero;
+        public bool StillValid => shipOnly
+            ? SheetBits.Voyage != null && !MidnightLandHud.Active
+            : camp != null && camp.Ledger != null && (camp.HasCamp || camp.Building);
         public Color Accent => MidnightLandHud.Ice;
         public bool WantsTallSheet => true;
 
@@ -85,10 +106,11 @@ namespace SeaSick.UI.Sheets
         string[] labels;
 
         public string[] TabLabels { get { EnsurePlan(); return labels; } }
-        public int Tab { get { EnsurePlan(); return onShipPage ? pages + part : part; } }
+        public int Tab { get { EnsurePlan(); return shipOnly ? part : onShipPage ? pages + part : part; } }
         public void SetTab(int index)
         {
             EnsurePlan();
+            if (shipOnly) { onShipPage = true; part = Mathf.Clamp(index, 0, pages - 1); return; }
             onShipPage = index >= pages;
             part = Mathf.Clamp(onShipPage ? index - pages : index, 0, pages - 1);
         }
@@ -147,7 +169,8 @@ namespace SeaSick.UI.Sheets
             root.AddToClassList("pack-body");
 
             // Away and carrying share one slot: away wins.
-            awayLine = new Label("Bring her alongside the pier to move goods");
+            awayLine = new Label(shipOnly ? "Moor at a camp to move goods"
+                : "Bring her alongside the pier to move goods");
             awayLine.AddToClassList("pack-away");
             root.Add(awayLine);
             orderLine = new Label();
@@ -186,7 +209,13 @@ namespace SeaSick.UI.Sheets
             var l = L;
             scratch.Clear();
             var v = SheetBits.Voyage;
-            if (l != null)
+            if (shipOnly && v != null)
+            {
+                foreach (var kv in v.HeldStores)
+                    if (!string.IsNullOrEmpty(kv.Key) && kv.Value > 0) scratch.Add(kv.Key);
+                scratch.Sort(ByCategoryThenName);
+            }
+            else if (l != null)
             {
                 foreach (var id in AllIds(l, v))
                 {
@@ -202,6 +231,12 @@ namespace SeaSick.UI.Sheets
             string ship = "Ship";
             if (v != null && pages == 1)
                 ship += " " + v.TotalHeld + "/" + (v.TakeDeckCargo ? v.MaxHold : v.HoldCapacity);
+            if (shipOnly)
+            {
+                if (labels == null || labels.Length != pages) labels = new string[pages];
+                for (int i = 0; i < pages; i++) labels[i] = pages == 1 ? ship : SheetKit.PageLabel("Ship", i, pages);
+                return;
+            }
             if (labels == null || labels.Length != pages * 2) labels = new string[pages * 2];
             for (int i = 0; i < pages; i++)
             {
@@ -223,6 +258,14 @@ namespace SeaSick.UI.Sheets
         /// `Refresh` re-texts them.
         public VisualElement BuildActions()
         {
+            if (shipOnly)
+            {
+                loadBtn = null;
+                deckBtn = SheetKit.Btn("Deck cargo", ToggleDeck, true);
+                deckBtn.style.minHeight = 44f;
+                FillDeck();
+                return SheetKit.Actions(deckBtn);
+            }
             loadBtn = SheetKit.Btn("Load all", LoadPressed, true);
             loadBtn.style.minHeight = 44f;
             VisualElement row;
@@ -300,6 +343,7 @@ namespace SeaSick.UI.Sheets
             btns.Add(t.minus);
             btns.Add(t.plus);
             t.root.Add(btns);
+            if (shipOnly) btns.style.display = DisplayStyle.None;   // nothing to carry to
             return t;
         }
 
@@ -430,7 +474,13 @@ namespace SeaSick.UI.Sheets
             string lt = CampLoading.Busy ? "Stop loading" : alongside ? "Load all" : "Moor to load";
             if (loadBtn.text != lt) loadBtn.text = lt;
             loadBtn.SetEnabled(CampLoading.Busy || (alongside && room > 0));
+            FillDeck();
+        }
+
+        void FillDeck()
+        {
             if (deckBtn == null) return;
+            var v = SheetBits.Voyage;
             string dt = v == null ? "Deck cargo" : v.TakeDeckCargo ? "Deck cargo · on" : "Deck cargo · off";
             if (deckBtn.text != dt) deckBtn.text = dt;
             deckBtn.SetEnabled(v != null);
@@ -452,10 +502,20 @@ namespace SeaSick.UI.Sheets
         };
 
         const string InfoHint = "Tap a tile for details · hold an island tile to keep some ashore";
+        const string ShipOnlyHint = "What she carries. Tap a tile for details.";
 
         void RefreshInfo(OutpostLedger l)
         {
             if (infoLine == null) return;
+            if (shipOnly)
+            {
+                infoLine.text = !string.IsNullOrEmpty(selected) && ResDefs.TryGet(selected, out var sd)
+                    ? StationPage.Cap(sd.label) + " · " + TierWord(sd.tier) + ", " + SourceWord(sd.source)
+                      + " · ship " + (SheetBits.Voyage != null ? SheetBits.Voyage.HeldOf(selected) : 0) + "."
+                      + (string.IsNullOrEmpty(sd.blurb) ? "" : " " + sd.blurb)
+                    : ShipOnlyHint;
+                return;
+            }
             if (string.IsNullOrEmpty(selected) || l == null || !ResDefs.TryGet(selected, out var def))
             {
                 infoLine.text = InfoHint;
@@ -492,6 +552,7 @@ namespace SeaSick.UI.Sheets
 
         public void Refresh()
         {
+            if (shipOnly) { RefreshShipOnly(); return; }
             var l = L;
             if (l == null || grid == null) return;
             bool here = l.ShipHere;
@@ -540,6 +601,40 @@ namespace SeaSick.UI.Sheets
             emptyLine.style.display = scratch.Count == 0 ? DisplayStyle.Flex : DisplayStyle.None;
 
             foreach (var id in shown) Fill(l, tiles[id], id, onShipPage);
+        }
+
+        /// The hold alone (no camp): its tiles, "held / limit" and the deck
+        /// toggle. Counts come straight off the voyage.
+        void RefreshShipOnly()
+        {
+            if (grid == null) return;
+            var v = SheetBits.Voyage;
+            Plan();
+            if (sub != null) sub.text = "the ship's hold";
+            awayLine.style.display = DisplayStyle.Flex;
+            orderLine.style.display = DisplayStyle.None;
+            workshopLine.style.display = DisplayStyle.None;
+            if (v == null) meta.text = "";
+            else
+            {
+                int limit = v.TakeDeckCargo ? v.MaxHold : v.HoldCapacity;
+                string m = v.TotalHeld + " / " + limit + (v.Overloaded ? " · overloaded" : "");
+                if (meta.text != m) meta.text = m;
+            }
+            emptyLine.text = "The hold is empty.";
+            FillDeck();
+            RefreshInfo(null);
+            SlicePage();
+            Relayout(grid, tiles, shown, pageIds, true);
+            emptyLine.style.display = scratch.Count == 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            foreach (var id in shown)
+            {
+                var t = tiles[id];
+                int have = v != null ? v.HeldOf(id) : 0;
+                t.count.text = MidnightLandHud.CompactCount(have);
+                t.root.EnableInClassList("pack-tile--dim", have <= 0);
+                t.pending.text = "";
+            }
         }
 
         /// Category (the `ResCategory` order: raw, material, food, ...), then

@@ -36,7 +36,7 @@ namespace SeaSick.Ship.Overboard
         HelmInput helm;
         float nextHelmLookup;
 
-        // --- state advanced once a frame in Update, only ever READ in OnGUI --
+        // --- state advanced once a frame in Update, read by Offer() ----------
         string targetName;      // nearest castaway in pickup range, or null
         bool targetTooFast;     // in range, but she's making too much way
         string berthWhy;        // non-empty = no free berth for targetName
@@ -81,70 +81,51 @@ namespace SeaSick.Ship.Overboard
                 pickupElapsed += Time.deltaTime;
                 if (pickupElapsed >= RecruitTuning.PickupSeconds) Commit(pickingName, motor.transform);
             }
+            Offer();
         }
 
-        void OnGUI()
+        // --- the sea action card (Kevin, 2026-09-30, island UI phase 6) -----
+        //
+        // The IMGUI button this drew at `BottomClustersTop` (with a
+        // `new GUIStyle` per event) is an offer to the sea HUD's one action
+        // card now (`SeaSick.UI.Sheets.SeaActions`): "Take X aboard" as the tap, the
+        // fetch as the card's progress bar, and "No free berth" / "slow down"
+        // as information (no chevron, the stick stays free under it).
+
+        readonly SeaSick.UI.Sheets.SeaActions.Joined takeTitle = new SeaSick.UI.Sheets.SeaActions.Joined();
+        readonly SeaSick.UI.Sheets.SeaActions.Joined fetchTitle = new SeaSick.UI.Sheets.SeaActions.Joined();
+        System.Action startPick;
+
+        void Offer()
         {
             if (string.IsNullOrEmpty(targetName)) return;
-
-            int u = HudLayout.Unit;
-            float btnH = Mathf.Max(u * 3.4f, 64f);
-            float btnW = Mathf.Min(HudLayout.Safe.width - HudLayout.Pad * 2f, u * 26f);
-            var safe = HudLayout.Safe;
-            var rect = new Rect(safe.x + (safe.width - btnW) * 0.5f,
-                HudLayout.BottomClustersTop - HudLayout.Gap - btnH, btnW, btnH);
-            UIBlocker.Block(rect);
-
-            if (targetTooFast)
-            {
-                var hintStyle = new GUIStyle(GUI.skin.label)
-                {
-                    fontSize = Mathf.RoundToInt(u * 0.9f),
-                    alignment = TextAnchor.MiddleCenter,
-                };
-                hintStyle.normal.textColor = new Color(1f, 0.8f, 0.3f);
-                GUI.Label(rect, "slow down to fetch " + targetName, hintStyle);
-                return;
-            }
-
-            if (!string.IsNullOrEmpty(berthWhy))
-            {
-                bool wasEnabled = GUI.enabled;
-                GUI.enabled = false;
-                GUI.Button(rect, "No free berth");
-                GUI.enabled = wasEnabled;
-                return;
-            }
-
+            if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
+            const int P = SeaSick.UI.Sheets.SeaActions.PriorityRescue + 5;
+            if (startPick == null) startPick = StartPick;
             if (pickingName == targetName)
             {
-                GUI.Box(rect, "");
                 float t = Mathf.Clamp01(pickupElapsed / Mathf.Max(0.01f, RecruitTuning.PickupSeconds));
-                var fill = new Rect(rect.x, rect.y, rect.width * t, rect.height);
-                UITheme.Rect(fill, new Color(0.35f, 0.75f, 0.4f, 0.55f));
-                var style = new GUIStyle(GUI.skin.label)
-                {
-                    fontSize = Mathf.RoundToInt(u * 0.95f),
-                    fontStyle = FontStyle.Bold,
-                    alignment = TextAnchor.MiddleCenter,
-                };
-                style.normal.textColor = Color.white;
-                GUI.Label(rect, "Fetching " + targetName + "...", style);
+                SeaSick.UI.Sheets.SeaActions.Offer(P, "IN THE WATER", fetchTitle.Of("Fetching ", targetName, "..."),
+                    "Hold her steady alongside", null, false, t);
                 return;
             }
-
-            if (GUI.Button(rect, "Take " + targetName + " aboard"))
+            if (!string.IsNullOrEmpty(berthWhy))
             {
-                pickingName = targetName;
-                pickupElapsed = 0f;
+                SeaSick.UI.Sheets.SeaActions.Offer(P, "IN THE WATER", "No free berth", berthWhy, null, false);
+                return;
             }
+            SeaSick.UI.Sheets.SeaActions.Offer(P, "IN THE WATER", takeTitle.Of("Take ", targetName, " aboard"),
+                targetTooFast ? SeaSick.UI.Sheets.SeaActions.SlowTo(OverboardTuning.ThrowMaxSpeed) : "Lift them onto the ship",
+                startPick, !targetTooFast);
         }
 
-        /// **The pickup finishes.** Same boarding path camp-born hands use
-        /// (`BornVillager.Board`, exactly what `Swimmer.Rescue` calls for a
-        /// swimmer whose own body is already gone) -- removed from
-        /// `Lives.Castaways` first, so a save mid-board never double-counts
-        /// them.
+        void StartPick()
+        {
+            if (string.IsNullOrEmpty(targetName) || targetTooFast || !string.IsNullOrEmpty(berthWhy)) return;
+            pickingName = targetName;
+            pickupElapsed = 0f;
+        }
+
         void Commit(string name, Transform hull)
         {
             pickingName = null;

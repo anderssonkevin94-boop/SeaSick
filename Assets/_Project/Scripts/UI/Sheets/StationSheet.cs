@@ -2218,6 +2218,14 @@ namespace SeaSick.UI.Sheets
                         p.Stroke();
                         Line(12, 12, 12, 6); Line(12, 12, 16.5f, 14.5f);
                         break;
+                    // The grave sheet (2026-09-30): a headstone with a cross.
+                    case "grave":
+                        Line(7, 20, 7, 10); Line(17, 20, 17, 10); Line(4, 20, 20, 20);
+                        p.BeginPath();
+                        p.Arc(new Vector2(12 * s, 10 * s), 5f * s, 180f, 360f);
+                        p.Stroke();
+                        Line(12, 9, 12, 16); Line(9.5f, 11.5f, 14.5f, 11.5f);
+                        break;
                     default:
                         Line(5, 12, 19, 12);
                         p.BeginPath();

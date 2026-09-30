@@ -61,8 +61,36 @@ namespace SeaSick.Combat
         /// What a lock would take right now, for the button and the probe.
         public IHittable CurrentCandidate => candidate;
 
-        /// The lock button's rect last frame, GUI space, for `LockOnCheck`.
-        public Rect ButtonRect { get; private set; }
+        /// The lock button's rect, GUI space, for `LockOnCheck`: the Lock /
+        /// Release button in `CombatHud` (UI Toolkit since 2026-09-30), zero
+        /// while the combat row is not showing.
+        public Rect ButtonRect => SeaSick.UI.Sheets.CombatHud.Visible
+            ? SeaSick.UI.Sheets.CombatHud.LockRect : default;
+
+        /// **For `CombatHud` (2026-09-30).** The lock range past which the
+        /// lock slips and the grace timer runs; the button and the target
+        /// brackets turn amber as a lock nears it.
+        public float BreakRange => breakRange;
+
+        /// Flat distance from the ship to a target, metres.
+        public float DistanceTo(IHittable t) => t == null ? 0f : Distance(t);
+
+        /// The ship's gun battery (for the combat row's fire buttons).
+        public SeaSick.Ship.CannonBattery Battery =>
+            battery != null ? battery : (battery = GetComponent<SeaSick.Ship.CannonBattery>());
+
+        /// Hands who would loose arrows now (`ShipArchers.Archers`), for the
+        /// combat row's note. 0 with no bows, no arrows or no archers
+        /// component.
+        public int ArchersReady
+        {
+            get
+            {
+                if (archers == null) archers = GetComponent<SeaSick.Ship.ShipArchers>();
+                return archers != null ? archers.Archers : 0;
+            }
+        }
+        SeaSick.Ship.ShipArchers archers;
 
         /// The lock button, the space bar and the probe all come here: lock
         /// the candidate, or drop the lock you hold. Returns true if a lock
@@ -242,7 +270,13 @@ namespace SeaSick.Combat
             if (battery != null) battery.AutoFireTarget = null;
         }
 
-        void OnDisable() => Release();
+        void OnEnable() { SeaSick.UI.Sheets.CombatHud.Source = this; }
+
+        void OnDisable()
+        {
+            Release();
+            if (SeaSick.UI.Sheets.CombatHud.Source == this) SeaSick.UI.Sheets.CombatHud.Source = null;
+        }
 
         /// Nearest thing worth locking, inside acquisition range.
         IHittable Candidate()
@@ -270,46 +304,15 @@ namespace SeaSick.Combat
             return d.magnitude;
         }
 
-        // ---- the lock button: its own corner, not the shared prompt slot ---
-
-        readonly HudLabel buttonCaption = new HudLabel();
-        static Texture2D roundTex;
-
-        /// A soft-edged filled circle, built once and cached. Same rule as
-        /// the rest of this HUD's text meshes: build once, key off reference
-        /// equality, never regenerate per frame.
-        static Texture2D RoundTex()
-        {
-            if (roundTex != null) return roundTex;
-            const int n = 64;
-            roundTex = new Texture2D(n, n, TextureFormat.RGBA32, false);
-            roundTex.hideFlags = HideFlags.HideAndDontSave;
-            Vector2 c = new Vector2((n - 1) * 0.5f, (n - 1) * 0.5f);
-            float rad = n * 0.5f;
-            var px = new Color[n * n];
-            for (int y = 0; y < n; y++)
-                for (int x = 0; x < n; x++)
-                {
-                    float dist = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), c);
-                    px[y * n + x] = new Color(1f, 1f, 1f, Mathf.Clamp01(rad - dist));
-                }
-            roundTex.SetPixels(px);
-            roundTex.Apply();
-            return roundTex;
-        }
-
-        static void DrawRound(Rect r, Color c)
-        {
-            var prev = GUI.color;
-            GUI.color = c;
-            GUI.DrawTexture(r, RoundTex());
-            GUI.color = prev;
-        }
-
-        /// What the button showed LAST frame, so a pulse fires once per new
-        /// candidate rather than every frame the same one is in range.
-        IHittable pulseFrom;
-        float pulseStart = -10f;
+        // ---- the lock button moved to `CombatHud` (2026-09-30) -------------
+        //
+        // Island UI phase 6 (mockup "8b · Sea: combat"): the round IMGUI
+        // button in `HudLayout.Slot.Lock` is gone. `CombatHud` draws Lock /
+        // Release in the centre of the combat row above the helm row (UI
+        // Toolkit; "Lock · 120 m" with a candidate, "Release" ember when
+        // held, amber when slipping) and calls `ToggleLock`. What stays
+        // here, drawn in IMGUI because it is world-anchored, is the four
+        // corner brackets on the locked target.
 
         void OnGUI()
         {
@@ -354,67 +357,6 @@ namespace SeaSick.Combat
                         }
                 }
             }
-
-            var shown = Locked ?? candidate;
-            if (shown == null) { ButtonRect = default; pulseFrom = null; return; }
-
-            // A short pulse the moment a NEW candidate comes into range --
-            // not on every frame the same one sits there, and not while a
-            // lock is held (taking the lock is the payoff; it doesn't need
-            // to keep announcing itself). Cheap: one reference compare and a
-            // float lerp, no allocation.
-            if (Locked == null && !ReferenceEquals(shown, pulseFrom))
-                pulseStart = Time.unscaledTime;
-            pulseFrom = Locked == null ? shown : null;
-            float pulseT = Mathf.Clamp01(1f - (Time.unscaledTime - pulseStart) / 0.4f);
-
-            // Its own fixed corner now (`HudLayout.Slot.Lock`, bottom-right,
-            // nearest the safe area's edge) rather than a bid for the shared
-            // prompt slot -- see the class doc for why. ~72 pt, the size
-            // Kevin asked for: the unit-scaled size is primary (it already
-            // matches the rest of the HUD across both target resolutions),
-            // with a points-based floor under it for a device whose `u`
-            // clamps low relative to its real pixel density.
-            float baseD = Mathf.Max(u * 10.5f, PtPx(66f));
-            float diameter = baseD * (1f + 0.16f * pulseT);
-            var r2 = HudLayout.Place(HudLayout.Slot.Lock, diameter, diameter);
-            ButtonRect = r2;
-            // Claimed on every event, same reason the rest of this HUD does:
-            // a button that only claims on Repaint loses the mouse-up that
-            // would have pressed it.
-            UIBlocker.Block(r2);
-
-            bool held = Locked != null;
-            float dist = Distance(shown);
-            bool slipping2 = held && dist > breakRange;
-
-            if (Event.current.type == EventType.Repaint)
-            {
-                // Ember/red once locked (amber while the lock is slipping,
-                // same fade the target brackets use), a cool highlight that
-                // brightens with the pulse while it's only a candidate.
-                Color fill = held
-                    ? Color.Lerp(new Color(0.82f, 0.20f, 0.16f, 0.97f),
-                                 new Color(0.95f, 0.58f, 0.22f, 0.90f), slipping2 ? 1f : 0f)
-                    : Color.Lerp(new Color(0.10f, 0.20f, 0.28f, 0.92f),
-                                 new Color(0.35f, 0.66f, 0.86f, 1f), pulseT);
-                DrawRound(r2, fill);
-
-                if (buttonCaption.Changed(HudLabel.Key(held ? 1 : 0, Mathf.RoundToInt(dist))))
-                    buttonCaption.Set(held ? "Release" : $"{dist:F0} m");
-
-                // Reticle icon on top, the distance (or "Release") under it --
-                // both fit inside the circle without crowding it.
-                GUI.Label(new Rect(r2.x, r2.y + r2.height * 0.14f, r2.width, r2.height * 0.42f),
-                    "◎", UITheme.Title);
-                GUI.Label(new Rect(r2.x, r2.y + r2.height * 0.58f, r2.width, r2.height * 0.3f),
-                    buttonCaption.Content, UITheme.Small2Centered);
-            }
-
-            // Invisible on top of the drawn circle -- GUI.Button's own click
-            // detection is rect-based regardless of what style draws it, so
-            // this still needs to run on every event, not only Repaint.
-            if (GUI.Button(r2, GUIContent.none, GUIStyle.none)) ToggleLock();
         }
     }
 }

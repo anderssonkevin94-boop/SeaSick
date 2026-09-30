@@ -56,6 +56,8 @@ namespace SeaSick.UI.Sheets
         SeaLedger sea;
         ThumbBar.View thumb;
         NextCard.View nextCard;
+        CombatHud.View combat;
+        SeaHud.View seaHud;
         PartyReportToast partyToast;
         bool midnight;
         readonly BuildingSheetFocus buildingFocus = new BuildingSheetFocus();
@@ -152,6 +154,12 @@ namespace SeaSick.UI.Sheets
             // The Next card (phase 2) after the bar: it sits above it, in
             // the same lane.
             nextCard = new NextCard.View(root);
+            // The sea combat row and target chip (phase 6, 2026-09-30).
+            combat = new CombatHud.View(root);
+            // The sea HUD (phase 6, 2026-09-30): top bar, alert chip, the
+            // action card and the helm row. After the combat row: it sets
+            // the combat row's offsets from its own bars.
+            seaHud = new SeaHud.View(root);
             // The landing party's report (2026-09-30), over the lot.
             partyToast = new PartyReportToast(root);
             if (ring == null) ring = gameObject.AddComponent<SelectionRing>();
@@ -376,7 +384,7 @@ namespace SeaSick.UI.Sheets
         /// keeps the island visible above a half-height card.
         public static bool HugsContent(ISheet s) =>
             s != null && !HudLayout.Wide
-            && ((MidnightLandHud.Active && BuildingSheetFocus.IsBuilding(s)) || s is LandingPartySheet);
+            && ((MidnightLandHud.Active && BuildingSheetFocus.IsBuilding(s)) || s is LandingPartySheet || s is GraveSheet);
 
         /// The hugging frame's ceiling: its top edge sits at most this
         /// fraction of the safe height above the safe bottom, header included.
@@ -871,7 +879,7 @@ namespace SeaSick.UI.Sheets
             bool suppressed = SeaSick.UI.ModularYard.ShipyardModal.IsOpen
                 || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None;
             root.style.display = suppressed ? DisplayStyle.None : DisplayStyle.Flex;
-            if (suppressed) { thumb.Hide(); return; }
+            if (suppressed) { thumb.Hide(); combat.Hide(); seaHud.Hide(); return; }
 
             // A page swap destroys the element a slide is running on, and a
             // scheduler on a dead element never reports finishing. Without
@@ -896,6 +904,10 @@ namespace SeaSick.UI.Sheets
             // After the bar (its lane, its reserve), before the land HUD
             // (whose IMGUI claim and food notice read the card's).
             nextCard.Tick(root);
+            combat.Tick(root);
+            // After the bar, the Next card and the combat row (the card
+            // stacks on their rects), before the chart (`ChartTopPanel`).
+            seaHud.Tick(root);
             partyToast.Tick(root);
             land.Tick(root);
             sea.Tick(root);

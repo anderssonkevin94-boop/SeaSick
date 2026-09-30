@@ -1,0 +1,105 @@
+/* The sea combat controls (CombatHud.cs, phase 6 of the island UI restructure,
+   mockup "8b · Sea: combat"). Every size is in DESIGN px of the 390-wide
+   mockup; CombatHud scales the two roots (.combat-wrap, .combat-chip) by
+   style.scale so a design px is the same on the phone whatever reference
+   resolution the panel is on. */
+
+.combat-wrap {
+    position: absolute; left: 0; bottom: 0; width: 370px;
+    flex-direction: column; margin: 0; padding: 0;
+    transform-origin: left bottom;
+}
+.combat-chip {
+    position: absolute; left: 0; top: 0; margin: 0; padding: 7px 14px;
+    border-radius: 16px; background-color: rgb(196, 87, 74);
+    color: rgb(232, 242, 246); font-size: 14px; white-space: nowrap;
+    -unity-text-align: middle-left;
+    transform-origin: left top;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.combat-note {
+    height: 16px; margin: 0 0 6px 4px; padding: 0; font-size: 12px; white-space: nowrap;
+    color: rgba(232, 242, 246, 0.85); -unity-text-align: middle-left; overflow: hidden;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.combat-row { flex-direction: row; align-items: stretch; height: 64px; margin: 0; padding: 0; }
+
+/* ---- fire buttons ---- */
+.combat-fire {
+    flex-grow: 1; flex-basis: 0; flex-shrink: 1; min-width: 0; height: 64px;
+    margin: 0; padding: 0; border-radius: 16px; border-width: 1.5px;
+    flex-direction: column; align-items: center; justify-content: center;
+    background-color: rgb(22, 41, 58); border-color: rgb(44, 74, 94);
+    color: rgb(166, 186, 198);
+}
+.combat-fire:hover { background-color: rgb(22, 41, 58); border-color: rgb(44, 74, 94); }
+.combat-fire--port { margin-right: 8px; }
+.combat-fire--stbd { margin-left: 8px; }
+.combat-fire-title {
+    margin: 0; padding: 0; font-size: 16px; white-space: nowrap;
+    -unity-text-align: middle-center;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.combat-bar {
+    width: 70%; height: 5px; margin: 3px 0 0 0; padding: 0; border-radius: 3px;
+    background-color: rgb(44, 74, 94); overflow: hidden;
+}
+.combat-bar-fill {
+    height: 5px; margin: 0; padding: 0; border-radius: 3px; background-color: rgb(166, 186, 198);
+}
+
+/* Loaded: the bright ice button. */
+.combat-fire--ready,
+.combat-fire--ready:hover { background-color: rgb(164, 210, 232); border-color: rgb(164, 210, 232); color: rgb(11, 23, 32); }
+.combat-fire--ready:active { background-color: rgb(120, 180, 210); }
+.combat-fire--ready .combat-bar { background-color: rgba(11, 23, 32, 0.25); }
+.combat-fire--ready .combat-bar-fill { background-color: rgb(11, 23, 32); }
+
+/* Nobody behind this side's guns: plain text, not a dead button. */
+.combat-fire--crewless,
+.combat-fire--crewless:hover {
+    background-color: rgba(0, 0, 0, 0); border-width: 0; color: rgb(242, 196, 109);
+}
+.combat-fire--crewless .combat-fire-title { font-size: 13px; white-space: normal; }
+.combat-fire--crewless .combat-bar { display: none; }
+
+/* Both sides crewless: one line in place of the two buttons. */
+.combat-nocrew {
+    flex-grow: 1; flex-basis: 0; flex-shrink: 1; min-width: 0; margin: 0 8px 0 4px; padding: 0;
+    font-size: 13px; white-space: normal; color: rgb(242, 196, 109);
+    -unity-text-align: middle-left;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.combat-spacer { flex-grow: 1; flex-basis: 0; flex-shrink: 1; margin: 0 0 0 8px; }
+
+/* ---- lock / release ---- */
+.combat-lock {
+    width: 92px; flex-shrink: 0; height: 64px; margin: 0; padding: 0;
+    border-radius: 16px; border-width: 1.5px;
+    flex-direction: column; align-items: center; justify-content: center;
+    background-color: rgb(22, 41, 58); border-color: rgb(164, 210, 232);
+    color: rgb(164, 210, 232);
+    transition-property: scale; transition-duration: 0.15s;
+}
+.combat-lock:hover { background-color: rgb(22, 41, 58); border-color: rgb(164, 210, 232); }
+.combat-lock-title {
+    margin: 0; padding: 0; font-size: 15px; white-space: nowrap;
+    -unity-text-align: middle-center;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.combat-lock-sub {
+    margin: 1px 0 0 0; padding: 0; font-size: 12px; white-space: nowrap;
+    -unity-text-align: middle-center;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
+/* A new candidate in reach: a short swell, so it is noticed once. */
+.combat-lock--new { scale: 1.08 1.08; background-color: rgb(32, 57, 72); }
+/* Locked: ember. */
+.combat-lock--held,
+.combat-lock--held:hover { background-color: rgb(58, 31, 28); border-width: 2px; border-color: rgb(246, 146, 128); color: rgb(246, 146, 128); }
+/* Locked but slipping out of range: amber. */
+.combat-lock--slip,
+.combat-lock--slip:hover { background-color: rgb(58, 42, 20); border-width: 2px; border-color: rgb(242, 196, 109); color: rgb(242, 196, 109); }
+/* Nothing in reach of the lock (the guns' reach is longer than the lock's). */
+.combat-lock--none,
+.combat-lock--none:hover { background-color: rgb(22, 41, 58); border-color: rgb(44, 74, 94); color: rgb(166, 186, 198); }

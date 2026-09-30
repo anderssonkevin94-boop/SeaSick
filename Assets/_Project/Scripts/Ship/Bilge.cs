@@ -118,12 +118,9 @@ namespace SeaSick.Ship
         Voyage.VoyageManager voyage;
         float nextVoyageLookup;
 
-        // One string, and its only input is a serialized field — but it was
-        // being built on every IMGUI event while she was flooding, which is
-        // exactly when the frame can least afford it. Built once, rebuilt only
-        // if the Inspector moves it.
-        string jettisonLabel;
-        int jettisonLabelFor = int.MinValue;
+        /// Crates one "throw over" tap puts over the side. The sea HUD's
+        /// "Overloaded · throw 5 over" chip reads it (`UI/Sheets/SeaHud.cs`).
+        public int JettisonPerTap => jettisonPerTap;
 
         /// Out of OnGUI: a scene scan per EVENT, for an object that never
         /// moves. Same shape as `Shipyard.Update` — cache it, and retry at
@@ -136,45 +133,11 @@ namespace SeaSick.Ship
             nextVoyageLookup = Time.unscaledTime + 1f;
         }
 
-        /// Contextual, like the rest of this game's HUD. The water level
-        /// itself now reads on the ship panel under the hull bar (StatusHUD) —
-        /// a panel appearing over the boat mid-storm is the thing you are
-        /// trying to look past. What stays here is the jettison BUTTON, which
-        /// has to be under a thumb.
-        void OnGUI()
-        {
-            bool overloaded = voyage != null && voyage.Overloaded;
-            if (!Flooding && !overloaded) return;
-
-            if (voyage == null || voyage.TotalHeld <= 0) return;
-            // Not over the camp (Kevin, 2026-09-30): the anchored ship's
-            // jettison button floated over the island as a stray
-            // "over the side · 5" pill. It is a sea control.
-            if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
-            // Same IMGUI-blind-spot suppression as the rest of the HUD
-            // (2026-09-26 review): a "jettison cargo" prompt is exactly the
-            // kind of thumb-reachable button that must not poke through a
-            // menu card.
-            if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen
-                || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
-
-            // The shared prompt slot, at the lowest rank of anything you can
-            // press: throwing cargo over the side matters, but it never
-            // matters more than coming alongside or a gun that bears. It used
-            // to be pinned at 0.60 of screen height -- the middle of the sea,
-            // 0.02 above where SalvageSpawner was putting its toast.
-            if (!Prompts.Claim(Prompts.Rank.Jettison)) return;
-
-            int u = HudLayout.Unit;
-            var btn = Prompts.Begin().Next(u * 2.1f, u * 14f);
-            UIBlocker.Block(btn);
-            if (jettisonLabelFor != jettisonPerTap)
-            {
-                jettisonLabelFor = jettisonPerTap;
-                jettisonLabel = $"over the side  ·  {jettisonPerTap}";
-            }
-            if (GUI.Button(btn, jettisonLabel, UITheme.Button))
-                voyage.Jettison(jettisonPerTap);
-        }
+        // **No IMGUI prompt since 2026-09-30** (Kevin, island UI restructure
+        // phase 6, approved mockup "8 · Sea: sailing"): the "over the side ·
+        // 5" button that claimed the shared prompt slot is the sea HUD's
+        // alert chip "Overloaded · throw 5 over" (tap = `VoyageManager
+        // .Jettison(JettisonPerTap)`), and the water level is its "Taking
+        // water 40% · 2 bailing" chip. See `UI/Sheets/SeaHud.cs`.
     }
 }

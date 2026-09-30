@@ -283,100 +283,31 @@ namespace SeaSick.Ship
         // Drawing
         // =====================================================================
 
-        /// Reserves a small persistent readout slot (order word, a compass
-        /// needle for the held heading, a throttle bar) and, while a thumb is
-        /// on the stick or the release fade hasn't finished, draws the
-        /// floating ring at the thumb's own anchor point rather than at any
-        /// fixed screen position.
+        /// Draws the floating ring at the thumb's own anchor point while a
+        /// thumb is on the stick or the release fade hasn't finished. Call on
+        /// Repaint only.
         ///
-        /// `targetHeadingDeg`/`hasTarget`/`throttleOrder`/`astern`/`burning`
-        /// are `HelmInput`'s policy state, handed in so nothing here needs to
-        /// know about `ShipMotor`. `currentHeadingDeg` is `motor.Heading`,
-        /// for the compass needle's relative bearing.
+        /// **No readout since 2026-09-30** (Kevin, island UI restructure
+        /// phase 6, approved mockup "8 · Sea: sailing"): the persistent order
+        /// word / compass needle / throttle bar that sat in the bottom-centre
+        /// `HudLayout.Slot.Wheel` is the UI Toolkit helm row's centre readout
+        /// (`UI/Sheets/SeaHud.cs`), which also reserves that slot so the
+        /// IMGUI prompts still stack above it. Only the ring stays IMGUI.
         ///
-        /// `direct` switches the drawing to direct-rudder mode: the compass
-        /// needle becomes a rudder indicator (`rudder`, -1 port .. 1
-        /// starboard), and the floating stick draws the rudder as the knob's
-        /// sideways offset on a horizontal track (`rudderStickX`, in ring
-        /// radii: where the thumb would have to be for the blade's CURRENT
-        /// angle, so the knob lags the thumb while the rudder catches up and
-        /// slides home when it springs back) and the latched throttle as a
-        /// vertical gauge beside the ring.
-        public void Draw(float targetHeadingDeg, bool hasTarget, float throttleOrder,
-            bool astern, bool burning, float currentHeadingDeg, GUIContent orderWord,
-            bool direct = false, float rudder = 0f, float rudderStickX = 0f)
+        /// `throttleOrder`/`astern`/`burning` are `HelmInput`'s policy state.
+        /// `direct` switches to direct-rudder mode: the floating stick draws
+        /// the rudder as the knob's sideways offset on a horizontal track
+        /// (`rudderStickX`, in ring radii: where the thumb would have to be
+        /// for the blade's CURRENT angle, so the knob lags the thumb while
+        /// the rudder catches up and slides home when it springs back) and
+        /// the latched throttle as a vertical gauge beside the ring.
+        public void Draw(float throttleOrder, bool astern, bool burning,
+            bool direct = false, float rudderStickX = 0f)
         {
+            if (!Dragging && fade <= 0.001f) return;
             int u = HudLayout.Unit;
-            float w = u * 9.2f;
-            float h = u * 3.4f;
-            var cluster = HudLayout.Place(HudLayout.Slot.Wheel, w, h);
-            var readoutRect = new Rect(cluster.x, cluster.y, w, h);
-            UIBlocker.Block(readoutRect);
-
-            if (Event.current.type != EventType.Repaint) return;
-
-            DrawReadout(readoutRect, u, targetHeadingDeg, hasTarget, throttleOrder,
-                astern, burning, currentHeadingDeg, orderWord, direct, rudder);
-
-            if (Dragging || fade > 0.001f)
-            {
-                if (direct) DrawStickDirect(u, rudderStickX, throttleOrder, astern, burning);
-                else DrawStick(u, astern, burning);
-            }
-        }
-
-        void DrawReadout(Rect r, int u, float targetDeg, bool hasTarget, float throttle,
-            bool astern, bool burning, float currentDeg, GUIContent orderWord,
-            bool direct, float rudder)
-        {
-            UITheme.Rect(r, UITheme.Panel);
-
-            GUI.Label(new Rect(r.x, r.y + u * 0.1f, r.width, u * 1.2f),
-                orderWord, UITheme.Small2Centered);
-
-            // The compass: a needle at the relative bearing between where
-            // she's pointed now and the course she's been given. Amidships
-            // (straight up) is dead ahead of her own bow, not of the camera.
-            float dialR = u * 1.05f;
-            var hub = new Vector2(r.x + dialR + u * 0.6f, r.yMax - dialR - u * 0.3f);
-            Ring(hub, dialR, u * 0.24f, UITheme.TextDim, 24);
-            UITheme.Rect(new Rect(hub.x - 1.5f, hub.y - dialR - u * 0.22f, 3f, u * 0.4f),
-                UITheme.TextDim);
-            // Direct-rudder mode: the same needle is the RUDDER angle
-            // indicator, hard over at `RudderDialDeg` either side of the
-            // lubber mark, so the one persistent readout says what the thumb
-            // is doing to the blade and shows it spring home after release.
-            if (direct || hasTarget)
-            {
-                float rel = direct ? Mathf.Clamp(rudder, -1f, 1f) * RudderDialDeg
-                    : Mathf.DeltaAngle(currentDeg, targetDeg);
-                var prev = GUI.matrix;
-                GUIUtility.RotateAroundPivot(rel, hub);
-                var needleCol = astern ? UITheme.Warn : UITheme.Sea;
-                UITheme.Rect(new Rect(hub.x - u * 0.16f, hub.y - dialR + u * 0.1f,
-                    u * 0.32f, dialR - u * 0.1f), needleCol);
-                GUI.matrix = prev;
-            }
-
-            // Throttle: one bar, mid-anchored at stop, astern below the mark
-            // and ahead/burn above it — same reading as the achieved-throttle
-            // bar on the helm panel, so the two never disagree in shape.
-            float barX = hub.x + dialR + u * 0.6f;
-            var barRect = new Rect(barX, r.y + u * 1.5f, r.xMax - u * 0.5f - barX, u * 0.55f);
-            if (barRect.width > u)
-            {
-                UITheme.Bar(barRect, 1f, UITheme.Track);
-                const float Ceiling = 1.4f; // headroom for the burn tier
-                float mid = barRect.x + barRect.width / (1f + Ceiling);
-                float t = Mathf.Clamp(throttle, -1f, Ceiling);
-                var col = burning ? UITheme.Warn : astern ? UITheme.Warn : UITheme.Sea;
-                if (t >= 0f)
-                    UITheme.Bar(new Rect(mid, barRect.y, (barRect.xMax - mid) * (t / Ceiling),
-                        barRect.height), 1f, col);
-                else
-                    UITheme.Bar(new Rect(mid + (mid - barRect.x) * t, barRect.y,
-                        (mid - barRect.x) * -t, barRect.height), 1f, col);
-            }
+            if (direct) DrawStickDirect(u, rudderStickX, throttleOrder, astern, burning);
+            else DrawStick(u, astern, burning);
         }
 
         void DrawStick(int u, bool astern, bool burning)
@@ -411,8 +342,6 @@ namespace SeaSick.Ship
             }
         }
 
-        /// Needle swing, degrees, at full rudder on the readout dial.
-        const float RudderDialDeg = 35f;
         /// Burn headroom on the stick's throttle gauge, as a multiple of full
         /// ahead — the same ceiling the readout bar uses.
         const float GaugeCeiling = 1.4f;

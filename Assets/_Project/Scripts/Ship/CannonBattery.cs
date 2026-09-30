@@ -587,70 +587,32 @@ namespace SeaSick.Ship
         bool enemyInRange;
         float nextEnemyLook;
 
-        void OnGUI()
+        // ---- the fire controls live in `UI/Sheets/CombatHud` (2026-09-30) ----
+        //
+        // **The IMGUI "◀ port 1/1 ready" / "stbd ▶" chips are gone** (island
+        // UI phase 6, mockup "8b · Sea: combat"): `CombatHud` draws one
+        // combat row -- Fire port, Lock / Release, Fire stbd -- above the helm
+        // row, in UI Toolkit, and calls `FireBroadside` from its buttons. It
+        // reads the readouts below. Q / E (Update) and auto-fire are untouched.
+
+        /// Should the combat row show? Public for `CombatHud`; the same
+        /// 4x-a-second lookup the IMGUI chips used.
+        public bool EnemyInRangeNow => EnemyInRange();
+
+        /// Hands standing behind a side's guns (0 = "No crew on the guns").
+        public int PortManned => MannedOn(port);
+        public int StarboardManned => MannedOn(starboard);
+
+        /// A side's reload progress, 0..1, averaged over its guns (the bar
+        /// inside the Fire button).
+        public float PortLoaded01 => LoadedOn(port);
+        public float StarboardLoaded01 => LoadedOn(starboard);
+
+        static float LoadedOn(List<Cannon> side)
         {
-            if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
-            // Same suppression for the shipyard's full-screen UI Toolkit
-            // modal, which OnGUI cannot see on its own (2026-09-25 review:
-            // the port/stbd chips drew over Cancel/Reset section). Same
-            // blind spot for `GameMenus` (2026-09-26 review: the chips
-            // poked into the Home/Pause/Save card from underneath).
-            if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen) return;
-            if (SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
-            // A hull with no gun-port stations is not carrying guns, and two
-            // buttons reading "no crew" are two buttons in a thumb's way.
-            if (allGuns.Count == 0) return;
-            // Nothing to shoot, no fire buttons (Kevin, 2026-09-30: the
-            // "◀ port 1/1 ready / stbd ▶" chips stacked over the landing
-            // party at a quiet island). Q / E still fire on a desk.
-            if (!EnemyInRange()) return;
-
-            int u = SeaSick.UI.HudLayout.Unit;
-            // Wide enough for "stbd ▶ 2/2" and for "no crew" — at 5.6 both
-            // clipped to "port 2/".
-            float bw = u * 6.4f;
-            float bh = u * 3.4f;
-            // The band is the two buttons AND the reload bars under them, so
-            // what it reserves is what it actually covers.
-            float gap = u * 0.4f;
-            var band = SeaSick.UI.HudLayout.Place(SeaSick.UI.HudLayout.Slot.Broadside,
-                                                  bw * 2f + gap, bh + u * 0.35f + 2f);
-            float y = band.y;
-
-            DrawSide(new Rect(band.x, y, bw, bh), false, PortReady, "◀ port", portText);
-            DrawSide(new Rect(band.x + bw + gap, y, bw, bh), true, StarboardReady, "stbd ▶", starboardText);
-        }
-
-        // One cached readout a side. IMGUI runs OnGUI once per EVENT, so these
-        // two were formatted several times a frame to keep saying "◀ port  2/2"
-        // — see StatusHUD for what that costs. They rebuild when the ready
-        // count, the gun count or the crew's presence moves, and not otherwise.
-        readonly HudLabel portText = new HudLabel();
-        readonly HudLabel starboardText = new HudLabel();
-
-        void DrawSide(Rect r, bool starboardSide, int ready, string label, HudLabel text)
-        {
-            UIBlocker.Block(r);
-            var style = UITheme.Button;   // cached; copying it per frame bought nothing
-            GUI.enabled = ready > 0;
-            var side = starboardSide ? starboard : port;
-            // Say WHY the side is silent. "0/2" reads as a reload; "no crew"
-            // reads as the two people who are supposed to be there being
-            // somewhere else, which is the actual situation.
-            int manned = MannedOn(side);
-            if (text.Changed(HudLabel.Key(manned == 0 ? 1 : 0, ready, side.Count)))
-                text.Set(manned == 0
-                    ? $"{label}\nNo crew"
-                    : $"{label}\n{ready}/{side.Count} ready");
-            if (GUI.Button(r, text.Content, style)) FireBroadside(starboardSide);
-            GUI.enabled = true;
-
-            // Reload progress under the button.
             float loaded = 0f;
             foreach (var c in side) if (c != null) loaded += c.ReloadFraction;
-            loaded /= Mathf.Max(1, side.Count);
-            UITheme.Bar(new Rect(r.x, r.yMax + 2f, r.width, UITheme.Unit * 0.35f), loaded,
-                ready > 0 ? UITheme.Good : UITheme.Warn);
+            return loaded / Mathf.Max(1, side.Count);
         }
     }
 }

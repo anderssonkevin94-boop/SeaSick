@@ -22,11 +22,13 @@ namespace SeaSick.UI.Sheets
     /// </list>
     ///
     /// Shown with the bar's own visibility (an island camp, no sheet open,
-    /// nothing being placed). Before a
-    /// camp exists there is no bar and no land HUD: at an anchored island
-    /// with a surveyed site and no fire the card stands alone in the bar's
-    /// slot as step 1, "Make camp", replacing the anchor prompt's old IMGUI
-    /// row (`AnchorController.DrawMakeCamp` stands down while `Visible`).
+    /// nothing being placed). Before a camp exists there is no land HUD: at
+    /// an anchored island with a surveyed site and no fire the card is step
+    /// 1, "Make camp", above the thumb bar's anchored mode (Landing party ·
+    /// Ship · Cast off, and its hint line when it has one; 2026-09-30, island
+    /// UI phase 6). It replaced the anchor prompt's IMGUI "Make camp" row,
+    /// now retired, and it no longer waits for the land theme: with no
+    /// IMGUI fallback left it is the only way to the first fire.
     ///
     /// Content is evaluated at the land HUD's 0.25 s cadence (and at once
     /// when the camp or the pin changes); the tree is built once and
@@ -42,9 +44,12 @@ namespace SeaSick.UI.Sheets
         /// the same space as `ThumbBar.Rect`. Zero while hidden.
         public static Rect Rect { get; private set; }
         public static bool Visible { get; private set; }
-        /// True while the card is up at an island with no camp (step 1 in
-        /// the bar's slot). `SheetHost` uses the land panel scale then.
-        public static bool NoCampShowing { get; private set; }
+        /// True while the card is up at an island with no camp (step 1), or
+        /// while she lies off one at all (`ThumbBar.AtFreshIsland`: the
+        /// anchored bar, the landing party, the Ship sheet). `SheetHost`
+        /// uses the land panel scale then.
+        public static bool NoCampShowing => cardNoCamp || ThumbBar.AtFreshIsland;
+        static bool cardNoCamp;
         /// The `CampAlerts` alert text the card is showing, or null -- the
         /// alert strip leaves that one out.
         public static string AlertText { get; private set; }
@@ -58,7 +63,7 @@ namespace SeaSick.UI.Sheets
         static void Reset()
         {
             Rect = Rect.zero;
-            Visible = NoCampShowing = ShowsRaid = false;
+            Visible = cardNoCamp = ShowsRaid = false;
             AlertText = null;
         }
 
@@ -152,7 +157,7 @@ namespace SeaSick.UI.Sheets
                     shown = false;
                     card.style.display = DisplayStyle.None;
                 }
-                Visible = NoCampShowing = ShowsRaid = false;
+                Visible = cardNoCamp = ShowsRaid = false;
                 AlertText = null;
                 Rect = Rect.zero;
             }
@@ -173,7 +178,7 @@ namespace SeaSick.UI.Sheets
                     // No camp yet: the land HUD is off because there is no
                     // fire or blueprint (`SuppressLegacy`), not because the
                     // classic UI was chosen.
-                    want = noCamp = MidnightLandHud.Enabled && !Sheets.SuppressLegacy && NoCampHere(camp);
+                    want = noCamp = !Sheets.SuppressLegacy && NoCampHere(camp);
                 if (!want) { Hide(); lastCamp = null; return; }
 
                 float now = Time.unscaledTime;
@@ -194,12 +199,13 @@ namespace SeaSick.UI.Sheets
                     card.style.display = DisplayStyle.Flex;
                 }
                 Visible = true;
-                NoCampShowing = noCamp;
+                cardNoCamp = noCamp;
                 AlertText = model.alertText;
                 ShowsRaid = model.raid;
 
                 ThumbBar.Lane(root, out float left, out float width, out float bottom);
-                if (ThumbBar.Visible) bottom += ThumbBar.Height + Gap;
+                // Above the bar and, off a fresh island, its hint line.
+                if (ThumbBar.Visible) bottom += ThumbBar.Height + Gap + ThumbBar.HintPanel;
                 card.style.left = left;
                 card.style.width = width;
                 card.style.bottom = bottom;
@@ -212,9 +218,10 @@ namespace SeaSick.UI.Sheets
                 ThumbBar.RaiseReserve(bottom + h + ThumbBar.Gap);
 
                 // With no camp the land HUD is off and claims nothing: the
-                // card keeps the IMGUI anchor prompt (Cast off, gather
-                // party) off itself the way the land HUD does for the bar.
-                if (noCamp && !SheetHost.FrameOpen) HudLayout.ClaimSheet(Rect);
+                // card keeps the IMGUI HUD off itself AND the anchored thumb
+                // bar under it (one claim holds one rect, so the bar's own
+                // claim this frame is widened, not replaced).
+                if (noCamp && !SheetHost.FrameOpen) HudLayout.ClaimSheet(ThumbBar.Union(Rect, ThumbBar.ClaimRect));
             }
 
             /// Fill `model`. False = nothing to say; the card hides.

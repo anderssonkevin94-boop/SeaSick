@@ -40,6 +40,10 @@ namespace SeaSick.UI.Sheets
     public class ChartInstrument
     {
         // ---- geometry, in panel units ----
+        /// The dial's box in screen pixels, GUI space (origin top-left), as
+        /// last laid out; zero while hidden. `SeaHud` reads it.
+        public static Rect ScreenRect { get; private set; }
+
         const float Diameter = 210f;
         const float R = Diameter * 0.5f;
         /// The paper rim's width: everything between `R` and `SeaR` is chart
@@ -171,7 +175,7 @@ namespace SeaSick.UI.Sheets
             // while a ghost is being positioned (phase 1 UI, 2026-09-30).
             bool placing = ThumbBar.PlacementActive;
             root.style.display = placing ? DisplayStyle.None : DisplayStyle.Flex;
-            if (placing) return;
+            if (placing) { ScreenRect = Rect.zero; return; }
 
             // Top-left, inside the safe area. The place label sits to its
             // right and is positioned off the same corner.
@@ -189,6 +193,17 @@ namespace SeaSick.UI.Sheets
                 if (HudLayout.Wide)
                     root.style.left = (safe.xMin + safe.width * (2f / 3f)) * scale - Diameter * chartScale - 14f;
                 root.style.top = (Screen.height - safe.yMax) * scale + MidnightLandHud.TopHeight + 20f;
+            }
+            // At sea, under the sea HUD's top bar (phase 6, 2026-09-30,
+            // mockup "8 · Sea: sailing"): the bar owns the top edge upright.
+            else if (SeaHud.ChartTopPanel > 0f) root.style.top = SeaHud.ChartTopPanel;
+            {
+                // Last layout's box in screen px, GUI space: the sea HUD keeps
+                // the combat target chip clear of it.
+                var wb = root.worldBound;
+                float inv = 1f / Mathf.Max(1e-4f, scale);
+                ScreenRect = wb.width > 0f && wb.height > 0f
+                    ? new Rect(wb.x * inv, wb.y * inv, wb.width * inv, wb.height * inv) : Rect.zero;
             }
             tab.style.display = land ? DisplayStyle.None : DisplayStyle.Flex;
 

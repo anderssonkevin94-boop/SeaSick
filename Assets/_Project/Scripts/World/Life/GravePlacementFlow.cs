@@ -26,8 +26,10 @@ namespace SeaSick.World.Life
     /// (bar + instruction card), and `IslandInput` routes every other tap
     /// ashore to `HandleTap` while `GraveGate.Blocking`.
     ///
-    /// **Still IMGUI stand-in** (like `LifeDevPanel`): the story card and the
-    /// "All graves" list, restyled later.
+    /// **The story card and the "All graves" list are UI Toolkit (2026-09-30,
+    /// island UI phase 6):** `UI/Sheets/GraveSheet`, opened here by
+    /// `ShowStory` / `ShowAllGraves` (a tap on a standing stone, right after
+    /// the stone is laid, the dev LIFE panel). Nothing in this file draws.
     public class GravePlacementFlow : MonoBehaviour
     {
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -84,11 +86,6 @@ namespace SeaSick.World.Life
         /// when one of these changes, so a frame allocates nothing.
         bool barValid;
         string barWhy;
-
-        // --- the story-card stand-in ----------------------------------------
-        GraveRecord storyShown;
-        bool showingAllGraves;
-        Vector2 allGravesScroll;
 
         void Awake() => instance = this;
         void OnDestroy()
@@ -223,6 +220,9 @@ namespace SeaSick.World.Life
 
         void BeginPlacement()
         {
+            // The burial is forced: a story card still up from the last stone
+            // gives way to the thumb bar's placement.
+            if (SeaSick.UI.Sheets.GraveSheet.IsOpen) SeaSick.UI.Sheets.Sheets.Close();
             GraveGate.Blocking = true;
             FindDefaultSpot();
             ghost = GraveVisual.Build(campOutpost.transform, "Grave_Ghost_" + grave.name, grave.name,
@@ -395,23 +395,20 @@ namespace SeaSick.World.Life
             return false;
         }
 
+        /// One grave's story, on the grave sheet.
         public static void ShowStory(GraveRecord g)
         {
-            if (instance == null || g == null) return;
-            instance.storyShown = g;
-            instance.showingAllGraves = false;
+            if (g == null) return;
+            SeaSick.UI.Sheets.GraveSheet.Show(g);
         }
 
         /// The dev LIFE panel's "All graves" button, and the story card's
-        /// own "All graves" button, both come through here.
-        public static void ShowAllGraves()
-        {
-            if (instance == null) return;
-            instance.showingAllGraves = true;
-            instance.storyShown = null;
-        }
+        /// own "‹ All graves" button, both come through here.
+        public static void ShowAllGraves() => SeaSick.UI.Sheets.GraveSheet.ShowAll();
 
-        static string CauseLabel(string cause) => cause switch
+        /// How they died, in lower case: "killed in a raid", "lost at sea"...
+        /// (`GraveSheet` reads it too).
+        public static string CauseLabel(string cause) => cause switch
         {
             LifeEvents.KilledInRaid => "killed in a raid",
             LifeEvents.LostAtSea => "lost at sea",
@@ -419,72 +416,5 @@ namespace SeaSick.World.Life
             LifeEvents.Shipwreck => "shipwreck",
             _ => "downed, nobody came in time",
         };
-
-        // --- IMGUI (the story card and the graves list only; the placement is the ThumbBar's) ---
-
-        void OnGUI()
-        {
-            float scale = Mathf.Clamp(Screen.dpi > 0 ? Screen.dpi / 160f : 2f, 1f, 3f);
-            var old = GUI.matrix;
-            GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
-            float w = Screen.width / scale;
-            float h = Screen.height / scale;
-
-            if (showingAllGraves) DrawAllGraves(w, h);
-            else if (storyShown != null) DrawStoryCard(w, h);
-
-            GUI.matrix = old;
-        }
-
-        const float RowH = 44f; // Apple's own minimum touch target.
-
-        void DrawStoryCard(float w, float h)
-        {
-            float cw = Mathf.Min(w - 32, 380f);
-            float ch = Mathf.Min(h - 32, 360f);
-            var r = new Rect((w - cw) * 0.5f, (h - ch) * 0.5f, cw, ch);
-            GUI.Box(r, "");
-            GUILayout.BeginArea(r);
-            var big = new GUIStyle(GUI.skin.label) { fontSize = 20, fontStyle = FontStyle.Bold };
-            GUILayout.Label(storyShown.name, big);
-            string days = storyShown.bornDay >= 0
-                ? "Day " + storyShown.bornDay + " – Day " + storyShown.diedDay
-                : "Day " + storyShown.diedDay;
-            GUILayout.Label(days);
-            GUILayout.Label(CauseLabel(storyShown.cause));
-            GUILayout.Space(8);
-            if (storyShown.story != null)
-                foreach (var line in storyShown.story)
-                    if (!string.IsNullOrEmpty(line)) GUILayout.Label(line);
-            GUILayout.FlexibleSpace();
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("All graves", GUILayout.Height(RowH))) ShowAllGraves();
-            if (GUILayout.Button("Close", GUILayout.Height(RowH))) storyShown = null;
-            GUILayout.EndHorizontal();
-            GUILayout.EndArea();
-        }
-
-        void DrawAllGraves(float w, float h)
-        {
-            float cw = Mathf.Min(w - 32, 400f);
-            float ch = Mathf.Min(h - 32, 480f);
-            var r = new Rect((w - cw) * 0.5f, (h - ch) * 0.5f, cw, ch);
-            GUI.Box(r, "");
-            GUILayout.BeginArea(r);
-            GUILayout.Label("All graves");
-            allGravesScroll = GUILayout.BeginScrollView(allGravesScroll);
-            foreach (var g in Lives.Graveyard)
-            {
-                if (g == null) continue;
-                string born = g.bornDay >= 0 ? g.bornDay.ToString() : "?";
-                string row = g.name + "  (Day " + born + "–" + g.diedDay + ")  " + CauseLabel(g.cause)
-                    + (string.IsNullOrEmpty(g.camp) ? "" : "  · " + g.camp);
-                if (GUILayout.Button(row, GUILayout.Height(RowH))) ShowStory(g);
-            }
-            if (Lives.Graveyard.Count == 0) GUILayout.Label("Nobody has died yet.");
-            GUILayout.EndScrollView();
-            if (GUILayout.Button("Close", GUILayout.Height(RowH))) showingAllGraves = false;
-            GUILayout.EndArea();
-        }
     }
 }

@@ -153,3 +153,22 @@
 .st .aw-ev-t { font-size: 18px; white-space: normal; flex-shrink: 1; }
 .st .aw-ev--bad .aw-ev-t, .st .aw-hungry { color: rgb(246, 146, 128); }
 .st .aw-ev--warn .aw-ev-t { color: rgb(240, 195, 106); }
+
+/* --- the grave sheet (island UI restructure 6, 2026-09-30) ---------------- */
+/* The story's three sentences, and the list of every grave: one 56-unit row
+ * each (initial · name / "Day 3–9 · killed in a raid · Home" · ›), newest
+ * first. GraveSheet.cs. */
+
+.st .gr-story { font-size: 17px; white-space: normal; margin-bottom: 6px; }
+.st .gr-row {
+    flex-direction: row; align-items: center; flex-shrink: 0;
+    min-height: 56px; margin: 0 0 8px 0; padding: 6px 12px;
+    background-color: rgb(19, 34, 46);
+    border-width: 2px; border-color: rgb(44, 74, 94); border-radius: 14px;
+}
+.st .gr-row:hover { background-color: rgb(26, 48, 64); }
+.st .gr-row .ck-av { width: 36px; height: 36px; border-radius: 18px; margin-right: 10px; }
+.st .gr-row .ck-av-t { font-size: 17px; }
+.st .gr-name { font-size: 17px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.st .gr-sub { font-size: 13px; color: rgb(166, 186, 198); white-space: normal; max-width: 100%; }
+.st .gr-go { font-size: 26px; color: rgb(110, 132, 148); margin-left: 8px; flex-shrink: 0; }

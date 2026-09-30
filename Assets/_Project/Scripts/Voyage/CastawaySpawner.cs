@@ -7,6 +7,7 @@ using SeaSick.Ship.SeaLife;
 using SeaSick.UI;
 using SeaSick.World;
 using SeaSick.World.Life;
+using SeaActions = SeaSick.UI.Sheets.SeaActions;
 
 namespace SeaSick.Voyage
 {
@@ -87,9 +88,10 @@ namespace SeaSick.Voyage
         float pullElapsed;
         string rescuer = "";
 
-        // --- read by OnGUI, written in Update ---------------------------------
+        // --- read by Offer(), written in Update ------------------------------
         bool inReach;
         bool tooFast;
+        float gapMetres = float.MaxValue;
 
         void OnEnable() => Castaway.Hauled += OnHauled;
         void OnDisable() => Castaway.Hauled -= OnHauled;
@@ -112,7 +114,7 @@ namespace SeaSick.Voyage
             }
 
             if (current != null && current.Resolved) current = null;
-            if (current != null) { TickCurrent(Time.deltaTime); return; }
+            if (current != null) { TickCurrent(Time.deltaTime); Offer(); return; }
             TickSpawn(Time.deltaTime);
         }
 
@@ -259,6 +261,7 @@ namespace SeaSick.Voyage
                 return;
             }
 
+            gapMetres = gap;
             inReach = gap <= RecruitTuning.SeaCastawayPullMetres;
             tooFast = motor.CurrentSpeed > RecruitTuning.SeaCastawayPullMaxSpeed;
             c.InPullReach = inReach;
@@ -391,44 +394,66 @@ namespace SeaSick.Voyage
 
         // ---------------------------------------------------------------- HUD --
 
-        void OnGUI()
+        /// **The pull is the sea action card's (Kevin, 2026-09-30, island UI
+        /// phase 6, approved mockup "8 · Sea: sailing": "IN THE WATER · 60 m
+        /// / Pull Edda aboard / Slow to under 3 m/s").** The IMGUI button and
+        /// toast labels this drew at `BottomClustersTop` are an offer to
+        /// `SeaActions` each frame: seen within `OfferMetres` it is
+        /// information (how far, what it takes); within reach and slow
+        /// enough it is the tap (`StartPull`); pulling, the card's bar is the
+        /// line coming in. Information leaves the stick free under it.
+        const float OfferMetres = 150f;
+
+        readonly SeaActions.Joined pullTitle = new SeaActions.Joined();
+        readonly SeaActions.Joined pullingTitle = new SeaActions.Joined();
+        readonly SeaActions.Joined farEyebrow = new SeaActions.Joined();
+        int farBucket = -1;
+        string farMetres = "";
+        System.Action startPull;
+
+        void Offer()
         {
             var c = current;
             if (c == null || c.Resolved) return;
-            if (!c.Pulling && !inReach) return;
             if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
-            if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen
-                || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
-
-            int u = HudLayout.Unit;
-            float btnH = Mathf.Max(u * 3.4f, 64f);
-            float btnW = Mathf.Min(HudLayout.Safe.width - HudLayout.Pad * 2f, u * 26f);
-            var safe = HudLayout.Safe;
-            var rect = new Rect(safe.x + (safe.width - btnW) * 0.5f,
-                HudLayout.BottomClustersTop - HudLayout.Gap - btnH, btnW, btnH);
-
+            const int P = SeaActions.PriorityRescue + 5;
+            string who = c.CastawayName;
             if (c.Pulling)
             {
-                UIBlocker.Block(rect);
-                if (Event.current.type != EventType.Repaint) return;
                 float t = Mathf.Clamp01(pullElapsed / PullSeconds);
-                UITheme.Rect(rect, new Color(0f, 0f, 0f, 0.55f));
-                UITheme.Rect(new Rect(rect.x, rect.y, rect.width * t, rect.height), new Color(0.3f, 0.75f, 0.4f, 0.85f));
-                GUI.Label(rect, "Pulling " + c.CastawayName + " aboard", UITheme.Toast);
+                SeaActions.Offer(P, "IN THE WATER", pullingTitle.Of("Pulling ", who, " aboard"),
+                    "Hold her steady", null, false, t);
                 return;
             }
-
-            if (tooFast)
+            string title = pullTitle.Of("Pull ", who, " aboard");
+            if (inReach)
             {
-                if (Event.current.type != EventType.Repaint) return;
-                GUI.Label(rect, "Slow down to pull " + c.CastawayName + " aboard", UITheme.Toast);
+                if (startPull == null) startPull = StartPull;
+                SeaActions.Offer(P, "IN THE WATER", title,
+                    tooFast ? SeaActions.SlowTo(RecruitTuning.SeaCastawayPullMaxSpeed) : "Throw them a line",
+                    startPull, !tooFast);
                 return;
             }
+            if (gapMetres > OfferMetres) return;
+            int bucket = Mathf.Max(10, Mathf.RoundToInt(gapMetres / 10f) * 10);
+            if (bucket != farBucket) { farBucket = bucket; farMetres = bucket + " m"; }
+            SeaActions.Offer(P, farEyebrow.Of("IN THE WATER · ", farMetres),
+                title, FarDetail(), null, false);
+        }
 
-            // Only a real button takes the touch from the helm; the "slow
-            // down" hint above leaves the stick free (same as `RescueHud`).
-            UIBlocker.Block(rect);
-            if (GUI.Button(rect, "Pull " + c.CastawayName + " aboard", UITheme.Button)) StartPull();
+        int farDetailKey = int.MinValue;
+        string farDetail = "";
+        /// "Come alongside, under 3 m/s", rebuilt only if the tuning moves.
+        string FarDetail()
+        {
+            int k = Mathf.RoundToInt(RecruitTuning.SeaCastawayPullMaxSpeed * 10f);
+            if (k != farDetailKey)
+            {
+                farDetailKey = k;
+                farDetail = "Come alongside, under "
+                    + (k % 10 == 0 ? (k / 10).ToString() : (k / 10f).ToString("0.0")) + " m/s";
+            }
+            return farDetail;
         }
 
         // ---------------------------------------------------------- dev hook --

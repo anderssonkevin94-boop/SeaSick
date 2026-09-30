@@ -1,0 +1,160 @@
+/* The sea HUD (SeaHud.cs, phase 6 of the island UI restructure, 2026-09-30,
+   Kevin's approved mockups "8 · Sea: sailing" and "8c · Anchored off a fresh
+   island"). Every size is in DESIGN px of the 390-wide mockup: SeaHud scales
+   each root (.sea-top, .sea-alerts, .sea-card, .sea-helm, .sea-hint) by
+   style.scale so a design px is the same on the phone whatever reference
+   resolution the panel is on (CombatHud does the same). */
+
+/* ---------------- top bar: hold · aboard · sea · day · menu ---------------- */
+.sea-top {
+    position: absolute; left: 0; top: 0; width: 370px; height: 52px;
+    flex-direction: row; align-items: stretch; justify-content: space-between;
+    margin: 0; padding: 0 4px;
+    background-color: rgb(22, 41, 58);
+    border-width: 1px; border-color: rgb(44, 74, 94); border-radius: 16px;
+    transform-origin: left top;
+}
+.sea-top-item {
+    flex-direction: row; align-items: center; justify-content: center;
+    flex-grow: 0; flex-shrink: 1; min-width: 44px; margin: 0; padding: 0 8px;
+    background-color: rgba(0, 0, 0, 0); border-width: 0; border-radius: 12px;
+}
+.sea-top-item:hover { background-color: rgba(164, 210, 232, 0.10); }
+.sea-top-item:active { background-color: rgba(164, 210, 232, 0.18); }
+.sea-top-text {
+    margin: 0 0 0 6px; padding: 0; font-size: 15px; color: rgb(232, 242, 246);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; -unity-text-align: middle-left;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.sea-top-text--plain { margin-left: 0; }
+.sea-top-icon { width: 20px; height: 20px; flex-shrink: 0; }
+.sea-top-menu { width: 48px; min-width: 48px; padding: 0; }
+.sea-top-menu .sea-top-icon { width: 22px; height: 22px; }
+.sea-top-place { flex-shrink: 1; min-width: 0; }
+
+/* ---------------- alert chip (one + "+N") ---------------- */
+.sea-alerts {
+    position: absolute; left: 0; top: 0; height: 44px;
+    flex-direction: row; align-items: stretch; margin: 0; padding: 0;
+    transform-origin: left top;
+}
+.sea-chip {
+    height: 44px; min-width: 44px; max-width: 250px; margin: 0 6px 0 0; padding: 0 14px;
+    border-radius: 16px; border-width: 1.5px; font-size: 13px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; -unity-text-align: middle-center;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.sea-chip--bad { background-color: rgb(58, 31, 28); border-color: rgb(246, 146, 128); color: rgb(246, 146, 128); }
+.sea-chip--bad:hover { background-color: rgb(72, 38, 34); }
+.sea-chip--warn { background-color: rgb(42, 36, 21); border-color: rgb(201, 147, 57); color: rgb(242, 196, 109); }
+.sea-chip--warn:hover { background-color: rgb(58, 50, 28); }
+.sea-chip--mob { background-color: rgb(196, 87, 74); border-width: 0; color: rgb(232, 242, 246); }
+.sea-chip--mob:hover { background-color: rgb(214, 104, 90); }
+.sea-chip--more { background-color: rgb(19, 34, 46); border-color: rgb(44, 74, 94); color: rgb(232, 242, 246); }
+.sea-chip--more:hover { background-color: rgb(32, 57, 72); }
+
+/* ---------------- the action card (the Next card's look) ---------------- */
+.sea-card {
+    position: absolute; left: 0; bottom: 0; width: 370px; min-height: 76px;
+    flex-direction: row; align-items: center; margin: 0; padding: 12px 12px 12px 14px;
+    background-color: rgb(22, 41, 58);
+    border-width: 1.5px; border-color: rgb(164, 210, 232); border-radius: 18px;
+    transform-origin: left bottom;
+}
+.sea-card:hover { background-color: rgb(28, 50, 70); border-color: rgb(164, 210, 232); }
+.sea-card:active { background-color: rgb(32, 57, 72); }
+.sea-card--info, .sea-card--info:hover, .sea-card--info:active {
+    background-color: rgba(22, 41, 58, 0.94); border-color: rgb(44, 74, 94);
+}
+.sea-card-body { flex-grow: 1; flex-shrink: 1; min-width: 0; flex-direction: column; margin: 0 10px 0 0; }
+.sea-card-eyebrow {
+    margin: 0; padding: 0; font-size: 11px; letter-spacing: 1px; color: rgb(164, 210, 232);
+    white-space: nowrap; -unity-text-align: upper-left;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.sea-card-title {
+    margin: 2px 0 0 0; padding: 0; font-size: 17px; color: rgb(232, 242, 246);
+    white-space: normal; -unity-text-align: upper-left;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.sea-card-detail {
+    margin: 2px 0 0 0; padding: 0; font-size: 12px; color: rgb(166, 186, 198);
+    white-space: normal; -unity-text-align: upper-left;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
+.sea-card-track { height: 6px; margin: 6px 0 0 0; border-radius: 3px; background-color: rgb(44, 74, 94); }
+.sea-card-fill { height: 6px; border-radius: 3px; background-color: rgb(156, 210, 122); width: 0; }
+.sea-card-go {
+    width: 52px; height: 52px; flex-shrink: 0; border-radius: 14px;
+    background-color: rgb(164, 210, 232); align-items: center; justify-content: center;
+}
+.sea-card-chevron { width: 28px; height: 28px; }
+
+/* ---------------- the helm row: Oars · order readout · Ease ---------------- */
+.sea-helm {
+    position: absolute; left: 0; bottom: 0; width: 370px; height: 120px;
+    flex-direction: row; align-items: stretch; margin: 0; padding: 0;
+    transform-origin: left bottom;
+}
+.sea-toggle {
+    width: 84px; flex-shrink: 0; margin: 0; padding: 4px;
+    flex-direction: column; align-items: center; justify-content: center;
+    background-color: rgb(22, 41, 58); border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 16px;
+}
+.sea-toggle:hover { background-color: rgb(28, 50, 70); border-color: rgb(44, 74, 94); }
+.sea-toggle:active { background-color: rgb(32, 57, 72); }
+.sea-toggle--on, .sea-toggle--on:hover { background-color: rgb(36, 62, 82); border-width: 2px; border-color: rgb(164, 210, 232); }
+.sea-toggle:disabled { opacity: 0.45; }
+.sea-toggle-icon { width: 24px; height: 24px; flex-shrink: 0; }
+.sea-toggle-label {
+    margin: 4px 0 0 0; padding: 0; font-size: 14px; color: rgb(232, 242, 246); white-space: nowrap;
+    -unity-text-align: middle-center;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.sea-toggle-sub {
+    margin: 2px 0 0 0; padding: 0; font-size: 10px; color: rgb(166, 186, 198); white-space: nowrap;
+    -unity-text-align: middle-center;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
+.sea-toggle--on .sea-toggle-sub { color: rgb(164, 210, 232); }
+
+.sea-readout {
+    flex-grow: 1; flex-shrink: 1; min-width: 0; margin: 0 8px; padding: 10px 12px;
+    flex-direction: column; justify-content: center;
+    background-color: rgb(22, 41, 58); border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 16px;
+}
+.sea-readout-top { flex-direction: row; align-items: flex-end; justify-content: space-between; }
+.sea-order {
+    margin: 0; padding: 0; font-size: 17px; color: rgb(232, 242, 246); white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.sea-order--burn { color: rgb(242, 196, 109); }
+.sea-order--astern { color: rgb(242, 196, 109); }
+.sea-speed {
+    margin: 0 0 0 6px; padding: 0; font-size: 13px; color: rgb(166, 186, 198); white-space: nowrap; flex-shrink: 0;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
+.sea-bar { height: 8px; margin: 8px 0 0 0; border-radius: 4px; background-color: rgb(44, 74, 94); }
+.sea-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 4px; background-color: rgb(164, 210, 232); }
+.sea-bar-fill--astern, .sea-bar-fill--burn { background-color: rgb(242, 196, 109); }
+.sea-bar-tick { position: absolute; top: -3px; width: 2px; height: 14px; background-color: rgb(242, 196, 109); }
+.sea-bar-labels { flex-direction: row; justify-content: space-between; margin: 5px 0 0 0; }
+.sea-bar-label {
+    margin: 0; padding: 0; font-size: 10px; color: rgb(166, 186, 198); white-space: nowrap;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
+.sea-bar-label--burn { color: rgb(242, 196, 109); }
+
+/* ---------------- first-use hint: "drag here to sail" ---------------- */
+.sea-hint {
+    position: absolute; left: 0; top: 0; width: 160px; height: 150px;
+    align-items: center; margin: 0; padding: 0;
+    transform-origin: left top;
+}
+.sea-hint-ring { width: 120px; height: 120px; }
+.sea-hint-text {
+    margin: 8px 0 0 0; padding: 0; font-size: 11px; color: rgba(232, 242, 246, 0.75); white-space: nowrap;
+    -unity-text-align: middle-center;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}

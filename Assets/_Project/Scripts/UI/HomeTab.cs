@@ -1,118 +1,17 @@
-using SeaSick.Ship;
 using UnityEngine;
-using SheetsHud = global::SeaSick.UI.Sheets.Sheets;
 
 namespace SeaSick.UI
 {
-    /// A small tab on the left edge that puts her back on her home berth.
+    /// **Retired 2026-09-30** (Kevin, island UI restructure phase 6). This
+    /// drew the IMGUI "⌂ Home" tab on the left rail at sea (tap, "sure?",
+    /// tap again = `AnchorController.BerthAtHome`). That is the Ship sheet's
+    /// **Home** pill now (`UI/Sheets/ShipSheet.cs`, same arm-then-confirm,
+    /// the refusal shown on the pill), reached from the sea top bar's aboard
+    /// count.
     ///
-    /// A TAB and not a panel, on purpose: the HUD is small plates at the
-    /// screen edges and nothing across the world, and this is a rare
-    /// deliberate command rather than an instrument. It sits directly under
-    /// the Yard tab, in the same idiom and on the same edge, because that is
-    /// already where a thumb goes for "things I do about the ship" as opposed
-    /// to "things I do with the ship".
-    ///
-    /// **It arms on the first press and only acts on the second.** One tap
-    /// that teleports a loaded ship off a wave face and across the world is
-    /// the kind of mis-tap that ends a session, and this button lives a
-    /// thumb's width from a control the player uses constantly. The armed
-    /// state lapses on its own so it can never sit hot.
-    ///
-    /// Hidden while she is already lying at her own pier — a control with
-    /// nothing to do should not be on screen — and it refuses while the crew
-    /// are ashore, saying so on itself rather than in a banner.
-    ///
-    /// What it does NOT do is cost anything: her cargo comes home with her and
-    /// the voyage closes exactly as if she had sailed back, because
-    /// `VoyageManager` completes on `AtHomeDock` and this genuinely puts her
-    /// there. That is Kevin's call, made 2026-09-10 — a free tow home. If it
-    /// ever needs a price, the price belongs in `VoyageManager`, not here.
+    /// The component stays because `Sea.unity` and `ArtDirectionLab.unity`
+    /// carry it (and `HomeTabProbe` finds it); it draws nothing.
     public class HomeTab : MonoBehaviour
     {
-        [Tooltip("Seconds the confirm stays armed before it lapses.")]
-        [SerializeField] float armSeconds = 3.5f;
-        [Tooltip("Seconds a refusal stays on screen.")]
-        [SerializeField] float refusalSeconds = 3f;
-
-        AnchorController anchor;
-        float armedUntil = -99f;
-        string refusal;
-        float refusalUntil = -99f;
-
-        float nextLookup;
-
-        void Start() => anchor = FindFirstObjectByType<AnchorController>();
-
-        void OnEnable() => SeaSick.Ship.Modular.ShipyardService.PlayerShipReplaced += Rebind;
-        void OnDisable() => SeaSick.Ship.Modular.ShipyardService.PlayerShipReplaced -= Rebind;
-        void Rebind(GameObject oldShip, GameObject newShip)
-        {
-            anchor = newShip != null ? newShip.GetComponent<AnchorController>() : null;
-            armedUntil = -99f; nextLookup = 0;
-        }
-
-        /// Script order is not guaranteed and the ship is not always the first
-        /// thing up, so the lookup has to be able to run again — but once a
-        /// second from here, not once per IMGUI EVENT from OnGUI, which is
-        /// where it used to live. Same shape as `Shipyard.Update`.
-        void Update()
-        {
-            if (anchor != null || Time.unscaledTime < nextLookup) return;
-            anchor = FindFirstObjectByType<AnchorController>();
-            nextLookup = Time.unscaledTime + 1f;
-        }
-
-        void OnGUI()
-        {
-            if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
-            if (anchor == null) return;
-            if (SheetsHud.SuppressLegacy) return;   // the ship's own sheet carries this while she lies at a camp
-            if (SeaSick.UI.Sheets.SeaLedger.IsOpen) return;   // IMGUI draws over the sea drawer; stand aside
-            // Nothing to do at her own pier -- or before there is one: a new
-            // game has no home until the player makes one (2026-09-29).
-            if (anchor.AtHomeDock || SeaSick.World.Dock.Home == null) { armedUntil = -99f; return; }
-
-            int u = HudLayout.Unit;
-            float pad = HudLayout.Pad;
-            // Third down the left rail, under Settings and Yard. It used to
-            // carry a copy of the Yard tab's position and height in a comment
-            // -- and a copied constant is a constant that drifts. The rail
-            // stacks it now, and it is the LAST tab on purpose: this is the
-            // one that moves the ship across the world, so it should not be
-            // where a thumb lands by accident.
-            var tab = HudLayout.Place(HudLayout.Slot.RailHome,
-                                      HudLayout.RailWidth, HudLayout.RailButtonHeight);
-            bool armed = Time.time < armedUntil;
-
-            var prev = GUI.contentColor;
-            if (armed) GUI.contentColor = UITheme.Warn;
-            if (GUI.Button(tab, armed ? "sure?" : "⌂ Home", UITheme.Button))
-            {
-                if (!armed) armedUntil = Time.time + armSeconds;
-                else
-                {
-                    armedUntil = -99f;
-                    if (!anchor.BerthAtHome(out string why))
-                    {
-                        refusal = why;
-                        refusalUntil = Time.time + refusalSeconds;
-                    }
-                }
-            }
-            GUI.contentColor = prev;
-            // Same as the Yard tab: register the rect so a tap on it can
-            // never also be read as a grab at the helm's steering zone.
-            UIBlocker.Block(tab);
-
-            // The reason lives ON the control that refused. Never a banner.
-            if (Time.time < refusalUntil && !string.IsNullOrEmpty(refusal))
-            {
-                GUI.contentColor = UITheme.Bad;
-                GUI.Label(new Rect(tab.xMax + pad * 0.5f, tab.y, u * 11f, tab.height),
-                          refusal, UITheme.Small);
-                GUI.contentColor = prev;
-            }
-        }
     }
 }

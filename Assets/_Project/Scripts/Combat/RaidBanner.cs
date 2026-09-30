@@ -3,11 +3,14 @@ using UnityEngine;
 namespace SeaSick.UI
 {
     /// The one line a watched camp shows about the raid it's living through
-    /// (or just finished) -- a warning while a raider is standing off, a
-    /// scoreline while her party is on the sand, and a verdict for a few
-    /// seconds after the ship has gone. Kept as a static drawer beside
-    /// `ReturnSummary`, same `OnGUI`/`HudLayout.ToastRow` idiom, so the two
-    /// toasts never fight for the same row.
+    /// -- a warning while a raider is standing off and a scoreline while her
+    /// party is on the sand. Kept as a static drawer, same `OnGUI`/
+    /// `HudLayout.ToastRow` idiom, for the classic HUD and the sea.
+    ///
+    /// **The verdict is UI Toolkit now (2026-09-30, island UI phase 6).** The
+    /// few seconds after the raiders have gone ("the raiders fled with
+    /// nothing / All clear.", `RaidDirector.LastResult`) draw as a raid-rim
+    /// card on `Sheets.PartyReportToast`; this drawer no longer says them.
     ///
     /// **Phase 11 (2026-09-28), docs/PLAN-DEATH-RESCUE.md "What you see" +
     /// "The Fight / Hide-all switch":** while the party is on the sand the
@@ -73,10 +76,9 @@ namespace SeaSick.UI
             }
             else
             {
-                string last = SeaSick.Combat.RaidDirector.LastResult(outpost);
-                if (string.IsNullOrEmpty(last)) return;
-                text = last;
-                phase = 3;
+                // Nothing raiding, nobody ashore: the verdict (phase 3) is
+                // the UI Toolkit toast's, not drawn here.
+                return;
             }
 
             // **Ashore, the land HUD says it all, 2026-09-27 / 2026-09-30**:
@@ -85,10 +87,9 @@ namespace SeaSick.UI
             // or half-hidden"*) took the floating "Hide everyone" button off
             // the phone too -- it sat over the chip and over the camp above
             // a half-height sheet. The switch now lives in `RaidSheet`'s
-            // thumb row. The after-raid verdict (phase 3) still shows here,
-            // and at sea (or on the classic HUD) this banner and its button
-            // are the only voice.
-            if (phase != 3 && Sheets.AlertStrip.ShowsRaid && Sheets.MidnightLandHud.Active)
+            // thumb row. At sea (or on the classic HUD) this banner and its
+            // button are the only voice.
+            if (Sheets.AlertStrip.ShowsRaid && Sheets.MidnightLandHud.Active)
             {
                 // Desktop keeps the H mirror of the switch.
                 var kb = UnityEngine.InputSystem.Keyboard.current;

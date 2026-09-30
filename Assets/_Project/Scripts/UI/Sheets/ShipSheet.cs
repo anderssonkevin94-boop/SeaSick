@@ -30,8 +30,28 @@ namespace SeaSick.UI.Sheets
     /// A grid longer than its six tiles pages: its last tile turns "More".
     /// (The old hold line glued "Hold 0 / 34" to "Room for 34" with no gap;
     /// that card is gone, and the Backpack's ship head is one string.)
+    ///
+    /// **At sea too (Kevin, 2026-09-30, island UI phase 6).** The sea top
+    /// bar's aboard count and the hull chip open this under way. Opened at
+    /// sea it stays valid while she sails (and closes when she stops, as the
+    /// lying-somewhere sheet closes when she casts off); the header says "at
+    /// sea", Cast off hides, and two pills join: **Home** (tap, "sure?", tap
+    /// = `AnchorController.BerthAtHome`, the retired IMGUI `HomeTab`, its
+    /// refusal shown on the pill) and **Ledger** (the sea ledger drawer,
+    /// whose rail button went with the IMGUI `PauseChip`). The cargo link
+    /// opens the Backpack's ship-only page.
     public class ShipSheet : ISheetFramed
     {
+        /// Opened under way (see the class notes); fixed for the sheet's life.
+        readonly bool atSea;
+
+        public ShipSheet()
+        {
+            var a = SheetBits.Anchor;
+            atSea = a != null && a.CurrentState != AnchorController.State.Anchored
+                    && a.CurrentState != AnchorController.State.Ashore;
+        }
+
         public string Title => "Ship";
         public string[] TabLabels => null;
         public int Tab => 0;
@@ -61,9 +81,10 @@ namespace SeaSick.UI.Sheets
             get
             {
                 var a = Anchor;
-                return a != null
-                    && (a.CurrentState == AnchorController.State.Anchored
-                        || a.CurrentState == AnchorController.State.Ashore);
+                if (a == null) return false;
+                bool lying = a.CurrentState == AnchorController.State.Anchored
+                             || a.CurrentState == AnchorController.State.Ashore;
+                return atSea ? !lying && !MidnightLandHud.Active : lying;
             }
         }
 
@@ -85,7 +106,12 @@ namespace SeaSick.UI.Sheets
             var dock = a != null ? a.CurrentDock : null;
             var camp = Camp;
             string isle = camp != null ? StationPage.Cap(StationPage.IslandName(camp)) : "";
-            if (dock != null)
+            if (atSea)
+            {
+                head.SetSub("at sea");
+                head.SetPill("under way", StationPage.PillWait);
+            }
+            else if (dock != null)
             {
                 head.SetSub(isle.Length > 0 ? isle + " pier" : "a pier");
                 head.SetPill(dock.IsHome ? "home berth" : "at the pier", StationPage.PillGood);
@@ -100,7 +126,8 @@ namespace SeaSick.UI.Sheets
         // --- the page -------------------------------------------------------------
 
         VisualElement pills;
-        Button yardPill, homePill, repairPill;
+        Button yardPill, homePill, repairPill, seaHomePill, ledgerPill;
+        Button castOffBtn;
         Button cargoLink;
         Label cargoLinkT, cargoLinkArrow;
         Paged crew;
@@ -122,6 +149,14 @@ namespace SeaSick.UI.Sheets
                 yardPill = CardKit.Pill(pills, "Shipyard", SeaSick.UI.ModularYard.ShipyardLiveBridge.Open, "ice");
             homePill = CardKit.Pill(pills, "Make home berth", HomeBerthPressed, "ice");
             repairPill = CardKit.Pill(pills, "Repair hull", () => { SheetBits.ToggleRepair(Anchor); Refresh(); });
+            seaHomePill = ledgerPill = null;
+            // At sea, and off an island with no camp (where the IMGUI Home
+            // tab also stood): there is no camp here to hold these.
+            if (atSea || !Sheets.SuppressLegacy)
+            {
+                seaHomePill = CardKit.Pill(pills, "Home", SeaHomePressed, "ice");
+                ledgerPill = CardKit.Pill(pills, "Ledger", OpenLedger, "ice");
+            }
             col.Add(pills);
 
             // --- the one cargo link: goods live in the Backpack
@@ -149,7 +184,8 @@ namespace SeaSick.UI.Sheets
             // --- thumb row
             var acts = CardKit.Acts(root);
             ashoreBtn = CardKit.Act(acts, "All ashore", EveryoneAshore);
-            CardKit.Act(acts, "Cast off", CastOff, 1);
+            castOffBtn = CardKit.Act(acts, "Cast off", CastOff, 1);
+            if (atSea) WatchTiles.Show(castOffBtn, false);   // she is already under way
 
             // --- toast
             toast = WatchTiles.Box("hs-toast");
@@ -205,6 +241,7 @@ namespace SeaSick.UI.Sheets
             }
 
             var a = Anchor;
+            FillSeaPills(a);
             bool canHome = CanMakeHome(a);
             bool feedback = Time.unscaledTime < homeFeedbackUntil;
             WatchTiles.Show(homePill, canHome || feedback);
@@ -220,6 +257,17 @@ namespace SeaSick.UI.Sheets
             int pct = hull != null ? Mathf.RoundToInt(hull.Integrity01 * 100f) : 100;
             int timber = v != null ? v.AmountOf(Res.Timber) : 0;
             bool show = hull != null && (on || (hull.NeedsRepair && pct < 99 && timber > 0));
+            if (atSea && hull != null && pct < 99)
+            {
+                // Repairs run only while she lies stopped (`AnchorController`
+                // mends at anchor or ashore): under way the pill says so.
+                WatchTiles.Show(repairPill, true);
+                string st = timber > 0 ? $"Hull {pct}% · mend at anchor" : $"Hull {pct}% · no timber aboard";
+                if (repairPill.text != st) repairPill.text = st;
+                repairPill.SetEnabled(false);
+                CardKit.PillTone(repairPill, "wait");
+                return;
+            }
             WatchTiles.Show(repairPill, show);
             if (show)
             {
@@ -227,6 +275,55 @@ namespace SeaSick.UI.Sheets
                 if (repairPill.text != rt) repairPill.text = rt;
                 CardKit.PillTone(repairPill, on ? "good" : "wait");
             }
+        }
+
+        // --- at sea: Home and Ledger (2026-09-30, phase 6) ------------------
+
+        float seaHomeArmedUntil = -99f, seaHomeRefusedUntil = -99f;
+        string seaHomeRefusal;
+
+        void FillSeaPills(AnchorController a)
+        {
+            if (seaHomePill == null) return;
+            // Nothing to do at her own pier, or before there is a home.
+            bool can = a != null && !a.AtHomeDock && SeaSick.World.Dock.Home != null;
+            bool refused = Time.unscaledTime < seaHomeRefusedUntil;
+            WatchTiles.Show(seaHomePill, can || refused);
+            string t = refused ? "Home · " + seaHomeRefusal
+                : Time.unscaledTime < seaHomeArmedUntil ? "Tap again · sail home?" : "Home";
+            if (seaHomePill.text != t) seaHomePill.text = t;
+            CardKit.PillTone(seaHomePill, refused ? "wait" : "ice");
+            if (ledgerPill != null) WatchTiles.Show(ledgerPill, SeaLedger.Available);
+        }
+
+        /// The retired IMGUI HomeTab's two taps: the first arms it, the
+        /// second calls `BerthAtHome` (which may refuse: crew ashore).
+        void SeaHomePressed()
+        {
+            var a = Anchor;
+            if (a == null) return;
+            if (Time.unscaledTime >= seaHomeArmedUntil)
+            {
+                seaHomeArmedUntil = Time.unscaledTime + 3.5f;
+                seaHomeRefusedUntil = -99f;
+                FillPills();
+                return;
+            }
+            seaHomeArmedUntil = -99f;
+            if (!a.BerthAtHome(out string why))
+            {
+                seaHomeRefusal = string.IsNullOrEmpty(why) ? "not now" : why;
+                seaHomeRefusedUntil = Time.unscaledTime + 3f;
+                FillPills();
+                return;
+            }
+            Sheets.Close();
+        }
+
+        static void OpenLedger()
+        {
+            Sheets.Close();
+            if (!SeaLedger.IsOpen) SeaLedger.Toggle();
         }
 
         /// **Can this island be made home?** (Kevin, 2026-09-29: "you choose
@@ -276,7 +373,8 @@ namespace SeaSick.UI.Sheets
             int limit = v == null ? 0 : v.TakeDeckCargo ? v.MaxHold : v.HoldCapacity;
             string t = v == null ? "Cargo · no hold" : "Cargo · " + v.TotalHeld + "/" + limit;
             if (cargoLinkT.text != t) cargoLinkT.text = t;
-            bool open = camp != null && (camp.HasCamp || camp.Building) && camp.Ledger != null;
+            // At sea the hold alone opens (the Backpack's ship-only page).
+            bool open = atSea || (camp != null && (camp.HasCamp || camp.Building) && camp.Ledger != null);
             cargoLink.style.opacity = open ? 1f : 0.6f;
             WatchTiles.Show(cargoLinkArrow, open);
         }
@@ -284,6 +382,7 @@ namespace SeaSick.UI.Sheets
         void OpenCargo()
         {
             var camp = Camp;
+            if (atSea) { Sheets.Open(new BackpackSheet(null, true)); return; }
             if (camp == null || !(camp.HasCamp || camp.Building)) { ShowToast("Moor at a camp to move goods"); return; }
             Sheets.Open(new BackpackSheet(camp, true));
         }

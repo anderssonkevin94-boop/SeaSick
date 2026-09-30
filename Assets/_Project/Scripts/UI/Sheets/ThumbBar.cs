@@ -23,6 +23,18 @@ namespace SeaSick.UI.Sheets
     ///   (under the status bar and alert strip). Driven by the siting code
     ///   through `ShowPlacement` and friends; shown whether or not a camp
     ///   exists, because the first campfire is placed before there is one.</item>
+    /// <item>**Anchored** (2026-09-30, island UI phase 6, Kevin's mockup
+    ///   "8c · Anchored off a fresh island") -- [Landing party] [Ship]
+    ///   [Cast off], Landing party the primary. Stopped (anchored or ashore)
+    ///   off an island with no camp (`LandingPartySheet.Offered`); replaces
+    ///   `AnchorController`'s IMGUI prompt stack. While any hand is ashore
+    ///   the right button is **Call them back** (Landing party then opens
+    ///   the sheet's progress view); while she is still coming alongside
+    ///   Cast off waits. With a raider in range (`CombatNear`) Landing
+    ///   party stands down. A one-line **hint** above the bar says what is
+    ///   going on (coming alongside, looking over the ground, no ground for
+    ///   a camp, the party's progress); the Next card ("Make camp") sits
+    ///   above bar and hint.</item>
     /// </list>
     ///
     /// The static half is the API and the published rects; `View` is the
@@ -49,8 +61,26 @@ namespace SeaSick.UI.Sheets
         public static Rect Rect { get; private set; }
         /// The placement instruction card, same space. Zero unless placing.
         public static Rect CardRect { get; private set; }
-        /// True while the bar is drawn (either mode).
+        /// True while the bar is drawn (any mode).
         public static bool Visible { get; private set; }
+        /// True while the bar is up in its anchored mode (a fresh island).
+        /// `NextCard.NoCampShowing` folds it in, so `SheetHost` lays the
+        /// panel out at the land scale for it too.
+        public static bool AnchoredActive { get; private set; }
+        /// **Stopped off a fresh island** (anchored or ashore, no fire or
+        /// blueprint): where the anchored bar, the lone Next card, the
+        /// landing party and the Ship sheet all live. `NextCard.NoCampShowing`
+        /// folds it in, so the panel keeps the land scale for the whole
+        /// stay -- opening Ship or the landing party no longer re-scales the
+        /// panel under the finger.
+        internal static bool AtFreshIsland => LandingPartySheet.Offered(Sheets.Anchor);
+        /// The anchored hint line above the bar, GUI space. Zero while hidden.
+        public static Rect HintRect { get; private set; }
+        /// Panel units the hint takes above the bar (its height and `Gap`),
+        /// zero while hidden: `NextCard` sits on top of it.
+        public static float HintPanel { get; private set; }
+        /// Height of the hint line, panel units (one line of 14 pt).
+        public const float HintHeight = 32f;
         /// Panel units from the bottom edge of the panel that the bar takes,
         /// with `Gap` above it: where something that must sit ABOVE the bar
         /// puts its `bottom`. Zero while hidden.
@@ -59,7 +89,22 @@ namespace SeaSick.UI.Sheets
         /// Does a GUI-space point land on the bar, the placement card, or
         /// the Next card above the bar (`NextCard`, phase 2)?
         public static bool Blocks(Vector2 guiPoint) =>
-            Rect.Contains(guiPoint) || CardRect.Contains(guiPoint) || NextCard.Blocks(guiPoint);
+            Rect.Contains(guiPoint) || CardRect.Contains(guiPoint) || HintRect.Contains(guiPoint)
+            || NextCard.Blocks(guiPoint);
+
+        /// The bar and its hint line together, GUI space: what the anchored
+        /// bar keeps the IMGUI HUD off (`HudLayout.ClaimSheet`; `NextCard`
+        /// unions itself in). Zero while hidden.
+        internal static Rect ClaimRect =>
+            HintRect.width > 0f ? Union(Rect, HintRect) : Rect;
+
+        internal static Rect Union(Rect a, Rect b)
+        {
+            if (a.width <= 0f || a.height <= 0f) return b;
+            if (b.width <= 0f || b.height <= 0f) return a;
+            return Rect.MinMaxRect(Mathf.Min(a.xMin, b.xMin), Mathf.Min(a.yMin, b.yMin),
+                                   Mathf.Max(a.xMax, b.xMax), Mathf.Max(a.yMax, b.yMax));
+        }
 
         /// Something stacked on the bar (the Next card) raises the reserve
         /// so the food notice sits above it too. Called
@@ -103,9 +148,9 @@ namespace SeaSick.UI.Sheets
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void Reset()
         {
-            PlacementActive = Visible = false;
-            Rect = CardRect = Rect.zero;
-            ReservePanel = 0f;
+            PlacementActive = Visible = AnchoredActive = false;
+            Rect = CardRect = HintRect = Rect.zero;
+            ReservePanel = HintPanel = 0f;
             onCancel = onTurn = onConfirm = null;
             title = hint = status = ""; confirmLabel = "Build here";
             statusOk = canConfirm = true;
@@ -191,6 +236,39 @@ namespace SeaSick.UI.Sheets
             if (sheet != null) Sheets.Open(sheet);
         }
 
+        // Anchored mode's presses: the ship the sheet HUD hangs off.
+        static void PressParty()
+        {
+            var a = Sheets.Anchor;
+            if (a != null) LandingPartySheet.Open(a);
+        }
+
+        static void PressCastOff()
+        {
+            var a = Sheets.Anchor;
+            if (a != null) a.CastOff();
+        }
+
+        static void PressRecall()
+        {
+            var a = Sheets.Anchor;
+            if (a != null) a.CallThemBack();
+        }
+
+        /// **Anchored off a fresh island, nothing else up?** Stopped
+        /// (anchored or ashore) at an island with no fire or blueprint
+        /// (`LandingPartySheet.Offered`), no sheet, no siting, no drawer,
+        /// the shipyard shut. Not gated on the land theme: with the IMGUI
+        /// prompt retired this bar is the only way to leave a fresh island.
+        static bool AnchoredWanted(out SeaSick.Ship.AnchorController a)
+        {
+            a = null;
+            if (MidnightLandHud.Active || Sheets.Current != null || SeaSick.UI.CampSiting.Placing
+                || SeaLedger.IsOpen || SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return false;
+            a = Sheets.Anchor;
+            return LandingPartySheet.Offered(a);
+        }
+
         static void PressCancel() => onCancel?.Invoke();
         static void PressTurn() => onTurn?.Invoke();
         static void PressConfirm() { if (canConfirm) onConfirm?.Invoke(); }
@@ -199,12 +277,22 @@ namespace SeaSick.UI.Sheets
 
         internal sealed class View
         {
+            enum Mode { None, Normal, Placing, Anchored }
+
             readonly VisualElement bar, card;
-            readonly Button camp, build, ship, cancel, turn, confirm;
-            readonly Label confirmText, titleText, hintText, statusText;
+            readonly Button party, camp, build, ship, cancel, turn, confirm, castOff, recall;
+            readonly Label confirmText, titleText, hintText, statusText, anchorHint;
             int seen = -1;
-            bool shownPlacing;
+            Mode shownMode = Mode.None;
             bool shown = true;
+
+            // Anchored mode: which buttons show (`Sub`), and the hint line.
+            int shownSub = -1;
+            string hintNow = "";
+            bool hintBad, hintShown = true;
+            float nextHint;
+            SeaSick.Ship.AnchorController hintFor;
+            int hintSub = -1;
 
             public View(VisualElement root)
             {
@@ -216,12 +304,46 @@ namespace SeaSick.UI.Sheets
                 bar.pickingMode = PickingMode.Position;
                 root.Add(bar);
 
+                // Anchored mode's Landing party first: the bar's children are
+                // its left-to-right order, and it leads "Landing party ·
+                // Ship · Cast off" (a hidden button takes no room).
+                party = Btn(Glyph.Kind.Compass, "Landing party", PressParty, true, out _, "Landing party: explore, gather, hunt ashore");
                 camp = Btn(Glyph.Kind.Camp, "Camp", PressCamp, false, out _, "The camp: what needs you, the fire, the buildings, people, stores");
                 build = Btn(Glyph.Kind.Build, "Build", PressBuild, true, out _, "Build: put up a new building");
                 ship = Btn(Glyph.Kind.Ship, "Ship", PressShip, false, out _, "The ship: hold, crew, chart");
                 cancel = Btn(Glyph.Kind.Cancel, "Cancel", PressCancel, false, out _, "Stop placing");
                 turn = Btn(Glyph.Kind.Turn, "Turn", PressTurn, false, out _, "Turn it");
                 confirm = Btn(Glyph.Kind.Confirm, "Build here", PressConfirm, true, out confirmText, "Place it here");
+                castOff = Btn(Glyph.Kind.Anchor, "Cast off", PressCastOff, false, out _, "Weigh anchor and sail (space)");
+                recall = Btn(Glyph.Kind.Recall, "Call them back", PressRecall, false, out var recallText, "Call the party back aboard (space)");
+                // The longest label in the bar: a little more room and a
+                // point smaller, so it never ellipsises on a 390 pt phone.
+                recall.style.flexGrow = 1.25f;
+                recallText.style.fontSize = 14f;
+
+                // The anchored hint: one line in the bar's lane, above it --
+                // the placement card's type (`thumb-card-hint`, and its
+                // ember for a "no" line), in a slim pill of the bar's own.
+                anchorHint = new Label { pickingMode = PickingMode.Position };
+                anchorHint.AddToClassList("thumb-card-hint");
+                anchorHint.style.position = Position.Absolute;
+                anchorHint.style.height = HintHeight;
+                anchorHint.style.marginTop = 0f;
+                anchorHint.style.paddingLeft = 14f;
+                anchorHint.style.paddingRight = 14f;
+                anchorHint.style.whiteSpace = WhiteSpace.NoWrap;
+                anchorHint.style.overflow = Overflow.Hidden;
+                anchorHint.style.textOverflow = TextOverflow.Ellipsis;
+                anchorHint.style.unityTextAlign = TextAnchor.MiddleCenter;
+                anchorHint.style.backgroundColor = new Color(11f / 255f, 23f / 255f, 32f / 255f, .92f);
+                anchorHint.style.borderTopWidth = anchorHint.style.borderBottomWidth =
+                    anchorHint.style.borderLeftWidth = anchorHint.style.borderRightWidth = 1.5f;
+                var rim = new Color32(44, 74, 94, 255);
+                anchorHint.style.borderTopColor = anchorHint.style.borderBottomColor =
+                    anchorHint.style.borderLeftColor = anchorHint.style.borderRightColor = (Color)rim;
+                anchorHint.style.borderTopLeftRadius = anchorHint.style.borderTopRightRadius =
+                    anchorHint.style.borderBottomLeftRadius = anchorHint.style.borderBottomRightRadius = 14f;
+                root.Add(anchorHint);
 
                 card = new VisualElement();
                 card.AddToClassList("thumb-card");
@@ -261,9 +383,62 @@ namespace SeaSick.UI.Sheets
                     bar.style.display = DisplayStyle.None;
                     card.style.display = DisplayStyle.None;
                 }
-                Visible = false;
-                Rect = CardRect = Rect.zero;
-                ReservePanel = 0f;
+                ShowHint(false);
+                Visible = AnchoredActive = false;
+                shownMode = Mode.None;
+                Rect = CardRect = HintRect = Rect.zero;
+                ReservePanel = HintPanel = 0f;
+            }
+
+            void ShowHint(bool on)
+            {
+                if (on == hintShown) return;
+                hintShown = on;
+                anchorHint.style.display = on ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+
+            /// Anchored mode's button set, as bits: 1 = a hand ashore (Call
+            /// them back replaces Cast off), 2 = still coming alongside (no
+            /// Cast off yet), 4 = a raider near (no Landing party).
+            static int Sub(SeaSick.Ship.AnchorController a)
+            {
+                int s = 0;
+                if (a.CurrentState == SeaSick.Ship.AnchorController.State.Ashore) s |= 1;
+                if (a.LandingPending) s |= 2;
+                if (a.CombatNear) s |= 4;
+                return s;
+            }
+
+            /// The hint line's words, at a quarter-second cadence (the party's
+            /// status line is built fresh each time it is asked) and at once
+            /// when the button set changes. First that applies: the party's
+            /// progress, hands ashore, coming alongside, the ground survey.
+            void RefreshHint(SeaSick.Ship.AnchorController a, int sub)
+            {
+                float now = Time.unscaledTime;
+                if (a == hintFor && sub == hintSub && now < nextHint) return;
+                hintFor = a; hintSub = sub; nextHint = now + .25f;
+
+                string t = ""; bool bad = false;
+                var isle = a.CurrentIsland;
+                var p = (sub & 1) != 0 ? SeaSick.Ship.GatherParty.For(a) : null;
+                if (p != null && p.Out)
+                    t = p.Recalling ? "Coming back aboard…" : p.StatusLine;
+                else if ((sub & 1) != 0)
+                    t = "Hands ashore · call them back to cast off";
+                else if ((sub & 2) != 0)
+                    t = "Coming alongside…";
+                else if (isle != null && SeaSick.World.Outpost.Of(isle) == null)
+                {
+                    if (SeaSick.World.Outpost.Surveying(isle)) t = "Looking over the ground…";
+                    else { t = "No ground here will take a camp"; bad = true; }
+                }
+                if (t != hintNow) { hintNow = t; anchorHint.text = t; }
+                if (bad != hintBad)
+                {
+                    hintBad = bad;
+                    anchorHint.EnableInClassList("thumb-card-status--bad", bad);
+                }
             }
 
             /// Once a frame from `SheetHost.LateUpdate`, BEFORE the land HUD
@@ -271,10 +446,17 @@ namespace SeaSick.UI.Sheets
             /// frame's reserve.
             public void Tick(VisualElement root)
             {
+                SeaSick.Ship.AnchorController anchor = null;
                 bool placing = PlacementActive;
                 bool normal = !placing && MidnightLandHud.Active && Sheets.Current == null
                               && !SeaSick.UI.CampSiting.Placing;
-                if (!placing && !normal) { Hide(); return; }
+                var mode = placing ? Mode.Placing
+                    : normal ? Mode.Normal
+                    : AnchoredWanted(out anchor) ? Mode.Anchored
+                    : Mode.None;
+                if (mode == Mode.None) { Hide(); return; }
+                AnchoredActive = mode == Mode.Anchored;
+                int sub = AnchoredActive ? Sub(anchor) : 0;
 
                 if (!shown)
                 {
@@ -282,7 +464,7 @@ namespace SeaSick.UI.Sheets
                     bar.style.display = DisplayStyle.Flex;
                     seen = -1;
                 }
-                if (placing != shownPlacing || seen != stamp) Apply(placing);
+                if (mode != shownMode || seen != stamp || sub != shownSub) Apply(mode, sub);
 
                 float scale = SheetHost.PanelScale;
                 var safe = Screen.safeArea;
@@ -302,6 +484,32 @@ namespace SeaSick.UI.Sheets
                 Visible = true;
                 ReservePanel = bottom + Height + Gap;
 
+                // The anchored hint, one line above the bar in its lane.
+                HintRect = Rect.zero;
+                HintPanel = 0f;
+                if (AnchoredActive)
+                {
+                    RefreshHint(anchor, sub);
+                    bool on = hintNow.Length > 0;
+                    ShowHint(on);
+                    if (on)
+                    {
+                        float hb = bottom + Height + Gap;
+                        anchorHint.style.left = left;
+                        anchorHint.style.width = width;
+                        anchorHint.style.bottom = hb;
+                        HintRect = new Rect(left * inv, Screen.height - (hb + HintHeight) * inv,
+                                            width * inv, HintHeight * inv);
+                        HintPanel = HintHeight + Gap;
+                        ReservePanel += HintPanel;
+                    }
+                    // No land HUD here to keep the IMGUI HUD (the helm's
+                    // rows, the jettison prompt) off the bar: claim it
+                    // (`NextCard` widens the claim to itself when it shows).
+                    HudLayout.ClaimSheet(ClaimRect);
+                }
+                else ShowHint(false);
+
                 if (!placing) { CardRect = Rect.zero; return; }
 
                 // The card: under the status bar, the alert strip and the
@@ -319,12 +527,24 @@ namespace SeaSick.UI.Sheets
                     : new Rect(wb.x * inv, wb.y * inv, wb.width * inv, wb.height * inv);
             }
 
-            void Apply(bool placing)
+            void Apply(Mode mode, int sub)
             {
                 seen = stamp;
-                shownPlacing = placing;
+                shownMode = mode;
+                shownSub = sub;
+                bool placing = mode == Mode.Placing;
+                bool normal = mode == Mode.Normal;
+                bool anchored = mode == Mode.Anchored;
                 var on = DisplayStyle.Flex; var off = DisplayStyle.None;
-                camp.style.display = build.style.display = ship.style.display = placing ? off : on;
+                camp.style.display = build.style.display = normal ? on : off;
+                ship.style.display = normal || anchored ? on : off;
+                // Anchored: Landing party unless a raider is near; Call them
+                // back while anyone is ashore, else Cast off once she is
+                // alongside (never a dead button -- the hint says "Coming
+                // alongside…" meanwhile).
+                party.style.display = anchored && (sub & 4) == 0 ? on : off;
+                recall.style.display = anchored && (sub & 1) != 0 ? on : off;
+                castOff.style.display = anchored && (sub & 3) == 0 ? on : off;
                 confirm.style.display = placing ? on : off;
                 // No Cancel when the caller gave none (the forced grave).
                 cancel.style.display = placing && onCancel != null ? on : off;
@@ -351,7 +571,7 @@ namespace SeaSick.UI.Sheets
         /// the placement trio ✕ ↻ ✓, and the Next card's chevron. A 24-unit grid.
         internal sealed class Glyph : VisualElement
         {
-            public enum Kind { Camp, Build, Ship, Cancel, Turn, Confirm, Chevron }
+            public enum Kind { Camp, Build, Ship, Cancel, Turn, Confirm, Chevron, Compass, Anchor, Recall }
 
             readonly Kind kind;
             Color tint = MidnightLandHud.Pearl;
@@ -431,6 +651,24 @@ namespace SeaSick.UI.Sheets
                         // The Next card's "go": a heavy right chevron.
                         p.lineWidth = 3.2f * s;
                         p.BeginPath(); p.MoveTo(V(9, 5)); p.LineTo(V(16, 12)); p.LineTo(V(9, 19)); p.Stroke();
+                        break;
+                    case Kind.Compass:
+                        // Landing party: a compass rose, ring and needle.
+                        p.BeginPath(); p.Arc(V(12, 12), 9f * s, 0f, 360f); p.ClosePath(); p.Stroke();
+                        p.BeginPath(); p.MoveTo(V(15.5f, 8.5f)); p.LineTo(V(13.5f, 13.5f));
+                        p.LineTo(V(8.5f, 15.5f)); p.LineTo(V(10.5f, 10.5f)); p.ClosePath(); p.Fill();
+                        break;
+                    case Kind.Anchor:
+                        // Cast off: an anchor -- ring, shank, arms, flukes.
+                        p.BeginPath(); p.Arc(V(12, 5), 2f * s, 0f, 360f); p.ClosePath(); p.Stroke();
+                        Line(12, 7, 12, 20);
+                        p.BeginPath(); p.Arc(V(12, 13), 7f * s, 0f, 180f); p.Stroke();
+                        Line(3, 13, 7, 13); Line(17, 13, 21, 13);
+                        break;
+                    case Kind.Recall:
+                        // Call them back: a return arrow, down then home to the left.
+                        p.BeginPath(); p.MoveTo(V(19, 5)); p.LineTo(V(19, 13)); p.LineTo(V(6, 13)); p.Stroke();
+                        p.BeginPath(); p.MoveTo(V(10, 9)); p.LineTo(V(6, 13)); p.LineTo(V(10, 17)); p.Stroke();
                         break;
                 }
             }
