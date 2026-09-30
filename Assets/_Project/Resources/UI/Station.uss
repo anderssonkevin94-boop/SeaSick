@@ -271,32 +271,49 @@
 
 /* --- upgrade ---------------------------------------------------------- */
 
-.st-upgrade { border-color: rgb(107, 82, 32); margin-top: 14px; }
+.st-upgrade { border-color: rgb(107, 82, 32); margin-top: 14px; flex-direction: column; align-items: stretch; }
 .st-upgrade-words { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-width: 0; }
 .st .st-upgrade-title { font-size: 19px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
-.st-cost { flex-direction: row; flex-wrap: wrap; align-items: center; margin-top: 4px; }
-.st .st-cost-text { font-size: 16px; margin-right: 10px; }
+.st-cost { flex-direction: row; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+.st-chip { flex-direction: row; align-items: center; margin-right: 12px; }
+.st .st-cost-text { font-size: 16px; margin-right: 0; }
 .st .st-cost--ok { color: rgb(159, 224, 194); }
 .st .st-cost--short { color: rgb(246, 146, 128); }
-.st .st-upgrade-btn {
-    border-color: rgb(107, 82, 32);
-    background-color: rgb(30, 26, 16);
-    color: rgb(240, 195, 106);
-    font-size: 16px;
-    padding: 0 16px;
-}
-.st .st-upgrade-btn:hover { background-color: rgb(44, 38, 22); }
+/* The ONE button on the card: amber "Raise to level N" (the fix is the Slot's ice button). */
+.st .st-upgrade-btn { margin: 10px 0 0 0; height: auto; min-height: 48px; font-size: 17px; padding: 0 16px; white-space: normal; }
 .st .st-upgrade-btn--go { background-color: rgb(240, 195, 106); color: rgb(30, 26, 16); border-color: rgb(240, 195, 106); }
 .st .st-upgrade-btn--go:hover { background-color: rgb(248, 214, 140); }
-.st .st-upgrade-btn:disabled { opacity: 1; }
-.st .st-pin {
-    align-self: flex-start; height: 30px; margin: 6px 0 0 0; padding: 0 12px; border-radius: 15px;
-    background-color: rgb(19, 34, 46); border-width: 1.5px; border-color: rgb(44, 74, 94);
-    color: rgb(164, 210, 232); font-size: 13px;
+/* Plain ember words -- clearly not a button (no fill, no border). */
+.st .st-upgrade-status { font-size: 16px; color: rgb(246, 146, 128); margin-top: 8px; white-space: normal; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
+/* A text link: lesser than any button (no fill, no border), 40 px tall to hit. */
+.st .st-link {
+    align-self: flex-start; min-height: 40px; margin: 2px 0 0 -6px; padding: 0 6px;
+    background-color: rgba(0, 0, 0, 0); border-width: 0; border-radius: 8px;
+    color: rgb(164, 210, 232); font-size: 15px; white-space: nowrap;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
 }
-.st .st-pin:hover { background-color: rgb(32, 57, 72); }
-.st .st-pin--on { border-color: rgb(159, 224, 194); color: rgb(159, 224, 194); }
+.st .st-link:hover { background-color: rgb(32, 57, 72); }
+.st .st-pin--on { color: rgb(159, 224, 194); }
+
+/* --- the store hut's tiles ------------------------------------------------ */
+
+.st-store-card { flex-direction: column; align-items: stretch; }
+.st-store-grid { flex-direction: row; flex-wrap: wrap; }
+.st-store-tile {
+    width: 23.5%; margin: 0 2% 8px 0; padding: 6px 4px 6px 4px; flex-direction: column; align-items: stretch;
+    background-color: rgb(26, 48, 64); border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 9px;
+}
+.st-store-tile--end { margin-right: 0; }
+.st-store-top { flex-direction: row; align-items: center; justify-content: center; height: 30px; }
+.st-store-icon { width: 26px; height: 26px; flex-shrink: 0; -unity-background-scale-mode: scale-to-fit; }
+.st .st-store-count { font-size: 14px; color: rgb(232, 242, 246); margin: 0 0 0 3px; white-space: nowrap; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
+.st-store-bar { height: 4px; margin: 4px 4px 0 4px; background-color: rgb(14, 26, 36); border-radius: 2px; overflow: hidden; }
+.st-store-fill { height: 4px; width: 0; background-color: rgb(159, 224, 194); }
+.st-store-tile--full { border-color: rgb(246, 146, 128); }
+.st-store-tile--full .st-store-fill { background-color: rgb(246, 146, 128); }
+.st .st-store-tile--full .st-store-count { color: rgb(246, 146, 128); }
+.st-store-foot { flex-direction: row; align-items: center; justify-content: space-between; margin-top: 0; }
+.st .st-store-holds { font-size: 15px; color: rgb(166, 186, 198); flex-shrink: 1; white-space: normal; }
 
 /* Leave space for the worker slot on a portrait phone. */
 .st .st-worker-assign { max-width: 140px; padding: 0 10px; white-space: normal; font-size: 16px; }

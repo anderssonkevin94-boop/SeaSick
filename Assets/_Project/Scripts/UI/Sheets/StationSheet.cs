@@ -198,9 +198,23 @@ namespace SeaSick.UI.Sheets
         Label stallLine;
 
         // the store
-        Label[] storeLines;
-        const int StoreLinesMax = 5;
-        const int StoreLinesHug = 3;
+        /// **The store hut's contents as icon tiles (Kevin 2026-09-30: "Why
+        /// is the store house information shown like this?").** Was five
+        /// lines of lower-case text with "and 3 more kinds". Now a grid of
+        /// read-only tiles -- icon, have/ceiling, a thin fill bar, ember at
+        /// the ceiling -- fullest first; whatever does not fit is one tap
+        /// away on the Backpack's Island page (the one home for goods).
+        sealed class StoreTile
+        {
+            public VisualElement root, icon, fill;
+            public Label count;
+            public string res;
+        }
+        StoreTile[] storeTiles;
+        Label storeHolds;
+        Button storeAll;
+        const int StoreTileCount = 8;
+        const int StoreTilesPerRow = 4;
 
         /// Built for a hugging frame (compact recipe cards, no eyebrows the
         /// tab already says, one of `hugTabs` per page).
@@ -210,7 +224,7 @@ namespace SeaSick.UI.Sheets
         {
             cards.Clear();
             orderFix = null;
-            storeLines = null; stallLine = null; worker = null; upgrade = null;
+            storeTiles = null; storeHolds = null; storeAll = null; stallLine = null; worker = null; upgrade = null;
             // Every refresh target is re-bound by the page that builds it;
             // the others stay null so `Refresh` skips them.
             stopBtn = null; keepBtn = null; queueEyebrow = null; queueList = null; orderEyebrow = null;
@@ -255,18 +269,44 @@ namespace SeaSick.UI.Sheets
 
             if (isStore && (all || on == PageWork))
             {
-                // Hugging: three lines, no eyebrow -- the Stores sheet is the
-                // racks' home, this is the glance.
+                // Two rows of icon tiles, no eyebrow when hugging -- the
+                // Backpack's Island page is the goods' home, this is the glance.
                 var s = Section(hugged ? null : "ON THE RACKS", out _);
                 var card = StationPage.Card();
-                var lines = new VisualElement(); lines.AddToClassList("st-col");
-                card.Add(lines);
-                storeLines = new Label[hugged ? StoreLinesHug : StoreLinesMax];
-                for (int i = 0; i < storeLines.Length; i++)
+                card.AddToClassList("st-store-card");
+                var grid = new VisualElement(); grid.AddToClassList("st-store-grid");
+                card.Add(grid);
+                int n = StoreTileCount;
+                storeTiles = new StoreTile[n];
+                for (int i = 0; i < n; i++)
                 {
-                    storeLines[i] = StationPage.Text("", "st-line");
-                    lines.Add(storeLines[i]);
+                    var t = new StoreTile();
+                    t.root = new VisualElement(); t.root.AddToClassList("st-store-tile");
+                    if (i % StoreTilesPerRow == StoreTilesPerRow - 1) t.root.AddToClassList("st-store-tile--end");
+                    var top = new VisualElement(); top.AddToClassList("st-store-top");
+                    t.icon = new VisualElement { pickingMode = PickingMode.Ignore };
+                    t.icon.AddToClassList("st-store-icon");
+                    top.Add(t.icon);
+                    t.count = StationPage.Text("", "st-store-count");
+                    top.Add(t.count);
+                    t.root.Add(top);
+                    var bar = new VisualElement { pickingMode = PickingMode.Ignore };
+                    bar.AddToClassList("st-store-bar");
+                    t.fill = new VisualElement { pickingMode = PickingMode.Ignore };
+                    t.fill.AddToClassList("st-store-fill");
+                    bar.Add(t.fill);
+                    t.root.Add(bar);
+                    t.root.style.display = DisplayStyle.None;
+                    grid.Add(t.root);
+                    storeTiles[i] = t;
                 }
+                var foot = new VisualElement(); foot.AddToClassList("st-store-foot");
+                storeHolds = StationPage.Text("", "st-store-holds");
+                foot.Add(storeHolds);
+                storeAll = new Button(() => Sheets.Open(new BackpackSheet(outpost))) { text = "All stores →" };
+                storeAll.AddToClassList("st-link");
+                foot.Add(storeAll);
+                card.Add(foot);
                 s.Add(card);
             }
 
@@ -920,28 +960,46 @@ namespace SeaSick.UI.Sheets
 
         readonly List<string> held = new List<string>();
 
+        /// Fills the tiles with the fullest piles first (ties keep the
+        /// ledger's order); tiles past the last kind are hidden, and the
+        /// "All stores" link says how many kinds there are when they do not
+        /// all fit.
         void FillStore(OutpostLedger l)
         {
-            if (storeLines == null) return;
+            if (storeTiles == null) return;
             held.Clear();
             foreach (var s in l.stores)
                 if (s != null && s.whole > 0 && !string.IsNullOrEmpty(s.resource)) held.Add(s.resource);
-            for (int i = 0; i < storeLines.Length; i++)
+            // Insertion sort by count, descending: a handful of kinds, no allocation.
+            for (int i = 1; i < held.Count; i++)
             {
-                int a = i * 2, b = a + 1;
-                string text = "";
-                if (a < held.Count) text = StoreBit(l, held[a]);
-                if (b < held.Count) text += "   ·   " + StoreBit(l, held[b]);
-                if (i == storeLines.Length - 1 && held.Count > storeLines.Length * 2)
-                    text = $"{StoreBit(l, held[a])} · and {held.Count - a - 1} more kinds";
-                if (i == 0 && held.Count == 0) text = "the store is empty";
-                storeLines[i].text = text;
-                storeLines[i].style.display = text.Length > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+                var r = held[i]; int c = l.StoreCountOf(r); int j = i - 1;
+                while (j >= 0 && l.StoreCountOf(held[j]) < c) { held[j + 1] = held[j]; j--; }
+                held[j + 1] = r;
             }
+            int ceil = Mathf.Max(1, l.ceilingPer);
+            for (int i = 0; i < storeTiles.Length; i++)
+            {
+                var t = storeTiles[i];
+                bool show = i < held.Count;
+                var want = show ? DisplayStyle.Flex : DisplayStyle.None;
+                if (t.root.style.display != want) t.root.style.display = want;
+                if (!show) continue;
+                string res = held[i];
+                int have = l.StoreCountOf(res);
+                StationPage.SetIcon(t.icon, res);
+                t.res = res;
+                string text = ItemIconSet.Get(res) == null ? $"{ResDefs.Label(res)} {have}" : $"{have}/{ceil}";
+                if (t.count.text != text) t.count.text = text;
+                t.fill.style.width = Length.Percent(Mathf.Clamp01(have / (float)ceil) * 100f);
+                bool full = have >= ceil;
+                t.root.EnableInClassList("st-store-tile--full", full);
+            }
+            string holds = held.Count == 0 ? "The store is empty" : $"Holds {ceil} of each kind";
+            if (storeHolds.text != holds) storeHolds.text = holds;
+            string all = held.Count > storeTiles.Length ? $"All {held.Count} kinds →" : "All stores →";
+            if (storeAll.text != all) storeAll.text = all;
         }
-
-        static string StoreBit(OutpostLedger l, string res) =>
-            $"{ResDefs.Label(res)} {l.StoreCountOf(res)}/{l.ceilingPer}";
 
         // --- refresh ------------------------------------------------------------------
 
@@ -1413,25 +1471,34 @@ namespace SeaSick.UI.Sheets
 
         // --- the upgrade card --------------------------------------------------
 
-        /// "Level 2 · 1.5× faster", the price with have/need per item, and
-        /// one button that is "Upgrade" when it can be and otherwise names
-        /// what is missing ("Campfire II", "Need 2 brick"). The cost row is
-        /// rebuilt only when the level changes -- a tap -- and has no
-        /// buttons in it; the button itself is built once.
+        /// **The upgrade card (rebuilt 2026-09-30, Kevin: "two button-looking
+        /// things compete, so it's unclear what to press").** "Level 2 ·
+        /// +10 stores", the price as icon + have/need chips (ember where
+        /// short), then EXACTLY ONE button:
+        /// <list type="bullet">
+        /// <item>affordable: **"Raise to level N"** (amber, the primary);</item>
+        /// <item>short or fire-locked: **the fix** (`ShortFix`: "Make brick",
+        /// "Gather timber", "Raise Campfire to II", "Build a kiln"...);</item>
+        /// <item>short with no fix at all: no button, one plain ember line.</item>
+        /// </list>
+        /// "Set as goal" is a text link under it, never a second button.
+        /// The chip row is rebuilt only when the level changes -- a tap.
         public sealed class UpgradeCard
         {
             public readonly VisualElement Root;
             readonly Label title;
             readonly VisualElement cost;
             readonly Button btn;
-            /// "Set as goal" (GoalPin): shown while the upgrade cannot be
+            /// A short upgrade with no fix to press: plain ember words.
+            readonly Label status;
+            /// "Set as goal" (GoalPin): a link while the upgrade cannot be
             /// paid, so the camp overview and the Next card can chase it.
             readonly Button pinBtn;
             readonly List<(Label label, string res, int n)> lines = new List<(Label, string, int)>();
             int builtLevel = -1;
             /// **The fix for a short upgrade (2026-09-30, island UI rule 2):**
-            /// one button under the price for the item lacking most, or the
-            /// fire when it is too low. Only when the caller passes its camp.
+            /// the one button under the price for the item lacking most, or
+            /// the fire when it is too low. Only when the caller passes its camp.
             readonly ShortFix.Slot fixSlot;
             readonly Outpost camp;
 
@@ -1445,23 +1512,29 @@ namespace SeaSick.UI.Sheets
                 words.Add(title);
                 cost = new VisualElement(); cost.AddToClassList("st-cost");
                 words.Add(cost);
-                if (pin != null)
-                {
-                    pinBtn = new Button(pin) { text = "Set as goal" };
-                    pinBtn.AddToClassList("st-pin");
-                    pinBtn.style.display = DisplayStyle.None;
-                    words.Add(pinBtn);
-                }
+                Root.Add(words);
+
                 if (camp != null)
                 {
                     fixSlot = new ShortFix.Slot();
-                    words.Add(fixSlot.button);
+                    Root.Add(fixSlot.button);
                 }
-                Root.Add(words);
-                btn = new Button(upgrade) { text = "Upgrade" };
+                btn = new Button(upgrade) { text = "Raise" };
                 btn.AddToClassList("st-btn");
                 btn.AddToClassList("st-upgrade-btn");
+                btn.AddToClassList("st-upgrade-btn--go");
                 Root.Add(btn);
+                status = Text("", "st-upgrade-status");
+                status.style.display = DisplayStyle.None;
+                Root.Add(status);
+                if (pin != null)
+                {
+                    pinBtn = new Button(pin) { text = "Set as goal" };
+                    pinBtn.AddToClassList("st-link");
+                    pinBtn.AddToClassList("st-pin");
+                    pinBtn.style.display = DisplayStyle.None;
+                    Root.Add(pinBtn);
+                }
             }
 
             public void Update(OutpostLedger l, int raisedIndex, string planId, int level, bool pinned = false)
@@ -1471,6 +1544,7 @@ namespace SeaSick.UI.Sheets
                 {
                     fixSlot?.Bind(camp, default(ShortFix.Fix));
                     if (pinBtn != null) pinBtn.style.display = DisplayStyle.None;
+                    status.style.display = DisplayStyle.None;
                     title.text = $"Level {level} · top level";
                     if (builtLevel != level) { cost.Clear(); lines.Clear(); builtLevel = level; }
                     btn.style.display = DisplayStyle.None;
@@ -1484,40 +1558,48 @@ namespace SeaSick.UI.Sheets
                     lines.Clear();
                     foreach (var c in next.cost)
                     {
-                        cost.Add(Icon(c.res, "st-small-icon"));
+                        var chip = new VisualElement(); chip.AddToClassList("st-chip");
+                        chip.pickingMode = PickingMode.Ignore;
+                        // An item without an icon says its name instead of a blank square.
+                        if (ItemIconSet.Get(c.res) != null) chip.Add(Icon(c.res, "st-small-icon"));
                         var lab = Text("", "st-cost-text");
-                        cost.Add(lab);
+                        chip.Add(lab);
+                        cost.Add(chip);
                         lines.Add((lab, c.res, c.n));
                     }
                 }
                 foreach (var (label, res, n) in lines)
                 {
                     int have = l.SpendableOf(res);
-                    label.text = $"{Mathf.Min(have, 9999)}/{n} {ResDefs.Label(res)}";
+                    string t = ItemIconSet.Get(res) != null
+                        ? $"{Mathf.Min(have, 9999)}/{n}"
+                        : $"{Mathf.Min(have, 9999)}/{n} {ResDefs.Label(res)}";
+                    if (label.text != t) label.text = t;
                     label.EnableInClassList("st-cost--ok", have >= n);
                     label.EnableInClassList("st-cost--short", have < n);
                 }
 
                 bool can = l.CanUpgradeAt(raisedIndex, planId, out string why);
-                if (fixSlot != null)
+                var fix = default(ShortFix.Fix);
+                if (!can && fixSlot != null)
                 {
-                    var fix = default(ShortFix.Fix);
-                    if (!can)
+                    if (l.CampfireLevel < next.campfireLevel) fix = ShortFix.RaiseFire(camp);
+                    else
                     {
-                        if (l.CampfireLevel < next.campfireLevel) fix = ShortFix.RaiseFire(camp);
-                        else
-                        {
-                            var most = new ShortFix.Most();
-                            foreach (var (_, res, n) in lines) most.Add(res, n - l.SpendableOf(res));
-                            if (most.Res != null) fix = ShortFix.For(camp, most.Res);
-                        }
+                        var most = new ShortFix.Most();
+                        foreach (var (_, res, n) in lines) most.Add(res, n - l.SpendableOf(res));
+                        if (most.Res != null) fix = ShortFix.For(camp, most.Res);
                     }
-                    fixSlot.Bind(camp, fix);
                 }
-                btn.style.display = DisplayStyle.Flex;
-                btn.text = can ? "Upgrade" : Short(l, next, why);
-                btn.SetEnabled(can);
-                btn.EnableInClassList("st-upgrade-btn--go", can);
+                fixSlot?.Bind(camp, fix);
+
+                // Exactly one of: the primary, the fix, or (no fix exists) plain words.
+                btn.style.display = can ? DisplayStyle.Flex : DisplayStyle.None;
+                if (can) btn.text = "Raise to level " + next.toLevel;
+                bool words = !can && !fix.Valid;
+                status.style.display = words ? DisplayStyle.Flex : DisplayStyle.None;
+                if (words) status.text = Short(l, next, why);
+
                 if (pinBtn != null)
                 {
                     pinBtn.style.display = can ? DisplayStyle.None : DisplayStyle.Flex;
@@ -1529,7 +1611,7 @@ namespace SeaSick.UI.Sheets
 
             static string Short(OutpostLedger l, UpgradeStep next, string why)
             {
-                if (l.CampfireLevel < next.campfireLevel) return "Campfire " + RecipeGraph.Roman(next.campfireLevel);
+                if (l.CampfireLevel < next.campfireLevel) return "Needs Campfire " + RecipeGraph.Roman(next.campfireLevel);
                 var missing = Cost.Missing(next.cost, l.SpendableOf);
                 if (missing.Count > 0) return $"Need {missing[0].n} {ResDefs.Label(missing[0].res)}";
                 return string.IsNullOrEmpty(why) ? "Not yet" : Cap(why);
