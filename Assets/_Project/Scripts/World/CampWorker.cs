@@ -2336,6 +2336,18 @@ namespace SeaSick.World
         Vector3 padFor = new Vector3(1e9f, 0f, 1e9f);
         bool padStartedOn, padPassed;
 
+        /// **A guard calling the walk "reached" where he stands
+        /// (2026-09-30).** On a pad's gate leg that is the GATE, never the
+        /// errand: the gate is spent and the next step walks on to the real
+        /// target. The stall, wall and slope guards used to return true
+        /// here, which told the caller he was at the store / bay / rack
+        /// while he still stood by the mill.
+        bool Reached(bool gated)
+        {
+            if (gated) padPassed = true;
+            return !gated;
+        }
+
         bool Walk(Vector3 to, float dt)
         {
             if (climb.Active) { climb.Tick(camp, transform, dt); return false; }
@@ -2387,7 +2399,7 @@ namespace SeaSick.World
             // of wherever he is wedged, re-plans, and says why on his sheet
             // (`bodyBlocked` -> `StallReason`); close enough and clear of any
             // wall, the errand counts as reached where he stands.
-            if (TickStall(here, to, dist, dt)) { ClearRoute(); return !gated; }
+            if (TickStall(here, to, dist, dt)) { ClearRoute(); return Reached(gated); }
             if (escapeLeft > 0f) { StepEscape(here, dt); return false; }
 
             // Where to head THIS frame: the next corner of the route if there
@@ -2438,7 +2450,7 @@ namespace SeaSick.World
                     // stand spot laid against the palisade -- is as reached
                     // as it is going to get; one across it is not.
                     if (dist < 1.2f && !CampPath.Crosses(camp, here, to, CampPath.Walker.Hand))
-                    { ClearRoute(); return true; }
+                    { ClearRoute(); return Reached(gated); }
                     Face(leg, dt);
                     return false;
                 }
@@ -2457,12 +2469,23 @@ namespace SeaSick.World
             // seconds of standing -- an errand must never stall on a hill.
             // Somebody already on ground too steep for him (dropped there)
             // may always walk off it downhill.
-            if (!Walkability.MayStep(camp, here, next, Walkability.Feet.Man))
+            //
+            // **Asked about the terrain, not the boards (2026-09-30).**
+            // Kevin: the sawyer "glitches uncontrollably" at the lumber
+            // mill. The backstop reads `from.y` as the ground under him,
+            // but on a `WorkerPad` his feet are on the platform, which
+            // stands at the building's HIGHEST corner + 0.16 m (`Raise`) --
+            // on a sloping plot 0.7 m+ over the terrain. Every step on the
+            // pad measured that as a cliff and was refused, so he could
+            // never walk off it, and the slope give-up just below called
+            // every errand "reached" from the pad: store, bay, rack all
+            // arrived on the spot, trip after trip, poses flipping in place.
+            if (!Walkability.MayStep(camp, Grounded(here), next, Walkability.Feet.Man))
             {
                 routeAge = Mathf.Max(routeAge, RePlanSeconds - 0.5f);
                 slopeStuck += dt;
                 if (dist < SlopeArrive || slopeStuck > SlopeGiveUp)
-                { slopeStuck = 0f; ClearRoute(); return true; }
+                { slopeStuck = 0f; ClearRoute(); return Reached(gated); }
                 Face(leg, dt);
                 return false;
             }
@@ -2564,7 +2587,7 @@ namespace SeaSick.World
                 var d = new Vector3(Mathf.Sin(t), 0f, Mathf.Cos(t));
                 Vector3 q = here + d * 1.2f;
                 if (CampPath.Blocks(camp, here, q, CampPath.Walker.Hand, CampPath.WallClearance, out _)) continue;
-                if (!Walkability.MayStep(camp, here, q, Walkability.Feet.Man)) continue;
+                if (!Walkability.MayStep(camp, Grounded(here), q, Walkability.Feet.Man)) continue;   // terrain, not pad (see `Walk`)
                 float clear = 3f;
                 if (walls != null)
                     for (int i = 0; i < walls.Count; i++)
@@ -2584,7 +2607,7 @@ namespace SeaSick.World
             escapeLeft -= dt;
             Vector3 next = here + escapeDir * (Speed * dt);
             if (CampPath.Blocks(camp, here, next, CampPath.Walker.Hand, CampPath.WallClearance, out _)
-                || !Walkability.MayStep(camp, here, next, Walkability.Feet.Man))
+                || !Walkability.MayStep(camp, Grounded(here), next, Walkability.Feet.Man))
             { escapeLeft = 0f; return; }
             next.y = WorkerPad.Foot(next, camp.GroundAt(next));
             transform.position = next;
@@ -2719,6 +2742,20 @@ namespace SeaSick.World
                         {
                             row.order = OutpostOrder.Idle;
                             row.target = "";
+                            // **And the trip he was walking (2026-09-30).**
+                            // Kevin's save: a closed palisade with the store
+                            // inside and three hands outside. The order went
+                            // to Idle but the planned meal trip stayed on the
+                            // row -- a driven hand's trip is only ever walked
+                            // by this body, and `EatStep` starts no new meal
+                            // while `eating` is set -- so every hand starved
+                            // beside 30 grilled fish. Dropped the ledger's
+                            // own way (`DropCarriedLoadNow`: a planned load
+                            // is cancelled, one in his arms goes on the
+                            // ground here). The next trip to the same walled
+                            // spot waits out this same backoff (`routeFor`
+                            // has not moved) -- never a search a frame.
+                            camp.Ledger?.DropCarriedLoadNow(row);
                             row.bodyBlocked = "walled off — no way round, needs a gate";
                             walledAsks = 0;
                         }
