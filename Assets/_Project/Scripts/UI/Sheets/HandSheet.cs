@@ -826,12 +826,17 @@ namespace SeaSick.UI.Sheets
                     bool swap = other != null && CountOn(l, h, planId) >= posts;
                     var oldOrder = h.order;
                     string oldTarget = h.target;
+                    // One worker per station (2026-10-01): the one there
+                    // steps off first, so the post has room for the swap.
+                    if (swap) outpost.OrderIdle(other, reserve: false);
                     ok = outpost.Assign(h, planId);
+                    if (!ok && swap) outpost.Assign(other, planId);
                     if (ok && swap)
                     {
                         GiveJob(other, oldOrder, oldTarget, planId);
                         ShowToast($"{who} and {other.name} swapped.");
                     }
+                    if (!ok && outpost.AssignRefusal != null) { ShowToast(outpost.AssignRefusal); Refresh(); return; }
                     break;
                 }
                 case JobKind.Gather:

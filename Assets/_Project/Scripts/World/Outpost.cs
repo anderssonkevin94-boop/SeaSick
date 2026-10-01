@@ -1599,6 +1599,9 @@ namespace SeaSick.World
         public void ArrangeHands()
         {
             if (ledger == null) return;
+            // One worker per station (2026-10-01): a save from before the
+            // rule, or a copy pulled down under its worker, frees the extras.
+            ledger.EnforceStationCaps();
             WireWalkerGuard();
             var bodies = Parked();
 
@@ -3106,13 +3109,25 @@ namespace SeaSick.World
         /// than by anything carried on the hand.
         public bool Assign(OutpostHand h, string planId)
         {
+            AssignRefusal = null;
             if (h == null || ledger == null) return false;
             if (!BuildPlans.HasPosition(planId)) return false;
             if (CountOf(planId) <= 0) return false;         // it is not standing here
+            // **One worker per station (2026-10-01).** A copy with room, or
+            // no. Everybody already there is pinned where he stands, so
+            // the new hand cannot be dealt on top of one of them.
+            int room = ledger.FreeCopyFor(planId, h);
+            if (room < 0) { AssignRefusal = OutpostLedger.OneWorkerReason; return false; }
+            foreach (var x in ledger.hands)
+            {
+                if (x == null || x == h || x.order != OutpostOrder.Work || x.target != planId) continue;
+                int at = ledger.OrdinalOfHand(x);
+                if (at >= 0) x.workPin = at + 1;
+            }
             h.order = OutpostOrder.Work;
             h.target = planId;
             h.playerIdle = false;   // any other order ends his reserve (2026-09-28)
-            h.workPin = 0;          // dealt round the copies, as before
+            h.workPin = room + 1;   // the copy with room
             MarkNightOrder(h);
             ArrangeHands();
             PuppetsToWork();
@@ -3133,6 +3148,8 @@ namespace SeaSick.World
             if (!BuildPlans.HasPosition(planId)) return false;
             int n = CountOf(planId);
             if (ordinal < 0 || ordinal >= n) return false;
+            if (ledger.WorkersAt(planId, ordinal, h) >= ledger.StationCapacity(planId, ordinal))
+            { AssignRefusal = OutpostLedger.OneWorkerReason; return false; }
             foreach (var x in ledger.hands)
             {
                 if (x == null || x == h || x.order != OutpostOrder.Work || x.target != planId) continue;
@@ -3144,6 +3161,18 @@ namespace SeaSick.World
             ArrangeHands();
             PuppetsToWork();
             return true;
+        }
+
+        /// Why the last `Assign` said no, for the UI; null when it took.
+        public string AssignRefusal { get; private set; }
+
+        /// Can `h` be put at this building (a copy with room)? For the Hand.
+        public bool CanStaff(OutpostHand h, Building b)
+        {
+            if (ledger == null || b == null || !BuildPlans.HasPosition(b.Id)) return true;
+            int o = OrdinalOf(b);
+            if (o < 0) return true;
+            return ledger.WorkersAt(b.Id, o, h) < ledger.StationCapacity(b.Id, o);
         }
 
         /// The same, by the station row itself.

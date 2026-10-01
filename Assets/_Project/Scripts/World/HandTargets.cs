@@ -238,6 +238,13 @@ namespace SeaSick.World
                     t.kind = HandTarget.Kind.Workplace;
                     t.verb = Verb(HandTarget.Kind.Workplace, who, plan.label);
                     t.refusal = cannotLand;
+                    // One worker per station (2026-10-01): a manned one
+                    // refuses on the cursor, before the drop.
+                    if (string.IsNullOrEmpty(t.refusal) && held != null)
+                    {
+                        var hr = outpost.HandNamed(held.DisplayName);
+                        if (hr != null && !outpost.CanStaff(hr, b)) t.refusal = OutpostLedger.OneWorkerReason;
+                    }
                     return t;
                 }
 

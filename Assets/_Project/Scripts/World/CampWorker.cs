@@ -2468,6 +2468,16 @@ namespace SeaSick.World
             Vector3 d = to - here;
             d.y = 0f;
             float dist = d.magnitude;
+            // **Somebody already stands there (2026-10-01, `Spacing`):** a
+            // man walking to a spot another body is holding stops beside
+            // it rather than shouldering into him -- except at his own
+            // work spot, where the other one yields.
+            if (dist >= 0.35f && dist < 2f * BodyRadius + 0.15f && SpotHeldByOther(to))
+            {
+                ClearRoute();
+                ResetStall(to, 0f);
+                return !gated;
+            }
             if (dist < 0.35f)
             {
                 // Arriving without a step (spawned or loaded on his spot)

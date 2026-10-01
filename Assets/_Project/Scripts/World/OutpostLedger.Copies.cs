@@ -130,5 +130,75 @@ namespace SeaSick.World
         /// than stand). For the watchtower: every manned tower counts.
         public int MannedCopies(string planId)
             => Mathf.Min(CountBuilt(planId), HandsOn(OutpostOrder.Work, planId));
+
+        // --- one worker per station (2026-10-01) ----------------------------
+
+        /// Kevin: *"only one at a station. potential to add more in upgraded
+        /// versions but for now it's one to a station."* The refusal the UI
+        /// shows.
+        public const string OneWorkerReason = "One worker per station";
+
+        /// **How many Work hands one copy of a building takes.** The one
+        /// hook for the cap: 1 at every level today; a level that should
+        /// take more raises it here (`LevelOf(planId, ordinal)`). Every
+        /// station's spots (the kitchen's cauldron and grill, the quarry's
+        /// bench and bays) share that one worker.
+        public int StationCapacity(string planId, int ordinal) => 1;
+
+        /// Work hands standing at copy `ordinal` of `planId`, `except` aside.
+        public int WorkersAt(string planId, int ordinal, OutpostHand except = null)
+        {
+            int k = 0;
+            foreach (var x in hands)
+                if (x != null && x != except && x.order == OutpostOrder.Work && x.target == planId
+                    && OrdinalOfHand(x) == ordinal) k++;
+            return k;
+        }
+
+        /// The first copy of `planId` with room for one more (`h` not
+        /// counted, so a hand already there has room at his own), or -1.
+        public int FreeCopyFor(string planId, OutpostHand h)
+        {
+            int n = CountBuilt(planId);
+            for (int o = 0; o < n; o++)
+                if (WorkersAt(planId, o, h) < StationCapacity(planId, o)) return o;
+            return -1;
+        }
+
+        /// **Over the cap -> free hands (a save from before the rule, a
+        /// copy demolished under its worker).** The first hand at each copy
+        /// keeps it and is pinned there; the rest go back to the idle
+        /// ladder (`playerIdle` off), anything planned in their arms is
+        /// dropped the ledger's own way -- no building moves, no stock is
+        /// lost. Returns how many were freed.
+        public int EnforceStationCaps()
+        {
+            int freed = 0;
+            var seen = new System.Collections.Generic.Dictionary<string, int>();
+            var ords = new int[hands.Count];
+            for (int i = 0; i < hands.Count; i++) ords[i] = hands[i] != null ? OrdinalOfHand(hands[i]) : -1;
+            for (int i = 0; i < hands.Count; i++)
+            {
+                var h = hands[i];
+                if (h == null || h.order != OutpostOrder.Work || ords[i] < 0) continue;
+                if (!BuildPlans.HasPosition(h.target)) continue;
+                string key = h.target + "#" + ords[i];
+                seen.TryGetValue(key, out int k);
+                if (k < StationCapacity(h.target, ords[i]))
+                {
+                    seen[key] = k + 1;
+                    h.workPin = ords[i] + 1;      // stays where he stands
+                    continue;
+                }
+                DropCarriedLoadNow(h);
+                h.order = OutpostOrder.Idle;
+                h.target = "";
+                h.workPin = 0;
+                h.playerIdle = false;
+                freed++;
+                Debug.Log($"[Ledger] {h.name}: freed from a full station (one worker per station).");
+            }
+            return freed;
+        }
     }
 }

@@ -669,7 +669,10 @@ namespace SeaSick.UI
                     camp.OrderGather(row, t.resource);
                     break;
                 case HandTarget.Kind.Workplace:
-                    camp.Assign(row, t.building != null ? t.building.Id : t.planId);
+                    // The copy he was dropped on (one worker each, 2026-10-01).
+                    int copy = t.building != null ? camp.OrdinalOf(t.building) : -1;
+                    if (copy >= 0) camp.Assign(row, t.building.Id, copy);
+                    else camp.Assign(row, t.building != null ? t.building.Id : t.planId);
                     // Which sawmill, out of two. The ledger knows a sawyer by
                     // plan id and that says nothing about which door he walks
                     // to, so the body is told separately -- and it is show

@@ -1922,10 +1922,15 @@ namespace SeaSick.UI.Sheets
                 var free = l.FreeHandFor(station != null ? station.planId : planId);
                 if (free == null) return;
                 var previous = station != null ? WorkerAt(l, station) : current;
-                // Seat the replacement first: the API pins existing workers before
-                // the old worker leaves, and a refused assignment changes nobody.
+                // **One worker per station (2026-10-01):** the old worker
+                // steps off first so the seat is free; a refused assignment
+                // puts him straight back, so it still changes nobody.
+                if (previous != null) outpost.OrderIdle(previous, reserve: false);
                 bool assigned = station != null ? outpost.Assign(free, station) : outpost.Assign(free, planId);
-                if (assigned && previous != null) outpost.OrderIdle(previous, reserve: false);
+                if (!assigned && previous != null)
+                {
+                    if (station != null) outpost.Assign(previous, station); else outpost.Assign(previous, planId);
+                }
                 changed?.Invoke();
             }
 
