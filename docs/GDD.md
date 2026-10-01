@@ -209,7 +209,7 @@ Future levels (III, IV) stay unused and unpaid until they are designed.
 | Store hut | 16 | 2 | 40 s | the fire keeps 10 of a thing; fire II wants 20 boards, so a store is on the road |
 | Farm plot | 12 | 2 | 30 s | food without walking |
 | Fishing hut | 14 | 2 | 35 s | as before |
-| Fletcher's | 14 | 2 | 40 s | a bench under a roof |
+| Hunting lodge (plan id Fletcher) | 14 | 2 | 40 s | a bench under a roof |
 | Kitchen | 16 | 4 | 45 s | |
 | Watchtower | 14 | 6 | 45 s | a stone footing |
 | Sawmill | 20 | 4 | 60 s | the first real goal: ~5 min after landing |

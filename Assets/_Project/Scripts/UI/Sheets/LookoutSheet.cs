@@ -285,11 +285,11 @@ namespace SeaSick.UI.Sheets
             if (post != null)
                 s = arrows > 0
                     ? $"{post.name} looses a volley at landing raiders and works the tower gun"
-                    : $"{post.name} works the tower gun · no arrows to loose, the fletcher makes them";
+                    : $"{post.name} works the tower gun · no arrows to loose, the hunting lodge makes them";
             else
                 s = arrows > 0
                     ? "A lookout looses a volley at raiders and works the tower gun"
-                    : "A lookout works the tower gun · the fletcher makes arrows for a volley";
+                    : "A lookout works the tower gun · the hunting lodge makes arrows for a volley";
             WatchTiles.Set(quiverS, s);
             quiverCard.EnableInClassList("lk-card--warn", post == null);
             quiverCard.EnableInClassList("lk-card--good", post != null);

@@ -739,7 +739,7 @@ namespace SeaSick.UI.Sheets
                     {
                         locked = true;
                         sub = "needs spear or bow";
-                        toastText = "Hunting needs a spear (the forge: a board and a stone) or a bow with arrows (the fletcher).";
+                        toastText = "Hunting needs a spear (the forge: a board and a stone) or a bow with arrows (the hunting lodge).";
                     }
                     else if (standing < 1f && !here)
                     {
