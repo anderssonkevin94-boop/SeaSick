@@ -1296,7 +1296,11 @@ namespace SeaSick.World
             {
                 var ship = hand.transform.parent != null ? hand.transform.root : null;
                 var plank = ship != null ? ship.GetComponentInChildren<SeaSick.Ship.Gangway>() : null;
-                if (plank != null && plank.Ready) p = plank.LandingPoint;
+                var moor = ship != null ? ship.GetComponent<SeaSick.Ship.AnchorController>() : null;
+                // At a pier: its land end, like `PartyLanding` -- the
+                // catwalk's foot is out on the pier head, over the water.
+                if (moor != null && moor.CurrentDock != null) p = moor.CurrentDock.Landing;
+                else if (plank != null && plank.Ready) p = plank.LandingPoint;
                 else if (Island != null) p = Island.ShorePoint(0, 1, ship != null ? ship.position : p);
                 else p = CampCentre;
 

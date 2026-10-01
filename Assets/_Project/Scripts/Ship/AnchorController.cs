@@ -47,6 +47,11 @@ namespace SeaSick.Ship
         Quaternion berthHeading = Quaternion.identity;
         Shipyard yard;
 
+        /// Where her centre lies at this berth (flat), and which way she
+        /// points there -- this berthing's answer, for the catwalk and probes.
+        public Vector3 BerthPosition => berthPos;
+        public Quaternion BerthHeading => berthHeading;
+
         /// Her beam right now: the live hull's, if a `Shipyard` says so;
         /// otherwise the same default `HarbourSite`/`Pier` assume when they
         /// site a berth with no ship built yet.
@@ -287,8 +292,8 @@ namespace SeaSick.Ship
             // `BerthAtHome`, whatever heading was just set for the
             // deterministic teleport -- `HeadingFor` then just confirms it).
             Vector3 approach = transform.forward; approach.y = 0f;
-            berthPos = d.BerthFor(BerthBeam);
             berthHeading = d.HeadingFor(approach);
+            berthPos = BerthPointAt(d, berthHeading);
 
             CurrentDock = d;
             CurrentIsland = Island.Nearest(d.Berth);
@@ -324,8 +329,27 @@ namespace SeaSick.Ship
         public bool BerthAtHome(out string why)
         {
             why = null;
-            var d = Dock.Home;
-            if (d == null) { why = "no home dock yet"; return false; }
+            if (Dock.Home == null) { why = "no home dock yet"; return false; }
+            return BerthAt(Dock.Home, Vector3.zero, out why);
+        }
+
+        /// **Where her centre lies at `d` when she points `heading`**: far
+        /// enough off the head for the catwalk (2026-10-01) to reach from the
+        /// pier's edge to her rail -- `Gangway.PierBerthOffset`, measured off
+        /// the live hull -- or the dock's own beam-and-fender default when
+        /// there is no gangway to ask.
+        Vector3 BerthPointAt(Dock d, Quaternion heading) => gangway != null
+            ? d.BerthAt(gangway.PierBerthOffset(d, heading))
+            : d.BerthFor(BerthBeam);
+
+        /// Set her down tied up at `d`, from wherever she is -- `BerthAtHome`
+        /// for home, and a load for a camp pier she was saved lying at.
+        /// `approachFlat` picks which of the two T-berth headings (zero =
+        /// the dock's default).
+        public bool BerthAt(Dock d, Vector3 approachFlat, out string why)
+        {
+            why = null;
+            if (d == null) { why = "no dock"; return false; }
             if (CurrentState == State.Ashore || landingPending)
             { why = "crew are ashore"; return false; }
 
@@ -338,8 +362,8 @@ namespace SeaSick.Ship
             // sailed in -- so this is `Dock`'s deterministic default
             // heading, and `BerthFor` takes her live beam if a Shipyard can
             // give one.
-            Vector3 p = d.BerthFor(BerthBeam);
-            var heading = d.HeadingFor(Vector3.zero);
+            var heading = d.HeadingFor(approachFlat);
+            Vector3 p = BerthPointAt(d, heading);
             // The berth is a place on the WATER, and the water moves. Taking
             // her current Y would set her down at whatever height the trough
             // she was sitting in happened to be — which at sea is metres.
@@ -357,6 +381,8 @@ namespace SeaSick.Ship
                 rb.angularVelocity = Vector3.zero;
             }
             motor.AnchorPoint = p;
+            // Set down square to the berth: the approach she "had" is the
+            // heading just given her, so `ComeAlongside` keeps it.
             ComeAlongside(d);
 
             // Ring down stop, or she arrives at her own pier under full
@@ -549,6 +575,7 @@ namespace SeaSick.Ship
             {
                 if (gangway != null) gangway.Withdraw();
                 motor.MooringHeading = null;
+                motor.HoldStation = false;
                 return;
             }
 
@@ -571,20 +598,30 @@ namespace SeaSick.Ship
                 motor.AnchorPoint = Vector3.Lerp(motor.AnchorPoint, target,
                     1f - Mathf.Exp(-berthSpeed * dt));
                 motor.MooringHeading = berthHeading.eulerAngles.y;
-                // At a camp's pier the plank crosses from her side onto the
-                // pier HEAD -- a short hop, not the length of the pier --
-                // and the shore party walks the pier the rest of the way
-                // (see `PartyLanding`). At home it stays inboard as before:
-                // the home pier has its own arrival and the plank was never
-                // part of it.
+                // **Locked to the berth (2026-10-01).** Once the spring has
+                // eased her in, `ShipMotor` holds her flat position and her
+                // heading with a servo; heave, roll and pitch stay free. The
+                // catwalk below needs her side to stay where it was laid.
+                motor.HoldStation = true;
+                // **The catwalk** (2026-10-01): from the pier's sea edge onto
+                // her pier-side rail, and the shore party walks the pier the
+                // rest of the way (see `PartyLanding`). **Home too** -- home
+                // has been a pier the player built at one of their camps
+                // since 2026-09-25 (`Dock.SetHome`), the same pier the same
+                // hands walk at every other camp; "the home pier has its own
+                // arrival" dated from the world-built harbour, and lying at
+                // a pier with no way ashore read as the bug it was.
+                // It comes down once she is locked, not while she is still
+                // being hauled in.
                 if (gangway != null)
                 {
-                    if (CurrentDock.IsHome) gangway.Withdraw();
-                    else gangway.ExtendTo(CurrentDock.Head);
+                    if (motor.StationLock01 > 0.99f) gangway.ExtendToPier(CurrentDock, berthHeading);
+                    else gangway.Withdraw();
                 }
                 return;
             }
             motor.MooringHeading = null;
+            motor.HoldStation = false;
 
             // **Off a beach she lies where she stopped.** This used to walk
             // the anchor point to `RadiusAt(bearing) + 11 m` from the
@@ -1139,7 +1176,8 @@ namespace SeaSick.Ship
             // Before `CurrentIsland` is cleared -- this is the last moment
             // anything knows which camp she is leaving.
             StowCampHands();
-            motor.Anchored = false;
+            motor.Anchored = false;     // also lets go of the pier lock
+            motor.HoldStation = false;
             motor.MooringHeading = null;
             CurrentIsland = null;
             CurrentDock = null;

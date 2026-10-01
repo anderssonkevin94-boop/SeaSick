@@ -167,11 +167,18 @@ namespace SeaSick.World
         /// Where her centre lies when tied up, for a hull of this beam:
         /// seaward of the head by half that beam plus a fender, on the
         /// pier's own axis.
-        public Vector3 BerthFor(float beamMeters)
+        public Vector3 BerthFor(float beamMeters) => BerthAt(beamMeters * 0.5f + Fender);
+
+        /// Her centre `offMeters` seaward of the head, on the pier's axis.
+        /// **`Seaward` is a Vector3** -- this read `sea.y` (the Vector2 the
+        /// dock stores it as) for the Z offset until 2026-10-01, which is
+        /// always 0: on any pier not running due east/west the berth sat ON
+        /// the head and the pier ran into her hull (Kevin's "board that
+        /// clips through the ship").
+        public Vector3 BerthAt(float offMeters)
         {
             Vector3 sea = Seaward;
-            float off = beamMeters * 0.5f + Fender;
-            return new Vector3(head.x + sea.x * off, 0f, head.z + sea.y * off);
+            return new Vector3(head.x + sea.x * offMeters, 0f, head.z + sea.z * offMeters);
         }
 
         /// The two headings she could take at this berth -- her long axis

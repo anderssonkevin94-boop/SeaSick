@@ -237,6 +237,7 @@ namespace SeaSick.Ship
             set
             {
                 if (value && !anchored) anchorPoint = transform.position;
+                if (!value) { holdStation = false; stationLock01 = 0f; }
                 anchored = value;
             }
         }
@@ -253,6 +254,28 @@ namespace SeaSick.Ship
         /// a boat at a dock is parallel to it or she is fouling it. The
         /// anchor spring only ever pulled position, so heading needs its own.
         public float? MooringHeading { get; set; }
+
+        /// **Tied up at a pier: hold the berth, ride the sea** (2026-10-01,
+        /// the catwalk). The anchor spring lets her wander a metre or two
+        /// and swing, which is right off a beach and wrong with a catwalk
+        /// run out from the pier to her rail. While this is set and she has
+        /// settled on `AnchorPoint`/`MooringHeading`, the spring hands over
+        /// to a station-keeping servo on her horizontal centre of mass and
+        /// her yaw only; heave, roll and pitch stay entirely the buoyancy's.
+        /// `AnchorController` sets it at a pier and clears it on cast-off.
+        public bool HoldStation
+        {
+            get => holdStation;
+            set { holdStation = value; if (!value) stationLock01 = 0f; }
+        }
+        bool holdStation;
+        float stationLock01;
+        /// 0 while she is still easing in on the spring, 1 once the servo
+        /// has her. Ramps, so the hand-over never kicks the hull.
+        public float StationLock01 => stationLock01;
+        /// Probe-only A/B switch (`Dev/MooringTrace`): true keeps the old
+        /// anchor spring at a pier. Never set by the game.
+        public static bool ProbeDisableStationLock;
 
         public bool Rowing { get; set; }
         public float RowSpeed => rowSpeed;
@@ -630,6 +653,9 @@ namespace SeaSick.Ship
         void Start()
         {
             rb = GetComponent<Rigidbody>();
+            // The pier lock's physics step (2026-10-01): its own component so
+            // it can run after every other force on the hull.
+            if (GetComponent<StationKeeper>() == null) gameObject.AddComponent<StationKeeper>();
             buoyant = GetComponent<BuoyantBody>();
             hull = GetComponent<HullIntegrity>();
             roster = GetComponent<Crew.CrewRoster>();
@@ -799,6 +825,16 @@ namespace SeaSick.Ship
         }
 
         static Vector3 Flat3(Vector3 v) => new Vector3(v.x, 0f, v.z);
+
+        // --- the pier lock (2026-10-01) -----------------------------------
+        /// Within this far of the berth, and this square to it, she counts as
+        /// eased in and the lock starts to take her. Generous on purpose: the
+        /// spring alone holds her ~1 m off in a 2.5 m sea (measured on
+        /// Kevin's save), and the servo's own speed cap walks her the rest.
+        const float StationEngageDistance = 3f;
+        const float StationEngageDegrees = 15f;
+        /// The spring-to-servo hand-over, seconds.
+        const float StationEngageSeconds = 1.5f;
         static float Signed(float a) => a > 180f ? a - 360f : a;
 
         float EffectiveRudder()
@@ -1065,19 +1101,35 @@ namespace SeaSick.Ship
             if (Anchored)
             {
                 Vector3 toAnchor = Flat3(anchorPoint - transform.position);
-                rb.AddForce(toAnchor * (mass * 0.4f) - Flat3(rb.linearVelocity) * (mass * 0.8f),
-                    ForceMode.Force);
+                float headErr = MooringHeading.HasValue
+                    ? Mathf.DeltaAngle(transform.eulerAngles.y, MooringHeading.Value) : 0f;
 
-                // Spring her head round to the berth's heading, damped on her
-                // actual yaw rate. Critically damped-ish rather than snapped:
-                // she is a floating body and a mooring line pulls, it does not
-                // teleport.
-                if (MooringHeading.HasValue)
+                // The pier lock takes over once she has eased in (see
+                // `HoldStation`); the spring is what brings her there.
+                if (holdStation && MooringHeading.HasValue && !ProbeDisableStationLock)
                 {
-                    float err = Mathf.DeltaAngle(transform.eulerAngles.y, MooringHeading.Value);
-                    rb.AddTorque(Vector3.up * ((err * Mathf.Deg2Rad * 0.9f
-                        - rb.angularVelocity.y * 1.6f) * RollInertia()), ForceMode.Force);
+                    bool settled = toAnchor.magnitude < StationEngageDistance
+                        && Mathf.Abs(headErr) < StationEngageDegrees;
+                    if (settled || stationLock01 > 0f)
+                        stationLock01 = Mathf.MoveTowards(stationLock01, 1f, dt / StationEngageSeconds);
                 }
+                float springShare = 1f - stationLock01;
+
+                if (springShare > 0f)
+                {
+                    rb.AddForce((toAnchor * (mass * 0.4f) - Flat3(rb.linearVelocity) * (mass * 0.8f))
+                        * springShare, ForceMode.Force);
+
+                    // Spring her head round to the berth's heading, damped on her
+                    // actual yaw rate. Critically damped-ish rather than snapped:
+                    // she is a floating body and a mooring line pulls, it does not
+                    // teleport.
+                    if (MooringHeading.HasValue)
+                        rb.AddTorque(Vector3.up * ((headErr * Mathf.Deg2Rad * 0.9f
+                            - rb.angularVelocity.y * 1.6f) * RollInertia() * springShare), ForceMode.Force);
+                }
+                // The lock itself is `StationKeeper`, which runs after every
+                // other force on the hull this step has been queued.
             }
 
             // Her attitude is bounded by her own flare and GM, not by a spring

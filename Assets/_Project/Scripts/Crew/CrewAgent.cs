@@ -1357,8 +1357,12 @@ namespace SeaSick.Crew
         /// Route from wherever we are, over the plank, to a point on the ship.
         void PathToShip(Vector3 finalPoint)
         {
-            if (gangway != null && gangway.Ready)
-                SetPath(gangway.LandingPoint, gangway.DeckPoint, finalPoint);
+            if (gangway != null && gangway.Ready && gangway.PierRoot is Vector3 root)
+                // At a pier, down the pier first: never cut across the water
+                // to the catwalk's foot on the head.
+                SetPath(root, gangway.LandingPoint, gangway.RailPoint, gangway.DeckPoint, finalPoint);
+            else if (gangway != null && gangway.Ready)
+                SetPath(gangway.LandingPoint, gangway.RailPoint, gangway.DeckPoint, finalPoint);
             else
                 SetPath(finalPoint);
         }
@@ -1366,8 +1370,10 @@ namespace SeaSick.Crew
         /// Route from the deck, over the plank, to a point ashore.
         void PathToShore(Vector3 finalPoint)
         {
-            if (gangway != null && gangway.Ready)
-                SetPath(gangway.DeckPoint, gangway.LandingPoint, finalPoint);
+            if (gangway != null && gangway.Ready && gangway.PierRoot is Vector3 root)
+                SetPath(gangway.DeckPoint, gangway.RailPoint, gangway.LandingPoint, root, finalPoint);
+            else if (gangway != null && gangway.Ready)
+                SetPath(gangway.DeckPoint, gangway.RailPoint, gangway.LandingPoint, finalPoint);
             else
                 SetPath(finalPoint);
         }
@@ -1378,8 +1384,15 @@ namespace SeaSick.Crew
         void RefreshShipWaypoints(Vector3 finalPoint, bool updateFinal)
         {
             if (path.Count == 0) return;
-            if (path.Count >= 3 && gangway != null && gangway.Ready)
-                path[1] = gangway.DeckPoint;
+            // Landing -> rail step -> deck -> final (the catwalk, 2026-10-01;
+            // on the beach plank the rail step IS the deck point).
+            // (at a pier the pier's root comes first) -- the rail step and
+            // the deck point are always the two before the final point.
+            if (path.Count >= 4 && gangway != null && gangway.Ready)
+            {
+                path[path.Count - 3] = gangway.RailPoint;
+                path[path.Count - 2] = gangway.DeckPoint;
+            }
             if (updateFinal) path[path.Count - 1] = finalPoint;
         }
 

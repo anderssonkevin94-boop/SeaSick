@@ -469,6 +469,14 @@ namespace SeaSick.Ship
         /// Shove her clear, kill the closing speed, and bill the hull for it.
         void Aground(Vector3 outward, Vector3 fixedPos, float damageScale, string source)
         {
+            // **Tied up and locked at a pier** (`ShipMotor.HoldStation`,
+            // 2026-10-01): nothing shoves her. A raider beached at the camp
+            // sits inside her 9 m hull radius at the pier head (Kevin's
+            // Island_6), and this write to an interpolated body's TRANSFORM
+            // then fought the lock every frame -- the hull drawn 10 m off
+            // while the body sat on the berth, the catwalk stretched to
+            // nothing.
+            if (motor != null && motor.StationLock01 > 0f) return;
             Vector3 pos = transform.position;
             transform.position = new Vector3(fixedPos.x, pos.y, fixedPos.z);
 

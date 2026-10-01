@@ -591,6 +591,18 @@ namespace SeaSick.Save
                     if (!anchor.BerthAtHome(out string why))
                         Debug.LogWarning("SaveGame: could not berth her at home: " + why);
                 }
+                else if (data.ship.anchor == 1 && CampPierAt(at) is Dock pierHere)
+                {
+                    // **She was lying at a camp's pier** (2026-10-01). The
+                    // save only says "stopped at an island", and anchoring
+                    // her there as off a beach lost the pier: no lock, no
+                    // catwalk, the beach plank run through her hull at the
+                    // pier (Kevin's screenshot). Tie her up again instead,
+                    // bow the way she was saved.
+                    var bow = Quaternion.Euler(0f, data.ship.yaw, 0f) * Vector3.forward;
+                    if (!anchor.BerthAt(pierHere, bow, out string why))
+                        Debug.LogWarning("SaveGame: could not tie her up at the pier: " + why);
+                }
                 else if (data.ship.anchor == 1)
                 {
                     Warp(motor, at, data.ship.yaw);
@@ -607,6 +619,15 @@ namespace SeaSick.Save
             AwayProgress.FlushSave();   // time away played: save it now
             Debug.Log("SaveGame: loaded <- " + Path + "   " + Summary(data)
                 + "   (" + restored + " of " + data.outposts.Count + " outposts)");
+        }
+
+        /// The non-home pier she lies at if a save put her within a berth's
+        /// reach of one (her centre within 12 m of the pier or its berth).
+        static Dock CampPierAt(Vector3 at)
+        {
+            var d = Dock.Nearest(at);
+            if (d == null || d.IsHome) return null;
+            return d.DistanceFromPier(at) <= 12f ? d : null;
         }
 
         static void Fail(string why)

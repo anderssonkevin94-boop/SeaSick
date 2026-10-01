@@ -82,10 +82,14 @@ namespace SeaSick.World
         /// over water would walk on the sea floor.
         public bool GangwayAt(out Vector3 at)
         {
-            var g = G;
-            if (g != null && g.Ready) { at = g.LandingPoint; return true; }
+            // At a pier the land end, never the catwalk's foot on the pier
+            // head (see above) -- checked BEFORE the plank: with the plank
+            // first, a camp pier answered its head and haulers walked the
+            // sea floor out to it.
             var a = A;
             if (a != null && a.CurrentDock != null) { at = a.CurrentDock.Landing; return true; }
+            var g = G;
+            if (g != null && g.Ready) { at = g.LandingPoint; return true; }
             var d = camp != null ? Dock.Nearest(camp.CampCentre) : Dock.Home;
             if (d == null) d = Dock.Home;
             if (d != null) { at = d.Landing; return true; }
