@@ -4107,7 +4107,10 @@ namespace SeaSick.World
             // and `Adopt` restoring a save) come through here, and `ledger`
             // is already the one whose `LevelOf` matters by the time either
             // does.
-            BuildingLevelLook.Apply(b.transform, LevelOfBuilding(b));
+            // Since 2026-10-01 a level with its own model (the level 2
+            // watchtower and sawmill) wears it instead: `ShowLevel` swaps
+            // the model in place, then tints.
+            BuildingFactory.ShowLevel(b, LevelOfBuilding(b));
         }
 
         /// **This building's own level, 2026-09-27.** `Built` and
@@ -4142,7 +4145,8 @@ namespace SeaSick.World
         public void Retint(Building b)
         {
             if (b == null) return;
-            BuildingLevelLook.Apply(b.transform, LevelOfBuilding(b));
+            // Its level's own model, swapped in place, then the tint.
+            BuildingFactory.ShowLevel(b, LevelOfBuilding(b));
         }
 
         /// **Re-tint every standing `planId` right now.** `OutpostLedger.Upgrade`

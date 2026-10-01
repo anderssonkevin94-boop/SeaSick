@@ -1361,6 +1361,11 @@ namespace SeaSick.World
             Building post = PostOf(r, ledger, st);
             Vector3 stand = post != null ? WorkSpot(camp, post) : home;
             Vector3 face = post != null ? BenchPoint(post, stand) : lookAt;
+            // The level 2 sawmill's crank (2026-10-01): he stands square to
+            // the building's front, as at every bench, and the `Crank` clip
+            // turns him the 90 degrees along the saw table itself (README:
+            // the marker has no facing).
+            if (Cranks(post)) face = stand + Flat(post.transform.forward);
 
             // A job came off the bench a moment ago and nobody walked it to
             // the rack ahead of time (see the paced carry below): walk it
@@ -1384,6 +1389,16 @@ namespace SeaSick.World
                 phase = Phase.Going;
                 return;
             }
+            // **Onto the crank's own spot (2026-10-01).** A walk "arrives"
+            // 0.35 m short; the bench mimes do not mind, but the `Crank`
+            // clip's fists land on the handle only from the marker itself.
+            // He shuffles the last of it at a slow step.
+            if (Cranks(post))
+            {
+                Vector3 p = transform.position;
+                Vector3 onto = Vector3.MoveTowards(new Vector3(p.x, stand.y, p.z), stand, 0.6f * dt);
+                if ((onto - p).sqrMagnitude > 1e-8f) transform.position = onto;
+            }
             // At his post: `Working` whatever the bench is doing, because
             // that is the phase `Update`'s walk-in check reads -- a new hand
             // whose bench cannot load until the books start paying him must
@@ -1400,7 +1415,7 @@ namespace SeaSick.World
                 acting?.Set(VillagerActing.Mode.None);
                 return;
             }
-            acting?.Set(ModeAt(r.target));
+            acting?.Set(JobMode(r.target, post));
             // The tool's stroke lands on the bench's own work spot (the
             // forge's anvil, the sawhorse), not a guess in front of him.
             acting?.WorkAt(face);
@@ -1472,7 +1487,7 @@ namespace SeaSick.World
                     // Kevin, 2026-09-27, saw a "cook" stirring a stick at the
                     // campfire this way. Idle hands, not a tool mimed on
                     // nothing.
-                    acting?.Set(post != null ? ModeAt(r.target) : VillagerActing.Mode.None);
+                    acting?.Set(post != null ? JobMode(r.target, post) : VillagerActing.Mode.None);
                     return;
 
                 case Phase.Working:
@@ -2111,6 +2126,10 @@ namespace SeaSick.World
 
         static readonly Dictionary<Building, Marks> marksOf = new Dictionary<Building, Marks>();
 
+        /// Drop `b`'s cached marks: its model was just swapped
+        /// (`BuildingFactory.ShowLevel`), so the next ask reads the new one.
+        public static void ForgetMarks(Building b) { if (b != null) marksOf.Remove(b); }
+
         static Marks MarksOf(Building b)
         {
             if (marksOf.TryGetValue(b, out var m) && !m.Stale) return m;
@@ -2340,6 +2359,33 @@ namespace SeaSick.World
         /// The trade, from the position the building offers. Keyed off
         /// `BuildPlans.PositionAt` rather than the plan id, so a second
         /// building that also employs a sawyer needs no entry here.
+        /// The trade at THIS building: `ModeAt`, except that a sawyer at a
+        /// sawmill wearing the level 2 saw shed (its model carries
+        /// `MillCrankWheels`) winds the crank instead of sawing.
+        VillagerActing.Mode JobMode(string planId, Building post)
+        {
+            var m = ModeAt(planId);
+            return m == VillagerActing.Mode.Saw && Cranks(post) ? VillagerActing.Mode.Crank : m;
+        }
+
+        /// Does `post`'s model have the level 2 crank? Cached per building
+        /// and model revision (asked every frame he works).
+        bool Cranks(Building post)
+        {
+            if (post == null) return false;
+            if (!ReferenceEquals(post, crankPost) || crankRev != post.ModelRevision)
+            {
+                crankPost = post;
+                crankRev = post.ModelRevision;
+                crankHere = post.GetComponentInChildren<MillCrankWheels>(true) != null;
+            }
+            return crankHere;
+        }
+
+        Building crankPost;
+        int crankRev;
+        bool crankHere;
+
         static VillagerActing.Mode ModeAt(string planId)
         {
             string post = BuildPlans.PositionAt(planId);
@@ -3064,6 +3110,9 @@ namespace SeaSick.World
         enum TowerState : byte { Ground, Up, Top, Down }
         TowerState tower;
         Building towerOn;
+        /// `towerOn.ModelRevision` when he last stood on it (a level 2 swap
+        /// moves his corner).
+        int towerRev = -1;
         /// The tower's own ladder climb: separate from `climb` (the cliff
         /// chains `Walk` starts on its own), so `Walk` never ticks it.
         readonly LadderClimb towerClimb = new LadderClimb();
@@ -3112,6 +3161,7 @@ namespace SeaSick.World
             var shape = camp.TowerClimbShape(post, foot);
             if (shape == null) return false;
             towerOn = post;
+            towerRev = post.ModelRevision;
             tower = TowerState.Up;
             towerClimb.Begin(camp, transform, shape, true, dt);
             return true;
@@ -3157,12 +3207,19 @@ namespace SeaSick.World
                     phase = Phase.Going;
                     if (!towerClimb.Tick(camp, transform, dt)) return true;
                     // Finished -- or dropped because something moved him.
-                    if (!Outpost.TowerMarks(towerOn, out _, out _, out Vector3 deck)
-                        || (transform.position - deck).sqrMagnitude > 1f)
+                    if (!Outpost.TowerMarks(towerOn, out _, out _, out Vector3 deck))
                     {
                         OffTower();
                         return false;
                     }
+                    if ((transform.position - deck).sqrMagnitude > 1f)
+                    {
+                        // The tower was upgraded under him mid-climb (a new
+                        // deck, a new corner): he steps to it.
+                        if (towerRev == towerOn.ModelRevision) { OffTower(); return false; }
+                        transform.position = deck;
+                    }
+                    towerRev = towerOn.ModelRevision;
                     tower = TowerState.Top;
                     return true;
                 }
@@ -3197,6 +3254,14 @@ namespace SeaSick.World
                         phase = Phase.Going;
                         towerClimb.Begin(camp, transform, shape, false, dt);
                         return true;
+                    }
+                    // **Upgraded under him (2026-10-01)**: the level 2 deck
+                    // puts his corner ~1.1 m further out; he steps to it
+                    // rather than reading as "moved off".
+                    if (towerRev != towerOn.ModelRevision)
+                    {
+                        towerRev = towerOn.ModelRevision;
+                        transform.position = deck;
                     }
                     // Moved off it by something that is not the Hand (a
                     // teleport home): he is wherever that put him.

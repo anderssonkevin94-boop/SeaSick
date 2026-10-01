@@ -43,9 +43,17 @@ namespace SeaSick.Dev
     {
         public const string Fbx = "Assets/_Project/Art/CrewClips/deckhand-v15c-anims.fbx";
         public const string LookoutFbx = "Assets/_Project/Art/CrewClips/deckhand-v15-anims.fbx";
+        /// **Third source (2026-10-01):** the asset agent's newest export
+        /// (seasick_assets claude/beautiful-mendel-wxvyo6 @50783ea), taken
+        /// for `Crank` ONLY -- the level 2 sawmill's crank wheel. Its other
+        /// takes are older than `Fbx`'s and are not used.
+        public const string CrankFbx = "Assets/_Project/Art/CrewClips/deckhand-v15-crank-anims.fbx";
         /// Takes taken from `LookoutFbx` instead of `Fbx`.
         static readonly string[] FromLookoutFbx = { "Lookout" };
-        static string TakeFrom(string name) => FromLookoutFbx.Contains(name) ? LookoutFbx : Fbx;
+        /// Takes taken from `CrankFbx`.
+        static readonly string[] FromCrankFbx = { "Crank" };
+        static string TakeFrom(string name)
+            => FromLookoutFbx.Contains(name) ? LookoutFbx : FromCrankFbx.Contains(name) ? CrankFbx : Fbx;
         const string Controller = "Assets/_Project/Resources/AstraPlaytest/CrewAnimator.controller";
         const string Crew = "Assets/_Project/Prefabs/CrewMember.prefab";
         const string TakePrefix = "Deckhand_Rig|Crew_";
@@ -72,7 +80,7 @@ namespace SeaSick.Dev
                 if (mi == null) return new string[0];
                 return mi.importedTakeInfos.Where(t => t.name.StartsWith(TakePrefix))
                     .Select(t => t.name.Substring(TakePrefix.Length))
-                    .Concat(FromLookoutFbx).Distinct().ToArray();
+                    .Concat(FromLookoutFbx).Concat(FromCrankFbx).Distinct().ToArray();
             }
         }
 
@@ -83,6 +91,7 @@ namespace SeaSick.Dev
             AssetDatabase.ImportAsset(Fbx, ImportAssetOptions.ForceSynchronousImport);
             ConfigureFbx(Fbx, Takes.Where(t => TakeFrom(t) == Fbx).ToArray(), log);
             ConfigureFbx(LookoutFbx, FromLookoutFbx, log);
+            ConfigureFbx(CrankFbx, FromCrankFbx, log);
             var controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(Controller);
             if (controller == null) throw new Exception("missing " + Controller + " (run AstraPlaytestImport first)");
             AddStates(controller, log);

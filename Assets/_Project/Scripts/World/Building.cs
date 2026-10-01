@@ -24,6 +24,18 @@ namespace SeaSick.World
         /// again, just the buildings already standing.
         public Vector2 Footprint => footprint;
 
+        /// **Which model it wears now (2026-10-01)** -- the Resources path of
+        /// its `Model` child: the plan's own prefab, or a level's
+        /// `BuildingLevelLook.prefabOverride` once `BuildingFactory.ShowLevel`
+        /// has swapped it. Null for an extruded building. `BuildingSolids`
+        /// reads its boxes by this. Not saved: the level is, and the load
+        /// swaps the model again.
+        public string ModelPrefab { get; internal set; }
+
+        /// Bumped on every model swap, so anything holding the old model's
+        /// marks (a lookout on the deck, a cached stand) can tell.
+        public int ModelRevision { get; internal set; }
+
         public void Configure(BuildPlan plan)
         {
             id = plan.id;

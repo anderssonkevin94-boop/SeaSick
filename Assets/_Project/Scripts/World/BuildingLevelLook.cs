@@ -48,6 +48,32 @@ namespace SeaSick.World
         /// nothing else in this file, or any caller of `Apply`, changes.
         public static LevelLook For(int level) => level >= 2 ? Gold : None;
 
+        /// **Real level 2 art (2026-10-01).** A plan whose level has its own
+        /// model wears it instead of the gold: `BuildingFactory.ShowLevel`
+        /// swaps the building's `Model` child in place (same root, same
+        /// spot) on a raise, a load and an upgrade.
+        static readonly (string planId, int level, string prefab)[] Models =
+        {
+            (OutpostLedger.WatchtowerId, 2, "Settlement/watchtower_l2"),
+            ("Sawmill", 2, "Settlement/sawmill_l2"),
+        };
+
+        /// The look for this plan at `level`: its own model if it has one
+        /// (the highest level at or below `level` that does), else `For`.
+        public static LevelLook For(string planId, int level)
+        {
+            int best = 0;
+            string prefab = null;
+            foreach (var m in Models)
+                if (m.planId == planId && m.level <= level && m.level > best) { best = m.level; prefab = m.prefab; }
+            if (prefab == null) return For(level);
+            return new LevelLook { tint = Color.white, strength = 0f, prefabOverride = prefab };
+        }
+
+        /// Colour every mesh under `root` for `planId` at `level` (no tint
+        /// at all when that level has its own model).
+        public static void Apply(Transform root, string planId, int level) => Apply(root, level, For(planId, level));
+
         // --- applying it, cheaply -------------------------------------------
 
         /// One tinted clone per (source material, level), shared by every
@@ -72,10 +98,11 @@ namespace SeaSick.World
         /// strength, so every renderer is simply set back to its own
         /// (untinted) material, which is a no-op the first time and undoes
         /// a tint if a level ever needs to go the other way.
-        public static void Apply(Transform root, int level)
+        public static void Apply(Transform root, int level) => Apply(root, level, For(level));
+
+        static void Apply(Transform root, int level, LevelLook look)
         {
             if (root == null) return;
-            var look = For(level);
             // **Every slot, 2026-09-28**: the textured level 1 kits (wall,
             // tower, lumber mill) carry up to four materials per renderer,
             // and `sharedMaterial` is only the first of them.

@@ -33,7 +33,13 @@ namespace SeaSick.Dev
         /// Geometry above this (metres over the model's base) never blocks a
         /// walker: roofs, tarps, signs, beams.
         const float BlockHeight = 1.3f;
-        const float Cell = 0.25f;
+        const float CoarseCell = 0.25f;
+        /// The grid this prefab is baked on (`FineCells` get half).
+        static float Cell = CoarseCell;
+        /// Prefabs whose worker reaches his stand through a gap narrower
+        /// than two coarse cells: the level 2 sawmill's 0.47 m between the
+        /// grindstone and the sign post (2026-10-01).
+        static readonly HashSet<string> FineCells = new HashSet<string> { "Settlement/sawmill_l2" };
 
         /// Prefab (Resources path, as `BuildPlan.prefab`) -> the part-name
         /// stems that block. A stem ending in `*` is a prefix.
@@ -54,11 +60,25 @@ namespace SeaSick.Dev
             ("Settlement/farm_astra", new[] { "Bed_*_Soil", "Tool_Frame", "Water_Butt", "Seed_Box", "Harvest_Basket" }),
             ("Settlement/campfire_astra", new[] { "Hearth", "Fuel_Cradle", "Cooking_Frame", "Seat" }),
             ("Settlement/watchtower_astra", new[] { "TowerL1_Posts", "TowerL1_Walls" }),
+            // Level 2 models (2026-10-01), swapped in by `BuildingFactory.ShowLevel`.
+            // The level 2 tower's ground parts are level 1's within 5 cm
+            // (README: same enclosure faces, legs 0.48 m at +-0.95): it takes
+            // level 1's box (`SameAs`), so its ladder foot stays outside it.
+            ("Settlement/watchtower_l2", new[] { "TowerL2_Posts", "TowerL2_Walls" }),
+            ("Settlement/sawmill_l2", new[] { "Mill2_SawTable", "Mill2_CrankStand", "Mill_InputCradle", "Mill_OutputRack",
+                "Mill2_Frame", "Mill2_Piers", "Mill2_BackWall", "Mill2_SignPost" }),
+            // Not the grindstone: a small prop on the sawyer's way in (the
+            // 0.47 m gap past it is narrower than a baked box can show).
         };
+
+        /// A prefab that takes another's boxes rather than its own bake (its
+        /// markers are still checked against them).
+        static readonly Dictionary<string, string> SameAs = new Dictionary<string, string>
+            { { "Settlement/watchtower_l2", "Settlement/watchtower_astra" } };
 
         /// Shells: one box over the whole low footprint, not the parts.
         static readonly HashSet<string> Shells = new HashSet<string>
-            { "Settlement/hut_astra", "Settlement/watchtower_astra", "Settlement/storage_astra" };
+            { "Settlement/hut_astra", "Settlement/watchtower_astra", "Settlement/storage_astra", "Settlement/watchtower_l2" };
 
         static readonly string[] AccessStems =
             { "Input_Pickup", "Output_Dropoff", "Worker_Stand", "Worker_Approach", "Entry", "Entrance_Anchor" };
@@ -74,6 +94,7 @@ namespace SeaSick.Dev
             code.Append("    public static partial class BuildingSolids\n    {\n");
             code.Append("        static readonly Dictionary<string, float[]> Baked = new Dictionary<string, float[]>\n        {\n");
 
+            var done = new Dictionary<string, List<Vector4>>();
             foreach (var (prefab, parts) in Table)
             {
                 var asset = Resources.Load<GameObject>(prefab);
@@ -86,7 +107,15 @@ namespace SeaSick.Dev
                 model.transform.localRotation = Quaternion.identity;
                 try
                 {
+                    Cell = FineCells.Contains(prefab) ? CoarseCell * 0.5f : CoarseCell;
                     var boxes = BakeOne(holder.transform, model, parts, Shells.Contains(prefab), report);
+                    Cell = CoarseCell;
+                    if (SameAs.TryGetValue(prefab, out var same) && done.TryGetValue(same, out var theirs))
+                    {
+                        report.Append($"{prefab}: takes {same}'s boxes (own bake: {boxes.Count})\n");
+                        boxes = theirs;
+                    }
+                    done[prefab] = boxes;
                     code.Append($"            {{ \"{prefab}\", new float[] {{ ");
                     foreach (var b in boxes)
                         code.Append(F(b.x)).Append(", ").Append(F(b.y)).Append(", ")

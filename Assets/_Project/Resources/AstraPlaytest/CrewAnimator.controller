@@ -316,6 +316,9 @@ AnimatorStateMachine:
   - serializedVersion: 1
     m_State: {fileID: 6210636837673724349}
     m_Position: {x: 1300, y: 340, z: 0}
+  - serializedVersion: 1
+    m_State: {fileID: 3771705306529356984}
+    m_Position: {x: 1300, y: 400, z: 0}
   m_ChildStateMachines: []
   m_AnyStateTransitions: []
   m_EntryTransitions: []
@@ -1012,6 +1015,32 @@ AnimatorState:
   m_CycleOffsetParameterActive: 0
   m_TimeParameterActive: 0
   m_Motion: {fileID: 3031679918428882240, guid: e345e4b1389b444dba25004790ecf636, type: 3}
+  m_Tag: 
+  m_SpeedParameter: 
+  m_MirrorParameter: 
+  m_CycleOffsetParameter: 
+  m_TimeParameter: 
+--- !u!1102 &3771705306529356984
+AnimatorState:
+  serializedVersion: 6
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Crank
+  m_Speed: 1
+  m_CycleOffset: 0
+  m_Transitions: []
+  m_StateMachineBehaviours: []
+  m_Position: {x: 50, y: 50, z: 0}
+  m_IKOnFeet: 0
+  m_WriteDefaultValues: 1
+  m_Mirror: 0
+  m_SpeedParameterActive: 0
+  m_MirrorParameterActive: 0
+  m_CycleOffsetParameterActive: 0
+  m_TimeParameterActive: 0
+  m_Motion: {fileID: -5717581639212515509, guid: 20150f5abfd3b4753a39b71953fb84e5, type: 3}
   m_Tag: 
   m_SpeedParameter: 
   m_MirrorParameter: 

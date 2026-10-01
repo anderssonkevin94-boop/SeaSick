@@ -50,7 +50,7 @@ namespace SeaSick.World
         /// it used to be (`CodePose`).
         public enum Mode { None, Chop, Saw, Hammer, Hoe, Stir, Carry, Dangle, Land, Bend, Mine, Lookout,
             Forage, Build, PickUp, SetDown, HuntWalk, Hunt, Farm, Smith, Cook, Mill, Quarry, Fletcher, Fisher,
-            Reach, Eat }
+            Reach, Eat, Crank }
 
         /// **The code pose a clip mode falls back to** on a rig whose
         /// controller lacks the state (what each job looked like before the
@@ -71,6 +71,8 @@ namespace SeaSick.World
                 case Mode.Cook: return Mode.Stir;
                 case Mode.Mill: case Mode.Quarry: case Mode.Fletcher: return Mode.Hammer;
                 case Mode.Fisher: return Mode.Bend;
+                // The level 2 sawmill's crank: the saw pose on a rig without it.
+                case Mode.Crank: return Mode.Saw;
                 default: return m;
             }
         }
@@ -413,8 +415,39 @@ namespace SeaSick.World
             PlaceDish();
         }
 
+        // --- the level 2 sawmill's crank (2026-10-01) ------------------------
+
+        static readonly List<VillagerActing> live = new List<VillagerActing>();
+        static readonly int CrankId = Animator.StringToHash("Crank");
+        void OnEnable() { if (!live.Contains(this)) live.Add(this); }
+
+        /// **Where in his `Crank` loop a body standing within `radius` of
+        /// `at` is (0..1)**, for `MillCrankWheels`: the clip turns the crank
+        /// once a loop, so the wheels read their angle off this and stay in
+        /// step with his fists. False when nobody there is playing it.
+        public static bool CrankPhaseNear(Vector3 at, float radius, out float phase)
+        {
+            phase = 0f;
+            for (int i = 0; i < live.Count; i++)
+            {
+                var a = live[i];
+                if (a == null || a.anim == null || !a.anim.isActiveAndEnabled) continue;
+                Vector3 d = a.transform.position - at;
+                d.y = 0f;
+                if (d.sqrMagnitude > radius * radius) continue;
+                var st = a.anim.GetCurrentAnimatorStateInfo(0);
+                if (st.shortNameHash != CrankId && a.anim.IsInTransition(0))
+                    st = a.anim.GetNextAnimatorStateInfo(0);
+                if (st.shortNameHash != CrankId) continue;
+                phase = st.normalizedTime - Mathf.Floor(st.normalizedTime);
+                return true;
+            }
+            return false;
+        }
+
         void OnDisable()
         {
+            live.Remove(this);
             // Switched off with the camp. The pose stops where it is; the
             // Animator owns the body again from the next frame.
             weight = 0f;
@@ -516,7 +549,7 @@ namespace SeaSick.World
 
         static readonly Mode[] ClipModes = { Mode.Chop, Mode.Saw, Mode.Mine, Mode.Carry, Mode.Lookout,
             Mode.Forage, Mode.Build, Mode.PickUp, Mode.SetDown, Mode.HuntWalk, Mode.Hunt, Mode.Farm,
-            Mode.Smith, Mode.Cook, Mode.Mill, Mode.Quarry, Mode.Fletcher, Mode.Fisher };
+            Mode.Smith, Mode.Cook, Mode.Mill, Mode.Quarry, Mode.Fletcher, Mode.Fisher, Mode.Crank };
         static readonly int ClipRateId = Animator.StringToHash("ClipRate");
         static readonly int IdleId = Animator.StringToHash("Idle");
         static readonly int WalkId = Animator.StringToHash("Walk");

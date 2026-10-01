@@ -553,6 +553,8 @@ namespace SeaSick.World
         public bool Route(Vector3 from, Vector3 to, Walker who, List<Vector3> corners)
             => Route(from, to, who, corners, true);
 
+        static float Flat2(Vector3 a, Vector3 b) { float dx = a.x - b.x, dz = a.z - b.z; return dx * dx + dz * dz; }
+
         /// `ladders` false: over the ground only (a worn road does not run
         /// up a ladder, `CampRoads`).
         public bool Route(Vector3 from, Vector3 to, Walker who, List<Vector3> corners, bool ladders)
@@ -571,6 +573,19 @@ namespace SeaSick.World
             // benches, the grid is too coarse to know it.
             bool laneA = LaneAt(from, 0.6f, out Vector3 exitA, out Vector3 viaA, out bool hasViaA);
             bool laneB = LaneAt(to, 0.5f, out Vector3 exitB, out Vector3 viaB, out bool hasViaB);
+            // **Already at the stand's own approach (2026-10-01, the level 2
+            // sawmill).** An approach inside a building's closed cells has a
+            // lane of its own, so a walk from it to the stand it serves (or
+            // from that stand back to it) read as "leave by the approach's
+            // lane, then come back in": out to its exit, back to it -- and a
+            // re-plan near the approach sent him out again. Finch circled
+            // there for good. The lane between the two IS the walk.
+            if ((laneB && hasViaB && Flat2(viaB, from) < 0.6f * 0.6f)
+                || (laneA && hasViaA && Flat2(viaA, to) < 0.5f * 0.5f))
+            {
+                corners.Add(to);
+                return true;
+            }
             int a = Nearest(laneA ? exitA : from, who), b = Nearest(laneB ? exitB : to, who);
             if (a < 0 || b < 0) return false;
             // Out by the approach first (a stand's lane, `ViaApproach`),

@@ -91,7 +91,9 @@ namespace SeaSick.World
                 // night, so it is added whatever the geometry came from.
                 if (plan.kind == BuildKind.Fire) Firelight(root.transform);
                 else Lamp(root.transform, plan);
-                root.AddComponent<Building>().Configure(plan);
+                var dressed = root.AddComponent<Building>();
+                dressed.Configure(plan);
+                dressed.ModelPrefab = plan.prefab;
                 Arm(root, plan);
                 return root;
             }
@@ -639,6 +641,89 @@ namespace SeaSick.World
         }
 
         static readonly HashSet<string> warned = new HashSet<string>();
+
+        // --- a level's own model (2026-10-01) -------------------------------
+
+        /// **Show `b` as it looks at `level`**: its level's own model where
+        /// one exists (`BuildingLevelLook.For(planId, level).prefabOverride`,
+        /// the level 2 watchtower and sawmill), else its plan's, then the
+        /// level's tint. Called on every raise and load (`Outpost.AfterRaised`)
+        /// and on an upgrade (`Outpost.Retint`).
+        ///
+        /// The swap replaces ONLY the `Model` child: the root -- its place,
+        /// yaw, slope sink, the `Building`, the gun, a wall tower's stilts,
+        /// the lamp -- never moves (buildings-never-move). Everything that
+        /// held the old model's marks is told: the stock views are re-added
+        /// (they find their slots in `Start`), `CampWorker`'s marks and the
+        /// tower marks are dropped, the gun re-seats on `Gun_Pivot`, and
+        /// `CampPath` re-reads the solids on its own (its signature includes
+        /// the model's id). A worker mid-trip re-paths to the new spots on
+        /// his next step. True when the model changed.
+        public static bool ShowLevel(Building b, int level)
+        {
+            if (b == null) return false;
+            var plan = BuildPlans.Named(b.Id);
+            var look = BuildingLevelLook.For(b.Id, level);
+            bool swapped = false;
+            string want = !string.IsNullOrEmpty(look.prefabOverride) ? look.prefabOverride : plan.prefab;
+            var old = b.transform.Find("Model");
+            if (old != null && !string.IsNullOrEmpty(want) && want != b.ModelPrefab)
+            {
+                var asset = Resources.Load<GameObject>(want);
+                if (asset == null)
+                {
+                    if (!warned.Contains(want))
+                    {
+                        warned.Add(want);
+                        Debug.LogWarning($"[Camp] no level {level} model at Resources/{want} -- '{plan.label}' keeps its own.");
+                    }
+                }
+                else
+                {
+                    // Out of the hierarchy NOW (Destroy waits for the frame's
+                    // end, and every GetComponentsInChildren this frame would
+                    // find both models), disabled so its pad and views stop.
+                    old.gameObject.SetActive(false);
+                    old.SetParent(null, false);
+                    Object.Destroy(old.gameObject);
+
+                    var model = Object.Instantiate(asset, b.transform);
+                    model.name = "Model";
+                    model.transform.SetSiblingIndex(0);
+                    model.transform.localPosition = Vector3.zero;
+                    model.transform.localRotation = Quaternion.identity;
+                    foreach (var c in model.GetComponentsInChildren<Collider>(true))
+                        Object.Destroy(c);
+                    // The views cache their slots: fresh ones find the new
+                    // model's in `Start`, exactly as on a raise.
+                    var root = b.gameObject;
+                    Renew<StationStockView>(root);
+                    Renew<StoreStockView>(root);
+                    Renew<FarmBedView>(root);
+                    Renew<CampfireStateView>(root);
+                    Renew<ShelterStateView>(root);
+                    if (plan.beds > 0) NameBeds(b.transform);
+
+                    b.ModelPrefab = want;
+                    b.ModelRevision++;
+                    CampWorker.ForgetMarks(b);
+                    Outpost.ForgetTowerMarks(b);
+                    var gun = b.GetComponent<Combat.WatchtowerGun>();
+                    if (gun != null) gun.Reseat();
+                    swapped = true;
+                }
+            }
+            BuildingLevelLook.Apply(b.transform, b.Id, level);
+            return swapped;
+        }
+
+        static void Renew<T>(GameObject root) where T : Component
+        {
+            var had = root.GetComponent<T>();
+            if (had == null) return;
+            Object.DestroyImmediate(had);
+            root.AddComponent<T>();
+        }
 
         // --- the farm's beds, 2026-09-21 ------------------------------------
 

@@ -174,8 +174,8 @@ namespace SeaSick.Combat
             // down when the kit shrank it to 4.65 m, so it hovered well
             // clear of the platform (or, on a steep wall node, well BELOW
             // it once the root sank into the slope).
-            pivot.transform.position = transform.position + Vector3.up * (DeckHeight + 0.15f);
             gunPivot = pivot.transform;
+            Seat();
 
             var go = new GameObject("TowerGun");
             go.transform.SetParent(gunPivot, false);
@@ -184,6 +184,36 @@ namespace SeaSick.Combat
 
             gun = go.AddComponent<Ship.Cannon>();
             gun.Build(wood, iron);
+        }
+
+        /// **Where the gun stands:** the level 2 deck's own `Gun_Pivot`
+        /// (2026-10-01: the turntable in the back-left quadrant, so the
+        /// lookout's corner and the lane round to it stay outside the swept
+        /// circle; same 4.76 m height), else level 1's deck centre at
+        /// `DeckHeight + 0.15`. It turns the full 360 degrees on both.
+        void Seat()
+        {
+            if (gunPivot == null) return;
+            Transform mark = null;
+            foreach (var t in GetComponentsInChildren<Transform>(true))
+                if (World.BuildingFactory.Stem(t.name) == "Gun_Pivot") { mark = t; break; }
+            gunPivot.position = mark != null ? mark.position
+                : transform.position + Vector3.up * (DeckHeight + 0.15f);
+        }
+
+        /// The tower's model was just swapped (`BuildingFactory.ShowLevel`,
+        /// an upgrade or a load): stand the gun on the new deck's pivot.
+        public void Reseat() => Seat();
+
+        /// Where the gun turns about now (for checks).
+        public Vector3 PivotPosition => gunPivot != null ? gunPivot.position : transform.position;
+
+        /// Turn the gun to `worldYaw` degrees now (for checks: a full
+        /// 360 degree sweep with nobody to aim at).
+        public void ForceYaw(float worldYaw)
+        {
+            yaw = worldYaw;
+            if (gunPivot != null) gunPivot.rotation = Quaternion.Euler(0f, yaw, 0f);
         }
 
         static Material Mat(Color c, float smoothness)

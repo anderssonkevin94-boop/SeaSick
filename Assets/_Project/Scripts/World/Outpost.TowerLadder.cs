@@ -74,6 +74,11 @@ namespace SeaSick.World
                         case "Ladder_Bottom": m.bottom = t; break;
                         case "Ladder_Top": m.top = t; break;
                         case "Lookout_Anchor": m.anchor = t; break;
+                        // The level 2 deck (2026-10-01): its own corner and
+                        // the lane round the gun circle.
+                        case "Lookout_Corner": m.corner = t; break;
+                        case "Lane_1": m.lane1 = t; break;
+                        case "Lane_2": m.lane2 = t; break;
                     }
                 }
                 if (m.bottom == null || m.top == null || m.anchor == null) return false;
@@ -81,6 +86,9 @@ namespace SeaSick.World
             }
             bottom = m.bottom.position;
             top = m.top.position;
+            // The level 2 deck marks its own corner (`Lookout_Corner`, the
+            // lookout's body centre, clear of the 360 degree gun circle).
+            if (m.corner != null) { stand = m.corner.position; return true; }
             stand = m.anchor.position;
             // The tower's own +Z (anchor -> ladder) and +X, flat.
             Vector3 front = top - stand;
@@ -93,8 +101,12 @@ namespace SeaSick.World
             return true;
         }
 
-        struct TowerMarkSet { public Transform bottom, top, anchor; }
+        struct TowerMarkSet { public Transform bottom, top, anchor, corner, lane1, lane2; }
         static readonly Dictionary<int, TowerMarkSet> towerMarks = new Dictionary<int, TowerMarkSet>();
+
+        /// Drop `b`'s cached marks: its model was just swapped
+        /// (`BuildingFactory.ShowLevel`), and the cache holds the old one's.
+        public static void ForgetTowerMarks(Building b) { if (b != null) towerMarks.Remove(b.GetInstanceID()); }
 
         /// **Where the lookout stands on the ground to start his climb**: a
         /// stride out from the rails' foot, on open ground. On a wall tower
@@ -168,9 +180,22 @@ namespace SeaSick.World
             s.path.Add(foot);
             s.path.Add(rail);
             s.path.Add(top);
-            s.path.Add(stand + run * LadderClimb.Standoff);
             s.legs.Add(LadderLayout.Leg.Ground);
             s.legs.Add(LadderLayout.Leg.Climb);
+            // **The level 2 lane (2026-10-01):** a straight line from the
+            // hatch to the corner crosses the gun's circle, so the deck walk
+            // goes round it -- sideways onto the boards at `Lane_1`, along
+            // the front strip to `Lane_2`, back along the side to the corner.
+            // Each added like the last point (`run * Standoff`), so he ends
+            // exactly on the mark.
+            if (towerMarks.TryGetValue(b.GetInstanceID(), out var marks) && marks.lane1 != null && marks.lane2 != null)
+            {
+                s.path.Add(marks.lane1.position + run * LadderClimb.Standoff);
+                s.legs.Add(LadderLayout.Leg.Deck);
+                s.path.Add(marks.lane2.position + run * LadderClimb.Standoff);
+                s.legs.Add(LadderLayout.Leg.Deck);
+            }
+            s.path.Add(stand + run * LadderClimb.Standoff);
             s.legs.Add(LadderLayout.Leg.Deck);
             return s;
         }

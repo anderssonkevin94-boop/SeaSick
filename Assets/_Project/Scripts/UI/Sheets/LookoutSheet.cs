@@ -114,6 +114,43 @@ namespace SeaSick.UI.Sheets
         Label quiverT, quiverS;
         WatchTiles tiles;
         Button showBtn, mainBtn;
+        StationPage.UpgradeCard upgrade;
+
+        /// The tower the upgrade card raises: this card's own, else the
+        /// camp's first.
+        Building UpgradeTarget
+        {
+            get
+            {
+                if (tower != null) return tower;
+                var list = WatchTiles.TowersOf(outpost);
+                return list.Count > 0 ? list[0] : null;
+            }
+        }
+
+        void DoUpgrade()
+        {
+            var l = L;
+            var b = UpgradeTarget;
+            if (l == null || b == null) return;
+            // THIS tower goes up (its own row), and its model swaps in place
+            // (`Outpost.Retint` -> `BuildingFactory.ShowLevel`).
+            if (l.UpgradeAt(outpost.RaisedIndexOf(b), OutpostLedger.WatchtowerId))
+            {
+                outpost.Retint(b);
+                Refresh();
+            }
+        }
+
+        void TogglePin()
+        {
+            var b = UpgradeTarget;
+            if (b == null) return;
+            int ri = outpost.RaisedIndexOf(b);
+            if (GoalPin.IsUpgradePinned(outpost, ri, OutpostLedger.WatchtowerId)) GoalPin.Clear(outpost);
+            else GoalPin.SetUpgrade(outpost, ri, OutpostLedger.WatchtowerId);
+            Refresh();
+        }
 
         public VisualElement Build()
         {
@@ -150,6 +187,13 @@ namespace SeaSick.UI.Sheets
             top.Add(words);
             quiverCard.Add(top);
             col.Add(quiverCard);
+
+            // --- level: the tower's upgrade (2026-10-01, the level 2 gun
+            // deck). The stations' one-button card (`StationPage.UpgradeCard`)
+            // for THIS tower -- or, on the camp-wide card, the first one.
+            upgrade = new StationPage.UpgradeCard(DoUpgrade, TogglePin, outpost);
+            upgrade.Root.style.marginTop = 12;
+            col.Add(upgrade.Root);
 
             // --- who could go
             var eye = WatchTiles.Box("hs-eye-row");
@@ -195,7 +239,8 @@ namespace SeaSick.UI.Sheets
         /// phone, more on a taller one, never past three.
         static int HugTilesPerPage()
         {
-            const float Rest = 30f + 96f + 32f + 36f + 58f + 8f, Row = 56f;
+            // + the upgrade card (2026-10-01): ~104 px with its gap.
+            const float Rest = 30f + 96f + 32f + 36f + 58f + 8f + 104f, Row = 56f;
             int rows = Mathf.Clamp(Mathf.FloorToInt((SheetHost.HugBodyBudget(false) - Rest) / Row), 1, 3);
             return rows * 3;
         }
@@ -248,6 +293,18 @@ namespace SeaSick.UI.Sheets
             WatchTiles.Set(quiverS, s);
             quiverCard.EnableInClassList("lk-card--warn", post == null);
             quiverCard.EnableInClassList("lk-card--good", post != null);
+
+            var target = UpgradeTarget;
+            if (upgrade != null)
+            {
+                upgrade.Root.style.display = target != null ? DisplayStyle.Flex : DisplayStyle.None;
+                if (target != null)
+                {
+                    int ri = outpost.RaisedIndexOf(target);
+                    upgrade.Update(l, ri, OutpostLedger.WatchtowerId, l.LevelAtRaised(ri, OutpostLedger.WatchtowerId),
+                        GoalPin.IsUpgradePinned(outpost, ri, OutpostLedger.WatchtowerId));
+                }
+            }
 
             tiles.Refresh(l);
             FillMain(l, towers, manned);

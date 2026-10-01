@@ -116,6 +116,11 @@ namespace SeaSick.World.Economy
                 cost = Cost.Of(Cost.I(Res.Brick, 8), Cost.I(Res.FineBoards, 4)) },
             new UpgradeStep { planId = "Storage", toLevel = 2, campfireLevel = 2, rateMul = 1f, storeBonus = 10,
                 cost = Cost.Of(Cost.I(Res.Brick, 6), Cost.I(Res.FineBoards, 2)) },
+            // The level 2 watchtower (2026-10-01): the big gun deck, its own
+            // model (`BuildingLevelLook`). Not a station, so no rate. A
+            // PROVISIONAL price, Kevin to tune: the sawmill's.
+            new UpgradeStep { planId = "Watchtower", toLevel = 2, campfireLevel = 2, rateMul = 1f,
+                cost = Cost.Of(Cost.I(Res.Brick, 6), Cost.I(Res.FineBoards, 4)) },
         };
 
         /// **Copies per fire level (I, II, III, IV) -- PROVISIONAL, Kevin to

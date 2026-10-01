@@ -38,7 +38,9 @@ namespace SeaSick.World
             if (b == null) return 0;
             if (b.Kind == BuildKind.Pier || b.Kind == BuildKind.DryDock) return 0;
             var plan = BuildPlans.Named(b.Id);
-            if (!string.IsNullOrEmpty(plan.prefab) && Baked.TryGetValue(plan.prefab, out var f)
+            // The model it wears NOW: a level 2 swap reads its own boxes.
+            string model = !string.IsNullOrEmpty(b.ModelPrefab) ? b.ModelPrefab : plan.prefab;
+            if (!string.IsNullOrEmpty(model) && Baked.TryGetValue(model, out var f)
                 && b.transform.Find("Model") != null)
             {
                 for (int i = 0; i + 3 < f.Length; i += 4)

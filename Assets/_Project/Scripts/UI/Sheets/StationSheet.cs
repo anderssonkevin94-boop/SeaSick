@@ -2108,6 +2108,8 @@ namespace SeaSick.UI.Sheets
                 if (Mathf.Abs(step.rateMul - 1f) > 0.001f) parts.Add($"{step.rateMul:0.#}× faster");
                 if (step.storeBonus != 0) parts.Add($"+{step.storeBonus} stores");
                 if (step.housesBonus != 0) parts.Add(step.housesBonus == 1 ? "+1 bed" : $"+{step.housesBonus} beds");
+                // The level 2 tower's whole point (2026-10-01).
+                if (parts.Count == 0 && step.planId == OutpostLedger.WatchtowerId) return "bigger gun deck";
                 return parts.Count > 0 ? string.Join(" · ", parts) : "stronger";
             }
         }

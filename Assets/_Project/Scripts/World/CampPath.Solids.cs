@@ -108,7 +108,10 @@ namespace SeaSick.World
                 sig = sig * 31 + Mathf.RoundToInt(p.x * 50f);
                 sig = sig * 31 + Mathf.RoundToInt(p.z * 50f);
                 sig = sig * 31 + Mathf.RoundToInt(t.eulerAngles.y * 10f);
-                sig = sig * 31 + (t.Find("Model") != null ? 1 : 0);
+                // The model itself, not just "has one": a level 2 swap
+                // (`BuildingFactory.ShowLevel`) re-reads the boxes and relays.
+                var model = t.Find("Model");
+                sig = sig * 31 + (model != null ? model.GetInstanceID() : 0);
             }
             if (solidsReady && sig == solidSig) return;
             solidSig = sig;
