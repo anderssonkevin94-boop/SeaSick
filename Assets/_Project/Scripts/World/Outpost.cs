@@ -3871,45 +3871,6 @@ namespace SeaSick.World
             }
         }
 
-        /// **One farm's own beds, ripe or cut, for its sheet** (read-only,
-        /// 2026-09-23). The beds `FarmFields` planted for THIS farm are the
-        /// `BuildPlans.Farm.beds` crop beds nearest the point it planted them
-        /// at (the kit's middle bed slot, else off the front) -- the same
-        /// beds `FarmBedView` dresses. `ripe` gets one entry per bed found,
-        /// nearest first, true while it stands. Changes nothing.
-        public int FarmBeds(Building farm, List<bool> ripe)
-        {
-            ripe?.Clear();
-            if (farm == null || ripe == null) return 0;
-            var crops = CropsHere();
-            if (crops == null) crops = Terrain.SceneryCrops.On(Island.Nearest(farm.transform.position));
-            if (crops == null || crops.BedCount == 0) return 0;
-            var plan = BuildPlans.Farm;
-            var slots = BuildingFactory.BedSlotsOf(farm.transform);
-            Vector3 at = slots.Count > 0
-                ? slots[slots.Count / 2].position
-                : farm.transform.position + farm.transform.forward * (plan.footprint.y * 0.5f + 3f);
-            const float reach = 6f;
-            int want = Mathf.Max(0, plan.beds);
-            var taken = new List<int>(want);
-            for (int k = 0; k < want; k++)
-            {
-                int best = -1;
-                float bestSq = reach * reach;
-                for (int i = 0; i < crops.BedCount; i++)
-                {
-                    if (taken.Contains(i)) continue;
-                    Vector3 d = crops.BedAt(i).at - at;
-                    d.y = 0f;
-                    if (d.sqrMagnitude < bestSq) { bestSq = d.sqrMagnitude; best = i; }
-                }
-                if (best < 0) break;
-                taken.Add(best);
-                ripe.Add(!crops.BedAt(best).harvested);
-            }
-            return ripe.Count;
-        }
-
         /// **Days until the next cut bed stands again** on regrowth alone
         /// (read-only, 2026-09-23): the rate `OutpostLedger.Step` regrows
         /// the Food field at (`standingMax * regrowPerDay` a day) against
@@ -4085,20 +4046,24 @@ namespace SeaSick.World
             return crops.BedAt(bedIndex).harvested;
         }
 
-        /// **Farm hook.** Called with the building the moment a farm plot is
-        /// RAISED (never for a ghost). The farm system plants its beds here
-        /// through `Terrain.SceneryCrops.Plant`.
-        public static System.Action<Building> PlantFarmBeds;
-
-        /// **Campfire hook, 2026-09-23.** Same shape as `PlantFarmBeds`:
-        /// called with the building the moment a campfire is actually
+        /// **No farm hook any more (2026-10-01, Kevin: "please fix this wheat
+        /// issue").** `FarmFields` used to plant `BuildPlans.Farm.beds` wild
+        /// wheat mats (`SceneryCrops.Plant`) off the farm's front on every
+        /// raise and every load -- the pre-food-rework field. No farm model
+        /// carries `BedSlot_` markers, so they always landed ~6 m in front of
+        /// the building, on whatever stood there (a road, in his camp), as a
+        /// shapeless golden slab. The farm grows on its own beds per plot
+        /// since 2026-09-27 (`FarmPlot`, `FarmBedView`) and `AddField` already
+        /// skipped it, so nothing read them. Planted mats were never saved,
+        /// so not planting them is the whole heal.
+        ///
+        /// **Campfire hook, 2026-09-23.** Called with the building the moment a campfire is actually
         /// raised. `CampPug` uses it to stand her companion by the fire.
         public static System.Action<Building> SpawnCampPug;
 
         void AfterRaised(BuildPlan plan, Building b)
         {
             if (b == null) return;
-            if (plan.id == BuildPlans.Farm.id) PlantFarmBeds?.Invoke(b);
             if (plan.id == BuildPlans.Campfire.id) SpawnCampPug?.Invoke(b);
             // Gold at level 2, until real art exists (Kevin, 2026-09-26) --
             // see `BuildingLevelLook`. Both raise paths (a fresh building

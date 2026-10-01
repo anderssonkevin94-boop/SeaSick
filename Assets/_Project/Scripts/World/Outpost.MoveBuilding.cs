@@ -226,8 +226,6 @@ namespace SeaSick.World
             EnsureClearing(true);
             ReturnToCamp(snapTrees, snapRocks);
 
-            MoveFarmBeds(b, plan, oldRoot, oldRot);
-
             // The fishing hut's cached stand-and-fish spot is keyed to the
             // row's position (`shoreForX/Z`), so it is found again here.
             SaveShoreSpots();
@@ -266,30 +264,6 @@ namespace SeaSick.World
             foreach (var n in rockScratch)
                 if (n != null && n.Gathered && siteRocks.Contains(n) && shape.Contains(n.transform.position))
                     rocks.Add(n);
-        }
-
-        /// **The farm's field walks with the farm.** Its beds were planted
-        /// off the building's own bed slots (`FarmFields`), so they move
-        /// rigidly with the root -- the same spots `FarmFields` would plant
-        /// at the new place on the next load. Only this farm's beds: a bed
-        /// nearer a twin farm stays with the twin.
-        void MoveFarmBeds(Building b, BuildPlan plan, Vector3 oldRoot, Quaternion oldRot)
-        {
-            if (b == null || b.Id != BuildPlans.Farm.id) return;
-            var crops = Terrain.SceneryCrops.On(Island);
-            if (crops == null || crops.BedCount == 0) return;
-            float reach = 0.5f * plan.footprint.magnitude + 4f
-                          + 1.6f * Mathf.Max(1, Mathf.CeilToInt(Mathf.Sqrt(Mathf.Max(1, plan.beds)))) + 2f;
-            crops.MoveBeds(oldRoot, oldRot, b.transform.position, b.transform.rotation, bed =>
-            {
-                float mine = Island.FlatDistance(bed, oldRoot);
-                if (mine > reach) return false;
-                foreach (var o in built)
-                    if (o != null && o != b && o.Id == b.Id
-                        && Island.FlatDistance(bed, o.transform.position) < mine) return false;
-                return true;
-            });
-            harvestOrder = null;
         }
     }
 }
