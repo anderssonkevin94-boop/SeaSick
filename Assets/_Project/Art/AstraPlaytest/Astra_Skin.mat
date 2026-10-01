@@ -8,7 +8,7 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: Astra_Skin
-  m_Shader: {fileID: 4800000, guid: 4c172e7daf62f4eeeb4f266468ef1a53, type: 3}
+  m_Shader: {fileID: 4800000, guid: 95801bfe576b348e0b5380dca67b4b72, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []

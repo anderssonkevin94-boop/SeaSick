@@ -39,8 +39,12 @@ namespace SeaSick.Dev
             {
                 Directory.CreateDirectory(Runtime);
                 AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-                var cloth = MaterialAt("Astra_Cloth", "SeaSick/Crew Vertex Color", Color.white);
-                var skin = MaterialAt("Astra_Skin", "SeaSick/Crew Vertex Color", new Color(.851f,.573f,.349f));
+                // Crew Paint = the ship's CoasterPaint light (hemisphere fill
+                // fading with night/storm, wrapped diffuse, shadow floor,
+                // lanterns) on vertex colour * _BaseColor, so the sickness
+                // tint still drives the skin. 2026-10-01.
+                var cloth = MaterialAt("Astra_Cloth", "SeaSick/Crew Paint", Color.white);
+                var skin = MaterialAt("Astra_Skin", "SeaSick/Crew Paint", new Color(.851f,.573f,.349f));
                 var wood = MaterialAt("Astra_Building", "SeaSick/Environment Toon", Color.white);
                 var hull = MaterialAt("Astra_Ship", "SeaSick/Fleet Vertex Color", Color.white);
                 foreach (var f in Directory.GetFiles(Art, "*.fbx", SearchOption.AllDirectories))
