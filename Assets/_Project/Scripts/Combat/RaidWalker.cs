@@ -47,7 +47,19 @@ namespace SeaSick.Combat
         public Vector3 landAt;
         bool landed;
 
-        const float Speed = 2.6f;
+        /// His walk's own speed (2026-10-01, `World.VillagerGaits`): a raider
+        /// runs (3.0 m/s), or carries loot (0.53) -- feet planted, the body
+        /// turned before it moves (`World.Stride`), same as the hands.
+        float Speed
+        {
+            get
+            {
+                if (actingC == null) actingC = GetComponent<World.VillagerActing>();
+                return actingC != null ? actingC.CruiseSpeed() : World.VillagerGaits.Cruise(World.VillagerGaits.RunClip);
+            }
+        }
+        World.VillagerActing actingC;
+        readonly World.Stride stride = new World.Stride();
         const float TakeSeconds = 0.8f;
         const float PileRadius = 5.2f;
         const float PileStandOff = 0.9f;
@@ -685,7 +697,8 @@ namespace SeaSick.Combat
             float legLen = leg.magnitude;
             if (legLen < 0.0001f) return false;
 
-            Vector3 step = leg / legLen * Mathf.Min(Speed * dt, legLen);
+            Vector3 step = stride.Step(transform, leg, Speed, dist, dt);
+            if (actingC != null) actingC.Commanded(stride.Speed);
             Vector3 next = here + step;
             // **Raiders climb no better than the hands (2026-09-27).** Same
             // backstop as `CampWorker.Walk`, same numbers (`World.Walkability`):
@@ -715,7 +728,6 @@ namespace SeaSick.Combat
             slopeStuck = 0f;
             next.y = camp.GroundAt(next);
             transform.position = next;
-            Face(leg, dt);
             return false;
         }
 

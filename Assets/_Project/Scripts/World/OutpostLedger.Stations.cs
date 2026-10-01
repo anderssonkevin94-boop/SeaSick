@@ -127,10 +127,11 @@ namespace SeaSick.World
 
         // --- trip timing (2026-09-23; see the class doc) ---------------------
 
-        /// Metres a second a villager walks. **The same number as
-        /// `CampWorker.Speed` (2.6)** -- the body and the books must agree on
-        /// how long a leg takes; change both together.
-        public const float WalkMetresPerSecond = 2.6f;
+        /// Metres a second a villager walks. **The body's own pace**
+        /// (2026-10-01: `VillagerGaits.Books`, out brisk and back carrying,
+        /// ~0.93 m/s at the 1.5x cadence; it was 2.6 while the feet skated) -- the body and the
+        /// books must agree on how long a leg takes.
+        public static readonly float WalkMetresPerSecond = VillagerGaits.Books;
         /// Straight line to walked path. **Unused by the books since
         /// 2026-09-27** (legs are measured on `CampPath` through `router`,
         /// or walked straight); kept for old callers.

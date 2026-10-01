@@ -53,12 +53,18 @@ namespace SeaSick.World
 
         struct Group { public float cx, cz, rad; public int first, count; }
 
-        struct Lane { public Vector3 at, exit; }
+        /// `via`: a stand's way in through its own building's approach
+        /// marker (`hasVia`), walked between `exit` and `at`.
+        struct Lane { public Vector3 at, exit, via; public bool hasVia; }
 
         readonly List<Box> boxes = new List<Box>();
         readonly List<Group> groups = new List<Group>();
         readonly List<Lane> lanes = new List<Lane>();
         readonly List<Vector3> accessPts = new List<Vector3>();
+        /// Per access point: its building's group, and whether it is the
+        /// stand / the approach marker (`ViaApproach`).
+        readonly List<int> accessGroup = new List<int>();
+        readonly List<byte> accessKind = new List<byte>();
         readonly List<Vector4> localScratch = new List<Vector4>();
 
         /// Per-cell: blocked by a building (both walkers).
@@ -117,6 +123,8 @@ namespace SeaSick.World
             boxes.Clear();
             groups.Clear();
             accessPts.Clear();
+            accessGroup.Clear();
+            accessKind.Clear();
             var list = camp.Built;
             for (int i = 0; i < list.Count; i++)
             {
@@ -160,6 +168,9 @@ namespace SeaSick.World
                     Vector3 p = m.position;
                     if (DistToSolids(p.x, p.z) < 0f) continue;
                     accessPts.Add(p);
+                    string stem = BuildingFactory.Stem(m.name);
+                    accessGroup.Add(groups.Count - 1);
+                    accessKind.Add((byte)(stem == "Worker_Stand" ? 1 : stem == "Worker_Approach" ? 2 : 0));
                 }
             }
         }
@@ -398,12 +409,60 @@ namespace SeaSick.World
                 if (camp != null) bestExit.y = camp.GroundAt(bestExit);
                 lanes.Add(new Lane { at = p, exit = bestExit });
             }
+            ViaApproach();
+        }
+
+        /// **A stand is entered by its building's approach (2026-10-01).**
+        /// The shortest-way-out lane is right for a pickup on a building's
+        /// edge, wrong for a cook's stand tucked behind the counter: the
+        /// kitchen's stand is 7 cm off the counter box and its cheapest
+        /// heading ran out through the counter, so the route brought him
+        /// round to the far side and the step guard (rightly) would not let
+        /// him through -- he paced up and down 2 m short. Where the same
+        /// building has a `Worker_Approach` the stand can see without
+        /// passing through a box, the stand's lane runs stand -> approach ->
+        /// the approach's own way out, which is the walk the building was
+        /// drawn for.
+        void ViaApproach()
+        {
+            for (int i = 0; i < lanes.Count; i++)
+            {
+                int si = accessPts.IndexOf(lanes[i].at);
+                if (si < 0 || accessKind[si] != 1) continue;
+                for (int j = 0; j < accessPts.Count; j++)
+                {
+                    if (accessKind[j] != 2 || accessGroup[j] != accessGroup[si]) continue;
+                    Vector3 st = accessPts[si], ap = accessPts[j];
+                    float len = Mathf.Sqrt((ap.x - st.x) * (ap.x - st.x) + (ap.z - st.z) * (ap.z - st.z));
+                    if (len > 3f || len < 0.05f) continue;
+                    bool clear = true;
+                    for (int k = 1; k <= 8 && clear; k++)
+                    {
+                        float t = k / 8f;
+                        if (DistToSolids(Mathf.Lerp(st.x, ap.x, t), Mathf.Lerp(st.z, ap.z, t)) < 0f) clear = false;
+                    }
+                    if (!clear) continue;
+                    // The approach's own way out, or the approach itself
+                    // when it already stands on open ground.
+                    Vector3 exit = ap;
+                    for (int k = 0; k < lanes.Count; k++)
+                        if ((lanes[k].at - ap).sqrMagnitude < 1e-6f) { exit = lanes[k].exit; break; }
+                    var l = lanes[i];
+                    l.via = ap; l.hasVia = true; l.exit = exit;
+                    lanes[i] = l;
+                    break;
+                }
+            }
         }
 
         /// The lane whose marker is within `within` of `p`, if any.
-        bool LaneAt(Vector3 p, float within, out Vector3 exit)
+        bool LaneAt(Vector3 p, float within, out Vector3 exit) => LaneAt(p, within, out exit, out _, out _);
+
+        bool LaneAt(Vector3 p, float within, out Vector3 exit, out Vector3 via, out bool hasVia)
         {
             exit = p;
+            via = p;
+            hasVia = false;
             float best = within * within;
             bool found = false;
             for (int i = 0; i < lanes.Count; i++)
@@ -413,10 +472,12 @@ namespace SeaSick.World
                 if (d > best) continue;
                 best = d;
                 exit = lanes[i].exit;
+                via = lanes[i].via;
+                hasVia = lanes[i].hasVia;
                 found = true;
             }
             // A marker already outside every building's cells needs no lane.
-            if (found && (exit - p).sqrMagnitude < 0.09f) return false;
+            if (found && !hasVia && (exit - p).sqrMagnitude < 0.09f) return false;
             return found;
         }
 

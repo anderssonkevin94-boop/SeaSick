@@ -711,10 +711,7 @@ namespace SeaSick.Crew
 
                 case State.Returning:
                     if (WalkTo(stationLocal, dt))
-                    {
-                        transform.localRotation = Quaternion.identity;
-                        state = State.Station;
-                    }
+                        state = State.Station;   // turns to his post in ActBody
                     break;
 
                 // --- phase 5a: the rail round-trip ---------------------------
@@ -742,7 +739,6 @@ namespace SeaSick.Crew
                 case State.RailReturning:
                     if (WalkTo(stationLocal, dt))
                     {
-                        transform.localRotation = Quaternion.identity;
                         heaveCooldown = heaveInterval.x;
                         state = State.Station;
                     }
@@ -764,10 +760,7 @@ namespace SeaSick.Crew
 
                 case State.HaulReturning:
                     if (WalkTo(stationLocal, dt))
-                    {
-                        transform.localRotation = Quaternion.identity;
-                        state = State.Station;
-                    }
+                        state = State.Station;   // turns to his post in ActBody
                     break;
 
                 case State.GoingAshore:
@@ -1552,13 +1545,49 @@ namespace SeaSick.Crew
                 Mathf.Clamp01((groundTickEnd - now) / GroundInterval));
         }
 
+        /// **Aboard: turn, then walk, at the walk's own pace (2026-10-01).**
+        /// In the ship's frame (feet on the deck, not the sea): the body
+        /// turns toward the route's next node (`CoasterNavigation.Peek`) at a
+        /// body's rate and steps at the deck gait's own clip speed
+        /// (`DeckGait`, `World.VillagerGaits`, at the 1.5x cadence) -- 0.87 m/s
+        /// plain, 0.50 in sea legs, 1.29 to the buckets, 3.0 running a line,
+        /// 0.21 on the gangway -- so the feet stay planted. `walkSpeed` is kept for prefab compatibility, unused.
+        readonly World.Stride deckStride = new World.Stride();
+        SeaSick.Ship.Modular.CoasterNavigation coasterNav;
+        Transform coasterFor;
+
         bool WalkTo(Vector3 targetLocal, float dt)
         {
-            var coaster = ship != null ? ship.GetComponentInChildren<SeaSick.Ship.Modular.CoasterNavigation>() : null;
-            if (coaster != null) return coaster.Move(transform,targetLocal,walkSpeed*dt);
-            Vector3 pos = Vector3.MoveTowards(transform.localPosition, targetLocal, walkSpeed * dt);
-            transform.localPosition = pos;
-            return (pos - targetLocal).sqrMagnitude < 0.001f;
+            if (coasterFor != ship) { coasterFor = ship; coasterNav = ship != null ? ship.GetComponentInChildren<SeaSick.Ship.Modular.CoasterNavigation>() : null; }
+            var coaster = coasterNav;
+            Vector3 here = transform.localPosition;
+            Vector3 aim = coaster != null ? coaster.Peek(transform, targetLocal) : targetLocal;
+            Vector3 toEnd = targetLocal - here; toEnd.y = 0f;
+            Vector3 step = deckStride.StepLocal(transform, aim - here, World.VillagerActing.GaitCruise(DeckGait()),
+                toEnd.magnitude - 0.05f, dt);
+            float distance = step.magnitude;
+            bool there;
+            if (coaster != null) there = coaster.Move(transform, targetLocal, distance);
+            else
+            {
+                Vector3 pos = Vector3.MoveTowards(here, targetLocal, distance);
+                transform.localPosition = pos;
+                there = (pos - targetLocal).sqrMagnitude < 0.001f;
+            }
+            if (there) deckStride.Stop();
+            return there;
+        }
+
+        /// The walk aboard, by what he is walking for (urgency picks the
+        /// gait; the gait sets the speed).
+        int DeckGait()
+        {
+            if (OnPlank()) return GangwayId;
+            if (state == State.HaulGoing) return RunId;
+            if (Sickness01 >= SickSwayAt) return SickWalkId;
+            if (state == State.Bailing) return WalkBriskId;
+            if (meter != null && meter.Roughness01 >= BraceRoughness) return WalkDeckId;
+            return WalkId;
         }
 
         // ------------------------------------------- the v15 clips (2026-10-01)
@@ -1591,6 +1620,9 @@ namespace SeaSick.Crew
         /// Above this ground speed aboard he walks briskly; ashore above
         /// `RunAbove` he runs (shore parties move at 6.5 m/s).
         public static float BriskAbove = 1.0f, RunAbove = 3.0f;
+        /// Ground speed above which he shows a walk at all (the slowest deck
+        /// gait, the gangway's, is 0.21 m/s).
+        public static float MovingAbove = 0.08f;
         /// Sickness at which the queasy clips take over (asset README).
         public static float SickSwayAt = 0.4f, SickClutchAt = 0.7f, SickCollapseAt = 0.92f;
         /// Sea roughness at which a hand at his post braces (`DeckBrace`).
@@ -1666,7 +1698,7 @@ namespace SeaSick.Crew
             }
 
             int want = ShipClip();
-            if (want == 0 || !HasClip(want)) want = walkSpeedSeen > 0.3f ? WalkId : IdleId;
+            if (want == 0 || !HasClip(want)) want = walkSpeedSeen > MovingAbove ? WalkId : IdleId;
             animator.SetFloat(WalkRateId, World.VillagerActing.GaitRate(want, walkSpeedSeen));
             if (want == clipPlaying) return;
             clipPlaying = want;
@@ -1681,7 +1713,7 @@ namespace SeaSick.Crew
         /// Idle/Walk.
         int ShipClip()
         {
-            bool moving = walkSpeedSeen > 0.3f;
+            bool moving = walkSpeedSeen > MovingAbove;
             bool sick = Sickness01 >= SickSwayAt;
             if (state != State.Station) collapsedFor = -1f;
 
@@ -1692,7 +1724,7 @@ namespace SeaSick.Crew
                 case State.RailHold:
                     return RailGripId;
                 case State.Bailing:
-                    return moving ? (sick ? SickWalkId : WalkId) : BailId;
+                    return moving ? DeckGait() : BailId;
                 case State.Hauling:
                     return stateClock < ThrowLineSeconds ? ThrowLineId : HaulLineId;
                 case State.Station:
@@ -1722,14 +1754,9 @@ namespace SeaSick.Crew
                     return 0;
             }
             if (!moving) return sick ? SickSwayId : 0;
-            if (OnPlank()) return GangwayId;
-            if (sick) return SickWalkId;
-            // A line to a man overboard is urgent: run to the rail.
-            if (state == State.HaulGoing) return RunId;
             if (IsAshore) return walkSpeedSeen > RunAbove ? RunId : WalkBriskId;
-            // Aboard: sea legs in a rough sea, else brisk or plain.
-            if (meter != null && meter.Roughness01 >= BraceRoughness) return WalkDeckId;
-            return walkSpeedSeen > BriskAbove ? WalkBriskId : WalkId;
+            // Aboard: the gait `WalkTo` walks him at (2026-10-01).
+            return DeckGait();
         }
 
         /// On the gangway or catwalk between its rail step and its landing.
@@ -1822,7 +1849,9 @@ namespace SeaSick.Crew
             }
             else if (state == State.Station)
             {
-                transform.localRotation = Quaternion.Euler(0f, 0f, sway);
+                // Turned back to his post at a body's rate, not snapped.
+                transform.localRotation = Quaternion.RotateTowards(transform.localRotation,
+                    Quaternion.Euler(0f, 0f, sway), World.VillagerGaits.TurnInPlace * dt);
             }
 
             // Green shift: the sea's mood, written on the crew. Nothing about

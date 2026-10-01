@@ -157,8 +157,18 @@ namespace SeaSick.World
             public static float chopPatience = 30f;
         }
 
-        [Tooltip("Metres a second. Slower than the shore party's 6.5 — nobody at their own camp is in a hurry.")]
-        const float Speed = 2.6f;
+        /// **No fixed walking speed any more (2026-10-01).** Each walk moves
+        /// at its own clip's ground speed (`VillagerGaits`, via
+        /// `VillagerActing.CruiseSpeed`) so the feet stay planted; the
+        /// errand walk is 1.29 m/s, a carry 0.53, a run 3.0 (1.5x cadence).
+        float Cruise => acting != null ? acting.CruiseSpeed() : VillagerGaits.Cruise(VillagerGaits.BriskClip);
+        /// The carrying walk, for a delivery's timing.
+        static float CarrySpeed => VillagerGaits.Carry;
+        /// The body's turn-then-walk stride (`Stride`).
+        readonly Stride stride = new Stride();
+        /// Heading bias from `Sidestep` (degrees, + = right), this frame.
+        float passSteer;
+        int passSteerFrame = -10;
         const float SwingSeconds = 2.4f;
         const float RestSeconds = 1.1f;
         /// Arm's length. He closes to this and no further -- walking to the
@@ -1407,7 +1417,7 @@ namespace SeaSick.World
             int yield = Mathf.Max(1, rec.yield);
             if (st.RackRoom < yield) return;
             Vector3 rackAt = OutputSpot(post, out Vector3 rackFace);
-            float walk = FlatDistance(transform.position, rackAt) / Speed;
+            float walk = FlatDistance(transform.position, rackAt) / CarrySpeed;
             float due = SecondsToJobDone(r, st);
             if (due > walk + LeaveLead) return;
             jobCarried = true;
@@ -1858,7 +1868,8 @@ namespace SeaSick.World
             deliverHold = 0f;
             deliverDueAt = dueIn > 0f ? Time.time + dueIn : 0f;
             // Generous, and only a backstop: nothing may strand him.
-            deliverMax = FlatDistance(transform.position, to) / Speed + 2f;
+            // Paths bend and he turns at corners: twice the straight line.
+            deliverMax = 2f * FlatDistance(transform.position, to) / CarrySpeed + 4f;
             placeLeft = 0f;
             acting?.Set(VillagerActing.Mode.Carry, res, deliverCount);
         }
@@ -2502,6 +2513,7 @@ namespace SeaSick.World
             // work spot, where the other one yields.
             if (dist >= 0.35f && dist < 2f * BodyRadius + 0.15f && SpotHeldByOther(to))
             {
+                stride.Stop();
                 ClearRoute();
                 ResetStall(to, 0f);
                 return !gated;
@@ -2516,6 +2528,8 @@ namespace SeaSick.World
                     float y = WorkerPad.Foot(here, camp.GroundAt(here));
                     if (Mathf.Abs(y - here.y) > 0.02f && y > here.y) { here.y = y; transform.position = here; }
                 }
+                stride.Stop();
+                acting?.Commanded(0f);
                 ClearRoute();
                 ResetStall(to, 0f);
                 return !gated;
@@ -2530,7 +2544,7 @@ namespace SeaSick.World
             // of wherever he is wedged, re-plans, and says why on his sheet
             // (`bodyBlocked` -> `StallReason`); close enough and clear of any
             // wall, the errand counts as reached where he stands.
-            if (TickStall(here, to, dist, dt)) { ClearRoute(); return Reached(gated); }
+            if (TickStall(here, to, dist, RouteLeft(here, to, dist), dt)) { stride.Stop(); ClearRoute(); return Reached(gated); }
             if (escapeLeft > 0f) { StepEscape(here, dt); return false; }
 
             // Where to head THIS frame: the next corner of the route if there
@@ -2552,7 +2566,14 @@ namespace SeaSick.World
             // A player's road (2026-09-27): ×`CampRoads.SpeedMultiplier` on a
             // road cell -- the same rule the route prices and the invisible
             // walker meters (`Outpost.WalkedMetres`).
-            Vector3 step = leg / legLen * Mathf.Min(Speed * CampRoads.SpeedAt(camp, here) * dt, legLen);
+            // **Turn, then walk (2026-10-01, `Stride`).** Kevin: they slid
+            // about and did not turn their bodies. The body turns toward the
+            // leg at a body's rate and moves only along its own forward, at
+            // its walk's own speed (feet planted), easing off and turning on
+            // the spot at a sharp corner, and braking into the stop.
+            float steer = Time.frameCount - passSteerFrame <= 1 ? passSteer : 0f;
+            Vector3 step = stride.Step(transform, leg, Cruise * CampRoads.SpeedAt(camp, here), dist - 0.35f, dt, steer);
+            acting?.Commanded(stride.Speed);
             Vector3 next = here + step;
 
             // **The wall guard (2026-09-24).** Kevin: *"villagers ... walk
@@ -2585,7 +2606,8 @@ namespace SeaSick.World
                     // stand spot laid against the palisade -- is as reached
                     // as it is going to get; one across it is not.
                     if (dist < 1.2f && !CampPath.Crosses(camp, here, to, CampPath.Walker.Hand))
-                    { ClearRoute(); return Reached(gated); }
+                    { stride.Stop(); ClearRoute(); return Reached(gated); }
+                    stride.Stop();
                     Face(leg, dt);
                     return false;
                 }
@@ -2620,7 +2642,8 @@ namespace SeaSick.World
                 routeAge = Mathf.Max(routeAge, RePlanSeconds - 0.5f);
                 slopeStuck += dt;
                 if (dist < SlopeArrive || slopeStuck > SlopeGiveUp)
-                { slopeStuck = 0f; ClearRoute(); return Reached(gated); }
+                { slopeStuck = 0f; stride.Stop(); ClearRoute(); return Reached(gated); }
+                stride.Stop();
                 Face(leg, dt);
                 return false;
             }
@@ -2630,7 +2653,6 @@ namespace SeaSick.World
             // 0.16 m rise at the mill, and the terrain everywhere else).
             next.y = WorkerPad.Foot(next, camp.GroundAt(next));
             transform.position = next;
-            Face(leg, dt);
             return false;
         }
 
@@ -2649,6 +2671,10 @@ namespace SeaSick.World
 
         Vector3 stallFor;
         float stallBest, stallFor_t;
+        /// Which yardstick `stallBest` was measured on (`RouteLeft`).
+        int routePlans, stallRuler = -2;
+        bool stallRebase;
+        float stallLastLeft;
         int stallEscapes;
         float escapeLeft;
         Vector3 escapeDir;
@@ -2659,20 +2685,55 @@ namespace SeaSick.World
         {
             stallFor = to;
             stallBest = dist;
+            stallLastLeft = dist;
             stallFor_t = 0f;
             stallEscapes = 0;
             escapeLeft = 0f;
             stallNote = null;
         }
 
+        /// **Metres left to walk** on the planned route (to its next corner,
+        /// then corner to corner to the target), or the straight line when
+        /// there is no route. What the stall guard measures progress on
+        /// (2026-10-01): Kevin's phone showed "Yara · stuck" -- her route to
+        /// the watchtower went round the camp first, AWAY from it, so the
+        /// straight-line distance did not shrink by a metre in 5 s and the
+        /// guard called a walking woman wedged (three escapes, "stuck").
+        /// At the slower, planted-feet walks (a tired 0.29 m/s covers 1.45 m
+        /// in those 5 s) it fired on nearly every detour.
+        float RouteLeft(Vector3 here, Vector3 to, float dist)
+        {
+            float mx = to.x - routeFor.x, mz = to.z - routeFor.z;
+            bool onRoute = hasRoute && routeAt < route.Count && mx * mx + mz * mz <= 1f;
+            // A new plan (or the straight line instead of one) is a new
+            // yardstick: re-base the best on it, keep the clock running --
+            // a wedged man re-planning still trips the guard in time.
+            int ruler = onRoute ? routePlans : -1;
+            if (ruler != stallRuler) { stallRuler = ruler; stallRebase = true; }
+            if (!onRoute) return dist;
+            float left = FlatDistance(here, route[routeAt]);
+            for (int i = routeAt + 1; i < route.Count; i++) left += FlatDistance(route[i - 1], route[i]);
+            return Mathf.Max(left, dist);
+        }
+
         /// True when the errand should count as reached where he stands.
-        bool TickStall(Vector3 here, Vector3 to, float dist, float dt)
+        /// `left` = metres of route left (`RouteLeft`): progress is walked
+        /// route, not straight-line closing.
+        bool TickStall(Vector3 here, Vector3 to, float dist, float left, float dt)
         {
             float mx = to.x - stallFor.x, mz = to.z - stallFor.z;
-            if (mx * mx + mz * mz > 1f) { ResetStall(to, dist); return false; }
-            if (dist < stallBest - 1f)
+            if (mx * mx + mz * mz > 1f) { ResetStall(to, left); return false; }
+            // A metre, or what a third of his walk covers in the window
+            // (a tired walk: 0.5 m), whichever is less.
+            float need = Mathf.Min(1f, 0.35f * Cruise * StallSeconds);
+            // Re-based on a new yardstick, the progress already made since
+            // the best carries over (a re-plan every second must not move
+            // the goalposts and starve the guard of progress).
+            if (stallRebase) { stallRebase = false; stallBest = left + (stallBest - stallLastLeft); }
+            stallLastLeft = left;
+            if (left < stallBest - need)
             {
-                stallBest = dist;
+                stallBest = left;
                 stallFor_t = 0f;
                 stallEscapes = 0;
                 stallNote = null;
@@ -2696,7 +2757,7 @@ namespace SeaSick.World
 
             // Wedged: step out, then ask for a fresh route.
             stallEscapes++;
-            stallBest = dist;
+            stallBest = left;
             stallNote = "stuck — can't get through to where he's going";
             if (PickEscape(here, to, out escapeDir)) escapeLeft = EscapeSeconds;
             hasRoute = false;
@@ -2740,13 +2801,13 @@ namespace SeaSick.World
         void StepEscape(Vector3 here, float dt)
         {
             escapeLeft -= dt;
-            Vector3 next = here + escapeDir * (Speed * dt);
+            Vector3 next = here + stride.Step(transform, escapeDir, Cruise, 9f, dt);
+            acting?.Commanded(stride.Speed);
             if (CampPath.Obstructs(camp, here, next, stallFor, CampPath.Walker.Hand, out _)
                 || !Walkability.MayStep(camp, Grounded(here), next, Walkability.Feet.Man))
             { escapeLeft = 0f; return; }
             next.y = WorkerPad.Foot(next, camp.GroundAt(next));
             transform.position = next;
-            Face(escapeDir, dt);
         }
 
         // --- routing -----------------------------------------------------------
@@ -2852,6 +2913,7 @@ namespace SeaSick.World
                 routeAge = 0f;
                 routeFor = to;
                 routeAt = 0;
+                routePlans++;
                 // A failed plan leaves `route` empty, which IS the straight
                 // line. Nobody can be stranded by this call.
                 // **A hand, explicitly.** Walls block a hand and gates do
@@ -3131,9 +3193,11 @@ namespace SeaSick.World
         {
             dir.y = 0f;
             if (dir.sqrMagnitude < 0.0001f) return;
-            transform.rotation = Quaternion.Slerp(transform.rotation,
-                Quaternion.LookRotation(dir.normalized, Vector3.up),
-                1f - Mathf.Exp(-8f * dt));
+            // Smoothed, and never faster than a body turns on the spot
+            // (`VillagerGaits.TurnInPlace`): a snap round reads as a glide.
+            Quaternion want = Quaternion.LookRotation(dir.normalized, Vector3.up);
+            Quaternion eased = Quaternion.Slerp(transform.rotation, want, 1f - Mathf.Exp(-8f * dt));
+            transform.rotation = Quaternion.RotateTowards(transform.rotation, eased, VillagerGaits.TurnInPlace * dt);
         }
 
         /// Standing at home: face whatever `ArrangeHands` said to face, with

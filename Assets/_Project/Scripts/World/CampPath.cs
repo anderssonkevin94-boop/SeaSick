@@ -569,14 +569,18 @@ namespace SeaSick.World
             // plans from / to the lane's outside end and walks the lane as
             // its first / last leg -- the lane is the way between the
             // benches, the grid is too coarse to know it.
-            bool laneA = LaneAt(from, 0.6f, out Vector3 exitA);
-            bool laneB = LaneAt(to, 0.5f, out Vector3 exitB);
+            bool laneA = LaneAt(from, 0.6f, out Vector3 exitA, out Vector3 viaA, out bool hasViaA);
+            bool laneB = LaneAt(to, 0.5f, out Vector3 exitB, out Vector3 viaB, out bool hasViaB);
             int a = Nearest(laneA ? exitA : from, who), b = Nearest(laneB ? exitB : to, who);
             if (a < 0 || b < 0) return false;
-            if (laneA) corners.Add(exitA);
+            // Out by the approach first (a stand's lane, `ViaApproach`),
+            // unless he is leaving it for the approach itself.
+            if (laneA && hasViaA && (viaA - to).sqrMagnitude > 0.09f) corners.Add(viaA);
+            if (laneA && (exitA - (hasViaA ? viaA : from)).sqrMagnitude > 0.0001f) corners.Add(exitA);
             if (a == b)
             {
                 if (laneB) corners.Add(exitB);
+                if (laneB && hasViaB && (viaB - from).sqrMagnitude > 0.09f) corners.Add(viaB);
                 corners.Add(to);
                 return true;
             }
@@ -636,6 +640,7 @@ namespace SeaSick.World
             // tolerance and every "am I there" test upstream are about the
             // target, not about the map. Down its lane, if it has one.
             if (laneB) corners.Add(exitB);
+            if (laneB && hasViaB) corners.Add(viaB);
             corners.Add(to);
             return true;
         }

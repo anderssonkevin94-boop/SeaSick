@@ -124,6 +124,18 @@ namespace SeaSick.Ship.Modular
             while(q.Count>0){int a=q.Dequeue();if(a==end)break;foreach(int b in nodes[a].edges)if(prev[b]<0){prev[b]=a;q.Enqueue(b);}}
             if(prev[end]<0)return null;var path=new List<int>();for(int a=end;a!=start;a=prev[a])path.Add(a);path.Reverse();return path;
         }
+        /// **Where `Move` would head this frame** (2026-10-01): the route's
+        /// next node, or the target -- without moving him or touching the
+        /// route, so the walker can turn his body to it first (`Stride`).
+        public Vector3 Peek(Transform hand,Vector3 target)
+        {
+            var here=hand.localPosition;
+            if(!routes.TryGetValue(hand.GetInstanceID(),out var r)||(r.target-target).sqrMagnitude>.02f||(r.last-here).sqrMagnitude>.0025f||r.nodes==null)
+                return target;
+            if(r.at>=r.nodes.Count)return target;
+            return nodes[r.nodes[r.at]].p;
+        }
+
         public bool Move(Transform hand,Vector3 target,float distance)
         {
             int id=hand.GetInstanceID();

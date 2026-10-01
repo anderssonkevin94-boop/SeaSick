@@ -92,34 +92,78 @@ namespace SeaSick.World
         public static readonly int WalkRateId = Animator.StringToHash("WalkRate");
 
         /// A gait state's ground speed at playback rate 1, m/s at game size
-        /// (clips.json `gait.speed_m_s_at_1x_game`): play it at speed / this
+        /// (measured off the clips, `VillagerGaits`): play it at speed / this
         /// and the planted foot does not skate.
         public static float GaitSpeed(int state)
         {
-            if (state == WalkBriskId) return 0.84f;
-            if (state == WalkTiredId) return 0.23f;
-            if (state == WalkDeckId) return 0.33f;
-            if (state == RunId) return 2.06f;
-            if (state == RunScaredId) return 2.25f;
-            if (state == SickWalkId) return 0.21f;
-            if (state == GangwayId) return 0.45f;
-            return 0.58f;   // Walk
+            if (state == WalkBriskId) return VillagerGaits.BriskClip;
+            if (state == WalkTiredId) return VillagerGaits.TiredClip;
+            if (state == WalkDeckId) return VillagerGaits.DeckClip;
+            if (state == RunId) return VillagerGaits.RunClip;
+            if (state == RunScaredId) return VillagerGaits.ScaredClip;
+            if (state == SickWalkId) return VillagerGaits.SickClip;
+            if (state == GangwayId) return VillagerGaits.GangwayClip;
+            if (state == CarryId) return VillagerGaits.CarryClip;
+            if (state == HuntWalkId) return VillagerGaits.StalkClip;
+            return VillagerGaits.WalkClip;   // Walk
         }
 
-        /// The playback-rate clamp: a body moving far faster than a gait's
-        /// own speed skates a little rather than flickering its legs.
-        public static float GaitRateMin = 0.5f, GaitRateMax = 2.2f;
+        /// **The speed a gait state is walked at** (2026-10-01): its clip's
+        /// own ground speed times the rate it is shown at -- the body moves
+        /// at THIS, so the foot stays planted.
+        public static float GaitCruise(int state)
+        {
+            if (state == GangwayId) return GaitSpeed(state) * VillagerGaits.GangwayRate;
+            return VillagerGaits.Cruise(GaitSpeed(state));
+        }
+
+        /// Playback rate for a body moving at `speed`: speed / the clip's
+        /// own speed, so the stance foot moves with the ground. Clamped to
+        /// `VillagerGaits.RateMin..RateMax` (the start/stop ramp below, a
+        /// road on top).
         public static float GaitRate(int state, float speed)
-            => Mathf.Clamp(speed / GaitSpeed(state), GaitRateMin, GaitRateMax);
+            => Mathf.Clamp(speed / GaitSpeed(state), VillagerGaits.RateMin, VillagerGaits.RateMax);
+
+        static readonly int CarryId = Animator.StringToHash("Carry"), HuntWalkId = Animator.StringToHash("HuntWalk");
 
         int locoPlaying;
+
+        // **The walker's own speed** (2026-10-01): whoever moves the body
+        // (`CampWorker.Walk`) says how fast, every frame it steps. The rate
+        // follows that rather than a smoothed transform velocity, which
+        // lagged a start and a stop by a quarter second -- a skate at each.
+        float cmdSpeed;
+        int cmdFrame = -10;
+        public void Commanded(float speed) { cmdSpeed = speed; cmdFrame = Time.frameCount; }
+        bool HasCommand => Time.frameCount - cmdFrame <= 1;
+        float GroundSpeed => HasCommand ? cmdSpeed : Vector3.ProjectOnPlane(velocity, transform.up).magnitude;
+
+        /// The state his walk shows right now (Carry/HuntWalk when that clip
+        /// owns the body, else the `WalkGait` walk).
+        int GaitState()
+        {
+            Mode m = Resolve(Current);
+            if (m == Mode.Carry && UsesClip(Mode.Carry)) return CarryId;
+            if (m == Mode.HuntWalk && UsesClip(Mode.HuntWalk)) return HuntWalkId;
+            int want = WalkGait == Gait.Errand ? WalkBriskId : WalkGait == Gait.Tired ? WalkTiredId
+                : WalkGait == Gait.Run ? RunId : WalkGait == Gait.Scared ? RunScaredId : WalkId;
+            Bind();
+            if (anim == null || !anim.HasState(0, want)) want = WalkId;
+            return want;
+        }
+
+        /// **How fast this body walks right now**, m/s: the gait it shows,
+        /// at the speed that keeps its feet planted (`GaitCruise`).
+        public float CruiseSpeed() => GaitCruise(GaitState());
 
         /// Idle or the `WalkGait` walk, at the rate his speed asks for.
         void DriveGait()
         {
             if (anim == null || !anim.isActiveAndEnabled || !hasLocomotion) return;
-            float v = Vector3.ProjectOnPlane(velocity, transform.up).magnitude;
-            bool moving = locoPlaying != 0 && locoPlaying != IdleId ? v > 0.18f : v > 0.3f;
+            float v = GroundSpeed;
+            bool walking = locoPlaying != 0 && locoPlaying != IdleId;
+            bool moving = HasCommand ? (walking ? v > 0.02f : v > 0.05f)
+                : (walking ? v > 0.18f : v > 0.3f);
             int want = IdleId;
             if (moving)
             {
@@ -464,13 +508,6 @@ namespace SeaSick.World
         static readonly int WalkId = Animator.StringToHash("Walk");
         /// Cross-fade into and out of a clip, seconds.
         public static float ClipFadeSeconds = 0.2f;
-        /// `Carry` walks in place: its rate follows his ground speed, this
-        /// fast at `CarryRateAtSpeed` m/s, and stands still when he does.
-        const float CarryRateMax = 1.6f, CarryRateAtSpeed = 2.6f;
-        /// `HuntWalk` is a slow stalk (0.45 m a 2.2 s loop at game size):
-        /// its rate follows his speed too, capped so a hurried stalk does not
-        /// scurry.
-        const float StalkStrideSpeed = 0.2f, StalkRateMax = 2.2f;
 
         // **The one-shots' prop timing** (clips.json, 30 fps, game metres
         // from his root: x right, y up, z forward).
@@ -532,14 +569,14 @@ namespace SeaSick.World
         {
             if (anim != null && hasClipRate)
             {
-                float v = Vector3.ProjectOnPlane(velocity, transform.up).magnitude;
+                // Carry and HuntWalk walk in place like the gaits: the rate
+                // is his speed over the clip's own (feet planted), and a
+                // carrier standing still stands still.
+                float v = GroundSpeed;
                 if (shown == Mode.Carry)
-                {
-                    float rate = v < 0.2f ? 0f : Mathf.Max(0.35f, Mathf.Clamp01(v / CarryRateAtSpeed) * CarryRateMax);
-                    anim.SetFloat(ClipRateId, rate);
-                }
+                    anim.SetFloat(ClipRateId, v < 0.03f ? 0f : GaitRate(CarryId, v));
                 else if (shown == Mode.HuntWalk)
-                    anim.SetFloat(ClipRateId, v < 0.1f ? 0.5f : Mathf.Clamp(v / StalkStrideSpeed, 0.6f, StalkRateMax));
+                    anim.SetFloat(ClipRateId, v < 0.03f ? 0.5f : GaitRate(HuntWalkId, v));
             }
             var tool = tools[(int)shown];
             var hand = ToolHand;

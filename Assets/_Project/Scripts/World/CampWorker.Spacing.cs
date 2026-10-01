@@ -31,6 +31,8 @@ namespace SeaSick.World
         public static float PassSpeed = 1.8f;
         /// How far ahead a walker looks for somebody to pass.
         public static float PassLook = 2.5f;
+        /// Most a walker turns off his line to pass somebody, degrees.
+        public static float PassSteerDeg = 35f;
 
         static int spacingFrame = -1;
         static readonly System.Collections.Generic.List<CampWorker> spacing = new System.Collections.Generic.List<CampWorker>();
@@ -81,7 +83,8 @@ namespace SeaSick.World
                 Vector3 p = w.transform.position;
                 // Moved by his own feet since the last pass (the last pass's
                 // nudges are already in `spacingLast`).
-                w.Moving = w.spacingSeen && FlatDistance(p, w.spacingLast) > 0.3f * dt;
+                // 0.1 m/s: the slowest walk (tired, 0.29) still counts.
+                w.Moving = w.spacingSeen && FlatDistance(p, w.spacingLast) > 0.1f * dt;
                 if (w.SpacingRole() != 0) spacing.Add(w);
             }
 
@@ -148,7 +151,14 @@ namespace SeaSick.World
             Vector3 right = new Vector3(fw.z, 0f, -fw.x);
             // Already off to one side of him: keep that side.
             float side = Vector3.Dot(right, toOther) > 0.15f ? -1f : 1f;
-            Nudge(right * (side * PassSpeed * dt * (1f - d / PassLook)));
+            float k = 1f - d / PassLook;
+            // **Steer past, mostly (2026-10-01):** the walk turns its body
+            // up to `PassSteerDeg` off the line (next frame's `Stride`), and
+            // only a third of the old sideways shove is left for a body
+            // already close -- a sideways slide is a skate.
+            passSteer = side * PassSteerDeg * k;
+            passSteerFrame = Time.frameCount;
+            Nudge(right * (side * PassSpeed * 0.33f * dt * k * k));
         }
 
         /// Move this body by a small flat offset if that ground is his to
