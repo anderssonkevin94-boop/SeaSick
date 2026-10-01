@@ -2936,7 +2936,6 @@ namespace SeaSick.World
         /// The tower's own ladder climb: separate from `climb` (the cliff
         /// chains `Walk` starts on its own), so `Walk` never ticks it.
         readonly LadderClimb towerClimb = new LadderClimb();
-        float lookClock = -1f;
 
         /// Is this man on a watchtower (on its deck, or on its ladder)?
         public bool OnTower => tower != TowerState.Ground;
@@ -3081,17 +3080,17 @@ namespace SeaSick.World
                     // horizon, pointing out a sail. Over the top of the
                     // `Set(None)` at the head of this method, same frame.
                     acting?.Set(VillagerActing.Mode.Lookout);
-                    // On watch: facing out, away from the camp, the gaze
-                    // drifting either side of it -- two slow sines, a
-                    // different start per man, so it reads as looking, not
-                    // as a turret.
-                    Vector3 outward = deck - camp.CampCentre;
-                    outward.y = 0f;
-                    if (outward.sqrMagnitude < 0.01f) outward = towerOn.transform.forward;
-                    if (lookClock < 0f) lookClock = Random.value * 60f;
-                    lookClock += dt;
-                    float sweep = 50f * Mathf.Sin(lookClock * 0.28f) + 15f * Mathf.Sin(lookClock * 0.9f);
-                    Face(Quaternion.Euler(0f, sweep, 0f) * outward.normalized, dt);
+                    // On watch in his back corner, facing out over the
+                    // corner post along the deck diagonal. The clip does
+                    // the scanning (its head and shoulders sweep the
+                    // horizon), so the body holds still: no sweep here.
+                    if (!Outpost.LookoutCorner(towerOn, out _, out _, out Vector3 outward))
+                    {
+                        outward = deck - camp.CampCentre;
+                        outward.y = 0f;
+                        if (outward.sqrMagnitude < 0.01f) outward = towerOn.transform.forward;
+                    }
+                    Face(outward, dt);
                     return true;
                 }
             }

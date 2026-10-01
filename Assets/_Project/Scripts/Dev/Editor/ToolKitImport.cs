@@ -53,6 +53,7 @@ namespace SeaSick.Dev
             ("StirPaddle", 0.060f, -0.060f, 0.755f, -0.021f, 0.021f),
             ("SpearStone", 0.052f, -0.650f, 1.405f, -0.030f, 0.030f),
             ("SpearIron",  0.042f, -0.650f, 1.450f, -0.030f, 0.030f),
+            ("Pickaxe",    0.032f, -0.050f, 0.645f, -0.175f, 0.230f),
         };
 
         [MenuItem("SeaSick/Art/Import worker tools (Astra v1)")]

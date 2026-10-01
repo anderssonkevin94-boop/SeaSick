@@ -1257,7 +1257,8 @@ namespace SeaSick.World
             if (m == Mode.Mine && !UsesClip(Mode.Mine)) m = Mode.Hammer;
             string kit = m == Mode.Hammer ? ToolKit.Hammer : m == Mode.Chop ? ToolKit.Axe
                 : m == Mode.Saw ? ToolKit.Saw : m == Mode.Hoe ? ToolKit.Hoe
-                : m == Mode.Stir ? ToolKit.StirPaddle : null;
+                : m == Mode.Stir ? ToolKit.StirPaddle
+                : m == Mode.Mine ? ToolKit.Pickaxe : null;
             if (kit != null && ToolKit.Attach(kit, tr, true))
             {
                 // The `Saw` clip holds the saw like a real handsaw, blade
@@ -1284,8 +1285,8 @@ namespace SeaSick.World
                 }
                 case Mode.Mine:
                 {
-                    // The pick (no mesh yet): 66 cm haft, a 46 cm head
-                    // across its top, point 23 cm out on +Z.
+                    // Fallback if the pickaxe mesh is missing: 66 cm haft, a
+                    // 46 cm head across its top, point 23 cm out on +Z.
                     Box(tr, wood, new Vector3(0.04f, 0.66f, 0.04f), new Vector3(0f, 0.28f, 0f));
                     Box(tr, iron, new Vector3(0.05f, 0.05f, 0.46f), new Vector3(0f, 0.58f, 0f));
                     break;

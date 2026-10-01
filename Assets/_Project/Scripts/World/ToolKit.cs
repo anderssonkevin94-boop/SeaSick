@@ -25,7 +25,17 @@ namespace SeaSick.World
     public static class ToolKit
     {
         public const string Axe = "Axe", Hammer = "Hammer", Saw = "Saw", Hoe = "Hoe",
-            StirPaddle = "StirPaddle", SpearStone = "SpearStone", SpearIron = "SpearIron";
+            StirPaddle = "StirPaddle", SpearStone = "SpearStone", SpearIron = "SpearIron",
+            // Astra's pickaxe v1 (2026-10-01, `art-staging/pickaxe-v1`), for
+            // the v15 `Mine` clip. Its `Tip` empty does not survive
+            // `KitAxisFix` (every node is reset to identity): the striking
+            // point is `PickaxeTip` below.
+            Pickaxe = "Pickaxe";
+
+        /// The pickaxe's striking point in the tool frame (metres): origin
+        /// mid-fist, +Y up the haft, +Z the point arm. 0.622 m from the fist,
+        /// 2 mm short of the stand-in the `Mine` clip was authored with.
+        public static readonly Vector3 PickaxeTip = new Vector3(0f, 0.578f, 0.23f);
 
         const string Dir = "Kits/Tools/";
 

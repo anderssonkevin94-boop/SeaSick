@@ -1680,7 +1680,8 @@ namespace SeaSick.World
                     && TowerMarks(post, out _, out _, out Vector3 deck))
                 {
                     spot = deck;
-                    lookAt = deck + (deck - CampCentre);
+                    lookAt = LookoutCorner(post, out _, out _, out Vector3 outward)
+                        ? deck + outward : deck + (deck - CampCentre);
                 }
 
                 a.transform.position = spot;

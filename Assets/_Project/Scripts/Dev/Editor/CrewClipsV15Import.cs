@@ -12,7 +12,7 @@ namespace SeaSick.Dev
     /// **The v15 deckhand's authored work clips (2026-10-01)**, from the asset
     /// agent's `deckhand-v15-anims.fbx` (seasick_assets, crew-meshy-v15/anims).
     ///
-    /// Only five of its 35 takes are imported -- `Saw` (level 1 lumber mill,
+    /// Only five of its 36 takes are imported -- `Saw` (level 1 lumber mill,
     /// lowered bench), `Chop` (a tree), `Mine` (a rock), `Carry` (a load held
     /// out on both arms, walking in place) and `Lookout` (watchtower) -- and
     /// only the clips: the FBX's mesh is never used, the game keeps

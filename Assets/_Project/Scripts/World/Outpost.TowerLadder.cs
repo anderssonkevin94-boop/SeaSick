@@ -27,9 +27,38 @@ namespace SeaSick.World
         /// climbs (the climb covers the last of it).
         const float TowerFootOut = 0.7f;
 
+        /// **The lookout's corner (2026-10-01, the reworked v15 `Lookout`
+        /// clip):** he stands in a BACK corner of the deck, `LookoutCornerOut`
+        /// m either way from `Lookout_Anchor` in the tower's own frame (+Z =
+        /// the ladder side): back = away from the ladder, and `LookoutCornerSide`
+        /// picks the right-hand back corner (the ladder is central, so either
+        /// side clears it equally). The old stand point (anchor + 0.25 m) was
+        /// inside the gun carriage; `WatchtowerGun` now steps its pivot off
+        /// this corner and keeps a blind wedge over him.
+        public const float LookoutCornerOut = 0.44f;
+        public const float LookoutCornerSide = 1f;
+
+        /// The deck's centre (`Lookout_Anchor`), the lookout's corner and the
+        /// flat unit direction from the centre out over that corner (he faces
+        /// it: over the corner post). False for a model without the marks.
+        /// The frame comes from the marks themselves (ladder top -> +Z), so
+        /// the tower's yaw, wall-tower squaring and Move/Turn come along.
+        public static bool LookoutCorner(Building b, out Vector3 centre, out Vector3 corner, out Vector3 outward)
+        {
+            centre = corner = outward = Vector3.zero;
+            if (!TowerMarks(b, out _, out _, out corner)) return false;
+            var m = towerMarks[b.GetInstanceID()];
+            centre = m.anchor.position;
+            outward = corner - centre;
+            outward.y = 0f;
+            if (outward.sqrMagnitude < 1e-6f) return false;
+            outward.Normalize();
+            return true;
+        }
+
         /// **The tower's three marks in world space**, or false for a model
-        /// without them. `stand` is on the deck, a little toward the far side
-        /// from the ladder hole so he is not stood in it.
+        /// without them. `stand` is the lookout's back corner of the deck
+        /// (`LookoutCorner`), clear of the ladder hole and the gun.
         public static bool TowerMarks(Building b, out Vector3 bottom, out Vector3 top, out Vector3 stand)
         {
             bottom = top = stand = Vector3.zero;
@@ -53,9 +82,14 @@ namespace SeaSick.World
             bottom = m.bottom.position;
             top = m.top.position;
             stand = m.anchor.position;
-            Vector3 away = stand - top;
-            away.y = 0f;
-            if (away.sqrMagnitude > 1e-4f) stand += away.normalized * 0.25f;
+            // The tower's own +Z (anchor -> ladder) and +X, flat.
+            Vector3 front = top - stand;
+            front.y = 0f;
+            if (front.sqrMagnitude < 1e-4f) front = b.transform.forward;
+            front.y = 0f;
+            front.Normalize();
+            Vector3 right = Vector3.Cross(Vector3.up, front);
+            stand += (right * LookoutCornerSide - front) * LookoutCornerOut;
             return true;
         }
 
