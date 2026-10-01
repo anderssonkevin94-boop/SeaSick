@@ -140,6 +140,10 @@ namespace SeaSick.Dev
                 var a=sm.AddState("Idle");a.motion=idle;var b=sm.AddState("Walk");b.motion=walk;sm.defaultState=a;
                 var to=b.AddTransition(a);to.hasExitTime=false;to.duration=.15f;to.AddCondition(AnimatorConditionMode.Less,.18f,"Speed");
                 to=a.AddTransition(b);to.hasExitTime=false;to.duration=.1f;to.AddCondition(AnimatorConditionMode.Greater,.30f,"Speed");
+                // The v15 work clips (Saw, Chop, Mine, Carry, Lookout) live in
+                // this controller too; rebuilding it must not drop them.
+                if(CrewClipsV15Import.Clip("Saw")!=null)CrewClipsV15Import.AddStates(controller,null);
+                else log.Add("Crew: v15 work clips not imported yet -- run CrewClipsV15Import.");
                 anim.runtimeAnimatorController=controller;anim.applyRootMotion=false;
                 anim.cullingMode=AnimatorCullingMode.AlwaysAnimate;
                 var agent=root.GetComponent<Crew.CrewAgent>();var so=new SerializedObject(agent);

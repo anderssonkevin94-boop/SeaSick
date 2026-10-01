@@ -307,8 +307,8 @@ namespace SeaSick.Dev
                 int all = Tris(root, _ => true);
                 int empty = Tris(root, t => !IsStock(t) && !IsBenchVariant(t));
                 int full = Tris(root, t => !IsBenchVariant(t) || Under(t, "Bench_Loaded"));
-                log.AppendLine($"tris: empty {empty} (want 1706), full+loaded {full} (want 2238), all variants {all} (want 2434)"
-                    + (empty != 1706 || full != 2238 || all != 2434 ? "  !! MISMATCH" : ""));
+                log.AppendLine($"tris: empty {empty} (want 1706), full+loaded {full} (want 2238), all variants {all} (want 2350: the 2026-10-01 low bench dropped the mallet and wedge)"
+                    + (empty != 1706 || full != 2238 || all != 2350 ? "  !! MISMATCH" : ""));
 
                 Pad(root, log);
 

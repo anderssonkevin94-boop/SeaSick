@@ -109,9 +109,8 @@ namespace SeaSick.World
         /// Same shape as `claimedTree`/`claimAt` above but the claim lives at
         /// the SITE (`Outpost.ClaimClearing`) rather than on the open
         /// island, and there is no index to hand back -- `clearing` is the
-        /// sentinel instead. `clearIsRock` picks the swing; there is no
-        /// separate pick/strike animation yet (`VillagerActing.Mode` has
-        /// none), so both trees and rock get the axe.
+        /// sentinel instead. `clearIsRock` picks the swing: the axe (`Chop`)
+        /// for a tree, the pick (`Mine`, the v15 clip, 2026-10-01) for rock.
         bool clearing;
         Vector3 clearAt;
         /// A rock on a plot is a kit deposit now (2-4 m across,
@@ -892,7 +891,7 @@ namespace SeaSick.World
                     phase = Phase.Working;
                     wait = SwingSeconds * Random.Range(0.85f, 1.35f);
                     clearFor = 0f;
-                    acting?.Set(clearing ? VillagerActing.Mode.Chop
+                    acting?.Set(clearing ? (clearIsRock ? VillagerActing.Mode.Mine : VillagerActing.Mode.Chop)
                         : raising ? VillagerActing.Mode.Hammer : ModeFor(WhatFor(r)));
                     return;
 
@@ -2224,9 +2223,9 @@ namespace SeaSick.World
         /// always looked.
         static int CarryCount(OutpostHand r) => r != null && r.Hauling ? Mathf.Max(1, r.haulCount) : 1;
 
-        /// The swing that suits the material. An axe for wood, a pick-like
-        /// hammer for the things that come out of rock, a hoe for what is
-        /// picked off the ground.
+        /// The swing that suits the material. An axe for wood, the pick
+        /// (`Mine`, 2026-10-01: the v15 clip, was a hammer) for the things
+        /// that come out of rock, a hoe for what is picked off the ground.
         static VillagerActing.Mode ModeFor(string resource)
         {
             if (string.IsNullOrEmpty(resource)) return VillagerActing.Mode.Chop;
@@ -2234,7 +2233,7 @@ namespace SeaSick.World
                 return VillagerActing.Mode.Chop;
             if (resource == Res.Spice || resource == Res.Food)
                 return VillagerActing.Mode.Hoe;
-            return VillagerActing.Mode.Hammer;      // stone, ore, anything mined
+            return VillagerActing.Mode.Mine;        // stone, ore, anything mined
         }
 
         /// The trade, from the position the building offers. Keyed off
@@ -3027,6 +3026,10 @@ namespace SeaSick.World
                     // the camp's bow and a raider in range he stops sweeping
                     // the horizon and looses at him (`CampWorker.Archery`).
                     if (TickTowerArcher(r, deck, dt)) return true;
+                    // The v15 `Lookout` clip (2026-10-01): scanning the
+                    // horizon, pointing out a sail. Over the top of the
+                    // `Set(None)` at the head of this method, same frame.
+                    acting?.Set(VillagerActing.Mode.Lookout);
                     // On watch: facing out, away from the camp, the gaze
                     // drifting either side of it -- two slow sines, a
                     // different start per man, so it reads as looking, not

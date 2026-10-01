@@ -40,7 +40,10 @@ namespace SeaSick.World
         /// `Bend` (2026-09-24): stooping over a stack -- picking a load up
         /// off a store pile or a station's bay/rack, or setting one down.
         /// Appended last so nothing that stored a mode by number moves.
-        public enum Mode { None, Chop, Saw, Hammer, Hoe, Stir, Carry, Dangle, Land, Bend }
+        ///
+        /// `Mine` and `Lookout` (2026-10-01) arrived with the v15 clips:
+        /// appended for the same reason.
+        public enum Mode { None, Chop, Saw, Hammer, Hoe, Stir, Carry, Dangle, Land, Bend, Mine, Lookout }
 
         public Mode Current { get; private set; }
 
@@ -161,7 +164,7 @@ namespace SeaSick.World
         /// by mode index so there is no dictionary and no per-frame lookup.
         /// One slot per `Mode`. They hang off THIS object, not a bone, and
         /// are placed in world space every frame (`PoseTool`).
-        readonly GameObject[] tools = new GameObject[10];
+        readonly GameObject[] tools = new GameObject[12];
         GameObject carryProp;
         string carryPropFor;
 
@@ -183,6 +186,29 @@ namespace SeaSick.World
             clock += dt;
             modeClock += dt;
             TrackVelocity(dt);
+
+            // **A mode with an authored clip is the Animator's** (v15, see
+            // `UsesClip`): no bone is bent, the state is cross-faded in
+            // straight away and the props ride the bones.
+            if (UsesClip(Current) || UsesClip(shown))
+            {
+                if (shown != Current || shownLoad != load || shownLoadCount != loadCount)
+                {
+                    shown = Current;
+                    shownLoad = load;
+                    shownLoadCount = loadCount;
+                    weight = 0f;
+                    landTimer = 0f;
+                    modeClock = 0f;
+                    RefreshProps();
+                }
+            }
+            PlayClip(UsesClip(shown) ? shown : Mode.None);
+            if (UsesClip(shown))
+            {
+                PlaceClipProps();
+                return;
+            }
 
             if (shown != Current)
             {
@@ -238,6 +264,9 @@ namespace SeaSick.World
             for (int i = 0; i < tools.Length; i++)
                 if (tools[i] != null) tools[i].SetActive(false);
             if (carryProp != null) carryProp.SetActive(false);
+            // A work clip has no transition out of its state: hand the body
+            // back to Idle/Walk, or it saws on with nobody to stop it.
+            PlayClip(Mode.None);
         }
 
         void OnDestroy()
@@ -297,6 +326,99 @@ namespace SeaSick.World
             }
 
             bound = armL != null || armR != null || chest != null || hips != null;
+
+            spine = Bone(all, "spine", "spine", "chest");
+            anim = GetComponentInChildren<Animator>(true);
+            if (anim != null && anim.runtimeAnimatorController != null)
+            {
+                for (int i = 0; i < ClipModes.Length; i++)
+                {
+                    int h = Animator.StringToHash(ClipModes[i].ToString());
+                    clipHash[(int)ClipModes[i]] = anim.HasState(0, h) ? h : 0;
+                }
+                foreach (var p in anim.parameters)
+                    if (p.nameHash == ClipRateId && p.type == AnimatorControllerParameterType.Float) hasClipRate = true;
+                hasLocomotion = anim.HasState(0, IdleId) && anim.HasState(0, WalkId);
+            }
+        }
+
+        // --- authored clips (v15 deckhand, 2026-10-01) -------------------------
+        //
+        // `Chop`, `Saw`, `Mine`, `Carry` and `Lookout` are animation clips
+        // (`CrewClipsV15Import` adds them to `CrewAnimator` as states of the
+        // same names), authored against the real tree, mill bench, rock and
+        // load. A body whose controller has the state plays it and nothing
+        // here bends a bone; one without (a different rig) falls back to the
+        // code poses below (`Mine` as the hammer swing, `Lookout` as none).
+
+        static readonly Mode[] ClipModes = { Mode.Chop, Mode.Saw, Mode.Mine, Mode.Carry, Mode.Lookout };
+        static readonly int ClipRateId = Animator.StringToHash("ClipRate");
+        static readonly int IdleId = Animator.StringToHash("Idle");
+        static readonly int WalkId = Animator.StringToHash("Walk");
+        /// Cross-fade into and out of a clip, seconds.
+        public static float ClipFadeSeconds = 0.2f;
+        /// `Carry` walks in place: its rate follows his ground speed, this
+        /// fast at `CarryRateAtSpeed` m/s, and stands still when he does.
+        const float CarryRateMax = 1.6f, CarryRateAtSpeed = 2.6f;
+
+        // **Where the props ride**, in the BONE's own local units, read off
+        // the v15 rest pose (`CrewClipsV15Import` re-measures and logs them).
+        // Placed with TransformPoint every frame from a prop parented to the
+        // BODY, never parented to the bone: the bones carry the rig's x100
+        // unit scale, and a bone-parented prop with a local offset is how the
+        // tools exploded before (memory: astra-rig-scale-trap).
+        //
+        // The tool frame (origin mid-fist, +Y up the haft, +Z the working
+        // face) on the bone named `hand.L`, his right hand.
+        public static readonly Vector3 ToolGripLocal = new Vector3(0f, 0.00101768528f, -0.000174226137f);
+        public static readonly Quaternion ToolGripRot = new Quaternion(0.5f, 0.5f, 0.5f, -0.5f);
+        // The load's bottom centre on the `spine` bone, body axes (the clip
+        // keeps the fists on its underside on every frame).
+        public static readonly Vector3 CarrySocketLocal = new Vector3(0f, 0.00105134305f, 0.0025f);
+
+        Animator anim;
+        Transform spine;
+        readonly int[] clipHash = new int[12];
+        int playing;                 // the clip state cross-faded to, 0 = locomotion
+        bool hasClipRate, hasLocomotion;
+
+        bool UsesClip(Mode m)
+        {
+            int i = (int)m;
+            if (i <= 0 || i >= clipHash.Length) return false;
+            Bind();
+            return clipHash[i] != 0 && anim != null && anim.isActiveAndEnabled;
+        }
+
+        void PlayClip(Mode m)
+        {
+            int want = m == Mode.None ? 0 : clipHash[(int)m];
+            if (want == playing) return;
+            playing = want;
+            if (anim == null || !anim.isActiveAndEnabled) return;
+            if (want != 0) anim.CrossFadeInFixedTime(want, ClipFadeSeconds, 0);
+            else if (hasLocomotion)
+                anim.CrossFadeInFixedTime(velocity.magnitude > 0.3f ? WalkId : IdleId, ClipFadeSeconds, 0);
+            if (want == 0 && hasClipRate) anim.SetFloat(ClipRateId, 1f);
+        }
+
+        /// The hand holding the tool (the wrist bone under `ToolArm`).
+        Transform ToolHand => ToolArm == armL ? handL : ToolArm == armR ? handR : null;
+
+        void PlaceClipProps()
+        {
+            if (shown == Mode.Carry && anim != null && hasClipRate)
+            {
+                float v = Vector3.ProjectOnPlane(velocity, transform.up).magnitude;
+                float rate = v < 0.2f ? 0f : Mathf.Max(0.35f, Mathf.Clamp01(v / CarryRateAtSpeed) * CarryRateMax);
+                anim.SetFloat(ClipRateId, rate);
+            }
+            var tool = tools[(int)shown];
+            var hand = ToolHand;
+            if (tool != null && tool.activeSelf && hand != null)
+                tool.transform.SetPositionAndRotation(hand.TransformPoint(ToolGripLocal), hand.rotation * ToolGripRot);
+            if (shown == Mode.Carry && carryProp != null && spine != null)
+                carryProp.transform.SetPositionAndRotation(spine.TransformPoint(CarrySocketLocal), spine.rotation);
         }
 
         static Transform Bone(Transform[] all, string exact, params string[] contains)
@@ -416,6 +538,7 @@ namespace SeaSick.World
                 }
 
                 case Mode.Hammer:
+                case Mode.Mine:      // no clip on this rig: the hammer swing
                 {
                     // One arm swings; the other holds the work on the anvil,
                     // which is what makes it read as a smith rather than a
@@ -643,7 +766,8 @@ namespace SeaSick.World
         {
             switch (m)
             {
-                case Mode.Hammer: return new Vector3(0.06f, 0.88f, 0.55f); // anvil face
+                case Mode.Hammer:
+                case Mode.Mine:   return new Vector3(0.06f, 0.88f, 0.55f); // anvil face
                 case Mode.Chop:   return new Vector3(0.05f, 0.40f, 0.72f); // log on the block
                 case Mode.Saw:    return new Vector3(0.08f, 0.74f, 0.55f); // top of the log on the horse
                 case Mode.Hoe:    return new Vector3(0.05f, 0.02f, 0.95f); // the ground
@@ -746,6 +870,7 @@ namespace SeaSick.World
             switch (m)
             {
                 case Mode.Hammer:
+                case Mode.Mine:
                     // Short wrist-and-elbow blow from above the shoulder,
                     // face flat onto the anvil; the other hand holds the work
                     // on the anvil beside it.
@@ -882,7 +1007,7 @@ namespace SeaSick.World
 
         static bool HasTool(Mode m) =>
             m == Mode.Chop || m == Mode.Saw || m == Mode.Hammer
-            || m == Mode.Hoe || m == Mode.Stir;
+            || m == Mode.Hoe || m == Mode.Stir || m == Mode.Mine;
 
         /// Highest visible count in a bundle. **Kevin, 2026-09-23:** *"if
         /// they carry 3 logs, you see three logs"* — but a haul can be a
@@ -894,7 +1019,10 @@ namespace SeaSick.World
         void EnsureCarry()
         {
             int n = Mathf.Clamp(shownLoadCount, 1, MaxVisibleCarry);
-            string key = shownLoad + "x" + n;
+            // Held out on both arms (the `Carry` clip) or shouldered (the
+            // code pose): different stacks, so a different key.
+            bool held = UsesClip(Mode.Carry);
+            string key = shownLoad + "x" + n + (held ? "h" : "");
             if (carryProp != null && carryPropFor == key) return;
             if (carryProp != null) Destroy(carryProp);
             carryPropFor = key;
@@ -911,16 +1039,36 @@ namespace SeaSick.World
             root.transform.localPosition = new Vector3(0.16f * side, 1.42f, 0.10f);
             root.transform.localRotation = Quaternion.Euler(0f, 6f * side, 0f);
 
-            if (what == Res.Timber)
+            // **Held (2026-10-01):** the root is the clip's carry socket
+            // (`PlaceClipProps` puts it on the spine every frame) and the
+            // load's BOTTOM centre sits on it, so each stack is lifted by its
+            // own half-height. Loads stay within 0.37 m front to back (the
+            // depth that clears his chest), so logs lie ACROSS his arms.
+            Transform stack = root.transform;
+            if (held)
+            {
+                stack = new GameObject("Stack").transform;
+                stack.SetParent(root.transform, false);
+                float lift = what == Res.Timber ? 0f
+                    : what == Res.Boards || what == Res.FineBoards ? 0.02f
+                    : what == Res.Stone ? 0.10f
+                    : what == Res.Brick ? 0.045f
+                    : 0.05f;
+                stack.localPosition = new Vector3(0f, lift, 0f);
+            }
+
+            if (what == Res.Timber && held)
+                BuildHeldLogs(stack, n);
+            else if (what == Res.Timber)
                 BuildLogs(root.transform, n);
             else if (what == Res.Boards || what == Res.FineBoards)
-                BuildPlanks(root.transform, n, what == Res.FineBoards);
+                BuildPlanks(stack, n, what == Res.FineBoards);
             else if (what == Res.Stone)
-                BuildStones(root.transform, n);
+                BuildStones(stack, n);
             else if (what == Res.Brick)
-                BuildBricks(root.transform, n);
+                BuildBricks(stack, n);
             else
-                BuildSacks(root.transform, n, what);
+                BuildSacks(stack, n, what);
 
             carryProp = root;
         }
@@ -949,6 +1097,26 @@ namespace SeaSick.World
                 log.transform.localPosition = new Vector3(x, y, z);
                 log.transform.localRotation =
                     Quaternion.Euler(90f, 0f, (i % 2 == 0 ? 1f : -1f) * (3f + i));
+            }
+        }
+
+        /// Logs held out on both arms (the `Carry` clip): lying across them
+        /// (long axis X), two deep and stacked up, bottom on the socket.
+        static void BuildHeldLogs(Transform root, int n)
+        {
+            var mat = Mat("log", Res.Colour(Res.Timber));
+            const float r = 0.08f, row = 0.15f;
+            for (int i = 0; i < n; i++)
+            {
+                int layer = i / 2;
+                bool pair = n - layer * 2 >= 2;
+                float z = pair ? ((i % 2) - 0.5f) * 0.16f : 0f;
+                var at = new Vector3(0.02f * ((i % 3) - 1), r + layer * row, z);
+                var turn = Quaternion.Euler(0f, 90f + (i % 2 == 0 ? -1f : 1f) * (2f + i), 0f);
+                if (ResourceKit.Spawn(Res.Timber, true, root, at, turn) != null) continue;
+                var log = Prim(PrimitiveType.Cylinder, root, new Vector3(0.16f, 0.58f, 0.16f), mat);
+                log.transform.localPosition = at;
+                log.transform.localRotation = turn * Quaternion.Euler(90f, 0f, 0f);
             }
         }
 
@@ -1085,10 +1253,21 @@ namespace SeaSick.World
             root.transform.localScale = Vector3.one;
             var tr = root.transform;
 
+            // No clip for `Mine` on this rig: the hammer, as before.
+            if (m == Mode.Mine && !UsesClip(Mode.Mine)) m = Mode.Hammer;
             string kit = m == Mode.Hammer ? ToolKit.Hammer : m == Mode.Chop ? ToolKit.Axe
                 : m == Mode.Saw ? ToolKit.Saw : m == Mode.Hoe ? ToolKit.Hoe
                 : m == Mode.Stir ? ToolKit.StirPaddle : null;
-            if (kit != null && ToolKit.Attach(kit, tr, true)) return root;
+            if (kit != null && ToolKit.Attach(kit, tr, true))
+            {
+                // The `Saw` clip holds the saw like a real handsaw, blade
+                // running on out of the fist along the forearm: the mesh
+                // (blade up +Y) turns +90 degrees about X (blade to +Z,
+                // teeth to -Y), as authored.
+                if (m == Mode.Saw && UsesClip(Mode.Saw))
+                    tr.GetChild(0).localRotation = Quaternion.Euler(90f, 0f, 0f);
+                return root;
+            }
 
             var wood = Mat("tool_haft", new Color(0.44f, 0.31f, 0.19f));
             var iron = Mat("tool_iron", new Color(0.42f, 0.44f, 0.48f));
@@ -1101,6 +1280,14 @@ namespace SeaSick.World
                     // the top, face 10 cm out on +Z, a short peen behind.
                     Box(tr, wood, new Vector3(0.035f, 0.34f, 0.035f), new Vector3(0f, 0.13f, 0f));
                     Box(tr, iron, new Vector3(0.055f, 0.06f, 0.16f), new Vector3(0f, Hammer_Reach, 0.02f));
+                    break;
+                }
+                case Mode.Mine:
+                {
+                    // The pick (no mesh yet): 66 cm haft, a 46 cm head
+                    // across its top, point 23 cm out on +Z.
+                    Box(tr, wood, new Vector3(0.04f, 0.66f, 0.04f), new Vector3(0f, 0.28f, 0f));
+                    Box(tr, iron, new Vector3(0.05f, 0.05f, 0.46f), new Vector3(0f, 0.58f, 0f));
                     break;
                 }
                 case Mode.Chop:
