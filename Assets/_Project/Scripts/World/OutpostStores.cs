@@ -229,8 +229,12 @@ namespace SeaSick.World
             Timber => 2,
             Stone => 3,
             Ore => 3,
-            Spice => 5,
-            Food => 5,
+            // **Small goods ride in the open carry crate, 8 slots**
+            // (2026-10-01, Kevin: "carry these things (up to 8 at a time) in
+            // an open lid crate"): every crop, fish, meat, forage, spice,
+            // flour and dish is an armful of `CrateArmful`. Was 3-6.
+            Spice => CrateArmful,
+            Food => CrateArmful,
             Hide => 3,
             Boards => 4,
             FineBoards => 4,
@@ -242,13 +246,17 @@ namespace SeaSick.World
             IronSpear => 2,
             Bow => 2,
             Arrows => 12,
-            Meals => 4,
-            Potato => 6, Carrot => 6, Onion => 6, Wheat => 5, Apple => 6,
-            Fish => FishArmful, Meat => 3, Flour => 4,
-            BakedPotato => 4, GrilledFish => 4, GrilledMeat => 4, RoastCarrots => 4, Bread => 6,
-            VegStew => 3, FishPie => 4, HuntersStew => 4,
+            Meals => CrateArmful,
+            Potato => CrateArmful, Carrot => CrateArmful, Onion => CrateArmful, Wheat => CrateArmful, Apple => CrateArmful,
+            Fish => FishArmful, Meat => CrateArmful, Flour => CrateArmful,
+            BakedPotato => CrateArmful, GrilledFish => CrateArmful, GrilledMeat => CrateArmful,
+            RoastCarrots => CrateArmful, Bread => CrateArmful,
+            VegStew => CrateArmful, FishPie => CrateArmful, HuntersStew => CrateArmful,
             _ => 3,
         };
+
+        /// One carry crate's worth of small goods (`CarryLook.CrateSlots`).
+        public const int CrateArmful = 8;
 
         /// **Fish go all at once (Kevin, 2026-09-30):** *"For the fish in
         /// particular he will carry all the fish at once since they aren't

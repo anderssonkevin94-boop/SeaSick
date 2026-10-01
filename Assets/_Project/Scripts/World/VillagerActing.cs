@@ -49,7 +49,8 @@ namespace SeaSick.World
         /// clip, and on a rig without the state falls back to the code pose
         /// it used to be (`CodePose`).
         public enum Mode { None, Chop, Saw, Hammer, Hoe, Stir, Carry, Dangle, Land, Bend, Mine, Lookout,
-            Forage, Build, PickUp, SetDown, HuntWalk, Hunt, Farm, Smith, Cook, Mill, Quarry, Fletcher, Fisher }
+            Forage, Build, PickUp, SetDown, HuntWalk, Hunt, Farm, Smith, Cook, Mill, Quarry, Fletcher, Fisher,
+            Reach, Eat }
 
         /// **The code pose a clip mode falls back to** on a rig whose
         /// controller lacks the state (what each job looked like before the
@@ -356,6 +357,16 @@ namespace SeaSick.World
                 return;
             }
 
+            if (shown == Mode.Reach && want == Mode.Eat)
+            {
+                // The dish hand is already where eating holds it: straight
+                // on, no drop of the arm between the two.
+                shown = want;
+                shownLoad = load;
+                shownLoadCount = loadCount;
+                modeClock = 0f;
+                RefreshProps();
+            }
             if (shown != want)
             {
                 // Out of the old pose before into the new one. One fade, not
@@ -397,8 +408,9 @@ namespace SeaSick.World
             if (!bound) return;
             // A shown tool is placed even at zero weight (the first frame of
             // a fade-in), or it would hang wherever it was last put.
-            if (weight <= 0.0001f && !HasTool(shown)) return;
+            if (weight <= 0.0001f && !HasTool(shown)) { PlaceDish(); return; }
             Pose(weight);
+            PlaceDish();
         }
 
         void OnDisable()
@@ -410,6 +422,7 @@ namespace SeaSick.World
             for (int i = 0; i < tools.Length; i++)
                 if (tools[i] != null) tools[i].SetActive(false);
             if (carryProp != null) carryProp.SetActive(false);
+            if (dishProp != null) dishProp.SetActive(false);
             // A work clip has no transition out of its state: hand the body
             // back to Idle/Walk, or it saws on with nobody to stop it.
             PlayClip(Mode.None);
@@ -425,6 +438,7 @@ namespace SeaSick.World
             for (int i = 0; i < tools.Length; i++)
                 if (tools[i] != null) Destroy(tools[i]);
             if (carryProp != null) Destroy(carryProp);
+            if (dishProp != null) Destroy(dishProp);
         }
 
         // --- the rig --------------------------------------------------------
@@ -830,6 +844,27 @@ namespace SeaSick.World
                     break;
                 }
 
+                case Mode.Reach:
+                {
+                    // A lean into the reach, back up with the dish (the arm
+                    // itself is `PoseMeal`'s).
+                    float u = Mathf.Clamp01(modeClock / ReachSeconds);
+                    float lean = Mathf.Sin(Mathf.PI * Mathf.Clamp01(u / (ReachGrabAt * 2f)));
+                    chestPitch = 12f * lean;
+                    hipsPitch = 4f * lean;
+                    headPitch = 6f + 8f * lean;
+                    break;
+                }
+
+                case Mode.Eat:
+                {
+                    // Looks down into the dish, up as the bite comes to him.
+                    float c = BiteLift(modeClock);
+                    chestPitch = Mathf.Lerp(6f, 2f, c);
+                    headPitch = Mathf.Lerp(16f, -2f, c);
+                    break;
+                }
+
                 case Mode.Dangle:
                 {
                     // Held by the scruff: arms up, legs swinging out of step
@@ -915,6 +950,161 @@ namespace SeaSick.World
             // Arms LAST for a tool: aimed from where the shoulders are after
             // the lean, so the blow lands where it is meant to.
             if (tool) PoseTool(shown, stroke, w);
+            if (shown == Mode.Reach || shown == Mode.Eat) PoseMeal(w);
+        }
+
+        // --- taking a meal and eating it (2026-10-01) ------------------------
+        //
+        // Kevin: *"when villagers are performing interaction actions like
+        // taking a meal to eat it i notice they do the 'pick up' animation
+        // from the ground for a split second, holding a box that isn't
+        // relevant."* A meal is not a haul: no squat, no carried stack. He
+        // REACHES to the counter / store at waist height with his left hand
+        // (`Reach`, code-bent on Idle, the dish appears in the hand at the
+        // grab), then EATS (`Eat`): the dish held at his chest, the right
+        // hand to his mouth and back, the food shrinking, the dish gone when
+        // the pose ends. No clip: there is no Eat/Reach take yet.
+
+        /// Seconds of the reach: out to the counter, the grab, back.
+        public static float ReachSeconds = 0.6f;
+        /// Share of the reach at which the hand closes on the dish.
+        const float ReachGrabAt = 0.45f;
+        /// How long a hand stands eating (`CampWorker` holds him this long).
+        public static float EatSeconds = 3.4f;
+        /// One bite: dish to mouth and back.
+        const float BitePeriod = 1.1f;
+        /// The first bite starts after this (the dish settles first).
+        const float BiteLead = 0.3f;
+        /// How far the food goes down by the last bite (0 = all of it).
+        const float FoodLeft = 0.25f;
+
+        // Body-local metres (x his right, y up from the feet, z forward):
+        // the counter he reaches to, where he holds the dish, his mouth.
+        // Read off the v15 deckhand: shoulders (+-0.29, 1.00, 0), arm to the
+        // fist ~0.45 m, the head from y 1.10 with its face ~0.2 m forward.
+        static readonly Vector3 CounterAt = new Vector3(0.17f, 0.80f, 0.42f);
+        static readonly Vector3 DishHoldAt = new Vector3(0.12f, 0.82f, 0.36f);
+        static readonly Vector3 DishTopAt = new Vector3(0.04f, 0.93f, 0.36f);
+        static readonly Vector3 MouthAt = new Vector3(-0.02f, 1.20f, 0.24f);
+
+        /// 0 with the hand at the dish, 1 at his mouth.
+        static float BiteLift(float t)
+        {
+            if (t < BiteLead) return 0f;
+            return 0.5f - 0.5f * Mathf.Cos(TAU * (t - BiteLead) / BitePeriod);
+        }
+
+        /// A body-local point with its x on the dish hand's side (the arm
+        /// that does NOT hold tools: his left).
+        Vector3 DishSide(Vector3 v) => transform.TransformPoint(new Vector3(-side * v.x, v.y, v.z));
+
+        void PoseMeal(float w)
+        {
+            Transform dishArm = OffArm, eatArm = ToolArm;
+            Vector3 hold = DishSide(DishHoldAt);
+            if (shown == Mode.Reach)
+            {
+                float u = Mathf.Clamp01(modeClock / ReachSeconds);
+                Vector3 rest = dishArm != null ? GripOf(dishArm) : hold;
+                Vector3 counter = DishSide(CounterAt);
+                Vector3 target = u < ReachGrabAt
+                    ? Vector3.Lerp(rest, counter, Mathf.SmoothStep(0f, 1f, u / ReachGrabAt))
+                    : Vector3.Lerp(counter, hold, Mathf.SmoothStep(0f, 1f, (u - ReachGrabAt) / (1f - ReachGrabAt)));
+                TwoBone(dishArm, target, w);
+                return;
+            }
+            TwoBone(dishArm, hold, w);
+            float c = BiteLift(modeClock);
+            Vector3 bite = Vector3.Lerp(DishSide(DishTopAt), transform.TransformPoint(new Vector3(MouthAt.x * side, MouthAt.y, MouthAt.z)), c);
+            TwoBone(eatArm, bite, w);
+        }
+
+        /// **Two-bone reach**: bend the upper arm and forearm so the middle
+        /// of the fist lands on `target` (clamped to the arm's length), the
+        /// elbow falling down and out. Blended by `w` over the clip, and
+        /// recorded so the next frame starts from the clip again. A rig with
+        /// no forearm bone just points the arm (`Aim`).
+        void TwoBone(Transform upper, Vector3 target, float w)
+        {
+            if (upper == null || w <= 0f) return;
+            Transform hand = upper == armL ? handL : upper == armR ? handR : null;
+            Transform fore = hand != null ? hand.parent : null;
+            if (fore == null || fore == upper || fore.parent != upper) { Aim(upper, target, w); return; }
+
+            Vector3 S = upper.position, E = fore.position, F = GripOf(upper);
+            float a = (E - S).magnitude, b = (F - E).magnitude;
+            Vector3 toT = target - S;
+            if (a < 1e-5f || b < 1e-5f || toT.sqrMagnitude < 1e-10f) return;
+            float d = Mathf.Clamp(toT.magnitude, Mathf.Abs(a - b) + 1e-4f, a + b - 1e-4f);
+            Vector3 dir = toT.normalized;
+            float outSign = Mathf.Sign(transform.InverseTransformPoint(S).x);
+            Vector3 pole = -transform.up + transform.right * (0.7f * outSign) - transform.forward * 0.2f;
+            Vector3 perp = Vector3.ProjectOnPlane(pole, dir);
+            if (perp.sqrMagnitude < 1e-8f) perp = Vector3.ProjectOnPlane(-transform.up, dir);
+            perp.Normalize();
+            float cosA = Mathf.Clamp((a * a + d * d - b * b) / (2f * a * d), -1f, 1f);
+            Vector3 elbow = S + a * (dir * cosA + perp * Mathf.Sqrt(1f - cosA * cosA));
+
+            Quaternion before = upper.localRotation;
+            Quaternion to = Quaternion.FromToRotation(E - S, elbow - S) * upper.rotation;
+            upper.rotation = Quaternion.Slerp(upper.rotation, to, w);
+            Record(upper, before);
+
+            E = fore.position;
+            F = GripOf(upper);
+            Vector3 fist = S + dir * d;
+            before = fore.localRotation;
+            to = Quaternion.FromToRotation(F - E, fist - E) * fore.rotation;
+            fore.rotation = Quaternion.Slerp(fore.rotation, to, w);
+            Record(fore, before);
+        }
+
+        /// Destroy that also works in an edit-mode render (`VillagerCarryShot`).
+        static void Kill(GameObject go)
+        {
+            if (Application.isPlaying) Destroy(go);
+            else DestroyImmediate(go);
+        }
+
+        GameObject dishProp;
+        string dishPropFor;
+        Transform dishFood;
+
+        void EnsureDish()
+        {
+            string what = string.IsNullOrEmpty(shownLoad) ? Res.Meals : shownLoad;
+            if (dishProp != null && dishPropFor == what) return;
+            if (dishProp != null) Kill(dishProp);
+            dishPropFor = what;
+            dishProp = new GameObject("Dish_" + what);
+            dishProp.transform.SetParent(transform, false);
+            // Every meal in a bowl, 0.20 m across (the chibi's fists are
+            // ~0.12 m): a raw one sits in it as itself, a cooked one as its
+            // dish -- a bare apple in his hand vanished behind his fingers.
+            CarryLook.Dish(what, dishProp.transform, 0.20f);
+            dishFood = dishProp.transform.Find("Food");
+        }
+
+        /// The dish rides the dish hand's fist, level, every frame; hidden
+        /// until the grab, its food going down bite by bite.
+        void PlaceDish()
+        {
+            if (dishProp == null) return;
+            bool meal = shown == Mode.Reach || shown == Mode.Eat;
+            bool inHand = meal && (shown == Mode.Eat || modeClock >= ReachSeconds * ReachGrabAt);
+            if (dishProp.activeSelf != inHand) dishProp.SetActive(inHand);
+            if (!inHand) return;
+            var arm = OffArm;
+            Vector3 fist = arm != null ? GripOf(arm) : DishSide(DishHoldAt);
+            dishProp.transform.SetPositionAndRotation(fist + transform.up * (0.07f * BodyScale),
+                transform.rotation * Quaternion.Euler(0f, 20f * side, 0f));
+            if (dishFood != null)
+            {
+                float k = shown == Mode.Eat
+                    ? Mathf.Lerp(1f, FoodLeft, Mathf.Clamp01((modeClock - BiteLead) / Mathf.Max(0.1f, EatSeconds - BiteLead)))
+                    : 1f;
+                dishFood.localScale = new Vector3(1f, k, 1f) * Mathf.Lerp(1f, 0.85f, 1f - k);
+            }
         }
 
         /// A strike cycle: 0 at the bottom of the stroke, 1 at the top, with
@@ -1208,8 +1398,14 @@ namespace SeaSick.World
             for (int i = 0; i < tools.Length; i++)
                 if (tools[i] != null) tools[i].SetActive(false);
             if (carryProp != null) carryProp.SetActive(false);
+            if (dishProp != null) dishProp.SetActive(false);
 
             propCaptured = false;
+            if (shown == Mode.Reach || shown == Mode.Eat)
+            {
+                EnsureDish();     // shown from the grab on (`PlaceDish`)
+                return;
+            }
             if (shown == Mode.Carry || (shown == Mode.PickUp || shown == Mode.SetDown) && UsesClip(shown) && !string.IsNullOrEmpty(shownLoad))
             {
                 EnsureCarry();
@@ -1242,59 +1438,44 @@ namespace SeaSick.World
 
         void EnsureCarry()
         {
-            int n = Mathf.Clamp(shownLoadCount, 1, MaxVisibleCarry);
             // Held out on both arms (the `Carry` clip) or shouldered (the
             // code pose): different stacks, so a different key.
             bool held = UsesClip(Mode.Carry);
-            string key = shownLoad + "x" + n + (held ? "h" : "");
+            string what = string.IsNullOrEmpty(shownLoad) ? Res.Timber : shownLoad;
+            int n = held ? CarryLook.Shown(what, shownLoadCount) : Mathf.Clamp(shownLoadCount, 1, MaxVisibleCarry);
+            string key = what + "x" + n + (held ? "h" : "");
             if (carryProp != null && carryPropFor == key) return;
-            if (carryProp != null) Destroy(carryProp);
+            if (carryProp != null) Kill(carryProp);
             carryPropFor = key;
 
-            // **The look the CampWorker's old `carried` object had**, moved in
-            // here so there is one owner of anything hanging off a villager,
-            // now built as a STACK of `n` distinct props rather than one.
-            // Timber is round logs, Boards/FineBoards a flat milled bundle,
-            // Stone and Brick their own stacks, everything else a sack —
-            // and a sack per unit above one, same as the rest.
-            string what = string.IsNullOrEmpty(shownLoad) ? Res.Timber : shownLoad;
             var root = new GameObject("Carry_" + what + "_" + n);
             root.transform.SetParent(transform, false);
             root.transform.localPosition = new Vector3(0.16f * side, 1.42f, 0.10f);
             root.transform.localRotation = Quaternion.Euler(0f, 6f * side, 0f);
+            carryProp = root;
 
-            // **Held (2026-10-01):** the root is the clip's carry socket
-            // (`PlaceClipProps` puts it on the spine every frame) and the
-            // load's BOTTOM centre sits on it, so each stack is lifted by its
-            // own half-height. Loads stay within 0.37 m front to back (the
-            // depth that clears his chest), so logs lie ACROSS his arms.
-            Transform stack = root.transform;
+            // **Held (2026-10-01): the carry table.** The root is the clip's
+            // carry socket (`PlaceClipProps` puts it on the spine every
+            // frame); `CarryLook` lays the load out at real size against
+            // the clip's arms -- logs and planks across the forearms, a
+            // stack forward of the chest, small goods in the open crate.
             if (held)
             {
-                stack = new GameObject("Stack").transform;
-                stack.SetParent(root.transform, false);
-                float lift = what == Res.Timber ? 0f
-                    : what == Res.Boards || what == Res.FineBoards ? 0.02f
-                    : what == Res.Stone ? 0.10f
-                    : what == Res.Brick ? 0.045f
-                    : 0.05f;
-                stack.localPosition = new Vector3(0f, lift, 0f);
+                CarryLook.Build(what, shownLoadCount, root.transform);
+                return;
             }
 
-            if (what == Res.Timber && held)
-                BuildHeldLogs(stack, n);
-            else if (what == Res.Timber)
+            // The code pose (a rig without the clip): the old shoulder loads.
+            if (what == Res.Timber)
                 BuildLogs(root.transform, n);
             else if (what == Res.Boards || what == Res.FineBoards)
-                BuildPlanks(stack, n, what == Res.FineBoards);
+                BuildPlanks(root.transform, n, what == Res.FineBoards);
             else if (what == Res.Stone)
-                BuildStones(stack, n);
+                BuildStones(root.transform, n);
             else if (what == Res.Brick)
-                BuildBricks(stack, n);
+                BuildBricks(root.transform, n);
             else
-                BuildSacks(stack, n, what);
-
-            carryProp = root;
+                BuildSacks(root.transform, n, what);
         }
 
         /// Round logs, shouldered side by side with just enough stagger
@@ -1321,26 +1502,6 @@ namespace SeaSick.World
                 log.transform.localPosition = new Vector3(x, y, z);
                 log.transform.localRotation =
                     Quaternion.Euler(90f, 0f, (i % 2 == 0 ? 1f : -1f) * (3f + i));
-            }
-        }
-
-        /// Logs held out on both arms (the `Carry` clip): lying across them
-        /// (long axis X), two deep and stacked up, bottom on the socket.
-        static void BuildHeldLogs(Transform root, int n)
-        {
-            var mat = Mat("log", Res.Colour(Res.Timber));
-            const float r = 0.08f, row = 0.15f;
-            for (int i = 0; i < n; i++)
-            {
-                int layer = i / 2;
-                bool pair = n - layer * 2 >= 2;
-                float z = pair ? ((i % 2) - 0.5f) * 0.16f : 0f;
-                var at = new Vector3(0.02f * ((i % 3) - 1), r + layer * row, z);
-                var turn = Quaternion.Euler(0f, 90f + (i % 2 == 0 ? -1f : 1f) * (2f + i), 0f);
-                if (ResourceKit.Spawn(Res.Timber, true, root, at, turn) != null) continue;
-                var log = Prim(PrimitiveType.Cylinder, root, new Vector3(0.16f, 0.58f, 0.16f), mat);
-                log.transform.localPosition = at;
-                log.transform.localRotation = turn * Quaternion.Euler(90f, 0f, 0f);
             }
         }
 

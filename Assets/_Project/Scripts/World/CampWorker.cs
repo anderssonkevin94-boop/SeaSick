@@ -1562,8 +1562,11 @@ namespace SeaSick.World
                     r.walkingIn = false;
                     Face(PickFace(view) - transform.position, dt);
                     // A store/station pickup is the v15 `PickUp` one-shot,
-                    // with the load shown on the ground and lifted.
-                    acting?.Set(PickMode(view), view.resource, Mathf.Max(1, view.count));
+                    // with the load shown on the ground and lifted. A MEAL
+                    // is not a haul (2026-10-01): a reach to the counter at
+                    // waist height, the dish into his hand.
+                    if (mimeEating) acting?.Set(VillagerActing.Mode.Reach, view.resource, 1);
+                    else acting?.Set(PickMode(view), view.resource, Mathf.Max(1, view.count));
                     ledger.BodyWorked(r, dt * ClockRate());
                     return;
                 }
@@ -1571,23 +1574,27 @@ namespace SeaSick.World
                 {
                     phase = Phase.Coming;
                     mimeLoaded = true;
-                    acting?.Set(VillagerActing.Mode.Carry, view.resource, Mathf.Max(1, view.count));
+                    if (mimeEating) acting?.Set(VillagerActing.Mode.Reach, view.resource, 1);
+                    else acting?.Set(VillagerActing.Mode.Carry, view.resource, Mathf.Max(1, view.count));
                     if (!Walk(mimeDrop, dt)) return;
                     mimeArrived = true;
                     Face(mimeFace - transform.position, dt);
                     ledger.BodyArrived(r);           // the drop-off event
                     if (!r.Hauling || r.haulSerial != mimedTrip)
                     {
-                        // Delivered: set it down, here, now.
+                        // Delivered: set it down, here, now -- or, a meal,
+                        // eat it standing where he took it.
                         mimeLoaded = mimeArrived = false;
-                        StartPlace(mimeFace, view.resource, Mathf.Max(1, view.count));
+                        if (mimeEating) StartEat(mimeFace, view.resource);
+                        else StartPlace(mimeFace, view.resource, Mathf.Max(1, view.count));
                     }
                     return;
                 }
                 default:
                     // At a full store: he holds it until room comes.
                     Face(mimeFace - transform.position, dt);
-                    acting?.Set(VillagerActing.Mode.Carry, view.resource, Mathf.Max(1, view.count));
+                    if (mimeEating) acting?.Set(VillagerActing.Mode.Reach, view.resource, 1);
+                    else acting?.Set(VillagerActing.Mode.Carry, view.resource, Mathf.Max(1, view.count));
                     return;
             }
         }
@@ -1625,6 +1632,9 @@ namespace SeaSick.World
         Vector3 mimeDrop, mimeFace;       // where the load goes, and what to face there
         string mimeRes;
         int mimeCount;
+        /// The trip is a hungry hand taking his meal (`OutpostHand.eating`,
+        /// read at its start: the books clear it the moment he has eaten).
+        bool mimeEating;
 
 
         /// Resolve this trip's two ends to where a body actually stands:
@@ -1642,6 +1652,7 @@ namespace SeaSick.World
             mimeJoinedLate = view.picked;
             mimeRes = view.resource;
             mimeCount = Mathf.Max(1, view.count);
+            mimeEating = r.eating;
             AimTripMime(r, view);
         }
 
@@ -1672,6 +1683,8 @@ namespace SeaSick.World
             mimeLoaded = mimeArrived = mimePlaced = false;
             mimeHold = 0f;
             if (!holding) return false;
+            // A meal in his hand: he eats it where he stands.
+            if (mimeEating) { StartEat(mimeFace, mimeRes); return true; }
             float left = FlatDistance(transform.position, mimeDrop);
             if (left <= 0.6f) { StartPlace(mimeFace, mimeRes, mimeCount); return true; }
             if (left <= TailMetres)
@@ -1891,17 +1904,45 @@ namespace SeaSick.World
         string placeRes;
         int placeCount = 1;
 
+        /// **Eating the meal he just took** (2026-10-01): stands where he
+        /// took it, the dish at his chest, `VillagerActing.EatSeconds` of
+        /// bites; the books already counted it eaten (`EatMeal`), this is
+        /// only the picture. The next trip waits for him the way it waits
+        /// for a set-down (the walker is paced by the body).
+        void StartEat(Vector3 face, string meal)
+        {
+            delivering = false;
+            placeLeft = 0f;
+            eatLeft = VillagerActing.EatSeconds;
+            eatFace = face;
+            eatRes = meal;
+            acting?.Set(VillagerActing.Mode.Eat, eatRes, 1);
+        }
+
+        float eatLeft;
+        Vector3 eatFace;
+        string eatRes;
+
         void CancelDelivery()
         {
             delivering = false;
             placeLeft = 0f;
             deliverHold = 0f;
+            eatLeft = 0f;
         }
 
         /// One frame of a delivery or a set-down. True while either owns the
         /// body (the caller does nothing else this frame).
         bool TickDelivery(float dt)
         {
+            if (eatLeft > 0f)
+            {
+                eatLeft -= dt;
+                Face(eatFace - transform.position, dt);
+                if (eatLeft > 0f) { acting?.Set(VillagerActing.Mode.Eat, eatRes, 1); return true; }
+                acting?.Set(VillagerActing.Mode.None);
+                return true;
+            }
             if (placeLeft > 0f)
             {
                 placeLeft -= dt;
