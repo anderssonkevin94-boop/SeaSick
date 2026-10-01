@@ -43,7 +43,104 @@ namespace SeaSick.World
         ///
         /// `Mine` and `Lookout` (2026-10-01) arrived with the v15 clips:
         /// appended for the same reason.
-        public enum Mode { None, Chop, Saw, Hammer, Hoe, Stir, Carry, Dangle, Land, Bend, Mine, Lookout }
+        ///
+        /// The rest (2026-10-01, "import and implement all the animations")
+        /// are the v15 clips' own jobs, appended likewise: each plays its
+        /// clip, and on a rig without the state falls back to the code pose
+        /// it used to be (`CodePose`).
+        public enum Mode { None, Chop, Saw, Hammer, Hoe, Stir, Carry, Dangle, Land, Bend, Mine, Lookout,
+            Forage, Build, PickUp, SetDown, HuntWalk, Hunt, Farm, Smith, Cook, Mill, Quarry, Fletcher, Fisher }
+
+        /// **The code pose a clip mode falls back to** on a rig whose
+        /// controller lacks the state (what each job looked like before the
+        /// v15 clips).
+        public static Mode CodePose(Mode m)
+        {
+            switch (m)
+            {
+                case Mode.Mine: return Mode.Hammer;
+                case Mode.Lookout: return Mode.None;
+                case Mode.Forage: return Mode.Hoe;
+                case Mode.Build: return Mode.Hammer;
+                case Mode.PickUp: case Mode.SetDown: return Mode.Bend;
+                case Mode.HuntWalk: return Mode.None;
+                case Mode.Hunt: return Mode.Bend;
+                case Mode.Farm: return Mode.Hoe;
+                case Mode.Smith: return Mode.Hammer;
+                case Mode.Cook: return Mode.Stir;
+                case Mode.Mill: case Mode.Quarry: case Mode.Fletcher: return Mode.Hammer;
+                case Mode.Fisher: return Mode.Bend;
+                default: return m;
+            }
+        }
+
+        /// What the body actually shows for `m`: its clip, or its code pose.
+        Mode Resolve(Mode m) => UsesClip(m) ? m : CodePose(m);
+
+        /// **How he walks when no job clip owns the body** (v15 gaits,
+        /// 2026-10-01): `Stroll` = Walk, `Errand` = WalkBrisk, `Tired` =
+        /// WalkTired (low mood), `Run` (raid alarm spear fetch, defence,
+        /// rescue, raiders), `Scared` = RunScared (running to hide). Set by
+        /// whoever drives the body; a rig without the state walks `Walk`.
+        public enum Gait { Errand, Stroll, Tired, Run, Scared }
+        public Gait WalkGait { get; set; }
+
+        static readonly int WalkBriskId = Animator.StringToHash("WalkBrisk"),
+            WalkTiredId = Animator.StringToHash("WalkTired"), WalkDeckId = Animator.StringToHash("WalkDeck"),
+            RunId = Animator.StringToHash("Run"), RunScaredId = Animator.StringToHash("RunScared"),
+            SickWalkId = Animator.StringToHash("SickWalk"), GangwayId = Animator.StringToHash("Gangway");
+        public static readonly int WalkRateId = Animator.StringToHash("WalkRate");
+
+        /// A gait state's ground speed at playback rate 1, m/s at game size
+        /// (clips.json `gait.speed_m_s_at_1x_game`): play it at speed / this
+        /// and the planted foot does not skate.
+        public static float GaitSpeed(int state)
+        {
+            if (state == WalkBriskId) return 0.84f;
+            if (state == WalkTiredId) return 0.23f;
+            if (state == WalkDeckId) return 0.33f;
+            if (state == RunId) return 2.06f;
+            if (state == RunScaredId) return 2.25f;
+            if (state == SickWalkId) return 0.21f;
+            if (state == GangwayId) return 0.45f;
+            return 0.58f;   // Walk
+        }
+
+        /// The playback-rate clamp: a body moving far faster than a gait's
+        /// own speed skates a little rather than flickering its legs.
+        public static float GaitRateMin = 0.5f, GaitRateMax = 2.2f;
+        public static float GaitRate(int state, float speed)
+            => Mathf.Clamp(speed / GaitSpeed(state), GaitRateMin, GaitRateMax);
+
+        int locoPlaying;
+
+        /// Idle or the `WalkGait` walk, at the rate his speed asks for.
+        void DriveGait()
+        {
+            if (anim == null || !anim.isActiveAndEnabled || !hasLocomotion) return;
+            float v = Vector3.ProjectOnPlane(velocity, transform.up).magnitude;
+            bool moving = locoPlaying != 0 && locoPlaying != IdleId ? v > 0.18f : v > 0.3f;
+            int want = IdleId;
+            if (moving)
+            {
+                want = WalkGait == Gait.Errand ? WalkBriskId : WalkGait == Gait.Tired ? WalkTiredId
+                    : WalkGait == Gait.Run ? RunId : WalkGait == Gait.Scared ? RunScaredId : WalkId;
+                if (!anim.HasState(0, want)) want = WalkId;
+            }
+            if (hasWalkRate) anim.SetFloat(WalkRateId, GaitRate(want, v));
+            if (want == locoPlaying) return;
+            locoPlaying = want;
+            var cur = anim.GetCurrentAnimatorStateInfo(0);
+            if (!anim.IsInTransition(0) && cur.shortNameHash == want) return;
+            if (anim.IsInTransition(0) && anim.GetNextAnimatorStateInfo(0).shortNameHash == want) return;
+            anim.CrossFadeInFixedTime(want, ClipFadeSeconds, 0);
+        }
+
+        /// True when this body plays `m` as an authored clip.
+        public bool Plays(Mode m) => UsesClip(m);
+
+        /// Seconds since the shown pose/clip last changed (a one-shot's clock).
+        public float ShownSeconds => modeClock;
 
         public Mode Current { get; private set; }
 
@@ -164,7 +261,8 @@ namespace SeaSick.World
         /// by mode index so there is no dictionary and no per-frame lookup.
         /// One slot per `Mode`. They hang off THIS object, not a bone, and
         /// are placed in world space every frame (`PoseTool`).
-        readonly GameObject[] tools = new GameObject[12];
+        readonly GameObject[] tools = new GameObject[ModeCount];
+        const int ModeCount = 32;
         GameObject carryProp;
         string carryPropFor;
 
@@ -189,12 +287,14 @@ namespace SeaSick.World
 
             // **A mode with an authored clip is the Animator's** (v15, see
             // `UsesClip`): no bone is bent, the state is cross-faded in
-            // straight away and the props ride the bones.
-            if (UsesClip(Current) || UsesClip(shown))
+            // straight away and the props ride the bones. A clip mode on a
+            // rig without the state shows its old code pose (`CodePose`).
+            Mode want = Resolve(Current);
+            if (UsesClip(want) || UsesClip(shown))
             {
-                if (shown != Current || shownLoad != load || shownLoadCount != loadCount)
+                if (shown != want || shownLoad != load || shownLoadCount != loadCount)
                 {
-                    shown = Current;
+                    shown = want;
                     shownLoad = load;
                     shownLoadCount = loadCount;
                     weight = 0f;
@@ -204,13 +304,15 @@ namespace SeaSick.World
                 }
             }
             PlayClip(UsesClip(shown) ? shown : Mode.None);
+            if (!UsesClip(shown)) DriveGait();
+            else locoPlaying = 0;
             if (UsesClip(shown))
             {
                 PlaceClipProps();
                 return;
             }
 
-            if (shown != Current)
+            if (shown != want)
             {
                 // Out of the old pose before into the new one. One fade, not
                 // two overlapping ones — two arms interpolating between three
@@ -219,7 +321,7 @@ namespace SeaSick.World
                 if (weight <= 0f)
                 {
                     weight = 0f;
-                    shown = Current;
+                    shown = want;
                     shownLoad = load;
                     shownLoadCount = loadCount;
                     landTimer = 0f;
@@ -337,7 +439,10 @@ namespace SeaSick.World
                     clipHash[(int)ClipModes[i]] = anim.HasState(0, h) ? h : 0;
                 }
                 foreach (var p in anim.parameters)
+                {
                     if (p.nameHash == ClipRateId && p.type == AnimatorControllerParameterType.Float) hasClipRate = true;
+                    if (p.nameHash == WalkRateId && p.type == AnimatorControllerParameterType.Float) hasWalkRate = true;
+                }
                 hasLocomotion = anim.HasState(0, IdleId) && anim.HasState(0, WalkId);
             }
         }
@@ -351,7 +456,9 @@ namespace SeaSick.World
         // here bends a bone; one without (a different rig) falls back to the
         // code poses below (`Mine` as the hammer swing, `Lookout` as none).
 
-        static readonly Mode[] ClipModes = { Mode.Chop, Mode.Saw, Mode.Mine, Mode.Carry, Mode.Lookout };
+        static readonly Mode[] ClipModes = { Mode.Chop, Mode.Saw, Mode.Mine, Mode.Carry, Mode.Lookout,
+            Mode.Forage, Mode.Build, Mode.PickUp, Mode.SetDown, Mode.HuntWalk, Mode.Hunt, Mode.Farm,
+            Mode.Smith, Mode.Cook, Mode.Mill, Mode.Quarry, Mode.Fletcher, Mode.Fisher };
         static readonly int ClipRateId = Animator.StringToHash("ClipRate");
         static readonly int IdleId = Animator.StringToHash("Idle");
         static readonly int WalkId = Animator.StringToHash("Walk");
@@ -360,6 +467,21 @@ namespace SeaSick.World
         /// `Carry` walks in place: its rate follows his ground speed, this
         /// fast at `CarryRateAtSpeed` m/s, and stands still when he does.
         const float CarryRateMax = 1.6f, CarryRateAtSpeed = 2.6f;
+        /// `HuntWalk` is a slow stalk (0.45 m a 2.2 s loop at game size):
+        /// its rate follows his speed too, capped so a hurried stalk does not
+        /// scurry.
+        const float StalkStrideSpeed = 0.2f, StalkRateMax = 2.2f;
+
+        // **The one-shots' prop timing** (clips.json, 30 fps, game metres
+        // from his root: x right, y up, z forward).
+        const float PickUpGrabFrame = 26f, PickUpSocketFrame = 45f;
+        static readonly Vector3 PickUpLoadAt = new Vector3(0f, 0f, 0.628f);
+        const float SetDownReleaseFrame = 3f, SetDownLandFrame = 16f;
+        static readonly Vector3 SetDownLoadAt = new Vector3(0f, 0f, 0.68f);
+        const float SetDownLoadYaw = 4f;
+        Vector3 propFrom;            // a one-shot's captured prop pose
+        Quaternion propFromRot = Quaternion.identity;
+        bool propCaptured;
 
         // **Where the props ride**, in the BONE's own local units, read off
         // the v15 rest pose (`CrewClipsV15Import` re-measures and logs them).
@@ -378,9 +500,9 @@ namespace SeaSick.World
 
         Animator anim;
         Transform spine;
-        readonly int[] clipHash = new int[12];
+        readonly int[] clipHash = new int[ModeCount];
         int playing;                 // the clip state cross-faded to, 0 = locomotion
-        bool hasClipRate, hasLocomotion;
+        bool hasClipRate, hasLocomotion, hasWalkRate;
 
         bool UsesClip(Mode m)
         {
@@ -396,6 +518,7 @@ namespace SeaSick.World
             if (want == playing) return;
             playing = want;
             if (anim == null || !anim.isActiveAndEnabled) return;
+            locoPlaying = 0;     // DriveGait picks the walk from here
             if (want != 0) anim.CrossFadeInFixedTime(want, ClipFadeSeconds, 0);
             else if (hasLocomotion)
                 anim.CrossFadeInFixedTime(velocity.magnitude > 0.3f ? WalkId : IdleId, ClipFadeSeconds, 0);
@@ -407,18 +530,76 @@ namespace SeaSick.World
 
         void PlaceClipProps()
         {
-            if (shown == Mode.Carry && anim != null && hasClipRate)
+            if (anim != null && hasClipRate)
             {
                 float v = Vector3.ProjectOnPlane(velocity, transform.up).magnitude;
-                float rate = v < 0.2f ? 0f : Mathf.Max(0.35f, Mathf.Clamp01(v / CarryRateAtSpeed) * CarryRateMax);
-                anim.SetFloat(ClipRateId, rate);
+                if (shown == Mode.Carry)
+                {
+                    float rate = v < 0.2f ? 0f : Mathf.Max(0.35f, Mathf.Clamp01(v / CarryRateAtSpeed) * CarryRateMax);
+                    anim.SetFloat(ClipRateId, rate);
+                }
+                else if (shown == Mode.HuntWalk)
+                    anim.SetFloat(ClipRateId, v < 0.1f ? 0.5f : Mathf.Clamp(v / StalkStrideSpeed, 0.6f, StalkRateMax));
             }
             var tool = tools[(int)shown];
             var hand = ToolHand;
             if (tool != null && tool.activeSelf && hand != null)
                 tool.transform.SetPositionAndRotation(hand.TransformPoint(ToolGripLocal), hand.rotation * ToolGripRot);
-            if (shown == Mode.Carry && carryProp != null && spine != null)
-                carryProp.transform.SetPositionAndRotation(spine.TransformPoint(CarrySocketLocal), spine.rotation);
+            if (carryProp == null || spine == null) return;
+            Vector3 sockAt = spine.TransformPoint(CarrySocketLocal);
+            Quaternion sockRot = spine.rotation;
+            float f = modeClock * 30f;
+            if (shown == Mode.Carry)
+                carryProp.transform.SetPositionAndRotation(sockAt, sockRot);
+            else if (shown == Mode.PickUp)
+            {
+                // On the ground 0.63 m ahead until the grip (frame 26), then
+                // in his fists (held at the offset it had from them at the
+                // grip), seated on the carry socket from frame 45.
+                Vector3 ground = transform.TransformPoint(PickUpLoadAt);
+                Vector3 fists = FistsMid();
+                if (f < PickUpGrabFrame || !propCaptured && handL == null)
+                {
+                    carryProp.transform.SetPositionAndRotation(ground, transform.rotation);
+                    propCaptured = false;
+                    return;
+                }
+                if (!propCaptured)
+                {
+                    propFrom = Quaternion.Inverse(transform.rotation) * (ground - fists);
+                    propCaptured = true;
+                }
+                Vector3 inHands = fists + transform.rotation * propFrom;
+                float k = Mathf.SmoothStep(0f, 1f, (f - (PickUpSocketFrame - 6f)) / 6f);
+                carryProp.transform.SetPositionAndRotation(Vector3.Lerp(inHands, sockAt, k),
+                    Quaternion.Slerp(transform.rotation, sockRot, k));
+            }
+            else if (shown == Mode.SetDown)
+            {
+                // On the socket until he lets go (frame 3), then it falls
+                // and lands 0.68 m ahead, turned 4 degrees, on frame 16.
+                if (f < SetDownReleaseFrame)
+                {
+                    carryProp.transform.SetPositionAndRotation(sockAt, sockRot);
+                    propFrom = sockAt; propFromRot = sockRot; propCaptured = true;
+                    return;
+                }
+                if (!propCaptured) { propFrom = sockAt; propFromRot = sockRot; propCaptured = true; }
+                Vector3 rest = transform.TransformPoint(SetDownLoadAt);
+                Quaternion restRot = transform.rotation * Quaternion.Euler(0f, SetDownLoadYaw, 0f);
+                float t = Mathf.Clamp01((f - SetDownReleaseFrame) / (SetDownLandFrame - SetDownReleaseFrame));
+                Vector3 at = Vector3.Lerp(propFrom, rest, t);
+                // Falls: the drop is t^2 (gravity), the forward drift linear.
+                at.y = Mathf.Lerp(propFrom.y, rest.y, t * t);
+                carryProp.transform.SetPositionAndRotation(at, Quaternion.Slerp(propFromRot, restRot, t));
+            }
+        }
+
+        /// Between his two fists (the middle of each closed hand).
+        Vector3 FistsMid()
+        {
+            if (handL == null || handR == null) return transform.TransformPoint(PickUpLoadAt);
+            return 0.5f * (handL.TransformPoint(ToolGripLocal) + handR.TransformPoint(ToolGripLocal));
         }
 
         static Transform Bone(Transform[] all, string exact, params string[] contains)
@@ -991,7 +1172,8 @@ namespace SeaSick.World
                 if (tools[i] != null) tools[i].SetActive(false);
             if (carryProp != null) carryProp.SetActive(false);
 
-            if (shown == Mode.Carry)
+            propCaptured = false;
+            if (shown == Mode.Carry || (shown == Mode.PickUp || shown == Mode.SetDown) && UsesClip(shown) && !string.IsNullOrEmpty(shownLoad))
             {
                 EnsureCarry();
                 if (carryProp != null) carryProp.SetActive(true);
@@ -1007,7 +1189,12 @@ namespace SeaSick.World
 
         static bool HasTool(Mode m) =>
             m == Mode.Chop || m == Mode.Saw || m == Mode.Hammer
-            || m == Mode.Hoe || m == Mode.Stir || m == Mode.Mine;
+            || m == Mode.Hoe || m == Mode.Stir || m == Mode.Mine
+            // v15 clips holding a tool the game has (README: Build/Smith
+            // hammer, Quarry's mallet -> the hammer as its stand-in, Farm
+            // hoe, Cook paddle). Knife, peg, basket, chisel: none yet.
+            || m == Mode.Build || m == Mode.Smith || m == Mode.Quarry
+            || m == Mode.Farm || m == Mode.Cook;
 
         /// Highest visible count in a bundle. **Kevin, 2026-09-23:** *"if
         /// they carry 3 logs, you see three logs"* — but a haul can be a
@@ -1255,6 +1442,9 @@ namespace SeaSick.World
 
             // No clip for `Mine` on this rig: the hammer, as before.
             if (m == Mode.Mine && !UsesClip(Mode.Mine)) m = Mode.Hammer;
+            if (m == Mode.Build || m == Mode.Smith || m == Mode.Quarry) m = Mode.Hammer;
+            else if (m == Mode.Farm) m = Mode.Hoe;
+            else if (m == Mode.Cook) m = Mode.Stir;
             string kit = m == Mode.Hammer ? ToolKit.Hammer : m == Mode.Chop ? ToolKit.Axe
                 : m == Mode.Saw ? ToolKit.Saw : m == Mode.Hoe ? ToolKit.Hoe
                 : m == Mode.Stir ? ToolKit.StirPaddle

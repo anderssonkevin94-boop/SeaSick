@@ -28,6 +28,10 @@ namespace SeaSick.World
         const float FlankHeight = 0.35f;
         /// Longest he waits by a killed beast for the scene to drop it.
         const float FallWaitSeconds = 3f;
+        /// The v15 `Hunt` clip's spear strikes 3.91 m straight ahead.
+        const float SpearThrowReach = 3.9f;
+        /// How far out from the throwing spot the stalk (`HuntWalk`) starts.
+        const float StalkMetres = 5f;
 
         HunterProps hunterProps;
         float setDownLeft = -1f;
@@ -42,8 +46,16 @@ namespace SeaSick.World
             string spear = ledger == null ? null
                 : r.huntArmed ? Res.Bow
                 : ledger.SpearInHand() ?? (ledger.BowReady() ? Res.Bow : null);
+            // **The v15 spear throw (2026-10-01):** a spear hunter on a rig
+            // with the `Hunt` clip stalks in (`HuntWalk`) and throws from
+            // 3.9 m (`SpearThrowReach`, the clip's strike point) instead of
+            // jabbing at arm's length. A bow, or a rig without the clip,
+            // hunts as before.
+            bool throwing = !r.huntArmed && !string.IsNullOrEmpty(spear) && spear != Res.Bow
+                && acting != null && acting.Plays(VillagerActing.Mode.Hunt);
             // A bow hunter shoots from farther off than arm's length.
-            float reach = r.huntArmed ? HuntReach * Economy.EconomyTuning.BowHuntReachScale : HuntReach;
+            float reach = r.huntArmed ? HuntReach * Economy.EconomyTuning.BowHuntReachScale
+                : throwing ? SpearThrowReach : HuntReach;
             if (hunterProps == null) hunterProps = HunterProps.On(gameObject);
             var props = hunterProps;
             var view = ledger != null ? ledger.HaulOf(r) : default;
@@ -93,6 +105,14 @@ namespace SeaSick.World
                     {
                         fallWait += dt;
                         Face(at - transform.position, dt);
+                        if (throwing)
+                        {
+                            // The throw plays on: follow-through, watching
+                            // it strike.
+                            props.Drive(spear, HunterProps.Pose.Throw, at + Vector3.up * FlankHeight);
+                            acting?.Set(VillagerActing.Mode.Hunt);
+                            return;
+                        }
                         props.Drive(spear, HunterProps.Pose.Thrust, at + Vector3.up * FlankHeight * 0.5f);
                         acting?.Set(VillagerActing.Mode.Bend);
                         return;
@@ -141,20 +161,22 @@ namespace SeaSick.World
             if (view.leg == TripLeg.ToPickup)
             {
                 phase = Phase.Going;
-                props.Drive(spear, HunterProps.Pose.Upright);
-                acting?.Set(VillagerActing.Mode.None);
+                // The last stretch is a stalk, spear raised (`HuntWalk`).
+                bool stalking = throwing && Near(beast, reach + StalkMetres);
+                props.Drive(spear, stalking ? HunterProps.Pose.Held : HunterProps.Pose.Upright);
+                acting?.Set(stalking ? VillagerActing.Mode.HuntWalk : VillagerActing.Mode.None);
                 if (!Near(beast, reach + 0.35f)) { Walk(StandOffFrom(beast, reach), dt); return; }
                 r.walkingIn = false;
                 ledger.BodyArrived(r);
                 return;
             }
 
-            // AtPickup: the jab.
+            // AtPickup: the jab (or the v15 throw).
             phase = Phase.Working;
             r.walkingIn = false;
             Face(beast - transform.position, dt);
-            props.Drive(spear, HunterProps.Pose.Thrust, beast + Vector3.up * FlankHeight);
-            acting?.Set(VillagerActing.Mode.Bend);
+            props.Drive(spear, throwing ? HunterProps.Pose.Throw : HunterProps.Pose.Thrust, beast + Vector3.up * FlankHeight);
+            acting?.Set(throwing ? VillagerActing.Mode.Hunt : VillagerActing.Mode.Bend);
             ledger.BodyWorked(r, dt * ClockRate());
         }
 

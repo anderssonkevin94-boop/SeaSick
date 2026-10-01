@@ -630,6 +630,18 @@ namespace SeaSick.World
             // where the books have him, and the ledger leaves his legs to him.
             camp.Ledger?.BodyAt(r, transform.position);
 
+            // **How he walks (v15 gaits, 2026-10-01):** running to hide is
+            // panic (RunScared); the spear fetch, a fight or a rescue run
+            // (Run); a low-mood hand drags his feet (WalkTired, mood < 0.5,
+            // the same line `OutpostLedger.WorkFactor` slows him at); an
+            // errand is brisk, an idle wander a stroll.
+            if (acting != null)
+                acting.WalkGait = r.hidingHut || r.hidingCrouch ? VillagerActing.Gait.Scared
+                    : r.fetchingSpear || r.defending || !string.IsNullOrEmpty(r.rescuing) ? VillagerActing.Gait.Run
+                    : r.mood < 0.5f ? VillagerActing.Gait.Tired
+                    : phase == Phase.Resting ? VillagerActing.Gait.Stroll
+                    : VillagerActing.Gait.Errand;
+
             // **The rescuer (death/rescue phase 2), ahead of everything
             // else** -- a hand sent to drag somebody home is not doing his
             // ordinary job right now, the same priority `TickTower` has
@@ -918,7 +930,7 @@ namespace SeaSick.World
                     wait = SwingSeconds * Random.Range(0.85f, 1.35f);
                     clearFor = 0f;
                     acting?.Set(clearing ? (clearIsRock ? VillagerActing.Mode.Mine : VillagerActing.Mode.Chop)
-                        : raising ? VillagerActing.Mode.Hammer : ModeFor(WhatFor(r)));
+                        : raising ? VillagerActing.Mode.Build : ModeFor(WhatFor(r)));
                     return;
 
                 case Phase.Working:
@@ -1539,7 +1551,9 @@ namespace SeaSick.World
                     phase = Phase.Working;
                     r.walkingIn = false;
                     Face(PickFace(view) - transform.position, dt);
-                    acting?.Set(PickMode(view));
+                    // A store/station pickup is the v15 `PickUp` one-shot,
+                    // with the load shown on the ground and lifted.
+                    acting?.Set(PickMode(view), view.resource, Mathf.Max(1, view.count));
                     ledger.BodyWorked(r, dt * ClockRate());
                     return;
                 }
@@ -1556,7 +1570,7 @@ namespace SeaSick.World
                     {
                         // Delivered: set it down, here, now.
                         mimeLoaded = mimeArrived = false;
-                        StartPlace(mimeFace);
+                        StartPlace(mimeFace, view.resource, Mathf.Max(1, view.count));
                     }
                     return;
                 }
@@ -1649,7 +1663,7 @@ namespace SeaSick.World
             mimeHold = 0f;
             if (!holding) return false;
             float left = FlatDistance(transform.position, mimeDrop);
-            if (left <= 0.6f) { StartPlace(mimeFace); return true; }
+            if (left <= 0.6f) { StartPlace(mimeFace, mimeRes, mimeCount); return true; }
             if (left <= TailMetres)
             {
                 StartDelivery(mimeDrop, mimeFace, mimeRes, mimeCount, 0f);
@@ -1808,7 +1822,7 @@ namespace SeaSick.World
         /// island's tree or rock, a stoop over a store's stack or a
         /// station's bay or rack.
         static VillagerActing.Mode PickMode(HaulView view) =>
-            view.from == HaulPlace.Field ? ModeFor(view.resource) : VillagerActing.Mode.Bend;
+            view.from == HaulPlace.Field ? ModeFor(view.resource) : VillagerActing.Mode.PickUp;
 
         /// What to face at a pickup: the tree or prop itself on the island
         /// (the stand spot is a pace off it), else the pickup's own anchor.
@@ -1851,13 +1865,20 @@ namespace SeaSick.World
 
         /// The set-down itself: a short stoop with empty arms (the carried
         /// stack is gone once the pose changes).
-        void StartPlace(Vector3 face)
+        void StartPlace(Vector3 face, string res = null, int count = 1)
         {
             delivering = false;
             placeLeft = PlaceSeconds;
             placeFace = face;
-            acting?.Set(VillagerActing.Mode.Bend);
+            placeRes = res;
+            placeCount = Mathf.Max(1, count);
+            // The v15 `SetDown` one-shot: he lets go on frame 3 and the load
+            // lands 0.68 m ahead on frame 16 (0.53 s), inside the stoop.
+            acting?.Set(VillagerActing.Mode.SetDown, placeRes, placeCount);
         }
+
+        string placeRes;
+        int placeCount = 1;
 
         void CancelDelivery()
         {
@@ -1874,7 +1895,7 @@ namespace SeaSick.World
             {
                 placeLeft -= dt;
                 Face(placeFace - transform.position, dt);
-                if (placeLeft > 0f) { acting?.Set(VillagerActing.Mode.Bend); return true; }
+                if (placeLeft > 0f) { acting?.Set(VillagerActing.Mode.SetDown, placeRes, placeCount); return true; }
                 acting?.Set(VillagerActing.Mode.None);
                 return true;
             }
@@ -1890,7 +1911,7 @@ namespace SeaSick.World
                 Face(deliverFace - transform.position, dt);
                 return true;
             }
-            StartPlace(deliverFace);
+            StartPlace(deliverFace, deliverRes, deliverCount);
             return true;
         }
 
@@ -2257,8 +2278,10 @@ namespace SeaSick.World
             if (string.IsNullOrEmpty(resource)) return VillagerActing.Mode.Chop;
             if (resource == Res.Timber || resource == Res.Boards)
                 return VillagerActing.Mode.Chop;
+            // v15 `Forage` (2026-10-01): crouch, pick from the bush, into
+            // the basket (was the hoe).
             if (resource == Res.Spice || resource == Res.Food)
-                return VillagerActing.Mode.Hoe;
+                return VillagerActing.Mode.Forage;
             return VillagerActing.Mode.Mine;        // stone, ore, anything mined
         }
 
@@ -2270,13 +2293,18 @@ namespace SeaSick.World
             string post = BuildPlans.PositionAt(planId);
             switch (post)
             {
+                // Each a v15 clip (2026-10-01); a rig without the state shows
+                // the old code pose (`VillagerActing.CodePose`).
                 case "sawyer": return VillagerActing.Mode.Saw;
-                case "smith": return VillagerActing.Mode.Hammer;
-                case "farmhand": return VillagerActing.Mode.Hoe;
-                case "cook": return VillagerActing.Mode.Stir;
-                // Gutting the catch on the prep board, stooped over the
-                // bench -- the fishing hut, 2026-09-27. No tool in hand.
-                case "fisher": return VillagerActing.Mode.Bend;
+                case "smith": return VillagerActing.Mode.Smith;
+                case "farmhand": return VillagerActing.Mode.Farm;
+                case "cook": return VillagerActing.Mode.Cook;
+                case "miller": return VillagerActing.Mode.Mill;
+                case "quarryman": return VillagerActing.Mode.Quarry;
+                case "fletcher": return VillagerActing.Mode.Fletcher;
+                // Gutting the catch on the prep board -- the fishing hut,
+                // 2026-09-27.
+                case "fisher": return VillagerActing.Mode.Fisher;
                 default: return VillagerActing.Mode.Hammer;
             }
         }

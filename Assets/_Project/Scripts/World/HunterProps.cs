@@ -29,7 +29,22 @@ namespace SeaSick.World
     [DefaultExecutionOrder(200)]
     public class HunterProps : MonoBehaviour
     {
-        public enum Pose { Upright, Thrust }
+        /// `Held` and `Throw` (2026-10-01) are the v15 `HuntWalk` / `Hunt`
+        /// clips': the spear rides his right fist in the tool frame (grip at
+        /// the fist centre, +Y to the point), and in `Throw` it leaves the
+        /// hand on frame 35 and its point strikes the mark on frame 48
+        /// (clips.json `spear_throw`), then stays stuck there.
+        public enum Pose { Upright, Thrust, Held, Throw }
+
+        const float ThrowReleaseFrame = 35f, ThrowHitFrame = 48f;
+        /// Grip to the point, metres: where the grip ends up when the point
+        /// is in the beast.
+        const float GripToPoint = 1.3f;
+        /// Peak height of the flight above the straight line, metres.
+        const float ThrowArc = 0.55f;
+        float throwClock;
+        Vector3 releaseAt;
+        Transform toolHand;
 
         /// The props on this body, added if it has none.
         public static HunterProps On(GameObject body)
@@ -85,6 +100,7 @@ namespace SeaSick.World
             drivenFrame = Time.frameCount;
             wantSpear = spearRes;
             if (p == Pose.Thrust && pose != Pose.Thrust) jabClock = 0f;
+            if (p == Pose.Throw && pose != Pose.Throw) throwClock = 0f;
             pose = p;
             aim = aimAt;
         }
@@ -182,6 +198,40 @@ namespace SeaSick.World
                 return;
             }
 
+            if (pose == Pose.Held || pose == Pose.Throw)
+            {
+                Transform hand = toolHand != null ? toolHand : handR;
+                if (hand != null)
+                {
+                    Vector3 inHand = hand.TransformPoint(VillagerActing.ToolGripLocal);
+                    Quaternion inRot = hand.rotation * VillagerActing.ToolGripRot;
+                    float f = 0f;
+                    if (pose == Pose.Throw) { throwClock += dt; f = throwClock * 30f; }
+                    if (pose == Pose.Held || f < ThrowReleaseFrame)
+                    {
+                        releaseAt = inHand;
+                        spear.transform.SetPositionAndRotation(inHand, inRot);
+                        return;
+                    }
+                    // In flight: the grip flies an arc from where it left the
+                    // fist to a spear's length short of the mark, the shaft
+                    // along its path; then it stays stuck.
+                    Vector3 flat = Vector3.ProjectOnPlane(aim - releaseAt, body.up);
+                    if (flat.sqrMagnitude < 1e-4f) flat = body.forward;
+                    Vector3 end = aim - flat.normalized * (GripToPoint * s * 0.8f) + body.up * 0.25f * s;
+                    float t = Mathf.Clamp01((f - ThrowReleaseFrame) / (ThrowHitFrame - ThrowReleaseFrame));
+                    Vector3 Arc(float u) => Vector3.Lerp(releaseAt, end, u) + body.up * (4f * ThrowArc * s * u * (1f - u));
+                    Vector3 at = Arc(t);
+                    Vector3 vel = Arc(Mathf.Min(1f, t + 0.02f)) - Arc(Mathf.Max(0f, t - 0.02f));
+                    if (t >= 1f) vel = Arc(1f) - Arc(0.96f);
+                    if (vel.sqrMagnitude < 1e-8f) vel = flat;
+                    Vector3 h = Mathf.Abs(Vector3.Dot(vel.normalized, body.up)) > 0.7f ? body.forward : body.up;
+                    spear.transform.SetPositionAndRotation(at,
+                        Quaternion.LookRotation(vel.normalized, h) * Quaternion.Euler(90f, 0f, 0f));
+                    return;
+                }
+            }
+
             Vector3 dir;
             if (pose == Pose.Thrust)
             {
@@ -248,6 +298,10 @@ namespace SeaSick.World
                 armR = transform.InverseTransformPoint(a.position).x > transform.InverseTransformPoint(b.position).x ? a : b;
             else armR = a != null ? a : b;
             handR = HandUnder(armR);
+            // The clips put tools in the bone named `hand.L` (his right
+            // fist, `VillagerActing.ToolArm`).
+            foreach (var t in GetComponentsInChildren<Transform>(true))
+                if (t.name == "hand.L") { toolHand = t; break; }
         }
 
         static Transform HandUnder(Transform arm)

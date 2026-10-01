@@ -450,8 +450,13 @@ namespace SeaSick.Combat
             return at;
         }
 
-        void Act(World.VillagerActing.Mode mode, string res) =>
-            World.VillagerActing.On(GetComponent<Crew.CrewAgent>())?.Set(mode, res);
+        void Act(World.VillagerActing.Mode mode, string res)
+        {
+            var a = World.VillagerActing.On(GetComponent<Crew.CrewAgent>());
+            if (a == null) return;
+            a.WalkGait = World.VillagerActing.Gait.Run;   // raiders run (v15 Run)
+            a.Set(mode, res);
+        }
 
         // --- barred, and breaking through --------------------------------------
 

@@ -53,6 +53,10 @@ namespace SeaSick.Ship
         public bool Manned { get; set; } = true;
 
         public bool Ready => Manned && reloadLeft <= 0f;
+        /// Reloading (the gunner's v15 `GunRam` clip plays while true).
+        public bool Reloading => reloadLeft > 0f;
+        /// `Time.time` of the last shot or recoil (the gunner's `GunFire`).
+        public float LastFiredAt { get; private set; } = -99f;
         public float ReloadFraction => Mathf.Clamp01(1f - reloadLeft / reloadTime);
         /// Straight out of the muzzle, angled up a touch.
         public Vector3 MuzzlePoint => barrel != null
@@ -301,6 +305,7 @@ namespace SeaSick.Ship
             if (!Ready) return false;
             reloadLeft = reloadTime;
             recoil = recoilDistance;
+            LastFiredAt = Time.time;
             if (smoke != null) smoke.Emit(28);
 
             // Resolved lazily, and by interface rather than by type, so the

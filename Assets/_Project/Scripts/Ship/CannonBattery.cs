@@ -306,9 +306,28 @@ namespace SeaSick.Ship
 
                 Vector3 gun = allGuns[i].transform.localPosition;
                 float side = Mathf.Sign(gun.x);
-                hand.AssignStation(
-                    new Vector3(gun.x - side * gunnerInboard, gun.y, gun.z),
+                Vector3 station = new Vector3(gun.x - side * gunnerInboard, gun.y, gun.z);
+                // **The v15 gunner (GunRam / GunFire, 2026-10-01)** was
+                // authored at his station beside the BACK of the gun, the gun
+                // on his right, facing outboard with it: 1.05 m inboard of
+                // the gun's origin and 0.98 m to its left (gun frame), clear
+                // of the recoil. A body with those clips stands there.
+                if (hand.HasGunnerClips && allGuns[i].transform.parent == transform)
+                {
+                    var g = allGuns[i].transform;
+                    Vector3 fwd = g.localRotation * Vector3.forward;
+                    fwd.y = 0f;
+                    if (fwd.sqrMagnitude < 1e-4f) fwd = new Vector3(side, 0f, 0f);
+                    fwd.Normalize();
+                    // Outboard along the gun; its left is up x forward.
+                    if (Vector3.Dot(fwd, new Vector3(side, 0f, 0f)) < 0f) fwd = -fwd;
+                    Vector3 left = Vector3.Cross(fwd, Vector3.up);
+                    station = gun - fwd * Crew.CrewAgent.GunnerBehind + left * Crew.CrewAgent.GunnerBeside;
+                    station.y = gun.y;
+                }
+                hand.AssignStation(station,
                     new Vector3(gun.x + side * gunportOutboard, gun.y, gun.z));
+                hand.AssignGun(allGuns[i]);
             }
         }
 

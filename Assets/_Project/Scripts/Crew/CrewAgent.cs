@@ -614,6 +614,7 @@ namespace SeaSick.Crew
             RunStateMachine(dt);
             TrackWalking(dt);
             ActBody(dt);
+            DriveClips(dt);
         }
 
         /// The walk cycle is driven by how fast they are ACTUALLY moving, not
@@ -831,8 +832,9 @@ namespace SeaSick.Crew
                             state = State.ToShip;
                         }
                     }
-                    // Lean into the swing.
-                    float swing = Mathf.Sin(Time.time * 12f) * 16f;
+                    // Lean into the swing (the v15 Chop/Mine/Forage clip
+                    // swings instead, `DriveClips`).
+                    float swing = HasClip(ChopId) ? 0f : Mathf.Sin(Time.time * 12f) * 16f;
                     Vector3 face = targetNode != null
                         ? targetNode.transform.position - transform.position : transform.forward;
                     face.y = 0f;
@@ -1559,6 +1561,193 @@ namespace SeaSick.Crew
             return (pos - targetLocal).sqrMagnitude < 0.001f;
         }
 
+        // ------------------------------------------- the v15 clips (2026-10-01)
+        //
+        // Aboard and ashore with a party, this body's Animator plays the
+        // authored v15 state for what it is doing (`ShipClip`): DeckBrace in
+        // a rough sea, SickSway/SickClutch/SickCollapse->SickKneel as the
+        // sickness climbs, SickRail and RailGrip at the rail, Bail on the
+        // buckets, ThrowLine->HaulLine on a rescue, Soaked resting after one,
+        // GunRam/GunFire on a gun, Gangway on the plank, SickWalk walking
+        // sick, else Idle/Walk. At a camp (`Puppeted`/`AtCamp`) or while a
+        // `VillagerActing` mode owns the body, this keeps out. A rig without
+        // a state keeps the old root poses (`ActBody`).
+
+        static readonly int WalkRateId = Animator.StringToHash("WalkRate");
+        static readonly int IdleId = Animator.StringToHash("Idle"), WalkId = Animator.StringToHash("Walk"),
+            SickWalkId = Animator.StringToHash("SickWalk"), SickSwayId = Animator.StringToHash("SickSway"),
+            SickClutchId = Animator.StringToHash("SickClutch"), SickCollapseId = Animator.StringToHash("SickCollapse"),
+            SickKneelId = Animator.StringToHash("SickKneel"), SickRailId = Animator.StringToHash("SickRail"),
+            RailGripId = Animator.StringToHash("RailGrip"), BailId = Animator.StringToHash("Bail"),
+            ThrowLineId = Animator.StringToHash("ThrowLine"), HaulLineId = Animator.StringToHash("HaulLine"),
+            SoakedId = Animator.StringToHash("Soaked"), DeckBraceId = Animator.StringToHash("DeckBrace"),
+            GunRamId = Animator.StringToHash("GunRam"), GunFireId = Animator.StringToHash("GunFire"),
+            GangwayId = Animator.StringToHash("Gangway"), ChopId = Animator.StringToHash("Chop"),
+            MineId = Animator.StringToHash("Mine"), ForageId = Animator.StringToHash("Forage"),
+            GunTendId = Animator.StringToHash("GunTend"), WalkBriskId = Animator.StringToHash("WalkBrisk"),
+            WalkDeckId = Animator.StringToHash("WalkDeck"), RunId = Animator.StringToHash("Run"),
+            RunScaredId = Animator.StringToHash("RunScared");
+
+        /// Above this ground speed aboard he walks briskly; ashore above
+        /// `RunAbove` he runs (shore parties move at 6.5 m/s).
+        public static float BriskAbove = 1.0f, RunAbove = 3.0f;
+        /// Sickness at which the queasy clips take over (asset README).
+        public static float SickSwayAt = 0.4f, SickClutchAt = 0.7f, SickCollapseAt = 0.92f;
+        /// Sea roughness at which a hand at his post braces (`DeckBrace`).
+        public static float BraceRoughness = 0.35f;
+        /// The v15 gunner's station from his gun's origin, metres: behind
+        /// it (inboard) and beside it (to its left, the gun on his right).
+        public const float GunnerBehind = 1.05f, GunnerBeside = 0.98f;
+        const float CollapseSeconds = 1.8f, ThrowLineSeconds = 1.4f, GunFireSeconds = 2.0f;
+
+        readonly Dictionary<int, bool> clipHas = new Dictionary<int, bool>();
+        int clipPlaying;            // the state last cross-faded to, 0 = not ours
+        float stateClock;           // seconds in the current `state`
+        State clockState = (State)(-1);
+        float collapsedFor = -1f;   // seconds since the collapse began, -1 = upright
+        Cannon gun;
+        bool partyActing;
+
+        /// Which gun this hand works (`CannonBattery.PostGunCrews`).
+        public void AssignGun(Cannon g) => gun = g;
+
+        /// True when this body has the v15 gunner clips (`CannonBattery`
+        /// then stands him at the clip's station).
+        public bool HasGunnerClips
+        {
+            get
+            {
+                if (animator == null) animator = GetComponentInChildren<Animator>();
+                return HasClip(GunRamId);
+            }
+        }
+
+        bool HasClip(int id)
+        {
+            if (animator == null || animator.runtimeAnimatorController == null) return false;
+            if (!clipHas.TryGetValue(id, out bool has))
+            {
+                has = animator.isActiveAndEnabled && animator.HasState(0, id);
+                if (!animator.isActiveAndEnabled) return false;   // ask again once it is
+                clipHas[id] = has;
+            }
+            return has;
+        }
+
+        void DriveClips(float dt)
+        {
+            if (state != clockState) { clockState = state; stateClock = 0f; }
+            else stateClock += dt;
+            if (animator == null || !animator.isActiveAndEnabled) { clipPlaying = 0; return; }
+
+            // An ashore party's work: the camp's acting (tools and all).
+            var acting = GetComponent<World.VillagerActing>();
+            if (!Puppeted && !AtCamp)
+            {
+                if (state == State.Chopping && targetNode != null && HasClip(ChopId))
+                {
+                    if (acting == null) acting = World.VillagerActing.On(this);
+                    string res = targetNode.Resource;
+                    acting.Set(res == World.Res.Spice || res == World.Res.Food ? World.VillagerActing.Mode.Forage
+                        : res == World.Res.Timber || res == World.Res.Boards || string.IsNullOrEmpty(res) ? World.VillagerActing.Mode.Chop
+                        : World.VillagerActing.Mode.Mine);
+                    partyActing = true;
+                }
+                else if (partyActing && acting != null)
+                {
+                    acting.Set(World.VillagerActing.Mode.None);
+                    partyActing = false;
+                }
+            }
+            if (Puppeted || AtCamp || (acting != null && acting.Current != World.VillagerActing.Mode.None))
+            {
+                clipPlaying = 0;     // not ours: re-assert when it comes back
+                return;
+            }
+
+            int want = ShipClip();
+            if (want == 0 || !HasClip(want)) want = walkSpeedSeen > 0.3f ? WalkId : IdleId;
+            animator.SetFloat(WalkRateId, World.VillagerActing.GaitRate(want, walkSpeedSeen));
+            if (want == clipPlaying) return;
+            clipPlaying = want;
+            var cur = animator.GetCurrentAnimatorStateInfo(0);
+            var next = animator.GetNextAnimatorStateInfo(0);
+            if (cur.shortNameHash == want && !animator.IsInTransition(0)) return;
+            if (animator.IsInTransition(0) && next.shortNameHash == want) return;
+            animator.CrossFadeInFixedTime(want, 0.25f, 0);
+        }
+
+        /// The v15 state for what this hand is doing aboard, or 0 for plain
+        /// Idle/Walk.
+        int ShipClip()
+        {
+            bool moving = walkSpeedSeen > 0.3f;
+            bool sick = Sickness01 >= SickSwayAt;
+            if (state != State.Station) collapsedFor = -1f;
+
+            switch (state)
+            {
+                case State.AtRail:
+                    return heaveTimer > 0f ? SickRailId : SickSwayId;
+                case State.RailHold:
+                    return RailGripId;
+                case State.Bailing:
+                    return moving ? (sick ? SickWalkId : WalkId) : BailId;
+                case State.Hauling:
+                    return stateClock < ThrowLineSeconds ? ThrowLineId : HaulLineId;
+                case State.Station:
+                {
+                    if (restLeft > 0f && !moving) return SoakedId;
+                    if (gun != null && Available)
+                    {
+                        if (Time.time - gun.LastFiredAt < GunFireSeconds) return GunFireId;
+                        if (gun.Reloading) return GunRamId;
+                    }
+                    // Standing by his gun at sea, most of the voyage.
+                    if (gun != null && ship != null && !sick && HasClip(GunTendId)) return GunTendId;
+                    if (Sickness01 >= SickCollapseAt || collapsedFor >= 0f && Sickness01 >= SickClutchAt)
+                    {
+                        if (collapsedFor < 0f) collapsedFor = 0f;
+                        collapsedFor += Time.deltaTime;
+                        return collapsedFor < CollapseSeconds ? SickCollapseId : SickKneelId;
+                    }
+                    collapsedFor = -1f;
+                    if (Sickness01 >= SickClutchAt) return SickClutchId;
+                    if (sick) return SickSwayId;
+                    if (meter != null && meter.Roughness01 >= BraceRoughness) return DeckBraceId;
+                    return 0;
+                }
+                case State.Chopping:
+                case State.JollyBoatDuty:
+                    return 0;
+            }
+            if (!moving) return sick ? SickSwayId : 0;
+            if (OnPlank()) return GangwayId;
+            if (sick) return SickWalkId;
+            // A line to a man overboard is urgent: run to the rail.
+            if (state == State.HaulGoing) return RunId;
+            if (IsAshore) return walkSpeedSeen > RunAbove ? RunId : WalkBriskId;
+            // Aboard: sea legs in a rough sea, else brisk or plain.
+            if (meter != null && meter.Roughness01 >= BraceRoughness) return WalkDeckId;
+            return walkSpeedSeen > BriskAbove ? WalkBriskId : WalkId;
+        }
+
+        /// On the gangway or catwalk between its rail step and its landing.
+        bool OnPlank()
+        {
+            if (gangway == null || !gangway.Ready) return false;
+            Vector3 a = gangway.RailPoint, b = gangway.LandingPoint, p = transform.position;
+            Vector3 ab = b - a;
+            ab.y = 0f;
+            float len2 = ab.sqrMagnitude;
+            if (len2 < 0.25f) return false;
+            Vector3 ap = p - a;
+            ap.y = 0f;
+            float t = Vector3.Dot(ap, ab) / len2;
+            if (t < 0.02f || t > 0.98f) return false;
+            return (ap - ab * t).sqrMagnitude < 0.6f * 0.6f;
+        }
+
         void ActBody(float dt)
         {
             // Queasy sway: builds with sickness, wobbles faster when sicker.
@@ -1573,7 +1762,32 @@ namespace SeaSick.Crew
             // tint underneath is NOT guarded: it is additive, it is the only
             // thing that reads the weather on their faces, and `VillagerActing`
             // deliberately stays off that channel so nothing double-books it.
+            bool clips = HasClip(SickRailId);
             if (Puppeted) { /* pose is not ours */ }
+            else if (clips && ((heaveTimer > 0f || state == State.RailHold) && IsAtRail || state == State.Hauling))
+            {
+                // v15 SickRail / RailGrip / ThrowLine / HaulLine: the clip
+                // leans; the body only turns to face out over the rail.
+                Vector3 r = state == State.Hauling ? haulRailLocal : railLocal;
+                float outward = Mathf.Sign(r.x != 0f ? r.x : 1f);
+                transform.localRotation = Quaternion.Euler(0f, 90f * outward, 0f);
+            }
+            else if (clips && state == State.Bailing)
+            {
+                // v15 Bail tosses over the rail on his RIGHT: face along the
+                // ship so the near side's rail is to his right.
+                float outward = Mathf.Sign(stationLocal.x != 0f ? stationLocal.x : 1f);
+                transform.localRotation = Quaternion.Euler(0f, outward > 0f ? 0f : 180f, 0f);
+            }
+            else if (clips && state == State.Station && gun != null && !AtCamp)
+            {
+                // The gunner faces outboard with his gun (GunRam/GunFire).
+                Vector3 fwd = ship != null ? ship.InverseTransformDirection(gun.transform.forward) : Vector3.right;
+                fwd.y = 0f;
+                if (Vector3.Dot(fwd, new Vector3(Mathf.Sign(gun.transform.localPosition.x), 0f, 0f)) < 0f) fwd = -fwd;
+                float yaw = fwd.sqrMagnitude > 1e-4f ? Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg : 90f;
+                transform.localRotation = Quaternion.Euler(0f, yaw, 0f) * Quaternion.Euler(0f, 0f, sway * 0.5f);
+            }
             else if ((heaveTimer > 0f || state == State.RailHold) && IsAtRail)
             {
                 // Doubled over the rail (retching), or gripping it white-
