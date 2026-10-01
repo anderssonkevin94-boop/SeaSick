@@ -220,7 +220,7 @@ namespace SeaSick.World
 
         /// Can this walker stand in this cell? Ground first, then whatever
         /// has been put on top of it.
-        bool Walk(int i) => open[i] && ((block[i] | wall[i]) & mask) == 0;
+        bool Walk(int i) => open[i] && ((block[i] | wall[i] | bldg[i]) & mask) == 0;
 
         /// The pathing map for this camp, added to the island on first ask.
         public static CampPath For(Outpost camp)
@@ -303,6 +303,7 @@ namespace SeaSick.World
             open = new bool[count];
             block = new byte[count];
             wall = new byte[count];
+            bldg = new byte[count];
             pen = new float[count];
 
             // One height sample per cell. This is the whole cost of the map.
@@ -365,6 +366,12 @@ namespace SeaSick.World
             RelayWalls(null);
             LayLinks(null);
             RelayRoads();
+            // Buildings (2026-10-01, `CampPath.Solids`): their own layer,
+            // with the lanes to their markers carved back open. Not in
+            // `LabelGround`: like a wall, a building is not the ground.
+            solidFrame = -1;
+            SyncSolids();
+            RelayBuildings();
             LabelGround();
 
             watch.Stop();
@@ -556,9 +563,23 @@ namespace SeaSick.World
             if (hs == null) return false;
 
             mask = MaskFor(who);
-            int a = Nearest(from, who), b = Nearest(to, who);
+            SyncSolids();
+            // **In and out of a building by its lane (2026-10-01).** A walk
+            // that starts or ends at a building's marker (a stand, a pickup)
+            // plans from / to the lane's outside end and walks the lane as
+            // its first / last leg -- the lane is the way between the
+            // benches, the grid is too coarse to know it.
+            bool laneA = LaneAt(from, 0.6f, out Vector3 exitA);
+            bool laneB = LaneAt(to, 0.5f, out Vector3 exitB);
+            int a = Nearest(laneA ? exitA : from, who), b = Nearest(laneB ? exitB : to, who);
             if (a < 0 || b < 0) return false;
-            if (a == b) { corners.Add(to); return true; }
+            if (laneA) corners.Add(exitA);
+            if (a == b)
+            {
+                if (laneB) corners.Add(exitB);
+                corners.Add(to);
+                return true;
+            }
 
             useLinks = ladders;
             bool found = Search(a, b);
@@ -604,7 +625,8 @@ namespace SeaSick.World
                     for (int k = at + 1; k < lookTo; k++)
                         if (Hop(cells[k], cells[k + 1])) { lookTo = k; break; }
                     for (int j = lookTo; j > at + 1; j--)
-                        if (Clear(cells[at], cells[j]) && KeepsRoad(at, j)) { far = j; break; }
+                        if (Clear(cells[at], cells[j]) && KeepsRoad(at, j)
+                            && SolidLineClear(Centre(cells[at]), Centre(cells[j]))) { far = j; break; }
                 }
                 at = far;
                 if (far < last) corners.Add(Centre(cells[far]));
@@ -612,7 +634,8 @@ namespace SeaSick.World
 
             // The real destination last, never a cell centre: arrival
             // tolerance and every "am I there" test upstream are about the
-            // target, not about the map.
+            // target, not about the map. Down its lane, if it has one.
+            if (laneB) corners.Add(exitB);
             corners.Add(to);
             return true;
         }
@@ -885,6 +908,9 @@ namespace SeaSick.World
             if (!built) Build();
             if (hs == null) return false;
             mask = MaskFor(who);
+            SyncSolids();
+            if (LaneAt(from, 0.6f, out Vector3 ea)) from = ea;
+            if (LaneAt(to, 0.5f, out Vector3 eb)) to = eb;
             int a = Nearest(from, who), b = Nearest(to, who);
             if (a < 0 || b < 0) return false;
             if (a == b) return true;
@@ -930,6 +956,7 @@ namespace SeaSick.World
             int i = Index(at);
             if (i < 0) return false;
             mask = MaskFor(who);
+            SyncSolids();
             return Walk(i);
         }
 

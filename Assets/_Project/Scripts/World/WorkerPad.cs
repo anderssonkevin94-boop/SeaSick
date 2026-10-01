@@ -20,7 +20,8 @@ namespace SeaSick.World
     /// the bench in front and the racks either side (0.4 / 0.5 m gaps that
     /// are clearances, not lanes), and only the rear, between the two roof
     /// posts, is open. Beyond the gate the ordinary walk takes over --
-    /// buildings are not obstacles to `CampPath` anywhere in the camp.
+    /// which, since 2026-10-01, walks round every building's benches and
+    /// posts (`CampPath.Solids`) and down each marker's lane.
     ///
     /// A pad on a ghost / blueprint / preview model (no `Building` above it)
     /// is ignored, so a planned mill never lifts anybody.

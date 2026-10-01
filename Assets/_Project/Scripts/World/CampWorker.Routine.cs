@@ -108,6 +108,8 @@ namespace SeaSick.World
             float deg = Mathf.Abs(hash) % 360;
             Vector3 dir = Quaternion.AngleAxis(deg, Vector3.up) * Vector3.forward;
             Vector3 at = centre + dir * CampLifeTuning.FireRingRadius;
+            // Not inside a building that stands on the ring (2026-10-01).
+            if (CampPath.PushOut(camp, at, out Vector3 outside)) at = outside;
             at.y = camp.GroundAt(at);
             return at;
         }

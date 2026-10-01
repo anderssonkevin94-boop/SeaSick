@@ -388,6 +388,8 @@ namespace SeaSick.World
         {
             Drop();
             OffTower();
+            // Dropped on a building: on the ground beside it (2026-10-01).
+            if (camp != null && CampPath.PushOut(camp, at, out Vector3 outside)) at = outside;
             if (camp != null) at.y = WorkerPad.Foot(at, camp.GroundAt(at));
             transform.position = at;
             phase = Phase.Landing;
@@ -622,6 +624,7 @@ namespace SeaSick.World
             // book a spot that deep (`Outpost.WalkerSpotOk`), so the books
             // still have him where he really was: put the body back there.
             HealBuried(r);
+            HealInsideSolid();
 
             // **This body is the walker** (2026-09-27): where he stands is
             // where the books have him, and the ledger leaves his legs to him.
@@ -771,6 +774,29 @@ namespace SeaSick.World
                 Vector3 booked = ledger.HandAt(r);
                 if (camp.WalkerSpotOk(booked, false)) to = booked;
             }
+            to.y = WorkerPad.Foot(to, camp.GroundAt(to));
+            transform.position = to;
+            ClearRoute();
+        }
+
+        /// The buildings' revision this body last checked itself against.
+        int solidRevSeen = -1;
+
+        /// **Never inside a building (2026-10-01).** When the camp's
+        /// buildings change (raised, moved, turned -- or this body is new,
+        /// e.g. a save loading), a body standing inside one of their boxes
+        /// steps out to the nearest face (`CampPath.PushOut`). The building
+        /// never moves. One int compare a frame otherwise. A lookout on his
+        /// tower is above the box, not in it.
+        void HealInsideSolid()
+        {
+            if (OnTower || climb.Active || bodyHidden) return;
+            var map = CampPath.For(camp);
+            if (map == null) return;
+            int rev = map.SolidRevisionNow();
+            if (rev == solidRevSeen) return;
+            solidRevSeen = rev;
+            if (!CampPath.PushOut(camp, transform.position, out Vector3 to)) return;
             to.y = WorkerPad.Foot(to, camp.GroundAt(to));
             transform.position = to;
             ClearRoute();
@@ -2431,6 +2457,14 @@ namespace SeaSick.World
                 if (FlatDistance(here, via) < 0.35f) padPassed = true;
                 else { gated = true; to = via; }
             }
+            // **Spent once it stops asking (2026-10-01).** `Gate` goes quiet
+            // within `Arrive` of the gate, so the line above never saw him
+            // arrive: a step on (down the lane toward the route's first
+            // corner) put him back in the lane past `Arrive`, the gate
+            // called him back, and he shuffled on the spot for good. A trip
+            // that began on the pad has passed its gate the first time the
+            // gate has nothing to say.
+            else if (!padPassed && padStartedOn) padPassed = true;
             Vector3 d = to - here;
             d.y = 0f;
             float dist = d.magnitude;
@@ -2493,14 +2527,18 @@ namespace SeaSick.World
             // against the walls themselves, as lines. Blocked, he slides
             // along the wall (which is where the gate or the end of it is);
             // pinned with no slide, he stands and the route is re-asked.
-            if (CampPath.Blocks(camp, here, next, CampPath.Walker.Hand,
-                    CampPath.WallClearance, out Vector3 along))
+            //
+            // **And buildings (2026-10-01, `CampPath.Solids`).** Kevin:
+            // villagers walked straight through buildings. The same guard,
+            // against each building's benches, racks and posts as boxes:
+            // slide along the face, never through; a box his own errand's
+            // spot is inside of never blocks him.
+            if (CampPath.Obstructs(camp, here, next, to, CampPath.Walker.Hand, out Vector3 along))
             {
                 Vector3 slide = along * Vector3.Dot(step, along);
                 Vector3 alt = here + slide;
                 if (slide.sqrMagnitude < 1e-8f
-                    || CampPath.Blocks(camp, here, alt, CampPath.Walker.Hand,
-                           CampPath.WallClearance, out _))
+                    || CampPath.Obstructs(camp, here, alt, to, CampPath.Walker.Hand, out _))
                 {
                     // Re-ask in half a second rather than every frame: a
                     // pinned man asking every frame is a search a frame.
@@ -2645,7 +2683,7 @@ namespace SeaSick.World
                 float t = k * Mathf.PI * 0.25f;
                 var d = new Vector3(Mathf.Sin(t), 0f, Mathf.Cos(t));
                 Vector3 q = here + d * 1.2f;
-                if (CampPath.Blocks(camp, here, q, CampPath.Walker.Hand, CampPath.WallClearance, out _)) continue;
+                if (CampPath.Obstructs(camp, here, q, to, CampPath.Walker.Hand, out _)) continue;
                 if (!Walkability.MayStep(camp, Grounded(here), q, Walkability.Feet.Man)) continue;   // terrain, not pad (see `Walk`)
                 float clear = 3f;
                 if (walls != null)
@@ -2665,7 +2703,7 @@ namespace SeaSick.World
         {
             escapeLeft -= dt;
             Vector3 next = here + escapeDir * (Speed * dt);
-            if (CampPath.Blocks(camp, here, next, CampPath.Walker.Hand, CampPath.WallClearance, out _)
+            if (CampPath.Obstructs(camp, here, next, stallFor, CampPath.Walker.Hand, out _)
                 || !Walkability.MayStep(camp, Grounded(here), next, Walkability.Feet.Man))
             { escapeLeft = 0f; return; }
             next.y = WorkerPad.Foot(next, camp.GroundAt(next));
@@ -2753,7 +2791,9 @@ namespace SeaSick.World
             // was a straight walk through it. Then it is planned like any
             // other walk, and goes round by the gate.
             bool straightCrosses = CampPath.Crosses(camp, here, to, CampPath.Walker.Hand);
-            if (dist < 6f && !straightCrosses) { ClearRoute(); return to; }
+            // A building in the way (2026-10-01) is planned round too.
+            if (dist < 6f && !straightCrosses && !CampPath.SolidBetween(camp, here, to, to))
+            { ClearRoute(); return to; }
 
             routeAge += dt;
 
@@ -2869,7 +2909,8 @@ namespace SeaSick.World
                 float d2 = dx * dx + dz * dz;
                 if (d2 > CornerReach * CornerReach) break;
                 Vector3 after = routeAt + 1 >= route.Count - 1 ? to : route[routeAt + 1];
-                if (d2 > 0.09f && CampPath.Crosses(camp, here, after, CampPath.Walker.Hand)) break;
+                if (d2 > 0.09f && (CampPath.Crosses(camp, here, after, CampPath.Walker.Hand)
+                                   || CampPath.SolidBetween(camp, here, after, to))) break;
                 routeAt++;
             }
 

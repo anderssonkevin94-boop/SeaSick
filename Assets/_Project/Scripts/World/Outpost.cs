@@ -1657,6 +1657,9 @@ namespace SeaSick.World
                     }
                     lookAt = spot + a.transform.forward;
                 }
+                // Never a spot inside a building's box (2026-10-01): a ring
+                // spot under a shed, a booked spot a building now covers.
+                if (CampPath.PushOut(this, spot, out Vector3 outside)) spot = outside;
                 if (height != null) spot.y = height(spot.x, spot.z);
                 if (worker != null)
                 {
