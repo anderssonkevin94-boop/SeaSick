@@ -45,12 +45,39 @@ Shader "SeaSick/Coaster Paint"
     float3 viewDir=GetWorldSpaceNormalizeViewDir(i.world);
     float3 halfDir=SafeNormalize(main.direction+viewDir);
     float3 specular=main.color*pow(saturate(dot(n,halfDir)),12)*.065*diffuse*visibility;
-    #if defined(_ADDITIONAL_LIGHTS)
+    // Lanterns, torches, campfire. Both renderers are Forward+, where URP never
+    // enables _ADDITIONAL_LIGHTS, so the loop must also compile under
+    // USE_CLUSTER_LIGHT_LOOP (it was compiled out: lanterns lit nothing).
+    // Falloff = the island contract (EnvironmentToon / TerrainVertexColor),
+    // duplicated in Crew/CrewPaint.shader -- keep the three constants in step.
+    // Daylight is unaffected: these lights are off by day.
+    #if defined(_ADDITIONAL_LIGHTS) || USE_CLUSTER_LIGHT_LOOP
+    {
+    const float LampFadePerMetre=0.045; // linear fade, 0 at ~22 m
+    const float LampWrapScale=0.6;      // wrapped Lambert n.l*.6+.4
+    const float LampWrapFloor=0.4;
     InputData inputData=(InputData)0;inputData.positionWS=i.world;inputData.normalizedScreenSpaceUV=GetNormalizedScreenSpaceUV(i.p);
     uint count=GetAdditionalLightsCount();
     LIGHT_LOOP_BEGIN(count)
-      Light l=GetAdditionalLight(lightIndex,i.world);lighting+=l.color*saturate(dot(n,l.direction))*l.distanceAttenuation*l.shadowAttenuation;
+      Light l=GetAdditionalLight(lightIndex,i.world);
+      #if USE_CLUSTER_LIGHT_LOOP
+        int pidx=lightIndex;
+      #else
+        int pidx=GetPerObjectLightIndex(lightIndex);
+      #endif
+      #if USE_STRUCTURED_BUFFER_FOR_LIGHT_DATA
+        float3 lp=_AdditionalLightsBuffer[pidx].position.xyz;
+      #else
+        float3 lp=_AdditionalLightsPosition[pidx].xyz;
+      #endif
+      float3 toLamp=lp-i.world;
+      float distanceSqr=max(dot(toLamp,toLamp),HALF_MIN);
+      float rangeFade=saturate(l.distanceAttenuation*distanceSqr); // URP range/spot fade, inverse-square cancelled
+      float fall=saturate(1.0-sqrt(distanceSqr)*LampFadePerMetre);fall*=fall;
+      float wrap=saturate(dot(n,l.direction)*LampWrapScale+LampWrapFloor);
+      lighting+=l.color*fall*rangeFade*wrap*l.shadowAttenuation;
     LIGHT_LOOP_END
+    }
     #endif
     float hi=max(i.c.r,max(i.c.g,i.c.b)), lo=min(i.c.r,min(i.c.g,i.c.b));
     float iron=(1-smoothstep(.012,.04,hi-lo))*(1-smoothstep(.09,.18,hi));

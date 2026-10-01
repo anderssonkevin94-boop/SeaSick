@@ -22,6 +22,14 @@
 // Keep the constants in step with CoasterPaint.shader; the ship is the
 // reference and is not touched from here.
 //
+// One deliberate difference: point lights use the ISLAND contract (the
+// linear ~22 m fade of EnvironmentToon / TerrainVertexColor), not URP's
+// inverse-square, and the loop also runs in Forward+ (see the frag). The
+// camp's torches and campfire are authored for that contract; villagers live
+// on islands. Vertex colours are a LINEAR palette (Blender export, same as
+// the Coaster meshes: cream shirt = 0.66 linear = #D4CBB8..#DCD3C0), so no
+// sRGB->linear conversion belongs here.
+//
 // The Coaster's "iron" palette remap is left out on purpose: it turns
 // near-neutral dark vertex colours charcoal-blue, which on a person is hair
 // and boots, not iron.
@@ -110,15 +118,55 @@ Shader "SeaSick/Crew Paint"
                 float3 halfDir = SafeNormalize(main.direction + viewDir);
                 float3 specular = main.color * pow(saturate(dot(n, halfDir)), 12) * .065 * diffuse * visibility;
 
-                #if defined(_ADDITIONAL_LIGHTS)
-                InputData inputData = (InputData)0;
-                inputData.positionWS = i.positionWS;
-                inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(i.positionCS);
-                uint count = GetAdditionalLightsCount();
-                LIGHT_LOOP_BEGIN(count)
-                    Light l = GetAdditionalLight(lightIndex, i.positionWS);
-                    lighting += l.color * saturate(dot(n, l.direction)) * l.distanceAttenuation * l.shadowAttenuation;
-                LIGHT_LOOP_END
+                // Torches, the campfire, hut windows and deck lanterns.
+                //
+                // Two fixes (2026-10-01, Kevin: villagers read dark and unlit
+                // beside the torches):
+                //  1. Both renderers are Forward+, and URP does NOT enable
+                //     _ADDITIONAL_LIGHTS in Forward+ (ForwardLights.cs sets
+                //     AdditionalLightsPixel only when !m_UseForwardPlus), so a
+                //     loop behind "#if defined(_ADDITIONAL_LIGHTS)" alone was
+                //     compiled out and no point light ever reached the crew.
+                //  2. Every island light is authored for the island shaders'
+                //     contract (EnvironmentToon / TerrainVertexColor: "the
+                //     shaders fade linearly over the range"): a squared linear
+                //     fade to zero at ~22 m, URP's own range fade kept, and a
+                //     wrapped Lambert. URP's inverse-square gave a villager 3 m
+                //     from a torch ~1/8 of the light the path under him got.
+                //     Same maths here so a villager is lit like the ground he
+                //     stands on.
+                #if defined(_ADDITIONAL_LIGHTS) || USE_CLUSTER_LIGHT_LOOP
+                {
+                    // Keep in step with EnvironmentToon.shader / TerrainVertexColor.shader.
+                    const float LampFadePerMetre = 0.045;  // linear fade, 0 at ~22 m
+                    const float LampWrapScale    = 0.6;    // wrapped Lambert: n.l * .6 + .4,
+                    const float LampWrapFloor    = 0.4;    // so the far side of a face still warms
+                    InputData inputData = (InputData)0;
+                    inputData.positionWS = i.positionWS;
+                    inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(i.positionCS);
+                    uint count = GetAdditionalLightsCount();
+                    LIGHT_LOOP_BEGIN(count)
+                        Light l = GetAdditionalLight(lightIndex, i.positionWS);
+                        #if USE_CLUSTER_LIGHT_LOOP
+                            int pidx = lightIndex;
+                        #else
+                            int pidx = GetPerObjectLightIndex(lightIndex);
+                        #endif
+                        #if USE_STRUCTURED_BUFFER_FOR_LIGHT_DATA
+                            float3 lp = _AdditionalLightsBuffer[pidx].position.xyz;
+                        #else
+                            float3 lp = _AdditionalLightsPosition[pidx].xyz;
+                        #endif
+                        float3 toLamp = lp - i.positionWS;
+                        float distanceSqr = max(dot(toLamp, toLamp), HALF_MIN);
+                        // Cancel inverse-square, keep URP's range/spot fade.
+                        float rangeFade = saturate(l.distanceAttenuation * distanceSqr);
+                        float fall = saturate(1.0 - sqrt(distanceSqr) * LampFadePerMetre);
+                        fall *= fall;
+                        float wrap = saturate(dot(n, l.direction) * LampWrapScale + LampWrapFloor);
+                        lighting += l.color * fall * rangeFade * wrap * l.shadowAttenuation;
+                    LIGHT_LOOP_END
+                }
                 #endif
 
                 float3 albedo = i.color.rgb * _BaseColor.rgb;
