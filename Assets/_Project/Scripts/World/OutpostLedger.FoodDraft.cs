@@ -126,6 +126,44 @@ namespace SeaSick.World
         /// every quantum around the line (the hunters' hysteresis, 1 -> 3).
         public const float FoodSafeDays = 6f;
 
+        /// **Is food really short** -- under `FedDays` of eating in store and
+        /// on the racks (`FoodFill`, the top bar's own count: it turns ice
+        /// under 3 days). The one test for "Food low" / "food emergency"
+        /// words (2026-10-02): a hand the emergency staffed stays on his post
+        /// above it (`FoodSafeDays`, hysteresis) but nothing says "low" then.
+        public bool FoodShort =>
+            hands != null && hands.Count > 0 && FoodFill() < hands.Count * EatPerHandPerDay * FedDays;
+
+        /// **Can the emergency's posts still bank food** -- a crop on one of
+        /// its farms, or a dish selected at one of its kitchens, with room
+        /// left in the store. False = they would only fill a full store, so
+        /// once fed (`FedDays`) the emergency ends even short of
+        /// `FoodSafeDays`, which a capped store may never hold.
+        bool FoodPostsCanBank()
+        {
+            if (hands == null) return false;
+            foreach (var h in hands)
+            {
+                if (h == null || !h.autoStation || !FoodStationOrder(h)) continue;
+                int k = Mathf.Max(0, OrdinalOfHand(h));
+                if (h.target == BuildPlans.Farm.id)
+                {
+                    if (plots != null)
+                        foreach (var p in plots)
+                            if (p != null && p.farm == k && !string.IsNullOrEmpty(p.crop) && RoomFor(p.crop) > 0) return true;
+                    continue;
+                }
+                var st = StationAt(StationIndex(BuildPlans.Kitchen.id, k));
+                if (st == null) continue;
+                foreach (var sp in st.Spots)
+                {
+                    var r = sp != null && sp.Selected ? sp.Recipe : null;
+                    if (r != null && FoodBook.IsDish(r.makes) && RoomFor(r.makes) > 0) return true;
+                }
+            }
+            return false;
+        }
+
         /// On the Farm or at the Kitchen (the posts the emergency fills).
         static bool FoodStationOrder(OutpostHand h) =>
             h != null && h.order == OutpostOrder.Work
@@ -153,7 +191,8 @@ namespace SeaSick.World
         /// Under `FedDays`: a free hand on every Farm copy with no worker
         /// (if it has a crop picked), then every Kitchen copy with no cook
         /// (if it has, or can be given, something to cook). Free = no job,
-        /// a builder, or a hand the draft sent foraging/hunting -- never the
+        /// a builder the idle ladder enlisted, or a hand the draft sent
+        /// foraging/hunting -- never a builder the player sent, the
         /// player's reserve, a runner, a hand the player put on other work,
         /// one he just sent back (`UndoFoodDraft`), busy, or carrying.
         void StaffFoodStations()
@@ -203,12 +242,15 @@ namespace SeaSick.World
         /// The next free hand for a food post, in the order the passes
         /// prefer: no job, a builder with nothing to build, a drafted
         /// forager or hunter, then any builder. Null: nobody.
+        /// **Never a builder the PLAYER sent (2026-10-02, `PlayerBuilder`)**
+        /// -- Kevin: *"you assign someone somewhere, thats what they do"*;
+        /// only the idle ladder's builders are free for a food post.
         OutpostHand FreeFoodHand()
         {
             for (int pass = 0; pass < 4; pass++)
                 foreach (var h in hands)
                 {
-                    if (h == null || h.Busy || h.downed || h.Hauling || Reserve(h) || FoodVetoed(h)) continue;
+                    if (h == null || h.Busy || h.downed || h.Hauling || Reserve(h) || PlayerBuilder(h) || FoodVetoed(h)) continue;
                     bool ok = pass switch
                     {
                         0 => h.order == OutpostOrder.Idle,

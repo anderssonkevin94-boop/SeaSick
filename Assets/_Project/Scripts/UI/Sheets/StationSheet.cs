@@ -1906,10 +1906,14 @@ namespace SeaSick.UI.Sheets
                     // **"Waiting for a runner" (2026-10-02):** a worker whose
                     // goods are on a runner's barrow says so in amber, not
                     // "role · mood", so a stopped bench has a reason.
-                    bool waiting = l.StatusWord(hand) == "Waiting for a runner";
+                    string handWord = l.StatusWord(hand);
+                    bool waiting = handWord == "Waiting for a runner";
+                    // No recipe chosen (2026-10-02): the same amber, and the fix.
+                    bool idleBench = handWord == "Idle at the bench";
                     sub.text = waiting ? "Waiting for a runner"
+                        : idleBench ? "Idle at the bench · pick a recipe"
                         : $"{role} · {hand.MoodWord}" + (others > 0 ? $" · +{others} more" : "");
-                    sub.style.color = waiting ? new StyleColor(Amber) : new StyleColor(StyleKeyword.Null);
+                    sub.style.color = waiting || idleBench ? new StyleColor(Amber) : new StyleColor(StyleKeyword.Null);
                     main.text = "Swap";
                     main.style.display = free != null ? DisplayStyle.Flex : DisplayStyle.None;
                     main.SetEnabled(free != null);

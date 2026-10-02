@@ -14,6 +14,12 @@ namespace SeaSick.World
     /// body walking it, same division `CampWorker.Rescue.cs` keeps for the
     /// drag.
     ///
+    /// **Retired (2026-10-02, second pass).** Nothing starts a pout any
+    /// more (`OutpostLedger.PoutStep`/`ForcePout`; Kevin: *"you assign
+    /// someone somewhere, thats what they do"*), so `r.pouting` is only ever
+    /// true for an old save's hand until the ledger's first tick clears it;
+    /// this walk is kept so that one frame still reads sensibly.
+    ///
     /// **Watched-only, same as the drag** (D2): this only runs inside
     /// `Update`, which only exists for a body that is here. Off screen the
     /// pout is books only and its clock still runs (`Step`).

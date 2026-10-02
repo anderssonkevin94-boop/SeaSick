@@ -1133,11 +1133,10 @@ namespace SeaSick.World
             DropCarriedLoad(h);
             ClearRescuerOf(h);
             RemoveHand(h);
-            // **The camp grieves (2026-10-02).** Kevin: *"pouting only
-            // happens when someone dies ... when someone dies they pout for
-            // half a day."* Every survivor owes one pout; `PoutStep` walks
-            // them to the fire as the floor allows.
-            foreach (var o in hands) if (o != null) o.griefPending = true;
+            // **No grief pout (2026-10-02, second pass).** A death used to
+            // send every survivor to the fire for half a day; Kevin: *"you
+            // assign someone somewhere, thats what they do"* -- nobody
+            // leaves his job over it now (`PoutStep`).
 
             Lives.Bury(grave);
         }
@@ -1293,7 +1292,8 @@ namespace SeaSick.World
         /// wins (straight line from `HandAt`; `h` null = "is there any",
         /// first found):
         ///
-        /// 0. a dropped load home (death/rescue phase 2: urgent and small);
+        /// 0. a dropped load home (death/rescue phase 2: urgent and small)
+        ///    -- since 2026-10-02 AFTER 1a's idle benches;
         /// 1. manned stations kept supplied: a bay short of its next batch
         ///    (from the store, or straight off another station's rack),
         ///    and a rack that blocks its bench (any amount);
@@ -1320,6 +1320,15 @@ namespace SeaSick.World
             float best = float.MaxValue;
             bool found = false;
 
+            int ns = stations != null ? stations.Count : 0;
+            // 1a first (2026-10-02, Kevin: runners are the supply line and a
+            // worker never fetches while there is one): a manned bay short
+            // of its next batch -- an idle bench -- beats even a dropped
+            // load, which a full store can leave lying by the dozen.
+            for (int i = 0; i < ns; i++)
+                if (BayChore(h, i, true, at, any, ref c, ref best, ref found) && any) return true;
+            if (found) return true;
+
             // 0. A dropped load home.
             if (groundLoads != null)
                 for (int i = 0; i < groundLoads.Count; i++)
@@ -1340,10 +1349,6 @@ namespace SeaSick.World
                 }
             if (found) return true;
 
-            int ns = stations != null ? stations.Count : 0;
-            // 1a. A manned bay short of its next batch.
-            for (int i = 0; i < ns; i++)
-                if (BayChore(h, i, true, at, any, ref c, ref best, ref found) && any) return true;
             // 1b. A rack blocking its bench.
             for (int i = 0; i < ns; i++)
             {
@@ -1960,12 +1965,15 @@ namespace SeaSick.World
             if (anyFinished || anySelected)
             {
                 string jam = RackJam(s);
-                if (jam != null) return $"rack and store are full of {Friendly(jam)}";
+                // With the fix, as the store-full chip says it (2026-10-02).
+                if (jam != null) return StoreFullWords(jam);
                 if (anyFinished) return null;
             }
             // Checked before the haul: a worker carrying his rack home with
             // no order is still a station with nothing to make.
-            if (!anySelected) return "no order given";
+            // "no recipe chosen · open the hunting lodge and pick one"
+            // (2026-10-02): the fix, at the station, by its name.
+            if (!anySelected) return NoRecipeWords(s);
             if (h.Hauling) return null;
             if (FishesAtShore(s))
             {
@@ -2003,6 +2011,11 @@ namespace SeaSick.World
                     return $"waiting for {Friendly(line.res)}: none left here";
                 }
                 var makers = Economy.Recipes.Making(line.res);
+                // Made right here (the sawmill's fine boards eat its own
+                // boards): say what to pick, not "made at the sawmill" to the
+                // sawyer standing in it (Kevin's camp, 2026-10-02).
+                if (makers.Count > 0 && makers[0].station == s.planId)
+                    return $"out of {Friendly(line.res)} · pick {makers[0].label} here to make more";
                 if (makers.Count > 0)
                     return $"waiting for {Friendly(line.res)} (made at the {BuildPlans.Named(makers[0].station).label})";
                 return $"waiting for {Friendly(line.res)}";

@@ -3189,6 +3189,7 @@ namespace SeaSick.World
             h.order = OutpostOrder.Build;
             h.target = "";
             h.playerIdle = false;   // any other order ends his reserve (2026-09-28)
+            h.playerBuild = true;   // the player's builder: the food draft leaves him be (2026-10-02)
             h.workPin = 0;          // any other order drops his copy (2026-09-28)
             MarkNightOrder(h);
             ArrangeHands();
@@ -4711,6 +4712,9 @@ namespace SeaSick.World
             if (ledger.raised == null) ledger.raised = new List<BuiltBuilding>();
             if (ledger.built == null) ledger.built = new List<string>();
             if (ledger.hands == null) ledger.hands = new List<OutpostHand>();
+            // A pre-`playerBuild` save: its builders count as the player's,
+            // so the food draft never takes them (2026-10-02).
+            ledger.MigratePlayerBuild();
             if (ledger.stores == null) ledger.stores = new List<OutpostStore>();
             if (ledger.stocks == null) ledger.stocks = new List<OutpostStock>();
 

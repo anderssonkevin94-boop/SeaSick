@@ -142,6 +142,12 @@ namespace SeaSick.World
                     if (string.IsNullOrEmpty(h.target)) return "Idle";
                     return h.target == Res.Game ? "Hunting" : "Gathering";
                 case OutpostOrder.Work:
+                    // **No recipe chosen (2026-10-02 play check):** Edda
+                    // and Nye read "Working | no order given" at benches
+                    // with nothing selected. Not "Idle" -- he keeps his
+                    // post (assignments are permanent) and the fix is a
+                    // recipe at the station, not a new job.
+                    if (BenchUnordered(h)) return "Idle at the bench";
                     return WaitingForRunner(h) ? "Waiting for a runner" : "Working";
                 case OutpostOrder.Build:
                     if (BuildSiteFor(h) != null) return "Building";
@@ -162,10 +168,43 @@ namespace SeaSick.World
             if (h.TopUpTrip) return "topping up the store's " + ResLabel(h.topUpRes);
             // The runners (2026-10-02).
             if (IsRunner(h) && !h.Hauling) return "at the store hut, nothing to carry";
+            // Ahead of the runner's words: with nothing chosen, a recipe is
+            // the fix, whatever is on the rack.
+            if (BenchUnordered(h)) return NoRecipeWords(StationOfHand(h));
             if (WaitingForRunner(h))
-                return RunnerBound(stations.IndexOf(StationOfHand(h))) ? "a runner is on the way" : "waiting on the barrows";
-            if (h.autoFood && FoodDraftOrder(h)) return "food is low";
-            if (h.autoStation && FoodStationOrder(h)) return "food emergency";
+            {
+                // "waiting for hide · runners bringing it" (2026-10-02): he
+                // stays at his bench while the runners carry.
+                var ws = StationOfHand(h);
+                int wsi = stations.IndexOf(ws);
+                // Only while a runner can take it somewhere: a rack whose
+                // goods have no room anywhere says so, with the fix, in the
+                // words of the store-full chip (2026-10-02 play check).
+                if (RackBlocking(ws))
+                {
+                    if (RackOutbound(ws, wsi) != null) return "rack full · runners taking it away";
+                    string held = RackHeldMost(ws);
+                    if (held != null) return StoreFullWords(held);
+                }
+                string item = RunnerWaitItem(ws, wsi);
+                return item != null
+                    ? $"waiting for {Friendly(item)} · runners bringing it"
+                    : RunnerBound(wsi) ? "a runner is on the way" : "waiting on the barrows";
+            }
+            // **Only while food really is short (`FoodShort`, 2026-10-02):**
+            // Pip read "food emergency" beside a store at its ceiling of
+            // potatoes, baked potatoes, fish and forage. Above `FedDays` the
+            // emergency's hand stays on until `FoodSafeDays` (or until the
+            // store can take no more of what he makes) and says that.
+            bool shortOfFood = FoodShort;
+            if (h.autoFood && FoodDraftOrder(h) && shortOfFood) return "food is low";
+            if (h.autoStation && FoodStationOrder(h))
+            {
+                if (shortOfFood) return $"food emergency · under {FedDays:0} days of food";
+                string stall = StallReason(h);
+                if (!string.IsNullOrEmpty(stall)) return stall;
+                return $"camp is fed · staying on food until {FoodSafeDays:0} days are stored";
+            }
             string why = StallReason(h);
             if (!string.IsNullOrEmpty(why)) return why;
             if (h.order == OutpostOrder.Build)
@@ -176,6 +215,35 @@ namespace SeaSick.World
             }
             return "";
         }
+
+        /// **A stationed worker at a bench with no recipe chosen** (2026-10-02):
+        /// on Work at a station that stands, no spot selected, none mid-batch
+        /// or holding a finished batch, and nothing in his arms. "Idle at the
+        /// bench" -- he keeps his post; the fix is a recipe at the station.
+        public bool BenchUnordered(OutpostHand h)
+        {
+            if (h == null || h.Hauling || IsRunner(h)) return false;
+            var s = StationOfHand(h);
+            if (s == null) return false;
+            s.EnsureSpotRows();
+            foreach (var sp in s.spots)
+                if (sp != null && (sp.Selected || sp.BenchBusy || sp.benchState == BenchState.Finished)) return false;
+            return true;
+        }
+
+        /// "no recipe chosen · open the hunting lodge and pick one": the
+        /// station's player-facing name (`BuildPlan.label`).
+        internal static string NoRecipeWords(StationStock s)
+        {
+            string name = s != null ? BuildPlans.Named(s.planId).label : null;
+            if (string.IsNullOrEmpty(name)) name = "station";
+            return $"no recipe chosen · open the {name} and pick one";
+        }
+
+        /// "rack and store are full of fish · build or upgrade a store hut"
+        /// -- the store-full chip's fix (`CampAlerts.StoreFullText`), whole.
+        internal static string StoreFullWords(string res) =>
+            $"rack and store are full of {Friendly(res)} · build or upgrade a store hut";
 
         /// **Heads per activity, for the camp tally.**
         public struct CampTally
@@ -204,7 +272,9 @@ namespace SeaSick.World
                     case "Gathering":
                     case "Hunting": t.gathering++; break;
                     case "Reserve": t.reserve++; break;
-                    case "Idle": t.noWork++; break;
+                    case "Idle":
+                    // A bench with no recipe chosen makes nothing (2026-10-02).
+                    case "Idle at the bench": t.noWork++; break;
                     case "Stuck": t.stuck++; break;
                     case "Downed": t.downed++; break;
                     case "Runner, waiting": t.runners++; break;

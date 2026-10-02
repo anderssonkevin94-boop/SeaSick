@@ -52,6 +52,22 @@ namespace SeaSick.UI.Sheets
             message = null; nextRefresh = 0f;
         }
 
+        /// "Food low — Pip cooking, Gale foraging": who is on food and at
+        /// what, for a reload (the draft's own sentence is not saved).
+        static string DraftLine(List<OutpostHand> hands)
+        {
+            var parts = new List<string>(hands.Count);
+            foreach (var h in hands)
+            {
+                if (h == null) continue;
+                string doing = h.target == BuildPlans.Farm.id ? "farming"
+                    : h.target == BuildPlans.Kitchen.id ? "cooking"
+                    : h.target == Res.Game ? "hunting" : "foraging";
+                parts.Add(h.name + " " + doing);
+            }
+            return parts.Count == 0 ? "Food low" : "Food low — " + string.Join(", ", parts);
+        }
+
         public void Hide() { footer.style.display = DisplayStyle.None; TopPanel = 0f; }
 
         /// **Top of the food-draft notice, in panel units up from the panel's
@@ -71,9 +87,17 @@ namespace SeaSick.UI.Sheets
             if (Time.unscaledTime >= nextRefresh)
             {
                 nextRefresh = Time.unscaledTime + .25f;
-                draft.Clear(); draft.AddRange(ledger.FoodDrafted);
+                draft.Clear();
+                // **Only while food really is short (2026-10-02 play check):**
+                // the banner read "Food low — villagers gathering food" over a
+                // store at its ceiling of potatoes, baked potatoes, fish and
+                // forage, because the emergency's cook stays on above `FedDays`
+                // (hysteresis). `FoodShort` is the top bar's own count (ice
+                // under 3 days); above it the hand's own line says why he is
+                // still on food, and nothing says "low".
+                if (ledger.FoodShort) draft.AddRange(ledger.FoodDrafted);
                 if (draft.Count == 0) message = null;
-                notice.text = message ?? "Food low — villagers gathering food";
+                notice.text = message ?? DraftLine(draft);
                 // The notice describes the last event; the button explicitly undoes
                 // ALL current drafts, including an earlier still-active batch.
                 undo.text = "Undo all (" + draft.Count + ")";

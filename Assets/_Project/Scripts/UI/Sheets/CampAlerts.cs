@@ -63,11 +63,15 @@ namespace SeaSick.UI.Sheets
 
             if (l.hands.Count > 0)
             {
+                // **The alert names the fix (2026-10-02).** The food draft no
+                // longer pulls a hand the player assigned (Kevin: *"you
+                // assign someone somewhere, thats what they do"*), so this
+                // line is how a hungry camp asks for one.
                 float days = SheetBits.FoodDays(l);
                 if (l.Hungry)
-                    into.Add(new Alert { text = "Out of food · hands hungry", tone = Tone.Bad, open = () => Larder(camp), fixLabel = "Food" });
+                    into.Add(new Alert { text = "Out of food · assign a gatherer or cook", tone = Tone.Bad, open = () => Larder(camp), fixLabel = "Food" });
                 else if (days >= 0f && days < 1f)
-                    into.Add(new Alert { text = "Food · under a day", tone = Tone.Bad, open = () => Larder(camp), fixLabel = "Food" });
+                    into.Add(new Alert { text = "Food low · assign a gatherer or cook", tone = Tone.Bad, open = () => Larder(camp), fixLabel = "Food" });
             }
 
             // **Walled off (2026-09-30)**: Kevin's catch-up closed a palisade
@@ -100,6 +104,15 @@ namespace SeaSick.UI.Sheets
             if (l.HasWatchtower && SheetBits.Lookout(l) == null)
                 into.Add(new Alert { text = "Nobody on watch", tone = Tone.Warn, open = () => new LookoutSheet(camp), fixLabel = "Assign" });
 
+            // **One "Store full of boards" chip for every hand a full pile
+            // holds up (2026-10-02)** -- Kevin's sawyer read "Yara · rack and
+            // store are full…" while the fix (more store) sat in a lower
+            // chip. When it has stopped somebody it goes up here, ahead of
+            // the single hands, and those hands get no chip of their own.
+            bool storeFull = StoreFullText(l, out string full, out bool stops);
+            if (storeFull && stops)
+                into.Add(new Alert { text = full, tone = Tone.Bad, open = () => BuildList(camp, BuildPlans.Storage.id), fixLabel = "Build storage" });
+
             // One chip per stuck hand -- the hand is where the fix is (his
             // orders). A hunter with no spear gets the forge instead: the
             // spear is made there, not on his sheet.
@@ -116,9 +129,26 @@ namespace SeaSick.UI.Sheets
                     continue;
                 }
                 if (!l.Stalled(h) && string.IsNullOrEmpty(h.bodyBlocked)) continue;
+                if (string.IsNullOrEmpty(h.bodyBlocked) && l.StoreFullFor(h) != null) continue;   // the store chip
                 string why = l.StallReason(h);
                 if (string.IsNullOrEmpty(why)) continue;
                 string who = h.name;
+                // **No recipe chosen (2026-10-02):** "Edda · no recipe chosen
+                // · open the hunting lodge and pick one" -- the fix is at the
+                // station, so the chip opens it, not his sheet.
+                if (l.BenchUnordered(h))
+                {
+                    var post = camp.WorkplaceOf(h);
+                    if (post != null)
+                    {
+                        into.Add(new Alert
+                        {
+                            text = who + " · " + why, tone = Tone.Warn, fixLabel = "Pick a recipe",
+                            open = () => Sheets.TryCreateFor(post) ?? new StationSheet(camp, post),
+                        });
+                        continue;
+                    }
+                }
                 into.Add(new Alert { text = who + " · " + Short(why), tone = Tone.Bad, open = () => new HandSheet(camp, who), fixLabel = "Open" });
             }
             if (idle > 0)
@@ -148,7 +178,7 @@ namespace SeaSick.UI.Sheets
                     text = $"{bedless} hand{(bedless == 1 ? "" : "s")} {(bedless == 1 ? "has" : "have")} no bed",
                     tone = Tone.Warn, open = () => BuildList(camp, BuildPlans.Hut.id), fixLabel = "Build a hut",
                 });
-            if (StoreFullText(l, out string full))
+            if (storeFull && !stops)
                 into.Add(new Alert { text = full, tone = Tone.Warn, open = () => BuildList(camp, BuildPlans.Storage.id), fixLabel = "Build storage" });
             int angry = l.AngryCount;
             if (angry > 0)
@@ -167,47 +197,56 @@ namespace SeaSick.UI.Sheets
 
         /// **"Store full" (2026-09-30)**: a pile sits at the store's ceiling
         /// (`ceilingPer`, what the fire and the store huts keep of EACH
-        /// thing) AND a hand is trying to add to it -- gathering it, or
-        /// stalled with a "full" reason (a station's pile, a farm's harvest).
-        /// A full pile nobody is feeding is a saving, not a problem, so it
-        /// is not an alert. "Store full · timber" for one pile, "Store full"
-        /// for several or when only a stall says so. The fix is a store hut
-        /// (Build): it keeps 20 more of each thing at once, where raising an
-        /// existing one needs fire II and gives 10.
-        internal static bool StoreFullText(OutpostLedger l, out string text)
+        /// thing) AND a hand is trying to add to it -- gathering it, a
+        /// station whose rack can go nowhere, a load waiting at the store
+        /// (`OutpostLedger.StoreFullFor`). A full pile nobody is feeding is
+        /// a saving, not a problem, so it is not an alert. Since 2026-10-02
+        /// the chip names the piles AND the fix, whole (it wraps, never
+        /// cut): "Store full of boards · build or upgrade a store hut". The
+        /// fix is a store hut (Build): it keeps 20 more of each thing at
+        /// once, where raising an existing one needs fire II and gives 10.
+        /// `stops`: somebody's work has stopped on it (not only a
+        /// gatherer's pile topped out).
+        internal static bool StoreFullText(OutpostLedger l, out string text, out bool stops)
         {
             text = null;
+            stops = false;
             if (l == null || l.ceilingPer <= 0) return false;
-            string only = null;
-            int piles = 0;
-            foreach (var st in l.stores)
-            {
-                if (st == null || st.whole < l.ceilingPer) continue;
-                bool fed = false;
-                foreach (var h in l.hands)
-                {
-                    if (h == null || h.order != OutpostOrder.Gather) continue;
-                    string into = h.target == Res.Game ? Res.Meat : h.target;
-                    if (into == st.resource) { fed = true; break; }
-                }
-                if (!fed) continue;
-                piles++;
-                only = st.resource;
-            }
-            if (piles == 1) { text = "Store full · " + ResDefs.Label(only); return true; }
-            if (piles > 1) { text = "Store full"; return true; }
+            var piles = fullPiles;
+            piles.Clear();
             foreach (var h in l.hands)
             {
-                if (h == null || h.walkingIn || !l.Stalled(h)) continue;
-                string why = l.StallReason(h);
-                if (!string.IsNullOrEmpty(why) && why.IndexOf("full", StringComparison.Ordinal) >= 0)
-                {
-                    text = "Store full";
-                    return true;
-                }
+                if (h == null) continue;
+                string res = l.StoreFullFor(h);
+                if (string.IsNullOrEmpty(res)) continue;
+                if (h.order != OutpostOrder.Gather) stops = true;
+                if (!piles.Contains(res)) piles.Add(res);
             }
-            return false;
+            if (piles.Count == 0)
+            {
+                // Any other stall that says "full" (a farm's harvest).
+                foreach (var h in l.hands)
+                {
+                    if (h == null || h.walkingIn || !l.Stalled(h)) continue;
+                    string why = l.StallReason(h);
+                    if (!string.IsNullOrEmpty(why) && why.IndexOf("full", StringComparison.Ordinal) >= 0)
+                    {
+                        text = "Store full · build or upgrade a store hut";
+                        stops = true;
+                        return true;
+                    }
+                }
+                return false;
+            }
+            string what = ResDefs.Label(piles[0]);
+            if (piles.Count == 2) what += " and " + ResDefs.Label(piles[1]);
+            else if (piles.Count == 3) what += ", " + ResDefs.Label(piles[1]) + " and " + ResDefs.Label(piles[2]);
+            else if (piles.Count > 3) what += ", " + ResDefs.Label(piles[1]) + " and " + (piles.Count - 2) + " more";
+            text = "Store full of " + what + " · build or upgrade a store hut";
+            return true;
         }
+
+        static readonly List<string> fullPiles = new List<string>(4);
 
         /// The body's "walled off — no way round, needs a gate"
         /// (`CampWorker`), which the walled-off camp chip covers.

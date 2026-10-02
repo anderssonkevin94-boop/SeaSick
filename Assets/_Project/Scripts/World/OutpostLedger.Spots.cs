@@ -309,6 +309,9 @@ namespace SeaSick.World
         /// store has none of, which no runner would fetch.
         bool StartInputFetch(OutpostHand h, StationStock st, int si, bool fieldOnly = false)
         {
+            // His own rack first, jammed or not, runners or not: it stands
+            // at his bench (`OwnRackFeed`).
+            if (OwnRackFeed(h, st, si)) return true;
             if (RackJam(st) != null) return false;
             foreach (var sp in st.spots)
             {
@@ -344,6 +347,44 @@ namespace SeaSick.World
                         }
                     }
                     break;                   // made elsewhere, or none left here
+                }
+            }
+            return false;
+        }
+
+        /// **A rack holding its own bench's input feeds its own bay**
+        /// (2026-10-02, Kevin's save, day 512): the sawmill set to fine
+        /// boards (2 boards -> 1), its rack full of the 12 BOARDS it made
+        /// earlier, the store at its ceiling of boards. `RackJam` held the
+        /// bench, and every feed (`StartInputFetch`, the runners'
+        /// `BayChore`) refused a jammed station -- so nobody moved the
+        /// boards the two feet from his rack to his bay, the one load that
+        /// both feeds the bench and frees the rack. The worker carries it
+        /// himself (it is at his bench, so the runner rule does not apply),
+        /// a real trip rack -> bay, delivered on arrival. True when he
+        /// set off.
+        bool OwnRackFeed(OutpostHand h, StationStock st, int si)
+        {
+            if (h == null || st == null || st.rack == null || FishesAtShore(st)) return false;
+            st.EnsureSpotRows();
+            foreach (var sp in st.spots)
+            {
+                if (sp == null || !sp.Selected || sp.benchState != BenchState.Empty) continue;
+                var r = sp.Recipe;
+                if (r == null || LockOf(st, r) != null) continue;
+                if (r.tool != null && HeldOf(r.tool) <= 0f) continue;
+                foreach (var line in r.takes)
+                {
+                    if (line.n <= 0) continue;
+                    int have = st.BayCount(line.res) + InFlightTo(HaulPlace.Station, si, line.res);
+                    if (have >= line.n) continue;
+                    int space = st.InputCap - have;
+                    int free = RowFree(si, st.Rack(line.res), false);
+                    if (space <= 0 || free <= 0) continue;
+                    int n = Mathf.Min(CarryArmful(h, line.res), Mathf.Min(space, free));
+                    if (n <= 0) continue;
+                    StartTimedTrip(h, line.res, n, HaulPlace.Station, si, HaulPlace.Station, si);
+                    return true;
                 }
             }
             return false;

@@ -105,6 +105,17 @@ namespace SeaSick.World
         /// reads false, i.e. every idle hand is free for the ladder, which
         /// is how it behaved before.
         public bool playerIdle;
+        /// **Put on the blueprints by the PLAYER (2026-10-02)**, not by the
+        /// idle ladder (`EnlistFree`). Kevin: *"see it as age of empires
+        /// style. you assign someone somewhere, thats what they do."* The
+        /// food draft (`FeedFirst`, `FreeFoodHand`) only ever takes a
+        /// builder the ladder enlisted; one the player sent stays building
+        /// and the food alert names the fix instead. Set by
+        /// `Outpost.OrderBuild`, cleared by every other order and by
+        /// `EnlistFree`; only meaningful while `order` is Build (read through
+        /// `OutpostLedger.PlayerBuilder`). Saved; an old save reads false,
+        /// i.e. every builder draftable, which is how it behaved before.
+        public bool playerBuild;
 
         /// **Which copy of his building he works at, 1-based; 0 = dealt
         /// (2026-09-28).** With two sawmills a Work hand used to be dealt
@@ -297,7 +308,10 @@ namespace SeaSick.World
         /// `StartPout`. **Only a death starts one since 2026-10-02** (Kevin:
         /// *"pouting only happens when someone dies. its too harsh of a
         /// punishment that occurs too often. when someone dies they pout for
-        /// half a day"*); low mood no longer does.
+        /// half a day"*); low mood no longer does. **Nothing starts one at
+        /// all since the second 2026-10-02 pass** (Kevin: *"you assign
+        /// someone somewhere, thats what they do"*); still saved so an old
+        /// save reads, and `PoutStep` clears it on the first tick.
         public bool pouting;
         /// Game seconds left of this pout (half a sky day when it starts).
         /// Counted down by `Step` since 2026-10-02, so it runs out off
@@ -977,6 +991,27 @@ namespace SeaSick.World
 
         public List<OutpostHand> hands = new List<OutpostHand>();
 
+        /// **Save marker for `OutpostHand.playerBuild` (2026-10-02).** 0 in a
+        /// ledger saved before the flag existed (`JsonUtility` leaves an
+        /// unmentioned field at its constructed 0); `Step` sets it to 1, so
+        /// every ledger written since carries 1. `MigratePlayerBuild` (from
+        /// `Outpost.Adopt`) reads it.
+        public int playerBuildSaved;
+
+        /// **An old save must not get drafted either (2026-10-02, Kevin's
+        /// rule is absolute).** A ledger saved before `playerBuild` existed
+        /// cannot say who the player sent to build, so every Build hand in
+        /// it counts as the player's -- never steal a builder he may have
+        /// ordered; an auto-enlisted one staying on his build is harmless.
+        /// Runs once: the marker is set after.
+        public void MigratePlayerBuild()
+        {
+            if (playerBuildSaved == 0 && hands != null)
+                foreach (var h in hands)
+                    if (h != null && h.order == OutpostOrder.Build) h.playerBuild = true;
+            playerBuildSaved = 1;
+        }
+
         public int HandsOn(OutpostOrder order)
         {
             int n = 0;
@@ -1298,7 +1333,14 @@ namespace SeaSick.World
         /// factor was exactly zero, so a hungry camp froze with everybody
         /// "assigned". Mood still falls, the camp still suffers for it, and
         /// the work still moves -- at about a third of the pace.
-        public const float StarvingWorkFloor = 0.35f;
+        ///
+        /// **Hunger barely slows a hand, 2026-10-02.** Raised 0.35 -> 0.8:
+        /// Kevin, *"the micro management is too much ... see it as age of
+        /// empires style. you assign someone somewhere, thats what they
+        /// do."* A starving hand keeps at his job at four-fifths pace; mood
+        /// stays a visible stat and the food alert says what to fix.
+        /// (Pouting, mentioned above, is retired the same day -- `PoutStep`.)
+        public const float StarvingWorkFloor = 0.8f;
 
         /// Days of rations each hand brings ashore from the ship
         /// (`Outpost.Station`), so a fresh camp gets its first buildings up
@@ -3019,6 +3061,8 @@ namespace SeaSick.World
                         if (hands[i] != null) hands[i].orderOverride = false;
             }
 
+            // A live ledger's hands all carry `playerBuild` from here on.
+            playerBuildSaved = 1;
             // Anything a body over-delivered since the last tick goes on the
             // pile before a single count is read. See `ReconcileSites`.
             MigratePending();
@@ -3727,10 +3771,15 @@ namespace SeaSick.World
             if (builders == 0) return SiteIssue(p) ?? "";
             if (walking == builders)
                 return "They are still on their way up from the ship.";
+            // **Hunger never stops work (2026-10-02):** `WorkFactor` floors
+            // at `StarvingWorkFloor` (0.8), so a zero here is night or every
+            // builder busy (hurt, rescuing, fighting) -- never hunger.
             if (strength <= 0.001f)
-                return "They are too hungry to work. Feed the camp and they pick the tools back up.";
+                return DayNightWorkScale <= 0f
+                    ? "Night: they pick the tools back up at first light."
+                    : "They are all busy (hurt, rescuing or fighting) and come back to it after.";
             if (Hungry && strength <= builders * StarvingWorkFloor + 0.001f)
-                return "They are starving and working at a third of the pace. Feed the camp.";
+                return "They are hungry and working a little slower. Feed the camp.";
             // Sites are worked side by side now (the ladder), so there is no
             // "waiting its turn"; what can stop one is a material nothing
             // can supply.
@@ -3785,7 +3834,14 @@ namespace SeaSick.World
             // under `FedDays` free hands farm and cook before anybody forages
             // (forage alone regrows a third of what five hands eat); they go
             // back to "no job" once the camp holds `FoodSafeDays`.
-            if (have >= day * FoodSafeDays) ReleaseFoodStations();
+            // **Fed, with the store out of room for what the posts make, is
+            // safe too (2026-10-02 play check):** the store caps each food
+            // (`ceilingPer`) and raw food is a quarter fill, so a big camp's
+            // full store can hold under `FoodSafeDays` (e.g. 30 each of potato,
+            // baked potato, fish and forage = 37.5 fill, under 5 days for
+            // eight) -- Pip stayed on "food emergency" for good beside a full
+            // store and the banner read "Food low" over 90+ food.
+            if (have >= day * FoodSafeDays || (have >= day * FedDays && !FoodPostsCanBank())) ReleaseFoodStations();
             else if (have < day * FedDays) StaffFoodStations();
 
             if (have >= day * FedDays)
@@ -3840,13 +3896,15 @@ namespace SeaSick.World
             // Idle first, then builders -- never a hand the player put on
             // other work, nor one the player is holding in reserve, nor one
             // the player just sent back from a draft (`UndoFoodDraft`).
+            // **Nor a builder the player sent (2026-10-02, `playerBuild`):**
+            // only the idle ladder's own builders are drafted.
             for (int pass = 0; pass < 2 && feeding < want && drafted < limit; pass++)
                 foreach (var h in hands)
                 {
                     if (feeding >= want || drafted >= limit) break;
                     if (h == null || h.Busy || Reserve(h) || FoodVetoed(h)) continue;
                     var from = pass == 0 ? OutpostOrder.Idle : OutpostOrder.Build;
-                    if (h.order != from) continue;
+                    if (h.order != from || PlayerBuilder(h)) continue;
                     h.order = OutpostOrder.Gather;
                     h.target = res;
                     h.autoFood = true;
@@ -3883,7 +3941,7 @@ namespace SeaSick.World
             int n = 0;
             foreach (var h in hands)
                 if (h != null && !h.downed && h.order == OutpostOrder.Idle && !Reserve(h))
-                { h.order = OutpostOrder.Build; h.target = ""; n++; }
+                { h.order = OutpostOrder.Build; h.target = ""; h.playerBuild = false; n++; }
             return n;
         }
 
@@ -3895,6 +3953,11 @@ namespace SeaSick.World
         /// clearing it.
         public static bool Reserve(OutpostHand h) =>
             h != null && h.playerIdle && h.order == OutpostOrder.Idle;
+
+        /// **A builder the PLAYER sent (2026-10-02, `OutpostHand.playerBuild`)**:
+        /// the food draft passes him over. Same stale-flag guard as `Reserve`.
+        public static bool PlayerBuilder(OutpostHand h) =>
+            h != null && h.playerBuild && h.order == OutpostOrder.Build;
 
         /// **Nothing stands to build: every builder goes back to "no job"
         /// (2026-09-28).** `Outpost` already does this when the last site

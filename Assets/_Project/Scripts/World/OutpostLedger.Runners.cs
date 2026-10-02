@@ -168,7 +168,26 @@ namespace SeaSick.World
             if (CountBuilt(StorageId) <= 0) { if (h.Hauling) AdvanceHaul(h, ref budget); return; }
             for (int guard = 0; guard < 64 && budget > Eps; guard++)
             {
-                if (h.Hauling) { if (!AdvanceHaul(h, ref budget)) break; continue; }
+                if (h.Hauling)
+                {
+                    if (AdvanceHaul(h, ref budget)) continue;
+                    // **A runner never stands holding a load the store has
+                    // no room for (2026-10-02).** His trip reserved the room,
+                    // but something else (a harvest, a hunt, a ship landing)
+                    // can fill it first; `DepositHaul` gave back what the
+                    // source would take and the rest would sit in his barrow
+                    // "until room comes" while every bench waited on him. He
+                    // sets it down by the store instead -- a dropped load,
+                    // physical and visible, that the ladder's dropped-load
+                    // rung brings in once there is room -- and runs on.
+                    if (WaitingAtStore(h) && h.haulTo == HaulPlace.Store && !h.eating && h.haulPicked)
+                    {
+                        AddGroundLoad(h.haulRes, h.haulCount, HandAt(h));
+                        ClearHaul(h);
+                        continue;
+                    }
+                    break;
+                }
                 if (StartBackhaul(h)) continue;
                 if (StartTransferTrip(h)) continue;
                 if (FindHaulerChore(h, out var c)) { BeginChore(h, c); continue; }
@@ -211,16 +230,59 @@ namespace SeaSick.World
         bool BenchWantsRunner(StationStock s, int si)
         {
             if (s == null) return false;
-            if (FishesAtShore(s)) return RackBlocking(s);
+            // Only a box a runner can take somewhere (2026-10-02 play check:
+            // Finch read "rack full · runners taking it away" while the store
+            // was full of fish and the runners stood at the store with
+            // nothing to carry). A box with nowhere to go is the store's
+            // stall ("rack and store are full of fish"), not a runner's.
+            if (FishesAtShore(s)) return RackBlocking(s) && RackOutbound(s, si) != null;
             s.EnsureSpotRows();
             return !AnySpotBusy(s) && RunnerNeed(s, si) != null;
         }
 
-        /// **Does this station's worker do his own fetching?** Always on an
-        /// island with no runner; with runners, only once his bench has
-        /// waited `RunnerFallbackQuanta`.
-        bool WorkerFetches(StationStock s) =>
-            !RunnersOn || (s != null && benchWait.TryGetValue(s, out int n) && n >= RunnerFallbackQuanta);
+        /// **The first rack row of station `si` a runner could take
+        /// somewhere** (a bay, a site, or the store with room), or null.
+        string RackOutbound(StationStock s, int si)
+        {
+            if (s == null || s.rack == null) return null;
+            foreach (var row in s.rack)
+            {
+                if (row == null || row.whole <= 0) continue;
+                int one = 1;
+                if (RackDest(si, row.resource, ref one, out _, out _, out _)) return row.resource;
+            }
+            return null;
+        }
+
+        /// What most of a rack holds (its biggest row), else what a finished
+        /// bench is holding; null when both are empty. "Store full of fish".
+        static string RackHeldMost(StationStock s)
+        {
+            if (s == null) return null;
+            string most = null;
+            int n = 0;
+            if (s.rack != null)
+                foreach (var row in s.rack)
+                    if (row != null && row.whole > n && !string.IsNullOrEmpty(row.resource)) { n = row.whole; most = row.resource; }
+            if (most != null) return most;
+            s.EnsureSpotRows();
+            foreach (var sp in s.spots)
+                if (sp != null && sp.benchState == BenchState.Finished && sp.Recipe != null) return sp.Recipe.makes;
+            return null;
+        }
+
+        /// **Does this station's worker do his own fetching?** Only on an
+        /// island with no runner. **With a runner, never (2026-10-02,
+        /// Kevin):** *"DESPITE HAVING TWO RUNNERS ... hunting lodge assignee
+        /// still went straight to the storage house to get the resource."*
+        /// That was the `RunnerFallbackQuanta` fallback (b6242988): a bench
+        /// idle ~10 quanta sent its worker to the store himself. Now he
+        /// stays at his bench ("Waiting for a runner"); the runners'
+        /// ladder puts an idle bench's input first (rung 1). He still
+        /// moves his own rack to his own bay (`OwnRackFeed`, at his bench)
+        /// and cuts a raw the store has none of (no runner cuts).
+        /// `benchWait` / `RunnerFallbackQuanta` are kept only as a count.
+        bool WorkerFetches(StationStock s) => !RunnersOn;
 
         /// **What a runner should bring this idle bench, or null**: its rack
         /// blocking it (the rack's first resource), else the first input a
@@ -235,12 +297,10 @@ namespace SeaSick.World
             // (play check 2026-10-02: sawyer and runner both waited for
             // minutes with nowhere to put the planks).
             if (RackBlocking(s))
-                foreach (var row in s.rack)
-                {
-                    if (row == null || row.whole <= 0) continue;
-                    int one = 1;
-                    if (RackDest(si, row.resource, ref one, out _, out _, out _)) return row.resource;
-                }
+            {
+                string outbound = RackOutbound(s, si);
+                if (outbound != null) return outbound;
+            }
             if (RackJam(s) != null) return null;
             foreach (var sp in s.spots)
             {
@@ -258,6 +318,18 @@ namespace SeaSick.World
                 }
             }
             return null;
+        }
+
+        /// **What a waiting bench is waiting for**, for its worker's
+        /// status ("waiting for hide · runners bringing it"): what a runner
+        /// is walking in, else what one should bring (`RunnerNeed`).
+        string RunnerWaitItem(StationStock s, int si)
+        {
+            if (hands != null)
+                foreach (var h in hands)
+                    if (IsRunner(h) && h.Hauling && h.haulTo == HaulPlace.Station && h.haulToStation == si)
+                        return h.haulRes;
+            return RunnerNeed(s, si);
         }
 
         /// A runner is walking something to station `si` right now.
@@ -300,6 +372,35 @@ namespace SeaSick.World
         static bool LastWorkOfDay =>
             ActiveHourKnown && Life.CampLifeTuning.IsAwakeHour(ActiveHour)
             && ActiveHour >= Life.CampLifeTuning.EveningStartHour - LastWorkHours;
+
+        /// **What full pile of the store is holding this hand up, or null**
+        /// (2026-10-02, the camp's one "Store full of boards" chip): a
+        /// stationed worker whose rack can go nowhere (`RackJam`, the
+        /// "rack and store are full of boards" stall), a gatherer whose
+        /// pile is at the ceiling, or anybody standing at the store with a
+        /// load it has no room for. The fix for every one of them is more
+        /// store (a store hut, or raising one).
+        public string StoreFullFor(OutpostHand h)
+        {
+            if (h == null || h.downed || h.walkingIn) return null;
+            if (h.Hauling && h.haulTo == HaulPlace.Store && WaitingAtStore(h)) return h.haulRes;
+            if (h.order == OutpostOrder.Gather && GatherBlocked(h))
+                return h.target == Res.Game ? Res.Meat : h.target;
+            if (h.order == OutpostOrder.Work && IsStation(h.target) && !h.Hauling)
+            {
+                var s = StationOfHand(h);
+                if (s == null) return null;
+                s.EnsureSpotRows();
+                if (AnySpotBusy(s)) return null;
+                // Only a bench with work to do (`StationStallCause`'s test):
+                // a full rack with no order given is that stall, not this.
+                bool wants = false;
+                foreach (var sp in s.spots)
+                    if (sp != null && (sp.Selected || sp.benchState == BenchState.Finished)) { wants = true; break; }
+                return wants ? RackJam(s) : null;
+            }
+            return null;
+        }
 
         /// "6 boards to Sawmill": a runner's trip, for his status word.
         string RunWords(OutpostHand h)

@@ -159,6 +159,11 @@ namespace SeaSick.UI.Sheets
                 case "Waiting for a runner":
                     why = JobOf(l, h) + " · waiting for a runner";
                     return HandKind.HeldUp;
+                // **No recipe chosen (2026-10-02):** at his post, so not
+                // Unassigned (the fix is a recipe at the station, not a job).
+                case "Idle at the bench":
+                    why = JobOf(l, h) + " · " + l.StatusReason(h);
+                    return HandKind.HeldUp;
                 default:
                     if (OutpostLedger.IsRunner(h) && (w.StartsWith("Runner") || w.StartsWith("Running")))
                     {
@@ -184,7 +189,7 @@ namespace SeaSick.UI.Sheets
                     if (string.IsNullOrEmpty(h.target)) return "Idle";
                     return h.target == Res.Game ? "Hunting" : "Gathering";
                 case OutpostOrder.Work:
-                    return "Working";
+                    return l.BenchUnordered(h) ? "Idle at the bench" : "Working";
                 case OutpostOrder.Build:
                     if (l.BuildSiteFor(h) != null) return "Building";
                     return h.Hauling ? "Hauling" : "Idle";

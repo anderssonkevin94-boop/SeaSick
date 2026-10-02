@@ -1465,7 +1465,8 @@ namespace SeaSick.World
             if (OutpostLedger.IsRunner(r))
             {
                 acting?.Set(VillagerActing.Mode.None);
-                if (!Walk(door, dt)) { phase = Phase.Going; return; }
+                Vector3 stand = post != null ? RunnerWaitSpot(r, post, door) : door;
+                if (!Walk(stand, dt)) { phase = Phase.Going; return; }
                 // At his post (the phase the walk-in check reads).
                 phase = Phase.Working;
                 Face(face - transform.position, dt);
@@ -2949,10 +2950,11 @@ namespace SeaSick.World
         /// and re-ask forever when no gate exists at all -- stood there
         /// "working" on the books while the sheet said "needs a gate" for
         /// good. After this many failed asks in a row for the SAME
-        /// destination, the errand is dropped back to idle instead (the
-        /// idle ladder re-plans him onto something reachable); `StallReason`
+        /// destination, the trip he was walking is dropped (since
+        /// 2026-10-02 his ORDER is kept -- the player's assignment is
+        /// permanent until the player changes it); `StallReason`
         /// still shows "walled off" while he stands there and while a fresh
-        /// order is asking for the same blocked spot again.
+        /// trip is asking for the same blocked spot again.
         const int WalledAsksBeforeGiveUp = 3;
         int walledAsks;
         /// **Same give-up, a different cause (2026-09-28).** A route that
@@ -3042,8 +3044,16 @@ namespace SeaSick.World
                         walledAsks++;
                         if (walledAsks >= WalledAsksBeforeGiveUp && row != null)
                         {
-                            row.order = OutpostOrder.Idle;
-                            row.target = "";
+                            // **The ERRAND is dropped, never the job
+                            // (2026-10-02).** Kevin: *"you assign someone
+                            // somewhere, thats what they do."* This used to
+                            // set the order to Idle -- which silently undid
+                            // the player's assignment of every runner whose
+                            // barrow trip once failed to route (runners are
+                            // Work hands walking to arbitrary racks, piles
+                            // and shore spots). The job stays; the stuck
+                            // trip goes, and `bodyBlocked` puts him on the
+                            // Stuck alert so the player can see why.
                             // **And the trip he was walking (2026-09-30).**
                             // Kevin's save: a closed palisade with the store
                             // inside and three hands outside. The order went
@@ -3068,16 +3078,17 @@ namespace SeaSick.World
                         // straight line is clear but `CampPath` couldn't
                         // find a plan anyway (a target outside its reach
                         // filter, a stale grid) -- back off the same as the
-                        // walled case, and give up onto Idle rather than
-                        // re-ask every frame forever. The straight-line
-                        // fallback below still carries him toward the
-                        // target while he waits out the backoff.
+                        // walled case rather than re-ask every frame
+                        // forever. The straight-line fallback below still
+                        // carries him toward the target while he waits out
+                        // the backoff. **His order is kept (2026-10-02)**:
+                        // it used to go to Idle here, which wiped runners'
+                        // and workers' assignments; now he is only flagged
+                        // stuck (`bodyBlocked`, the Stuck alert).
                         routeAge = -NoRouteBackoff;
                         lostAsks++;
                         if (lostAsks >= WalledAsksBeforeGiveUp && row != null)
                         {
-                            row.order = OutpostOrder.Idle;
-                            row.target = "";
                             row.bodyBlocked = "can't reach that — no way there";
                             lostAsks = 0;
                         }
@@ -3139,6 +3150,54 @@ namespace SeaSick.World
         /// The building this Work row is drawn at (`PreferWorkplace` first).
         Building WorkPostOf(OutpostHand r)
             => preferred != null && preferred.Id == r.target ? preferred : camp.WorkplaceOf(r);
+
+        /// Metres between two waiting runners: clear of two `BodyRadius`.
+        const float RunnerWaitGap = 0.95f;
+
+        /// **Each runner waits on his own spot (2026-10-02).** Kevin's
+        /// phone: *"they're both just glitching in the storage hut"* -- both
+        /// runners of one store hut waited on the hut's ONE work spot, and a
+        /// man's own work spot is the one place `SpotHeldByOther` never
+        /// yields, so both walked onto it; standing there both were anchored
+        /// (`SpacingRole` 1), `SpaceBodies` pushed the later one off, he
+        /// walked straight back, and so on every frame. The first runner
+        /// (in the hand list's order) keeps the door; the next stand a gap
+        /// to its right, its left, two gaps right..., along the hut's front
+        /// -- or straight out from it where that ground is blocked.
+        Vector3 RunnerWaitSpot(OutpostHand r, Building post, Vector3 door)
+        {
+            int k = 0;
+            var hands = camp != null && camp.Ledger != null ? camp.Ledger.hands : null;
+            if (hands != null)
+                foreach (var o in hands)
+                {
+                    if (o == r) break;
+                    if (OutpostLedger.IsRunner(o) && camp.WorkplaceOf(o) == post) k++;
+                }
+            if (k == 0) return door;
+            Vector3 outward = door - post.transform.position;
+            outward.y = 0f;
+            if (outward.sqrMagnitude < 1e-4f) outward = Vector3.forward;
+            outward.Normalize();
+            Vector3 along = new Vector3(outward.z, 0f, -outward.x);
+            float side = (k & 1) == 1 ? 1f : -1f;
+            float step = RunnerWaitGap * ((k + 1) / 2);
+            Vector3 a = door + along * (side * step);
+            if (StandsClear(door, a)) return a;
+            Vector3 b = door + outward * (RunnerWaitGap * k);
+            if (StandsClear(door, b)) return b;
+            return door;
+        }
+
+        /// Open ground a man may stand on, reached from `from` in a line.
+        bool StandsClear(Vector3 from, Vector3 to)
+        {
+            if (camp == null) return false;
+            to.y = from.y;
+            if (CampPath.Obstructs(camp, from, to, FarGoal, CampPath.Walker.Hand, out _)) return false;
+            if (!Walkability.MayStep(camp, Grounded(from), to, Walkability.Feet.Man)) return false;
+            return true;
+        }
 
         /// The watchtower this row should be standing on, or null.
         Building LookoutTower(OutpostHand r)

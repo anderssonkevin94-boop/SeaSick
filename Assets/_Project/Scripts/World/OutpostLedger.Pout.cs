@@ -5,7 +5,9 @@ namespace SeaSick.World
 {
     /// <summary>
     /// **Pout + floor (death/rescue phase 4, 2026-09-28; grief only since
-    /// 2026-10-02)**, docs/PLAN-DEATH-RESCUE.md, "Neglect": nobody deserts.
+    /// 2026-10-02; RETIRED later on 2026-10-02 -- nobody pouts at all,
+    /// see `PoutStep`. The history below is how it used to work.)**,
+    /// docs/PLAN-DEATH-RESCUE.md, "Neglect": nobody deserts.
     ///
     /// Kevin, 2026-10-02: *"pouting only happens when someone dies. its too
     /// harsh of a punishment that occurs too often. when someone dies they
@@ -39,47 +41,32 @@ namespace SeaSick.World
         /// off `TimeOfDay.DayLength`, so it follows the day length.
         public static float GriefPoutSeconds => 0.5f * TimeOfDay.DayLength;
 
-        /// **The pout clock, one quantum of game time** (`Step`, 2026-10-02).
-        /// Ends any pout whose time ran out, then starts the grief pouts
-        /// that are owed -- one at a time, re-checking the floor after each,
-        /// so a camp at exactly the floor's headcount never lets two hands
-        /// mourn at once; the rest wait their turn.
+        /// **Pouting is retired (2026-10-02, second pass).** Kevin: *"we
+        /// need to rework the villagers quitting or being too unhappy to
+        /// work. the micro management is too much ... see it as age of
+        /// empires style. you assign someone somewhere, thats what they
+        /// do."* Nobody starts a pout any more, not even after a death; this
+        /// only ENDS one that an older build or an old save left running
+        /// and drops any grief still owed, so a loaded camp is back at work
+        /// on its first tick. Runs every quantum, even a zero-length one
+        /// (no `workDays` gate), so it cannot wait on the clock.
         void PoutStep(float workDays)
         {
-            if (hands == null || workDays <= 0f) return;
-            float secs = workDays * TimeOfDay.WorkDaySeconds;
+            if (hands == null) return;
             foreach (var h in hands)
             {
                 if (h == null) continue;
-                h.poutCooldown = 0f;
-                if (h.pouting)
-                {
-                    h.poutLeft -= secs;
-                    if (h.poutLeft <= 0f) EndPout(h);
-                }
-            }
-            int free = FreeHandCount();
-            foreach (var h in hands)
-            {
-                if (h == null || !h.griefPending || h.Busy) continue;
-                if (!FloorHolds(free - 1)) continue;
-                StartPout(h);
-                free--;
+                h.griefPending = false;
+                if (h.pouting) EndPout(h);
+                else h.poutCooldown = 0f;
             }
         }
 
 
-        /// **Dev-only (`LifeDevPanel`'s "Pout" button): force a pout now,
-        /// cooldown ignored, floor still respected.** Returns false (does
-        /// nothing) when the floor would break or the hand is not free to
-        /// pout at all (already busy, or not on this roster).
-        public bool ForcePout(OutpostHand h)
-        {
-            if (h == null || hands == null || !hands.Contains(h) || h.Busy) return false;
-            if (!FloorHolds(FreeHandCount() - 1)) return false;
-            StartPout(h);
-            return true;
-        }
+        /// **Dev-only (`LifeDevPanel`'s "Pout" button).** Pouting is retired
+        /// (2026-10-02, see `PoutStep`), so this never starts one and always
+        /// returns false. Kept so the dev panel still compiles.
+        public bool ForcePout(OutpostHand h) => false;
 
         void StartPout(OutpostHand h)
         {
