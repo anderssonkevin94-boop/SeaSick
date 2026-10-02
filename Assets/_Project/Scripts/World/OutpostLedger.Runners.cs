@@ -230,9 +230,17 @@ namespace SeaSick.World
         {
             if (s == null) return null;
             s.EnsureSpotRows();
+            // Only a rack something can take: a full store is the store's
+            // stall ("store is full of boards"), not "waiting for a runner"
+            // (play check 2026-10-02: sawyer and runner both waited for
+            // minutes with nowhere to put the planks).
             if (RackBlocking(s))
                 foreach (var row in s.rack)
-                    if (row != null && row.whole > 0) return row.resource;
+                {
+                    if (row == null || row.whole <= 0) continue;
+                    int one = 1;
+                    if (RackDest(si, row.resource, ref one, out _, out _, out _)) return row.resource;
+                }
             if (RackJam(s) != null) return null;
             foreach (var sp in s.spots)
             {
