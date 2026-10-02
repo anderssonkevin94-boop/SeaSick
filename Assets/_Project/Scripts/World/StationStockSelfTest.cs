@@ -1192,7 +1192,12 @@ namespace SeaSick.World
                 bool waited = ship.HeldOf(T) == 3 && Ashore(l, T) == 7 && l.CarriedOf(T) == 0
                               && why == OutpostLedger.StallHoldFull && l.TransferPending(T, true);
                 ship.capacity = 10;
-                Advance(l, ref now, 2.0);
+                // Three days, not two (2026-10-02): seven more timber is four
+                // walked trips at the off-screen 0.75 m/s, and with supper's
+                // shorter work day (evening from 21:00) two days left the
+                // last armful on the plank -- timing, not the wait/resume
+                // this gate is about.
+                Advance(l, ref now, 3.0);
                 bool resumed = ship.HeldOf(T) == 10 && Ashore(l, T) == 0 && l.CarriedOf(T) == 0
                                && !l.TransferPending(T, true);
                 Gate(sb, ref fails, "transfer-hold-full-waits", waited && resumed,
