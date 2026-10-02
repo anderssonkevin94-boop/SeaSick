@@ -51,11 +51,9 @@ namespace SeaSick.World
 
         // --- who pushes one -----------------------------------------------------
 
-        /// **A runner**: a hand on the work order at the store hut. (The
-        /// hauling lane is adding `OutpostLedger.IsRunner` with the same
-        /// meaning; switch to it once that lands.)
-        public static bool IsRunner(OutpostHand h) =>
-            h != null && h.order == OutpostOrder.Work && h.target == BuildPlans.Storage.id;
+        /// **A runner**: a hand on the work order at the store hut
+        /// (`OutpostLedger.IsRunner`).
+        public static bool IsRunner(OutpostHand h) => OutpostLedger.IsRunner(h);
 
         /// **Called every frame from `CampWorker.Update`** for a body on the
         /// ground with a row. Adds the component the first time its hand is a
