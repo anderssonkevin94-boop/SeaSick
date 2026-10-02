@@ -133,6 +133,7 @@ namespace SeaSick.UI.Sheets
                 case "Reserve":
                     why = "held in reserve";
                     return HandKind.Unassigned;
+                case "Idle":
                 case "No work":
                     why = h.order == OutpostOrder.Build ? "builder · nothing to build"
                         : h.order == OutpostOrder.Gather ? "gatherer · nothing picked"
@@ -158,9 +159,6 @@ namespace SeaSick.UI.Sheets
                 case "Waiting for a runner":
                     why = JobOf(l, h) + " · waiting for a runner";
                     return HandKind.HeldUp;
-                case "Idle":
-                    why = "no job";
-                    return HandKind.Unassigned;
                 default:
                     if (OutpostLedger.IsRunner(h) && (w.StartsWith("Runner") || w.StartsWith("Running")))
                     {
@@ -183,15 +181,15 @@ namespace SeaSick.UI.Sheets
             switch (h.order)
             {
                 case OutpostOrder.Gather:
-                    if (string.IsNullOrEmpty(h.target)) return "No work";
+                    if (string.IsNullOrEmpty(h.target)) return "Idle";
                     return h.target == Res.Game ? "Hunting" : "Gathering";
                 case OutpostOrder.Work:
                     return "Working";
                 case OutpostOrder.Build:
                     if (l.BuildSiteFor(h) != null) return "Building";
-                    return h.Hauling ? "Hauling" : "No work";
+                    return h.Hauling ? "Hauling" : "Idle";
                 default:
-                    return h.Hauling ? "Hauling" : "No work";
+                    return h.Hauling ? "Hauling" : "Idle";
             }
         }
 

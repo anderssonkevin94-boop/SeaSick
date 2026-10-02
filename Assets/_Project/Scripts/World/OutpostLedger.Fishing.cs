@@ -161,7 +161,9 @@ namespace SeaSick.World
                     else if (sp.benchState != BenchState.Empty) sp.EmptyBench();
                 }
                 if (StartCatchTrip(h, s, si)) continue;
-                if (RackChore(si, out var home)) { BeginChore(h, home); continue; }
+                // With runners on the island the box is theirs to carry
+                // (2026-10-02), unless it has waited too long for one.
+                if (WorkerFetches(s) && RackChore(si, out var home, h, true)) { BeginChore(h, home); continue; }
                 break;
             }
         }

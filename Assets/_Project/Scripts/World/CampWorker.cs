@@ -1456,6 +1456,19 @@ namespace SeaSick.World
             // A lookout's shift is the platform: walk to the ladder, climb.
             if (post != null && post.Id == OutpostLedger.WatchtowerId && TowerFootWalk(post, door, dt)) return;
 
+            // **A runner with nothing to carry (2026-10-02)** waits at the
+            // store hut's door, hands empty -- the ledger's next barrow
+            // trip (`HaulOf`) takes him from here.
+            if (OutpostLedger.IsRunner(r))
+            {
+                acting?.Set(VillagerActing.Mode.None);
+                if (!Walk(door, dt)) { phase = Phase.Going; return; }
+                // At his post (the phase the walk-in check reads).
+                phase = Phase.Working;
+                Face(face - transform.position, dt);
+                return;
+            }
+
             if (camp.Ledger != null && camp.Ledger.Stalled(r))
             {
                 Drop();

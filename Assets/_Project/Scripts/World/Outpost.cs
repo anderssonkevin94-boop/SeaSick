@@ -3118,7 +3118,8 @@ namespace SeaSick.World
             // no. Everybody already there is pinned where he stands, so
             // the new hand cannot be dealt on top of one of them.
             int room = ledger.FreeCopyFor(planId, h);
-            if (room < 0) { AssignRefusal = OutpostLedger.OneWorkerReason; return false; }
+            // (A store hut takes its runners, 2026-10-02: `CapacityReason`.)
+            if (room < 0) { AssignRefusal = ledger.CapacityReason(planId); return false; }
             foreach (var x in ledger.hands)
             {
                 if (x == null || x == h || x.order != OutpostOrder.Work || x.target != planId) continue;
@@ -3150,7 +3151,7 @@ namespace SeaSick.World
             int n = CountOf(planId);
             if (ordinal < 0 || ordinal >= n) return false;
             if (ledger.WorkersAt(planId, ordinal, h) >= ledger.StationCapacity(planId, ordinal))
-            { AssignRefusal = OutpostLedger.OneWorkerReason; return false; }
+            { AssignRefusal = ledger.CapacityReason(planId); return false; }
             foreach (var x in ledger.hands)
             {
                 if (x == null || x == h || x.order != OutpostOrder.Work || x.target != planId) continue;

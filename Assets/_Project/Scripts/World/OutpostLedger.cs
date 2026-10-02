@@ -435,6 +435,12 @@ namespace SeaSick.World
         /// `TopUpTrip`, which is false once the trip is over.
         [System.NonSerialized] public string topUpRes;
 
+        /// **A runner's backhaul (2026-10-02)**: 1 + the station whose bay
+        /// he just filled, 0 = none. His next trip takes that station's
+        /// rack home if there is any (`OutpostLedger.RunnerDay`). Not saved:
+        /// a reload simply asks the ladder.
+        [System.NonSerialized] public int backhaulStation;
+
         /// On a stock top-up trip right now (no job of his own, walking
         /// timber/stone from the island into the store).
         public bool TopUpTrip =>
@@ -3008,6 +3014,8 @@ namespace SeaSick.World
             FeedFirst();
             ReleaseIdleBuilders();
             EnlistFree();
+            // Who may haul this quantum (2026-10-02, OutpostLedger.Runners.cs).
+            CountRunners();
             AgeStallSkips();
             EnsureStations();
             // She cast off: store -> ship armfuls go home; done orders go.
@@ -3019,7 +3027,8 @@ namespace SeaSick.World
             // 2026-09-23): hauls for the stations if there is hauling to do,
             // else lends a hand to the build. Decided once per quantum so the
             // two cannot both take his day.
-            bool haulChores = HasHaulChore();
+            // (None for a gatherer once the island has a runner, 2026-10-02.)
+            bool haulChores = SpareHaulChore();
             bool gatherersBuild = !haulChores && Focus != null;
 
             // Regrowth first, so a camp that stripped its ground last step has
@@ -3143,6 +3152,8 @@ namespace SeaSick.World
                 // `StepStations` below. This loop is left with the buildings
                 // whose input is the ground (the farm).
                 if (IsStation(h.target)) continue;
+                // A runner's day is the station pass's (`RunnerDay`).
+                if (IsRunner(h)) continue;
                 // **Carrying his basket to the store** (2026-09-27): walked
                 // by the station pass; no harvesting on the way.
                 if (h.Hauling) continue;
@@ -3479,6 +3490,8 @@ namespace SeaSick.World
                 // A lookout makes nothing and that is the job -- never
                 // stalled for having nothing to show for standing watch.
                 if (h.target == WatchtowerId) return null;
+                // Nor a runner waiting at the store (2026-10-02).
+                if (IsRunner(h)) return null;
                 if (IsStation(h.target)) return StationStallCause(h);
                 if (h.target == BuildPlans.Farm.id) return FarmStallCause(h);
                 if (!Conversion(h.target, out string makes, out Economy.Ingredient[] takes,
