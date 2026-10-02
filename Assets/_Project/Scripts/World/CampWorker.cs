@@ -652,6 +652,9 @@ namespace SeaSick.World
                     : phase == Phase.Resting ? VillagerActing.Gait.Stroll
                     : VillagerActing.Gait.Errand;
 
+            // A store runner pushes his wheelbarrow (visual only, `RunnerBarrow`).
+            RunnerBarrow.Sync(this, r, acting);
+
             // **The rescuer (death/rescue phase 2), ahead of everything
             // else** -- a hand sent to drag somebody home is not doing his
             // ordinary job right now, the same priority `TickTower` has

@@ -88,6 +88,22 @@ namespace SeaSick.World
         public enum Gait { Errand, Stroll, Tired, Run, Scared }
         public Gait WalkGait { get; set; }
 
+        /// **Pushing the runner's wheelbarrow** (`RunnerBarrow`, 2026-10-02):
+        /// the load rides in the barrow, so no carry prop is drawn in his
+        /// arms (or picked up / set down by the PickUp/SetDown clips), and
+        /// while `BarrowArms` is also set an otherwise free body walks the
+        /// `Carry` clip (arms forward on the grips) at its own walk's speed.
+        public bool Barrow
+        {
+            get => barrow;
+            set { if (barrow == value) return; barrow = value; RefreshProps(); }
+        }
+        bool barrow;
+        public bool BarrowArms { get; set; }
+        /// What `Set` was last told to carry, and how many (the barrow's load).
+        public string Load => load;
+        public int LoadCount => loadCount;
+
         static readonly int WalkBriskId = Animator.StringToHash("WalkBrisk"),
             WalkTiredId = Animator.StringToHash("WalkTired"), WalkDeckId = Animator.StringToHash("WalkDeck"),
             RunId = Animator.StringToHash("Run"), RunScaredId = Animator.StringToHash("RunScared"),
@@ -337,6 +353,7 @@ namespace SeaSick.World
             // straight away and the props ride the bones. A clip mode on a
             // rig without the state shows its old code pose (`CodePose`).
             Mode want = Resolve(Current);
+            if (barrow && BarrowArms && want == Mode.None && UsesClip(Mode.Carry)) want = Mode.Carry;
             if (UsesClip(want) || UsesClip(shown))
             {
                 if (shown != want || shownLoad != load || shownLoadCount != loadCount)
@@ -1441,6 +1458,7 @@ namespace SeaSick.World
             }
             if (shown == Mode.Carry || (shown == Mode.PickUp || shown == Mode.SetDown) && UsesClip(shown) && !string.IsNullOrEmpty(shownLoad))
             {
+                if (barrow) return;   // the load is in the wheelbarrow
                 EnsureCarry();
                 if (carryProp != null) carryProp.SetActive(true);
                 return;
