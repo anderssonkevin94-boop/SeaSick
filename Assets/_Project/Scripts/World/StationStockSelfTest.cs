@@ -823,8 +823,9 @@ namespace SeaSick.World
             if (box != null) box.Rack(Res.Fish, true).whole = 3;
             float fill = m.FoodFill();
             string meal = m.BestMeal();
-            double nm = m.lastTicked;
-            for (int i = 0; i < 10; i++) Advance(m, ref nm, 0.02);
+            // Supper (2026-10-02): nobody walks to the box any more; the
+            // fish is served at the fire, straight off the box's rack.
+            m.ServeSupperForTest(0);
             var hungry = m.hands[0];
             Gate(sb, ref fails, "fish-box-is-food",
                 fill > 0f && meal == Res.Fish && hungry.lastMeal == Res.Fish && hungry.full > 0f,

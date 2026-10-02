@@ -61,14 +61,12 @@ namespace SeaSick.UI.Sheets
             var h = l.hands[index];
             if (h == null || h.downed) return 0f;
             float d = 0f;
-            if (l.rations == Rations.None || h.full <= 0f) d -= OutpostLedger.MoodDropPerHungryDay;
-            else
-            {
-                d += l.rations == Rations.Half
-                    ? -OutpostLedger.MoodDropPerHungryDay * 0.5f
-                    : OutpostLedger.MoodRecoverPerFedDay;
-                d += FoodBook.MoodPerDay(h.lastMeal);
-            }
+            // Mirrors EatStep since supper (2026-10-02): mood follows how
+            // short the last supper left him, not his stomach right now.
+            float hunger = l.rations == Rations.None ? 1f : Mathf.Clamp01(h.supperHunger);
+            if (hunger > 1e-3f) d -= OutpostLedger.MoodDropPerHungryDay * hunger;
+            else d += OutpostLedger.MoodRecoverPerFedDay;
+            if (hunger < 1f - 1e-3f) d += FoodBook.MoodPerDay(h.lastMeal);
             if (l.IsHandWarm(index)) d += OutpostLedger.WarmMoodBonusPerDay;
             return d;
         }
@@ -122,7 +120,7 @@ namespace SeaSick.UI.Sheets
             why = "";
             if (l == null || h == null) return HandKind.Busy;
             string w = l.StatusWord(h);
-            if (w == "Sleeping" || w == "Evening") w = UnderWord(l, h);
+            if (w == "Sleeping" || w == "Evening" || w == "Supper") w = UnderWord(l, h);
             switch (w)
             {
                 case "Downed":

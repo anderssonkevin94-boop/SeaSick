@@ -188,9 +188,9 @@ namespace SeaSick.UI.Sheets
 
                 if (l.rations == Rations.None)
                     Count("none", -drop, "on no rations", null, "Full rations", fixRations);
-                else if (h.full <= 0f)
-                    Count("empty", -drop, "starving, nothing eaten",
-                        storeEmpty ? "the store is empty" : "food is on its way to them",
+                else if (h.supperHunger - (l.rations == Rations.Half ? 0.5f : 0f) > 0.01f)
+                    Count("empty", -drop * Mathf.Clamp01(h.supperHunger), "went short at supper",
+                        storeEmpty ? "the store is empty" : "not enough food went round",
                         storeEmpty ? "Gather food" : null, storeEmpty ? fixFood : null);
                 else
                 {
@@ -271,7 +271,7 @@ namespace SeaSick.UI.Sheets
             var parts = new List<string>(4);
             if (h.downed) parts.Add("down");
             else if (l.rations == Rations.None) parts.Add("no rations");
-            else if (h.full <= 0f) parts.Add("starving");
+            else if (h.supperHunger - (l.rations == Rations.Half ? 0.5f : 0f) > 0.01f) parts.Add("short at supper");
             else
             {
                 if (l.rations == Rations.Half) parts.Add("half rations");
