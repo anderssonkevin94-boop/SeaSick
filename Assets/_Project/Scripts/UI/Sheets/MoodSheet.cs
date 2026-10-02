@@ -220,7 +220,7 @@ namespace SeaSick.UI.Sheets
                 else
                     Count("nobed", 0f, "have no bed", null, "Build a hut", fixHut);
 
-                if (h.pouting) Count("pout", 0f, "pouting at the fire", "they come round as mood rises");
+                if (h.pouting) Count("pout", 0f, "grieving at the fire", "a death at the camp: half a day, then back to work");
             }
 
             sorted.Clear();
@@ -278,7 +278,7 @@ namespace SeaSick.UI.Sheets
                 if (FoodBook.MoodPerDay(h.lastMeal) < 0f) parts.Add("ate raw " + CampReadouts.Label(h.lastMeal));
             }
             if (!l.IsHandWarm(i)) parts.Add(i < beds ? "cold bed" : "no bed");
-            if (h.pouting) parts.Add("pouting");
+            if (h.pouting) parts.Add("grieving");
             float d = CampReadouts.MoodDriftPerDay(l, i);
             if (!h.downed) parts.Add(d > 0.001f ? "rising" : d < -0.001f ? "falling" : "steady");
             return string.Join(" · ", parts);

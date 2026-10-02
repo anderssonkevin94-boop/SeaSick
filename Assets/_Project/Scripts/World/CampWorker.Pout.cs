@@ -6,18 +6,17 @@ namespace SeaSick.World
     /// <summary>
     /// **The pouting hand's own walk (death/rescue phase 4, 2026-09-28).**
     ///
-    /// docs/PLAN-DEATH-RESCUE.md, "Neglect": an angry hand walks to the fire
-    /// and stands there sulking. Deciding WHO pouts and for how long is the
-    /// ledger's job (`OutpostLedger.PoutTick`, plain data); this file is the
+    /// docs/PLAN-DEATH-RESCUE.md, "Neglect": a grieving hand walks to the
+    /// fire and stands there (since 2026-10-02 only after a death at the
+    /// camp, half a sky day -- Kevin: *"pouting only happens when someone
+    /// dies"*). Deciding WHO pouts and for how long is the ledger's job
+    /// (`OutpostLedger.PoutStep`, plain data, game time); this file is the
     /// body walking it, same division `CampWorker.Rescue.cs` keeps for the
     /// drag.
     ///
     /// **Watched-only, same as the drag** (D2): this only runs inside
-    /// `Update`, which only exists for a body that is here, which only
-    /// happens while the camp is watched. There is no headless equivalent --
-    /// an unwatched pout simply sits at whatever `poutLeft`/`poutCooldown`
-    /// it had until the camp is watched again (`OutpostLedger.PoutTick` is
-    /// itself gated the same way in `Outpost.Update`).
+    /// `Update`, which only exists for a body that is here. Off screen the
+    /// pout is books only and its clock still runs (`Step`).
     /// </summary>
     public partial class CampWorker
     {

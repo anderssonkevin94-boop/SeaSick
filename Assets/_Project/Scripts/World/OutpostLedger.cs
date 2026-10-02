@@ -82,6 +82,15 @@ namespace SeaSick.World
         /// itself (`OutpostLedger.FeedFirst`), not because the player said
         /// so. Only these are sent back once the camp is fed again.
         public bool autoFood;
+        /// **Put on the Farm or the Kitchen by the food emergency
+        /// (2026-10-02, `OutpostLedger.StaffFoodStations`)**, not by the
+        /// player. Kevin: *"so often I'll leave with food going up, and come
+        /// back to 0 food"* -- a camp nobody farms lived on forage, which
+        /// regrows at a third of what five hands eat. Only these are sent
+        /// back ("no job") once the camp is fed again; a player `Assign`
+        /// clears it, so a hand the player puts there himself stays. Saved;
+        /// an old save reads false.
+        public bool autoStation;
         /// **Held in reserve by the player (2026-09-28, designer call).**
         /// Two different things both read as `OutpostOrder.Idle`: "no job"
         /// -- the system let him go (build queue emptied, his building torn
@@ -283,18 +292,26 @@ namespace SeaSick.World
         // exactly where it left off; all default false/0, which is what an
         // old save (nobody in it ever pouted) reads as.
 
-        /// Standing at the fire, sulking. `WorkFactor` is 0 the same way
-        /// `downed`'s is (via `Busy`); see `OutpostLedger.PoutTick`/
-        /// `StartPout`.
+        /// Standing at the fire, grieving. `WorkFactor` is 0 the same way
+        /// `downed`'s is (via `Busy`); see `OutpostLedger.PoutStep`/
+        /// `StartPout`. **Only a death starts one since 2026-10-02** (Kevin:
+        /// *"pouting only happens when someone dies. its too harsh of a
+        /// punishment that occurs too often. when someone dies they pout for
+        /// half a day"*); low mood no longer does.
         public bool pouting;
-        /// Real seconds left of this pout. Counted down only while the
-        /// camp is watched and running (`OutpostLedger.PoutTick`, called
-        /// from `Outpost.Update` beside `TickDowned`).
+        /// Game seconds left of this pout (half a sky day when it starts).
+        /// Counted down by `Step` since 2026-10-02, so it runs out off
+        /// screen and in a catch-up too (it was real seconds, watched only).
         public float poutLeft;
-        /// Real seconds before this hand may pout again, even if he is
-        /// still angry. Ticks down the same watched-and-running way
-        /// `poutLeft` does.
+        /// Unused since 2026-10-02 (a grief pout has no cooldown); kept so
+        /// an old save still reads.
         public float poutCooldown;
+        /// **A death at this camp that he has not grieved yet**
+        /// (2026-10-02, set by `OutpostLedger.Die` on every survivor).
+        /// `PoutStep` turns it into a pout as soon as the camp's floor
+        /// (`LifeTuning.MinHandsFloor`) allows -- so the mourners go one
+        /// after another, never all at once. Saved; an old save reads false.
+        public bool griefPending;
 
         // --- villagers with a day (2026-09-28) -------------------------------
         //
@@ -478,7 +495,7 @@ namespace SeaSick.World
                 if (dragged) return "being carried home";
                 if (!string.IsNullOrEmpty(rescuing))
                     return (draggingNow ? "dragging " : "running to ") + rescuing;
-                if (pouting) return "pouting at the fire · " + Mmss(poutLeft);
+                if (pouting) return "grieving at the fire · " + Mmss(poutLeft);
                 // **Death/rescue phase 10/11** -- the alarm's own states, same
                 // priority band as `defending` just below. A hand hiding with
                 // a spear still in hand (the Hide-all switch caught a hunter
@@ -3012,6 +3029,8 @@ namespace SeaSick.World
             DecayDelivered(days);
             AgeFoodVetoes(days);
             FeedFirst();
+            // Grief pouts run on the game clock (2026-10-02).
+            PoutStep(days);
             ReleaseIdleBuilders();
             EnlistFree();
             // Who may haul this quantum (2026-10-02, OutpostLedger.Runners.cs).
@@ -3762,6 +3781,12 @@ namespace SeaSick.World
             if (hands == null || hands.Count == 0) return;
             float have = FoodFill();
             float day = hands.Count * EatPerHandPerDay;
+            // **The food emergency (2026-10-02, OutpostLedger.FoodDraft.cs):**
+            // under `FedDays` free hands farm and cook before anybody forages
+            // (forage alone regrows a third of what five hands eat); they go
+            // back to "no job" once the camp holds `FoodSafeDays`.
+            if (have >= day * FoodSafeDays) ReleaseFoodStations();
+            else if (have < day * FedDays) StaffFoodStations();
 
             if (have >= day * FedDays)
             {

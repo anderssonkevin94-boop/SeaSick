@@ -263,10 +263,11 @@ namespace SeaSick.World
                 "My belly's been empty since yesterday.",
                 "Could eat a whole goat.",
             };
+            // Grief over a death since 2026-10-02 (was a sulk over mood).
             static readonly string[] Pouting =
             {
-                "Nobody listens to me.",
-                "Nobody ever asks what I think.",
+                "I keep thinking about the one we buried.",
+                "Give me a moment by the fire.",
             };
             static readonly string[] Overboard =
             {

@@ -149,9 +149,10 @@ namespace SeaSick.World.Life
                 case LifeEvents.Pouted:
                     return Pick(h, salt, new[]
                     {
-                        "Sulked by the fire more than once, and always came back to work.",
-                        "Had his black moods at " + camp + ", and everyone learned to let them pass.",
-                        "Stood by the fire and stewed " + CountWord(e.count) + ", and picked his tools back up every time.",
+                        // Grief over a death since 2026-10-02 (it was a sulk).
+                        "Mourned the lost at the fire, and always came back to work.",
+                        "Grieved for friends buried at " + camp + ", and carried on.",
+                        "Stood by the fire for the dead " + CountWord(e.count) + ", and picked his tools back up every time.",
                     });
                 case LifeEvents.SurvivedRaid:
                     return Pick(h, salt, new[]

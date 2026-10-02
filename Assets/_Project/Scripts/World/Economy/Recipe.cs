@@ -175,8 +175,15 @@ namespace SeaSick.World.Economy
             }
         }
 
+        /// **Recipe ids that were renamed** (2026-10-02): an old save's
+        /// kitchen order "meals" (the pre-rework biscuit) is ship's biscuit
+        /// now; it was cleared without a word on load. Unknown ids pass
+        /// through unchanged.
+        public static string Canonical(string id) => id == "meals" ? "ships-biscuit" : id;
+
         public static Recipe Named(string id)
         {
+            id = Canonical(id);
             Index();
             return id != null && byId.TryGetValue(id, out var r) ? r : null;
         }

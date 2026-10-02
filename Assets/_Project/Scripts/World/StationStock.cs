@@ -259,6 +259,7 @@ namespace SeaSick.World
                 if (keep != null) old.Remove(keep);
                 else keep = new SpotState { spot = name };
                 if (keep.recipeId != null && keep.recipeId.Length == 0) keep.recipeId = null;
+                if (keep.recipeId != null) keep.recipeId = Economy.Recipes.Canonical(keep.recipeId);
                 if (keep.benchRecipe == null) keep.benchRecipe = "";
                 spots.Add(keep);
             }
@@ -273,6 +274,9 @@ namespace SeaSick.World
 
             if (fresh)
             {
+                // Renamed recipe ids (2026-10-02, `Recipes.Canonical`).
+                benchRecipe = Economy.Recipes.Canonical(benchRecipe);
+                orderRecipe = Economy.Recipes.Canonical(orderRecipe);
                 // The legacy single bench.
                 if (benchState != BenchState.Empty && !string.IsNullOrEmpty(benchRecipe))
                 {
@@ -302,6 +306,7 @@ namespace SeaSick.World
                     foreach (var q in queue)
                     {
                         if (q == null) continue;
+                        q.recipe = Economy.Recipes.Canonical(q.recipe);
                         var to = SpotFor(Economy.Recipes.Named(q.recipe));
                         if (to == null || to.Selected) continue;
                         if (q.mode == OrderMode.Count && q.n <= 0) continue;

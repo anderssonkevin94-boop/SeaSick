@@ -4,17 +4,20 @@ using SeaSick.World.Life;
 namespace SeaSick.World
 {
     /// <summary>
-    /// **Pout + floor (death/rescue phase 4, 2026-09-28)**, docs/PLAN-DEATH-
-    /// RESCUE.md, "Neglect": nobody deserts. An angry hand (mood &lt; 0.5)
-    /// walks to the fire and sulks for `LifeTuning.PoutSeconds`, then goes
-    /// back to whatever he was doing -- `order`/`target` are never touched.
+    /// **Pout + floor (death/rescue phase 4, 2026-09-28; grief only since
+    /// 2026-10-02)**, docs/PLAN-DEATH-RESCUE.md, "Neglect": nobody deserts.
     ///
-    /// **Watched-and-running only, same gate as `TickDowned`** (D2's own
-    /// rule, extended here): `Outpost.Update` calls this right beside
-    /// `TickDowned`/`DispatchRescuers`, guarded there against a paused menu
-    /// and an offline catch-up run. An unwatched camp simply keeps last
-    /// phase's slow-down (`WorkFactor`'s `StarvingWorkFloor`) and nothing
-    /// more -- pouting itself never starts, ticks, or ends off-screen.
+    /// Kevin, 2026-10-02: *"pouting only happens when someone dies. its too
+    /// harsh of a punishment that occurs too often. when someone dies they
+    /// pout for half a day."* So low mood no longer starts a pout (it still
+    /// slows a hand, `WorkFactor`'s `StarvingWorkFloor`); a death at the camp
+    /// (`Die`) marks every survivor `griefPending`, and `PoutStep` walks
+    /// them to the fire for half a sky day each, as the floor allows --
+    /// `order`/`target` are never touched, he goes back to what he was doing.
+    ///
+    /// **Game time, from `Step`** (was real seconds, watched only): a pout
+    /// runs out off screen and in a time-away catch-up too, so nobody comes
+    /// back to a camp still sulking over something hours old.
     /// </summary>
     public partial class OutpostLedger
     {
@@ -32,41 +35,39 @@ namespace SeaSick.World
             return n;
         }
 
-        /// Real seconds, watched-and-running only (`Outpost.Update`). Ticks
-        /// every hand's cooldown, ends any pout whose clock ran out, then
-        /// starts new ones for angry, off-cooldown, non-busy hands -- one
-        /// at a time, re-checking the floor after each so a camp at exactly
-        /// the floor's headcount never lets two hands sulk on the same
-        /// frame.
-        public void PoutTick(float realDeltaSeconds)
-        {
-            if (hands == null || realDeltaSeconds <= 0f) return;
+        /// Half a sky day (Kevin's "half a day"), in game seconds -- read
+        /// off `TimeOfDay.DayLength`, so it follows the day length.
+        public static float GriefPoutSeconds => 0.5f * TimeOfDay.DayLength;
 
+        /// **The pout clock, one quantum of game time** (`Step`, 2026-10-02).
+        /// Ends any pout whose time ran out, then starts the grief pouts
+        /// that are owed -- one at a time, re-checking the floor after each,
+        /// so a camp at exactly the floor's headcount never lets two hands
+        /// mourn at once; the rest wait their turn.
+        void PoutStep(float workDays)
+        {
+            if (hands == null || workDays <= 0f) return;
+            float secs = workDays * TimeOfDay.WorkDaySeconds;
             foreach (var h in hands)
             {
                 if (h == null) continue;
-                if (h.poutCooldown > 0f)
-                    h.poutCooldown = Mathf.Max(0f, h.poutCooldown - realDeltaSeconds);
+                h.poutCooldown = 0f;
                 if (h.pouting)
                 {
-                    h.poutLeft -= realDeltaSeconds;
+                    h.poutLeft -= secs;
                     if (h.poutLeft <= 0f) EndPout(h);
                 }
             }
-
             int free = FreeHandCount();
             foreach (var h in hands)
             {
-                if (h == null || h.Busy || h.poutCooldown > 0f || !h.Angry) continue;
-                // Pouting him would take `free` down by one -- refuse if
-                // that breaks the floor; he simply tries again next tick
-                // (nothing here remembers the refusal, same as any other
-                // "not right now" in this file).
+                if (h == null || !h.griefPending || h.Busy) continue;
                 if (!FloorHolds(free - 1)) continue;
                 StartPout(h);
                 free--;
             }
         }
+
 
         /// **Dev-only (`LifeDevPanel`'s "Pout" button): force a pout now,
         /// cooldown ignored, floor still respected.** Returns false (does
@@ -83,7 +84,8 @@ namespace SeaSick.World
         void StartPout(OutpostHand h)
         {
             h.pouting = true;
-            h.poutLeft = LifeTuning.PoutSeconds;
+            h.griefPending = false;
+            h.poutLeft = GriefPoutSeconds;
             // **Nothing vanishes.** A load already in his arms when the
             // pout starts: if he had reached the drop (walking the last leg
             // home, or standing at a full store waiting for room) the trip
@@ -105,7 +107,7 @@ namespace SeaSick.World
         {
             h.pouting = false;
             h.poutLeft = 0f;
-            h.poutCooldown = LifeTuning.PoutCooldownSeconds;
+            h.poutCooldown = 0f;
         }
     }
 }

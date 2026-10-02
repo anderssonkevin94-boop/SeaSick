@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using SeaSick.World.Economy;
 
 namespace SeaSick.World
 {
@@ -44,7 +45,8 @@ namespace SeaSick.World
                 foodDrafted.Clear();
                 if (hands != null)
                     foreach (var h in hands)
-                        if (h != null && h.autoFood && FoodDraftOrder(h)) foodDrafted.Add(h);
+                        if (h != null && ((h.autoFood && FoodDraftOrder(h))
+                                          || (h.autoStation && FoodStationOrder(h)))) foodDrafted.Add(h);
                 return foodDrafted;
             }
         }
@@ -57,7 +59,17 @@ namespace SeaSick.World
         /// arrival, and the hauler pass walks a load in any idle hand's arms).
         public void UndoFoodDraft(OutpostHand h)
         {
-            if (h == null || !h.autoFood) return;
+            if (h == null) return;
+            // The food emergency's farmhand or cook (2026-10-02), same undo.
+            if (h.autoStation)
+            {
+                h.autoStation = false;
+                if (FoodStationOrder(h))
+                { h.order = OutpostOrder.Idle; h.target = ""; h.workPin = 0; h.playerIdle = false; }
+                foodVeto[h] = FoodVetoDays;
+                return;
+            }
+            if (!h.autoFood) return;
             h.autoFood = false;
             if (FoodDraftOrder(h))
             {
@@ -94,6 +106,193 @@ namespace SeaSick.World
         /// already walking to pick, and room in the store for it.
         bool ForageCanStart() =>
             Res.IsGatherable(Res.Food) && FieldFree(Res.Food) >= 1 && RoomFor(Res.Food) >= 1;
+
+        // --- the food emergency (2026-10-02) ------------------------------------
+        //
+        // Kevin: *"so often I'll leave with food going up, and come back to 0
+        // food, and it not going up and everyone pouting, and it's like damage
+        // control every time I start the game."* The trace (Dev/Editor/
+        // FoodCollapseTrace) found the camp nobody farmed: `FeedFirst` only
+        // ever sent one forager, and wild forage regrows ~1.6 fill a sky day
+        // against the 5 five hands eat -- mood 0 by sky day 13 of a 12 h
+        // absence, for good. With a farmhand and a cook the same camp holds
+        // its food and its mood for all 90 sky days. So under `FedDays` the
+        // free hands staff the Farm first, then the Kitchen (with an order
+        // it can cook), one per copy; forage stays the fallback. Same code
+        // live and in a catch-up (it runs from `Step`).
+
+        /// Days of food at which the emergency's farmhands and cooks go back
+        /// to "no job" -- twice `FedDays`, so they are not swapped in and out
+        /// every quantum around the line (the hunters' hysteresis, 1 -> 3).
+        public const float FoodSafeDays = 6f;
+
+        /// On the Farm or at the Kitchen (the posts the emergency fills).
+        static bool FoodStationOrder(OutpostHand h) =>
+            h != null && h.order == OutpostOrder.Work
+            && (h.target == BuildPlans.Farm.id || h.target == BuildPlans.Kitchen.id);
+
+        /// Fed again: every hand the emergency put on a food post goes back
+        /// to "no job" (a SYSTEM release, so `EnlistFree` and the idle ladder
+        /// take him at once). One the player has re-ordered since keeps his
+        /// order; one with a load in his arms lands it first.
+        void ReleaseFoodStations()
+        {
+            foreach (var h in hands)
+            {
+                if (h == null || !h.autoStation) continue;
+                if (!FoodStationOrder(h)) { h.autoStation = false; continue; }
+                if (h.Hauling) continue;
+                h.autoStation = false;
+                h.order = OutpostOrder.Idle;
+                h.target = "";
+                h.workPin = 0;
+                h.playerIdle = false;
+            }
+        }
+
+        /// Under `FedDays`: a free hand on every Farm copy with no worker
+        /// (if it has a crop picked), then every Kitchen copy with no cook
+        /// (if it has, or can be given, something to cook). Free = no job,
+        /// a builder, or a hand the draft sent foraging/hunting -- never the
+        /// player's reserve, a runner, a hand the player put on other work,
+        /// one he just sent back (`UndoFoodDraft`), busy, or carrying.
+        void StaffFoodStations()
+        {
+            draftNames.Clear();
+            int farms = CountBuilt(BuildPlans.Farm.id);
+            for (int f = 0; f < farms; f++)
+            {
+                if (WorkersAt(BuildPlans.Farm.id, f) >= StationCapacity(BuildPlans.Farm.id, f)) continue;
+                if (!FarmHasCrop(f)) continue;
+                var h = FreeFoodHand();
+                if (h == null) break;
+                PutOnFoodPost(h, BuildPlans.Farm.id, f);
+                draftNames.Add(h.name + " is farming");
+            }
+            bool farmed = HandsOn(OutpostOrder.Work, BuildPlans.Farm.id) > 0;
+            int kitchens = CountBuilt(BuildPlans.Kitchen.id);
+            for (int k = 0; k < kitchens; k++)
+            {
+                // The emergency's own cook stood idle beside 30 potatoes when
+                // the grilled meat it had chosen ran out (trace 2026-10-02):
+                // at a kitchen IT staffed, an order with nothing to cook is
+                // swapped for one whose inputs are here.
+                if (EmergencyCookAt(k)) { KitchenCanCook(k, farmed, true); continue; }
+                if (WorkersAt(BuildPlans.Kitchen.id, k) >= StationCapacity(BuildPlans.Kitchen.id, k)) continue;
+                var h = FreeFoodHand();
+                if (h == null) break;
+                if (!KitchenCanCook(k, farmed)) continue;
+                PutOnFoodPost(h, BuildPlans.Kitchen.id, k);
+                draftNames.Add(h.name + " is cooking");
+            }
+            if (draftNames.Count == 0) return;
+            string msg = "Food emergency: " + string.Join(", ", draftNames);
+            try { FoodDraftNotice?.Invoke(msg); }
+            catch (System.Exception e) { Debug.LogException(e); }
+        }
+
+        bool FarmHasCrop(int farm)
+        {
+            if (plots == null) return false;
+            foreach (var p in plots)
+                if (p != null && p.farm == farm && (!string.IsNullOrEmpty(p.crop) || p.state != PlotState.Empty))
+                    return true;
+            return false;
+        }
+
+        /// The next free hand for a food post, in the order the passes
+        /// prefer: no job, a builder with nothing to build, a drafted
+        /// forager or hunter, then any builder. Null: nobody.
+        OutpostHand FreeFoodHand()
+        {
+            for (int pass = 0; pass < 4; pass++)
+                foreach (var h in hands)
+                {
+                    if (h == null || h.Busy || h.downed || h.Hauling || Reserve(h) || FoodVetoed(h)) continue;
+                    bool ok = pass switch
+                    {
+                        0 => h.order == OutpostOrder.Idle,
+                        1 => h.order == OutpostOrder.Build && BuildSiteFor(h) == null,
+                        2 => h.autoFood && FoodDraftOrder(h),
+                        _ => h.order == OutpostOrder.Build,
+                    };
+                    if (ok) return h;
+                }
+            return null;
+        }
+
+        /// The ledger's own `Outpost.Assign`: everybody already on the plan
+        /// is pinned where he stands, then this hand to copy `ordinal`.
+        void PutOnFoodPost(OutpostHand h, string planId, int ordinal)
+        {
+            foreach (var x in hands)
+            {
+                if (x == null || x == h || x.order != OutpostOrder.Work || x.target != planId) continue;
+                int at = OrdinalOfHand(x);
+                if (at >= 0) x.workPin = at + 1;
+            }
+            h.order = OutpostOrder.Work;
+            h.target = planId;
+            h.workPin = ordinal + 1;
+            h.autoFood = false;
+            h.autoStation = true;
+            h.playerIdle = false;
+        }
+
+        /// **Does Kitchen copy `k` have something to cook** -- giving it an
+        /// order if it has none. The player's own order stands (worth a cook
+        /// when its inputs are here, or the farm is about to bring potatoes);
+        /// with no order the best dish whose inputs are already held is put
+        /// on repeat, else baked potato when somebody is farming.
+        bool KitchenCanCook(int k, bool farmed, bool needInputs = false)
+        {
+            int si = StationIndex(BuildPlans.Kitchen.id, k);
+            var st = StationAt(si);
+            if (st == null) return false;
+            int level = LevelOf(BuildPlans.Kitchen.id, k);
+            foreach (var sp in st.Spots)
+            {
+                var r = sp != null ? sp.Recipe : null;
+                if (r == null || !CanCookHere(r, level)) continue;
+                if (InputsHeld(r) || (farmed && !needInputs)) return true;
+                // (Mid-batch: leave the bench be.)
+                if (sp.BenchBusy) return true;
+            }
+            Economy.Recipe best = null;
+            float bestFill = -1f;
+            foreach (var r in Economy.Recipes.At(BuildPlans.Kitchen.id))
+            {
+                if (!CanCookHere(r, level) || !InputsHeld(r)) continue;
+                float fill = FoodBook.Fill(r.makes) * r.yield;
+                if (fill > bestFill) { bestFill = fill; best = r; }
+            }
+            if (best == null && farmed && !needInputs)
+            {
+                var potato = Economy.Recipes.Named("baked-potato");
+                if (potato != null && CanCookHere(potato, level)) best = potato;
+            }
+            return best != null && PlaceOrder(si, best.id, RepeatOrder);
+        }
+
+        /// Kitchen copy `k`'s cook is the emergency's (`autoStation`).
+        bool EmergencyCookAt(int k)
+        {
+            foreach (var h in hands)
+                if (h != null && h.autoStation && h.order == OutpostOrder.Work
+                    && h.target == BuildPlans.Kitchen.id && OrdinalOfHand(h) == k) return true;
+            return false;
+        }
+
+        bool CanCookHere(Economy.Recipe r, int level) =>
+            r != null && FoodBook.IsDish(r.makes) && level >= r.stationLevel && RecipeAvailable(r, out _);
+
+        bool InputsHeld(Economy.Recipe r)
+        {
+            if (r.takes == null) return true;
+            foreach (var line in r.takes)
+                if (line.n > 0 && HeldOf(line.res) < line.n) return false;
+            return true;
+        }
 
         void AnnounceFoodDraft(bool hunting)
         {

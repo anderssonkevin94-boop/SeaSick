@@ -63,6 +63,12 @@ namespace SeaSick.World.Economy
             new EdibleDef { res = Res.Potato, fill = 0.25f, raw = true },
             new EdibleDef { res = Res.Carrot, fill = 0.25f, raw = true },
             new EdibleDef { res = Res.Fish,   fill = 0.25f, raw = true },
+            // Raw meat, 2026-10-02: the food draft sent hunters out and the
+            // camp starved beside 30 meat it could not eat (trace: fill 0.4,
+            // every supper empty). Eaten raw like fish -- quarter fill, the
+            // raw mood cost -- and only once nothing cooked is left; grilled
+            // meat (0.75) stays the reason to cook it.
+            new EdibleDef { res = Res.Meat,   fill = 0.25f, raw = true },
             new EdibleDef { res = Res.Apple,  fill = 0.25f, raw = true },
             new EdibleDef { res = Res.Food,   fill = 0.25f, raw = true },   // wild forage
         };

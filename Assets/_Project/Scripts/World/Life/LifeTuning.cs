@@ -35,10 +35,10 @@ namespace SeaSick.World.Life
         public float huntAccidentChance = 0.03f;
 
         [Header("Pout + floor (phase 4)")]
-        [Tooltip("Real seconds an angry (mood < 0.5) hand stands at the fire pouting before he goes back to his order. Docs: \"5 minutes.\"")]
+        [Tooltip("UNUSED since 2026-10-02: a pout is grief over a death and lasts half a sky day (OutpostLedger.GriefPoutSeconds); low mood no longer starts one.")]
         public float poutSeconds = 300f;
 
-        [Tooltip("Real seconds after a pout ends before that same hand may pout again, even if he is still angry.")]
+        [Tooltip("UNUSED since 2026-10-02: grief pouts have no cooldown (one per death).")]
         public float poutCooldownSeconds = 600f;
 
         [Tooltip("A camp never lets pouting drop the number of hands who are NOT downed/recovering/dragged/rescuing/pouting below this. A hand who would break the floor simply does not start pouting; he tries again next tick. **Also the floor for any future neglect outcome** (docs: \"a camp never drops below a minimum number of hands\") -- this one field is meant to gate whatever comes after pouting too, not just this phase.")]

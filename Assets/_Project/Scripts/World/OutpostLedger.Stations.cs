@@ -1028,7 +1028,7 @@ namespace SeaSick.World
             h.rescuing = "";
             // **A pouting hand knocked down (phase 4, 2026-09-28):** `Doing`
             // already reads `downed` ahead of `pouting`, but leaving
-            // `pouting` true would let `PoutTick` go on ticking his (now
+            // `pouting` true would let `PoutStep` go on ticking his (now
             // meaningless) sulk in the background and would count him
             // against the floor twice over. Clear it outright, same as
             // `rescuing` above; no cooldown penalty either way, since he
@@ -1133,6 +1133,11 @@ namespace SeaSick.World
             DropCarriedLoad(h);
             ClearRescuerOf(h);
             RemoveHand(h);
+            // **The camp grieves (2026-10-02).** Kevin: *"pouting only
+            // happens when someone dies ... when someone dies they pout for
+            // half a day."* Every survivor owes one pout; `PoutStep` walks
+            // them to the fire as the floor allows.
+            foreach (var o in hands) if (o != null) o.griefPending = true;
 
             Lives.Bury(grave);
         }

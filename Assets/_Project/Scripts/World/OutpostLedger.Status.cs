@@ -165,6 +165,7 @@ namespace SeaSick.World
             if (WaitingForRunner(h))
                 return RunnerBound(stations.IndexOf(StationOfHand(h))) ? "a runner is on the way" : "waiting on the barrows";
             if (h.autoFood && FoodDraftOrder(h)) return "food is low";
+            if (h.autoStation && FoodStationOrder(h)) return "food emergency";
             string why = StallReason(h);
             if (!string.IsNullOrEmpty(why)) return why;
             if (h.order == OutpostOrder.Build)

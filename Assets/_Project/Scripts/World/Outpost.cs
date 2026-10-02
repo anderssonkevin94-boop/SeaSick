@@ -3053,14 +3053,10 @@ namespace SeaSick.World
                 // rescuer's own `CampWorker.Update`, watched-only same as
                 // the downed timer above.
                 ledger?.DispatchRescuers();
-                // **The pout (death/rescue phase 4, 2026-09-28):** same
-                // watched-and-running gate as the downed timer above --
-                // docs/PLAN-DEATH-RESCUE.md, "Neglect": "pouts start and
-                // tick only while the camp is watched and unpaused." The
-                // walk to the fire is the pouting hand's own
-                // `CampWorker.Update` (`TickPout`), watched-only the same
-                // way the rescuer's drag is.
-                ledger?.PoutTick(Time.unscaledDeltaTime);
+                // (The pout clock moved into the ledger's `Step` on
+                // 2026-10-02 -- game time, grief only: `OutpostLedger.
+                // PoutStep`. The walk to the fire is still the pouting
+                // hand's own `CampWorker.Update`, `TickPout`.)
             }
             // Four times a second, not sixty: `CatchUp` reconciles the
             // props and the bodies as well as running the tick, and the
@@ -3129,6 +3125,7 @@ namespace SeaSick.World
             h.order = OutpostOrder.Work;
             h.target = planId;
             h.playerIdle = false;   // any other order ends his reserve (2026-09-28)
+            h.autoStation = false;  // the player's now, not the food emergency's (2026-10-02)
             h.workPin = room + 1;   // the copy with room
             MarkNightOrder(h);
             ArrangeHands();
