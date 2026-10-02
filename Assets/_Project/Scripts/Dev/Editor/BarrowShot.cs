@@ -76,48 +76,72 @@ public static class BarrowShot
             cam.backgroundColor = new Color(0.78f, 0.80f, 0.84f);
             cam.nearClipPlane = 0.05f;
             cam.farClipPlane = 30f;
-            const int Cell = 400, Cols = 3;
+            const int Cell = 400, Cols = 4;
             rt = new RenderTexture(Cell, Cell, 24);
             var tex = new Texture2D(Cell, Cell, TextureFormat.RGB24, false);
             made.Add(tex);
             cam.targetTexture = rt;
             cam.aspect = 1f;
 
-            var states = new List<(string name, string res, int n, float speed)>
+            // grade = rise per metre along his walk (+Z), cross = rise per metre to his right (+X).
+            var states = new List<(string name, string res, int n, float speed, float grade, float cross)>
             {
-                ("push empty", null, 0, 1.29f),
-                ("push logs x3", Res.Timber, 3, VillagerGaits.Carry),
-                ("push planks x6", Res.Boards, 6, VillagerGaits.Carry),
-                ("push bricks x8", Res.Brick, 8, VillagerGaits.Carry),
-                ("push stone x5", Res.Stone, 5, VillagerGaits.Carry),
-                ("push potatoes x8", Res.Potato, 8, VillagerGaits.Carry),
-                ("parked logs x3", Res.Timber, 3, 0f),
-                ("parked empty", null, 0, 0f),
+                ("push empty", null, 0, 1.29f, 0f, 0f),
+                ("push logs x6", Res.Timber, 6, VillagerGaits.Carry, 0f, 0f),
+                ("push planks x10", Res.Boards, 10, VillagerGaits.Carry, 0f, 0f),
+                ("push bricks x24", Res.Brick, 24, VillagerGaits.Carry, 0f, 0f),
+                ("push stone x12", Res.Stone, 12, VillagerGaits.Carry, 0f, 0f),
+                ("push potatoes x8", Res.Potato, 8, VillagerGaits.Carry, 0f, 0f),
+                ("parked logs x6", Res.Timber, 6, 0f, 0f, 0f),
+                ("parked stone x5", Res.Stone, 5, 0f, 0f, 0f),
+                ("push logs uphill 15deg", Res.Timber, 6, VillagerGaits.Carry, 0.268f, 0f),
+                ("push logs downhill 15deg", Res.Timber, 6, VillagerGaits.Carry, -0.268f, 0f),
+                ("push stone across 10deg", Res.Stone, 12, VillagerGaits.Carry, 0.05f, 0.176f),
+                ("parked logs uphill 12deg + across 8deg", Res.Timber, 6, 0f, 0.213f, 0.14f),
+                ("parked stone downhill 12deg - across 8deg", Res.Stone, 5, 0f, -0.213f, -0.14f),
             };
+            bool fail = false;
+            var verts = new Dictionary<Mesh, Vector3[]>();
             var page = new Texture2D(Cols * Cell, states.Count * Cell, TextureFormat.RGB24, false);
             made.Add(page);
             for (int s = 0; s < states.Count; s++)
             {
-                var (name, res, n, speed) = states[s];
+                var (name, res, n, speed, grade, cross) = states[s];
                 if (res == null) acting.Set(VillagerActing.Mode.None);
                 else acting.Set(VillagerActing.Mode.Carry, res, n);
+                // The ground: a plane through his feet at the row's start
+                // (flat rows: the old level quad), as the barrow sees it.
+                Vector3 o0 = body.transform.position;
+                float G(float x, float z) => Origin.y + grade * (z - o0.z) + cross * (x - o0.x);
+                barrow.GroundOverride = G;
+                body.transform.position = new Vector3(o0.x, G(o0.x, o0.z), o0.z);
                 // Walk (or stand) long enough for the tilt, the clip and the
-                // speed filter to settle.
+                // speed filter to settle; the barrow's ground contact is
+                // checked on every frame of the second half (the walk cycle).
+                var low = new Low();
                 for (int k = 0; k < 30; k++)
                 {
-                    body.transform.position += body.transform.forward * speed * Dt;
+                    var bp = body.transform.position + body.transform.forward * speed * Dt;
+                    bp.y = G(bp.x, bp.z);
+                    body.transform.position = bp;
                     acting.Commanded(speed);
                     barrow.Step(Dt, true);
                     if (anim != null) anim.Update(Dt);
                     step.Invoke(acting, new object[] { Dt });
+                    if (k >= 15) Contact(body.transform, G, verts, low);
                 }
                 Vector3 o = body.transform.position;
-                ground.transform.position = new Vector3(o.x, Origin.y, o.z);
+                var nrm = new Vector3(-cross, 1f, -grade).normalized;
+                ground.transform.SetPositionAndRotation(new Vector3(o.x, G(o.x, o.z), o.z),
+                    Quaternion.FromToRotation(Vector3.up, nrm) * Quaternion.Euler(90f, 0f, 0f));
                 int row = states.Count - 1 - s;
                 Vector3 look = o + new Vector3(0f, 0.6f, 0.75f);
                 Shoot(cam, rt, tex, look + new Vector3(4f, 0.2f, 0f), look, page, 0, row, Cell, 1.05f);
                 Shoot(cam, rt, tex, look + new Vector3(2.4f, 1.4f, 3.0f), look, page, 1, row, Cell, 1.05f);
                 Shoot(cam, rt, tex, look + new Vector3(-1.6f, 3.6f, -2.6f), look, page, 2, row, Cell, 1.05f);
+                // Close-up of the tray, high front three-quarter: clipping shows here.
+                Vector3 tray = o + body.transform.rotation * new Vector3(0f, 0.55f, 0.95f);
+                Shoot(cam, rt, tex, tray + new Vector3(1.6f, 2.2f, 1.9f), tray, page, 3, row, Cell, 0.5f);
 
                 var bt = body.transform;
                 string grips = "no grips";
@@ -127,20 +151,25 @@ public static class BarrowShot
                     Vector3 fr = bones.TryGetValue("hand.R", out var hr) ? hr.TransformPoint(VillagerActing.ToolGripLocal) : Vector3.zero;
                     grips = $"gripL {F(bt.InverseTransformPoint(gl))} gripR {F(bt.InverseTransformPoint(gr))} | fistL {F(bt.InverseTransformPoint(fl))} fistR {F(bt.InverseTransformPoint(fr))}";
                 }
-                float wheelLow = float.MaxValue, minY = float.MaxValue;
-                var br = bt.Find("RunnerBarrow");
-                if (br != null)
-                    foreach (var mr in br.GetComponentsInChildren<MeshRenderer>())
-                    {
-                        float y = mr.bounds.min.y - o.y;
-                        minY = Mathf.Min(minY, y);
-                        if (mr.name == "Wheel" || mr.transform.parent.name == "Wheel") wheelLow = Mathf.Min(wheelLow, y);
-                    }
                 float feet = float.MaxValue;
                 foreach (var fb in new[] { "foot.L", "foot.R", "toe.L", "toe.R" })
-                    if (bones.TryGetValue(fb, out var f)) feet = Mathf.Min(feet, f.position.y - o.y);
-                sb.AppendLine($"{name}: showing={barrow.Showing} acting={acting.Current} clipArms={acting.BarrowArms} {grips} wheelLow {wheelLow:0.000} barrowLow {minY:0.000} footBone {feet:0.00}");
+                    if (bones.TryGetValue(fb, out var f)) feet = Mathf.Min(feet, f.position.y - G(f.position.x, f.position.z));
+                // Kevin's rule, no clipping ever: the wheel touches (never under),
+                // nothing of the barrow or its load is under the ground, and
+                // parked it stands on its legs.
+                bool parked = speed <= 0f;
+                var why = new List<string>();
+                if (!barrow.Showing) why.Add("not showing");
+                if (low.wheelMin < -0.005f || low.wheelMax > 0.01f) why.Add($"wheel {low.wheelMin:0.000}..{low.wheelMax:0.000} not in [-0.005, 0.010]");
+                if (low.all < -0.005f) why.Add($"barrow/load {low.all:0.000} under the ground");
+                if (parked && (low.legs < -0.005f || low.legs > 0.01f)) why.Add($"parked legs {low.legs:0.000} not on the ground");
+                if (!parked && low.legs < 0.01f) why.Add($"pushed legs {low.legs:0.000} drag");
+                if (why.Count > 0) fail = true;
+                sb.Append($"tray fit {TrayFit(bt)} | ");
+                sb.AppendLine($"{(why.Count == 0 ? "ok" : "FAIL (" + string.Join("; ", why) + ")")} {name}: showing={barrow.Showing} acting={acting.Current} clipArms={acting.BarrowArms} {grips} wheelLow {low.wheelMin:0.000}..{low.wheelMax:0.000} legsLow {low.legs:0.000} barrowLow {low.all:0.000} footBone {feet:0.00}");
             }
+            barrow.GroundOverride = null;
+            sb.Insert(0, fail ? "BARROW CONTACT FAIL\n" : "BARROW CONTACT PASS (wheel on the ground every frame, nothing under it, legs down when parked)\n");
             page.Apply();
             string file = Path.Combine(outDir, "barrow-sheet.jpg");
             File.WriteAllBytes(file, page.EncodeToJPG(88));
@@ -154,6 +183,71 @@ public static class BarrowShot
             if (rt != null) { rt.Release(); Object.DestroyImmediate(rt); }
         }
         return sb.ToString();
+    }
+
+    /// **The load against wheelbarrow A's real inside** (`art-staging/wheelbarrow-v2/
+    /// layout_fit.py` planes): every load renderer's mesh-bounds corners in the
+    /// tray's Load frame. pen > 0 = through a wall / rail / the floor; gap = the
+    /// closest any corner comes to them (want >= 0.01).
+    static string TrayFit(Transform body)
+    {
+        Transform load = null;
+        foreach (var t in body.GetComponentsInChildren<Transform>(true))
+            if (t.name == "Load" && t.parent != null && t.parent.name == "Tilt") { load = t; break; }
+        if (load == null) return "no load";
+        float worst = -9f; int items = 0;
+        foreach (var mf in load.GetComponentsInChildren<MeshFilter>(true))
+        {
+            if (mf.sharedMesh == null) continue;
+            items++;
+            var m = load.worldToLocalMatrix * mf.transform.localToWorldMatrix;
+            var mb = mf.sharedMesh.bounds;
+            for (int c = 0; c < 8; c++)
+            {
+                var p = m.MultiplyPoint3x4(mb.center + Vector3.Scale(mb.extents, new Vector3((c & 1) == 0 ? -1 : 1, (c & 2) == 0 ? -1 : 1, (c & 4) == 0 ? -1 : 1)));
+                float y = Mathf.Min(Mathf.Max(p.y, 0f), 0.2819f), tt = y / 0.27f;
+                float xm = 0.27f + 0.015f * tt, z0 = -0.295f, z1 = 0.295f + 0.25f * tt - 0.002f;
+                if (y >= 0.219f) xm -= 0.008f;
+                if (y >= 0.225f) { z0 += 0.008f; z1 -= 0.008f; }
+                if (p.y >= 0.282f) z1 = 0.295f;   // above the rim: stay over the floor
+                worst = Mathf.Max(worst, Mathf.Max(Mathf.Max(Mathf.Abs(p.x) - xm, z0 - p.z), Mathf.Max(p.z - z1, -p.y)));
+            }
+        }
+        return items == 0 ? "empty" : $"{items} items pen {worst:0.000} gap {-worst:0.000}";
+    }
+
+    /// Lowest true vertex (mesh data, edit mode reads non-readable meshes)
+    /// over the ground under it, over the frames sampled: the wheel, the
+    /// barrow body (its legs are its lowest part), and everything incl. the load.
+    sealed class Low { public float wheelMin = float.MaxValue, wheelMax = float.MinValue, legs = float.MaxValue, all = float.MaxValue; }
+
+    static void Contact(Transform body, System.Func<float, float, float> g, Dictionary<Mesh, Vector3[]> verts, Low low)
+    {
+        var br = body.Find("RunnerBarrow");
+        if (br == null || !br.gameObject.activeInHierarchy) return;
+        float wheel = float.MaxValue;
+        foreach (var mf in br.GetComponentsInChildren<MeshFilter>())
+        {
+            var mesh = mf.sharedMesh;
+            if (mesh == null) continue;
+            if (!verts.TryGetValue(mesh, out var vs)) verts[mesh] = vs = mesh.vertices;
+            var m = mf.transform.localToWorldMatrix;
+            float lo = float.MaxValue;
+            foreach (var v in vs)
+            {
+                var w = m.MultiplyPoint3x4(v);
+                lo = Mathf.Min(lo, w.y - g(w.x, w.z));
+            }
+            low.all = Mathf.Min(low.all, lo);
+            bool isWheel = mf.name == "Wheel" || (mf.transform.parent != null && mf.transform.parent.name == "Wheel");
+            if (isWheel) wheel = Mathf.Min(wheel, lo);
+            else if (mf.transform.parent != null && mf.transform.parent.name == "Tilt") low.legs = Mathf.Min(low.legs, lo);
+        }
+        if (wheel < float.MaxValue)
+        {
+            low.wheelMin = Mathf.Min(low.wheelMin, wheel);
+            low.wheelMax = Mathf.Max(low.wheelMax, wheel);
+        }
     }
 
     static string F(Vector3 v) => $"({v.x:0.00},{v.y:0.00},{v.z:0.00})";

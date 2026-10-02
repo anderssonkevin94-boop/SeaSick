@@ -6,19 +6,22 @@ using UnityEngine;
 
 namespace SeaSick.Dev
 {
-    /// **The runner's wheelbarrow v1 (2026-10-02, `art-staging/wheelbarrow-v1`)**:
-    /// the timber barrow a store runner pushes (`World.RunnerBarrow`).
+    /// **The runner's wheelbarrow (2026-10-02; v2 variant A since Kevin
+    /// approved it, `art-staging/wheelbarrow-v2/Wheelbarrow_A.fbx`; v1 in
+    /// `art-staging/wheelbarrow-v1`)**: the timber barrow a store runner
+    /// pushes (`World.RunnerBarrow`). Same node names / markers as v1, wider
+    /// tray walls (0.71 m outside, the 0.54 x 0.59 m floor is unchanged).
     ///
-    /// Copies `Wheelbarrow.fbx` into `Resources/Kits/Carry/` next to the
+    /// Copies the FBX over `Resources/Kits/Carry/Wheelbarrow.fbx` (same GUID) into `Resources/Kits/Carry/` next to the
     /// carry crate and imports it exactly the way `CarryCrateImport` does
     /// (true metres, axis conversion baked, authored normals, no animation /
     /// tangents / colliders, the shared `GameColor` material), keeping the
     /// hierarchy so the empties survive: `Wheelbarrow` (root = the ground
     /// under the pusher's hips) > `Tilt_Pivot` (on the axle) >
     /// `Wheelbarrow_Body`, `Wheel`, `Grip_L/R`, `Load_Anchor`, `Slot_0..11`.
-    /// Every face and the vertex colours are kept as delivered (500 tris).
+    /// Every face and the vertex colours are kept as delivered (760 tris; v1 500).
     /// Then checks the README's numbers in the imported frame: two meshes on
-    /// GameColor with vertex colours, ~0.60 x 0.70 x 1.56 m, bottom on y = 0,
+    /// GameColor with vertex colours, ~0.71 x 0.71 x 1.57 m (v1: 0.60 x 0.70 x 1.56), bottom on y = 0,
     /// `Tilt_Pivot` at (0, 0.24, 1.55), `Slot_0` at (-0.18, 0.43, 1.116).
     /// `RunnerBarrow` reads the markers from the imported model, so a
     /// half-turned import (the crate's) is reported here and turned back
@@ -28,7 +31,7 @@ namespace SeaSick.Dev
     /// Idempotent.
     public static class WheelbarrowImport
     {
-        const string Source = "art-staging/wheelbarrow-v1/Wheelbarrow.fbx";
+        const string Source = "art-staging/wheelbarrow-v2/Wheelbarrow_A.fbx";
         const string Dir = "Assets/_Project/Resources/Kits/Carry";
         const string Path = Dir + "/Wheelbarrow.fbx";
         const string MaterialPath = "Assets/_Project/Art/Kits/Shared/GameColor.mat";
@@ -85,6 +88,16 @@ namespace SeaSick.Dev
                 if (mr == null || mr.sharedMaterial != mat) log.AppendLine($"!! {mf.name} is not on GameColor");
                 if (!mf.sharedMesh.HasVertexAttribute(UnityEngine.Rendering.VertexAttribute.Color))
                     log.AppendLine($"!! {mf.name} has no vertex colours");
+                else
+                {
+                    // Environment Toon takes the vertex colour as LINEAR albedo.
+                    // build.py's palette is linear and must be exported with
+                    // colors_type='LINEAR'; the default sRGB encoding lifts the
+                    // dark frame 0.17 -> 0.45 and the barrow washes out to beige.
+                    float darkest = mf.sharedMesh.colors.Min(c => Mathf.Max(c.r, Mathf.Max(c.g, c.b)));
+                    log.AppendLine($"  {mf.name} darkest vertex colour {darkest:0.000} (linear palette: 0.150 wheel hub / 0.170 frame)");
+                    if (darkest > 0.3f) log.AppendLine($"!! {mf.name} vertex colours look sRGB-encoded (washed out): re-export with colors_type='LINEAR'");
+                }
                 var toRoot = prefab.transform.worldToLocalMatrix * mf.transform.localToWorldMatrix;
                 var mb = mf.sharedMesh.bounds;
                 for (int c = 0; c < 8; c++)
