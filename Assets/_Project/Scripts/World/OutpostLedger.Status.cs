@@ -12,8 +12,8 @@ namespace SeaSick.World
     /// For the UI:
     /// - `StatusWord(h)`   -- one or two words: "Building", "Hauling",
     ///   "Gathering", "Hunting", "Working", "Reserve", "No work", "Stuck",
-    ///   "Sleeping", "Evening", "Downed", "Fighting", "Hiding", "Rescuing",
-    ///   "Pouting".
+    ///   "Sleeping", "Supper", "Evening", "Downed", "Fighting", "Hiding",
+    ///   "Rescuing", "Pouting".
     /// - `StatusReason(h)` -- the longer why ("walled off", "store is full
     ///   of timber", "! No stone" ...), "" when there is nothing to add.
     /// - `Tally()`         -- `CampTally`: how many hands fall in each of
@@ -119,7 +119,11 @@ namespace SeaSick.World
             {
                 var phase = Life.CampLifeTuning.PhaseAtHour(TimeOfDay.Hour);
                 if (phase == Life.CampLifeTuning.RoutinePhase.Sleep) return "Sleeping";
-                if (phase == Life.CampLifeTuning.RoutinePhase.Evening) return "Evening";
+                // **Supper (2026-10-02)** until he has sat down to it at the
+                // fire (or the bell has not been booked yet); "Evening" after,
+                // and for a hand the supper had nothing for.
+                if (phase == Life.CampLifeTuning.RoutinePhase.Evening)
+                    return supperDay < TimeOfDay.Day || h.SupperWaiting(TimeOfDay.Day) ? "Supper" : "Evening";
             }
             if (Reserve(h)) return h.Hauling ? "Hauling" : "Reserve";
             if (h.TopUpTrip) return "Gathering";

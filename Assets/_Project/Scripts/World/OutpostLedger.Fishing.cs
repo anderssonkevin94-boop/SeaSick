@@ -206,10 +206,11 @@ namespace SeaSick.World
 
         // --- food off the racks (2026-09-30) ------------------------------------
         //
-        // Fish in the hut's box is camp food: it counts in `FoodFill` and a
-        // hungry hand may walk to the box for it (`EatStep`), as he walks to
-        // the store -- else a camp starves with a full box. Racks only, never
-        // bays (a kitchen's queued input is not dinner) and never a bench.
+        // Fish in the hut's box is camp food: it counts in `FoodFill` and
+        // supper is served from it as from the store (`ServeSupper`, since
+        // 2026-10-02; a hungry hand used to walk there) -- else a camp starves
+        // with a full box. Racks only, never bays (a kitchen's queued input
+        // is not dinner) and never a bench.
 
         /// Whole units of `res` on every station's output rack.
         int RackCountOf(string res)
@@ -230,43 +231,6 @@ namespace SeaSick.World
                 if (s != null) n += RowFree(i, s.Rack(res), false);
             }
             return n;
-        }
-
-        /// **The nearest rack with a free unit of `res`** to `from`, by the
-        /// straight line (a choice, not a trip: the trip walks the route).
-        bool NearestRackWith(string res, Vector3 from, out int station)
-        {
-            station = -1;
-            if (stations == null) return false;
-            float best = float.MaxValue;
-            for (int i = 0; i < stations.Count; i++)
-            {
-                var s = stations[i];
-                if (s == null || RowFree(i, s.Rack(res), false) <= 0) continue;
-                float d = StationPlace(i, out var at)
-                    ? (new Vector3(at.x - from.x, 0f, at.z - from.z)).sqrMagnitude : float.MaxValue * 0.5f;
-                if (d < best) { best = d; station = i; }
-            }
-            return station >= 0;
-        }
-
-        /// **A hungry hand's meal trip, from wherever the meal is**: the store
-        /// if it has a free unit (as before), else the nearest rack holding
-        /// one, eaten beside it (`EatMeal` on arrival; the drop-off is the
-        /// same station). False when neither has one.
-        bool StartMealTrip(OutpostHand h, string meal)
-        {
-            if (StoreFree(meal) > 0)
-            {
-                StartTimedTrip(h, meal, 1, HaulPlace.Store, -1, HaulPlace.Store, -1);
-                return true;
-            }
-            if (NearestRackWith(meal, HandAt(h), out int si))
-            {
-                StartTimedTrip(h, meal, 1, HaulPlace.Station, si, HaulPlace.Station, si);
-                return true;
-            }
-            return false;
         }
     }
 }

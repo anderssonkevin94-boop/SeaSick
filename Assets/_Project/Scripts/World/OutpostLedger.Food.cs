@@ -40,10 +40,9 @@ namespace SeaSick.World
     /// **Food: plots, eating by fill, the food total (2026-09-27).** The
     /// approved Melvor-style rework (docs/GDD.md "Food"): crops grow per plot
     /// on real-minute timers and the farmhand carries each harvest to the
-    /// store; the kitchen cooks dishes by order; a hand whose fullness drops
-    /// below `EconomyTuning.HungryBelow` walks to the store and eats the best
-    /// dish there (raw at a quarter only if nothing cooked is left). Goods
-    /// count on arrival -- the meal is picked up at the store and eaten there.
+    /// store; the kitchen cooks dishes by order; the camp eats once a day,
+    /// at supper by the fire (2026-10-02, OutpostLedger.Supper.cs): the best
+    /// dishes first, raw at a quarter only once nothing cooked is left.
     ///
     /// **`Res.Food` is no longer "the food".** Read `FoodFill` (fill units in
     /// store, one = a hand-day) or `DaysOfFood` for any gauge.
@@ -60,8 +59,8 @@ namespace SeaSick.World
 
         /// **Fill units of food the camp can eat** -- one is a hand fed for a
         /// day. The store, and **station output racks since 2026-09-30**
-        /// (fish in the fishing hut's box, a dish on the kitchen's rack: a
-        /// hungry hand walks to either, `StartMealTrip`), never a bay.
+        /// (fish in the fishing hut's box, a dish on the kitchen's rack:
+        /// supper is served from either, `ServeSupper`), never a bay.
         /// Saved dishes are left out unless asked for. `storeOnly`: the
         /// store's own, for a view drawing the store (`StoreStockView`).
         public float FoodFill(bool includeSaved = false, bool storeOnly = false)
@@ -180,10 +179,10 @@ namespace SeaSick.World
 
         // --- eating ------------------------------------------------------------
 
-        /// **The meal a hungry hand walks to the store (or a rack) for**: the best
-        /// allowed dish (highest fill, then its bonus) with a unit nobody is
-        /// already walking to take; raw only when no dish is left. Null when
-        /// the store has nothing edible for him.
+        /// **The next dish supper serves** (from the store or a rack): the
+        /// best allowed dish (highest fill, then its bonus) with a unit nobody
+        /// is already walking to take; raw only when no dish is left. Null
+        /// when there is nothing edible left.
         public string BestMeal()
         {
             string best = null;
@@ -194,28 +193,39 @@ namespace SeaSick.World
                     if (e.raw != (pass == 1) || DishSaved(e.res)) continue;
                     // A free unit in the store or on a rack (2026-09-30).
                     if (StoreFree(e.res) + RackFree(e.res) <= 0) continue;
-                    float score = FoodBook.Fill(e.res) + 0.01f * (FoodBook.MoodPerDay(e.res) + FoodBook.WorkBonus(e.res));
+                    float score = MealScore(e.res);
                     if (score > bestScore) { bestScore = score; best = e.res; }
                 }
             return best;
         }
 
-        /// The eating pass of `Step`, replacing the old settle-from-the-pile:
-        /// everybody drains; a hungry hand with nothing in his arms starts a
-        /// store -> store trip for one unit of `BestMeal` (`eating`), eaten on
-        /// arrival in `DepositHaul`. Mood keeps its old shape: an empty
-        /// stomach drops it, a fed hand climbs back (half rations never
-        /// recover), plus the last meal's bonus while he is fed.
-        /// **The last game day `EatStep` logged a Hungry life event.** Not
-        /// saved -- worst case a load re-logs the same day once, which
-        /// `Lives.Log`'s repeat-collapse absorbs for free. Guards against
-        /// logging every quantum of a hungry day (several a second while
-        /// watched) rather than once.
-        [System.NonSerialized] int hungryLoggedDay = -1;
+        /// How good a dish is: its fill, then its bonuses as the tie-break.
+        static float MealScore(string res) =>
+            FoodBook.Fill(res) + 0.01f * (FoodBook.MoodPerDay(res) + FoodBook.WorkBonus(res));
 
-        void EatStep(float workDays)
+        /// **The eating pass of `Step`** (supper since 2026-10-02, Kevin:
+        /// "they all eat one time during the day, supper time together by
+        /// the fire before they go to sleep"). Nobody walks to the store to
+        /// eat any more: the supper bell (`SupperBellAt`) serves the whole
+        /// camp out of the books (`ServeSupper`), and every quantum drains
+        /// the stomachs and drifts the mood.
+        ///
+        /// **Mood keys off the supper, not the stomach.** With one meal a
+        /// day `full` runs down to about 0 right as the next bell rings, so
+        /// an empty-stomach test would dock a perfectly fed camp every
+        /// evening. Instead `supperHunger` (what the last supper fell short
+        /// of a full day, ration cut included) bites through the day after
+        /// it, in proportion: `MoodDropPerHungryDay x supperHunger` a sky
+        /// day, recovery only when he was fed in full. That reproduces the
+        /// old rates exactly -- half rations 0.25 a day, none 0.5, a fed
+        /// camp climbs 0.25 -- and an under-fed supper costs what that much
+        /// empty time used to. `full` stays as the gauge the sheets draw.
+        void EatStep(float workDays, double atSeconds = double.NaN)
         {
             if (hands == null || hands.Count == 0) return;
+            SettleOldMealTrips();
+            if (SupperBellAt(workDays, atSeconds, out int bellDay)) ServeSupper(bellDay);
+
             // **Needs run on the SKY's day (2026-09-29).** `workDays` is the
             // ledger's step (fixed 180 s days, the unit production is priced
             // in); eating and mood are "per day" of the sun, which is
@@ -225,67 +235,60 @@ namespace SeaSick.World
             // sky days too (the sheets turn them into spans with DayLength).
             float days = workDays * TimeOfDay.SkyDaysPerWorkDay;
             bool starved = rations == Rations.None;
-            int today = TimeOfDay.Day;
-            bool logHungryToday = today != hungryLoggedDay;
+            float rationCut = 1f - EatMultiplier;
             float drain = EatPerHandPerDay * (rations == Rations.Half ? 0.5f : 1f) * days;
-            float hungryBelow = EconomyTuning.HungryBelow;
-            bool anyEmpty = false;
+            bool anyHungry = false;
             for (int hi = 0; hi < hands.Count; hi++)
             {
                 var h = hands[hi];
                 if (h == null) continue;
                 // **Downed (death/rescue phase 1): no eating, no hunger
-                // drain.** A hand lying where he fell is not walking to the
-                // store, and his stomach is not the camp's problem right
-                // now -- docs/PLAN-DEATH-RESCUE.md, "Deaths".
+                // drain.** A hand lying where he fell is not at supper, and
+                // his stomach is not the camp's problem right now --
+                // docs/PLAN-DEATH-RESCUE.md, "Deaths".
                 if (h.downed) continue;
                 h.full = Mathf.Max(0f, h.full - drain);
 
-                if (!starved && h.full < hungryBelow && !h.eating && !h.walkingIn
-                    && (!h.Hauling || !h.haulPicked))
-                {
-                    string meal = BestMeal();
-                    if (meal != null)
-                    {
-                        // A trip only planned (walking out empty-handed) is
-                        // dropped for the meal; a load in his arms is
-                        // finished first (he is caught on a later step).
-                        if (h.Hauling) CancelPlanned(h);
-                        // From the store, or a station's rack (the fishing
-                        // hut's box) when the store has none, 2026-09-30.
-                        if (StartMealTrip(h, meal)) h.eating = true;
-                    }
-                }
-
-                bool empty = h.full <= 0f;
-                if (starved || empty)
-                {
-                    anyEmpty = true;
-                    h.mood = Mathf.Max(0f, h.mood - MoodDropPerHungryDay * days);
-                    if (logHungryToday) Life.Lives.Log(h.name, Life.LifeEvents.Hungry, CampLabel);
-                }
+                float hunger = starved ? 1f : Mathf.Clamp01(h.supperHunger);
+                if (hunger > 1e-3f)
+                    h.mood = Mathf.Max(0f, h.mood - MoodDropPerHungryDay * hunger * days);
                 else
+                    h.mood = Mathf.Min(1f, h.mood + MoodRecoverPerFedDay * days);
+                if (hunger < 1f - 1e-3f)
                 {
-                    h.mood = rations == Rations.Half
-                        ? Mathf.Max(0f, h.mood - MoodDropPerHungryDay * 0.5f * days)
-                        : Mathf.Min(1f, h.mood + MoodRecoverPerFedDay * days);
                     float bonus = FoodBook.MoodPerDay(h.lastMeal);
                     if (bonus != 0f) h.mood = Mathf.Clamp01(h.mood + bonus * days);
                 }
+                // Hungry for the away card = short of what the rations
+                // promise (half rations by choice is not "went hungry").
+                if (starved || hunger - rationCut > 0.01f) anyHungry = true;
 
                 // **Warmth, 2026-09-27.** A hand in a Hut within
                 // `WarmHutRadius` climbs a little further toward content.
                 if (IsHandWarm(hi))
                     h.mood = Mathf.Min(1f, h.mood + WarmMoodBonusPerDay * days);
             }
-            if (anyEmpty) { hungerDays += days; away.hungryDays += days; }
-            if (logHungryToday) hungryLoggedDay = today;
+            if (anyHungry) { hungerDays += days; away.hungryDays += days; }
         }
 
-        /// **The meal is eaten where it was picked up** (the store, or the
-        /// station whose rack it came off), on
-        /// arrival: fullness up by its fill, its bonus now his. A meal that
-        /// was never picked up (somebody beat him to it) is simply no meal.
+        /// **An old save's daytime meal trip** (2026-10-02): nothing starts
+        /// one any more, so one found in flight is settled on the spot -- a
+        /// meal already in his arms is eaten (`EatMeal`), a planned one is
+        /// dropped (the store still has it). Then `eating` is never set again.
+        void SettleOldMealTrips()
+        {
+            for (int i = 0; i < hands.Count; i++)
+            {
+                var h = hands[i];
+                if (h == null || !h.eating) continue;
+                if (h.Hauling) EatMeal(h);
+                else h.eating = false;
+            }
+        }
+
+        /// **An old save's meal trip, eaten where it was picked up** (also
+        /// `DepositHaul`'s branch for it): fullness up by its fill, its bonus
+        /// now his. A meal that was never picked up is simply no meal.
         void EatMeal(OutpostHand h)
         {
             if (!h.haulPicked) { CancelPlanned(h); h.eating = false; return; }
@@ -302,8 +305,10 @@ namespace SeaSick.World
         public const float MaxFull = 1.5f;
 
         /// Work pace bonus from the last meal while he is fed.
+        /// Fed = got something at the last supper (2026-10-02; was "stomach
+        /// not empty", which one meal a day empties every evening).
         public static float MealWorkBonus(OutpostHand h) =>
-            h == null || h.full <= 0f ? 0f : FoodBook.WorkBonus(h.lastMeal);
+            h == null || h.supperHunger >= 1f - 1e-3f ? 0f : FoodBook.WorkBonus(h.lastMeal);
 
         // --- farm plots --------------------------------------------------------
 

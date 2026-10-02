@@ -19,9 +19,13 @@ namespace SeaSick.World.Life
         // through the night, its too much dead game play" -- he picked short
         // nights: evening 22-23, asleep 23-01 (3 h off, was 21-04 = 7 h).
         // AwakeWorkScale keeps the day's output the same.
+        // 2026-10-02, Kevin: "they all eat one time during the day, supper
+        // time together by the fire before they go to sleep" -- the evening
+        // now opens at 21 with the supper bell (OutpostLedger.Supper.cs);
+        // sleep 23, wake 01 unchanged. AwakeWorkScale is 24/20 = 1.2 now.
         [Header("The day (local hour, 0..24)")]
-        [Tooltip("Hands not on an urgent job start walking to the fire from here.")]
-        public float eveningStartHour = 22f;
+        [Tooltip("The supper bell: the camp eats (OutpostLedger.ServeSupper) and hands not on an urgent job walk to the fire from here.")]
+        public float eveningStartHour = 21f;
         [Tooltip("Hands with a hut go inside; the rest lie by the fire.")]
         public float sleepHour = 23f;
         [Tooltip("Hands come out of their huts and resume the ordinary dispatch (idle-hand ladder etc.).")]
@@ -77,7 +81,7 @@ namespace SeaSick.World.Life
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         static void Boot() { looked = false; active = null; }
 
-        public static float EveningStartHour => Active != null ? Active.eveningStartHour : 22f;
+        public static float EveningStartHour => Active != null ? Active.eveningStartHour : 21f;
         public static float SleepHour => Active != null ? Active.sleepHour : 23f;
         public static float WakeHour => Active != null ? Active.wakeHour : 1f;
         public static float FireRingRadius => Active != null ? Active.fireRingRadius : 3.2f;
