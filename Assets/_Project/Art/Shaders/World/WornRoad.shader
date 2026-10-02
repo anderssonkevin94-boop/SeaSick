@@ -65,6 +65,7 @@ Shader "SeaSick/Worn Road"
             #pragma multi_compile _ _CLUSTER_LIGHT_LOOP
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "RichLight.hlsl" // _SS_Night, _SS_Storminess, _SS_RichLight
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _Tint;
@@ -157,14 +158,19 @@ Shader "SeaSick/Worn Road"
                 float4 shadowCoord = TransformWorldToShadowCoord(i.positionWS);
                 Light light = GetMainLight(shadowCoord);
                 float ndl = saturate(dot(n, light.direction));
-                float3 ambient = SampleSH(n);
-                float3 col = albedo * (light.color * light.shadowAttenuation * ndl + ambient);
+                // Rich light: the terrain's swap, same numbers (see
+                // Terrain/TerrainVertexColor.shader), so a road keeps the
+                // ground's brightness. rich = 0 is the old look exactly.
+                float rich = SS_Rich();
+                float3 shipAmbient = SS_ShipAmbient(n);
+                float3 ambient = lerp(SampleSH(n), shipAmbient, rich);
+                float3 col = albedo * (light.color * lerp(light.shadowAttenuation, lerp(.22,1,light.shadowAttenuation), rich) * ndl + ambient);
 
                 // The terrain's "graphic" two-band response, same numbers.
                 float sun = ndl * light.shadowAttenuation;
                 float bandWidth = max(.012, fwidth(sun) * 1.2);
                 float sculpted = smoothstep(.34 - bandWidth, .34 + bandWidth, sun);
-                float3 fill = max(0, SampleSH(float3(0,1,0))) * .58 * _ShadowTint.rgb;
+                float3 fill = lerp(max(0, SampleSH(float3(0,1,0))) * .58 * _ShadowTint.rgb, shipAmbient, rich);
                 float3 graphic = albedo * (fill + light.color
                     * lerp(_ShadowTint.rgb * 0.38, float3(1.02,1.01,1.0), sculpted));
                 col = lerp(col, graphic, _GraphicLight);
@@ -177,7 +183,7 @@ Shader "SeaSick/Worn Road"
                 float3 aTint = lerp(float3(0.30,0.42,0.85), float3(0.66,0.70,0.82), aLow);
                 aTint = lerp(aTint, float3(1.04,1.03,1.0), aMid);
                 aTint *= lerp(0.92, 1.04, aHigh);
-                float3 authored = albedo * (max(0,SampleSH(float3(0,1,0))) * float3(.36,.42,.54) + light.color * aTint);
+                float3 authored = albedo * (lerp(max(0,SampleSH(float3(0,1,0))) * float3(.36,.42,.54), shipAmbient, rich) + light.color * aTint);
                 col = lerp(col, authored, _AuthoredFormLighting * 0.62);
 
                 // Camp-fire and lamps: the terrain's stylised linear falloff.

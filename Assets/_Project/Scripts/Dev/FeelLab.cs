@@ -73,6 +73,9 @@ namespace SeaSick.Dev
             // + the main ones in FEEL"); the base numbers are the
             // `EconomyTuning` asset.
             "SeaSick.World.Economy.EconomyFeel",
+            // The island art's ship-style ambient (Kevin, 2026-10-02: "that
+            // rich beautiful color that we somehow created for the boat").
+            "SeaSick.Terrain.RichLight",
         };
 
         /// The spec's range table, keyed "ClassName.fieldName". Anything not
@@ -150,6 +153,8 @@ namespace SeaSick.Dev
             {"EconomyFeel.gatherSpeedMultiplier",  (0.25f, 4f)},
             {"EconomyFeel.meatPerAnimal",          (0f, 12f)},
             {"EconomyFeel.hidePerAnimal",          (0f, 4f)},
+
+            {"RichLight.amount", (0f, 1f)}, // 0 = old island ambient, 1 = the ship's
         };
 
         static (float min, float max) RangeFor(string key, float def)

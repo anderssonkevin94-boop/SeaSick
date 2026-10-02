@@ -54,6 +54,7 @@ Shader "SeaSick/Terrain Vertex Color"
             #pragma multi_compile _ _CLUSTER_LIGHT_LOOP
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "../World/RichLight.hlsl" // _SS_Night, _SS_Storminess, _SS_RichLight
 
             CBUFFER_START(UnityPerMaterial)
                 float _PaintedSurface, _PaintStudy;
@@ -70,7 +71,6 @@ Shader "SeaSick/Terrain Vertex Color"
                 float _ShadowReceiverOffset;
             CBUFFER_END
 
-            float _SS_Night;
             // Every island's painted ground: one slice each, and a coarse
             // world index (point-sampled, value = slice + 1) saying which
             // slice covers a spot. See NatureGroundAtlas.cs.
@@ -293,8 +293,15 @@ Shader "SeaSick/Terrain Vertex Color"
                 float4 shadowCoord = TransformWorldToShadowCoord(i.positionWS+n*_ShadowReceiverOffset);
                 Light light = GetMainLight(shadowCoord);
                 float ndl = saturate(dot(n, light.direction));
-                float3 diffuse = light.color * light.shadowAttenuation * ndl;
-                float3 ambient = SampleSH(n);
+                // Rich light (World/RichLight.hlsl): every lighting mode below
+                // swaps its ambient for the ship's, so the blend of modes keeps
+                // one ambient. rich = 0 is the old look exactly.
+                float rich = SS_Rich();
+                float3 shipAmbient = SS_ShipAmbient(n);
+                // Plain Lambert mode also takes the ship's 22 % shadow floor
+                // (graphic and authored modes already floor higher than that).
+                float3 diffuse = light.color * lerp(light.shadowAttenuation, lerp(.22,1,light.shadowAttenuation), rich) * ndl;
+                float3 ambient = lerp(SampleSH(n), shipAmbient, rich);
                 float3 col = albedo * (diffuse + ambient);
                 // Vertex colours already carry canopy/rock form. Give their
                 // darkest faces a coloured fill rather than crushing twice.
@@ -303,7 +310,7 @@ Shader "SeaSick/Terrain Vertex Color"
                 float foliage = smoothstep(.015,.065,albedo.g-albedo.r);
                 float bandWidth = max(lerp(.012,.075,foliage), fwidth(sun) * 1.2);
                 float sculpted = smoothstep(.34 - bandWidth, .34 + bandWidth, sun);
-                float3 fill = max(0, SampleSH(float3(0,1,0))) * .58 * _ShadowTint.rgb;
+                float3 fill = lerp(max(0, SampleSH(float3(0,1,0))) * .58 * _ShadowTint.rgb, shipAmbient, rich);
                 float3 graphic = albedo * (fill + light.color
                     * lerp(_ShadowTint.rgb * 0.38, float3(1.02,1.01,1.0), sculpted));
                 col = lerp(col, graphic, _GraphicLight);
@@ -332,11 +339,12 @@ Shader "SeaSick/Terrain Vertex Color"
                 // term preserves plane-to-plane direction variation inside them.
                 // Keep each painted lighting band uniform.
                 float authoredMask = _AuthoredFormLighting * lerp(0.62, 1.0, saturate(i.color.a));
-                float3 authored = albedo * (max(0,SampleSH(float3(0,1,0))) * float3(.40,.46,.54) + light.color * authoredTint);
+                float3 authored = albedo * (lerp(max(0,SampleSH(float3(0,1,0))) * float3(.40,.46,.54), shipAmbient, rich) + light.color * authoredTint);
                 col = lerp(col, authored, authoredMask);
                 // Restrained blue moon fill keeps shore faces legible between warm lamps.
+                // (Rich light carries the ship's moon fill inside shipAmbient.)
                 col += albedo * float3(.018,.032,.058) * saturate(_SS_Night)
-                    * (.35+.65*saturate(n.y*.5+.5));
+                    * (.35+.65*saturate(n.y*.5+.5)) * (1-rich);
                 // Point lights: the campfire and the lamps. URP's own falloff
                 // is inverse-square, which lights a fire's stone ring and
                 // nothing past it; a camp has to read from the water, so

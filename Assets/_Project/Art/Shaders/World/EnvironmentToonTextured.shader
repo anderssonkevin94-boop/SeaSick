@@ -31,6 +31,7 @@ Shader "SeaSick/Environment Toon Textured"
             #pragma multi_compile_instancing
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "RichLight.hlsl"
 
             TEXTURE2D(_BaseMap); SAMPLER(sampler_BaseMap);
 
@@ -84,11 +85,17 @@ Shader "SeaSick/Environment Toon Textured"
                 float4 shadowCoord = TransformWorldToShadowCoord(i.positionWS);
                 Light light = GetMainLight(shadowCoord);
                 float ndl = saturate(dot(n, light.direction));
-                float edge = max(.012,fwidth(ndl)*1.2);
-                float band = .16 + .44*smoothstep(.32-edge,.32+edge,ndl)
+                // Rich light (RichLight.hlsl): the ship's ambient and its 22 %
+                // shadow floor; the three cel bands stay, edges a touch softer.
+                // rich = 0 is the old look exactly.
+                float rich = SS_Rich();
+                float edge = max(lerp(.012,.03,rich),fwidth(ndl)*1.2);
+                float lowBand = lerp(.16,.22,rich);
+                float band = lowBand + (.60-lowBand)*smoothstep(.32-edge,.32+edge,ndl)
                                   + .40*smoothstep(.72-edge,.72+edge,ndl);
-                float3 diffuse = light.color * band * lerp(.16,1,smoothstep(.4,.6,light.shadowAttenuation));
-                float3 ambient = max(0,SampleSH(float3(0,1,0))) * float3(.48,.55,.68) + _Ambient;
+                float3 diffuse = light.color * band * lerp(lowBand,1,smoothstep(.4,.6,light.shadowAttenuation));
+                // _Ambient stays additive on both sides: flames and pier glows use it as emission.
+                float3 ambient = lerp(max(0,SampleSH(float3(0,1,0))) * float3(.48,.55,.68), SS_ShipAmbient(n), rich) + _Ambient;
                 float3 col = albedo * (diffuse + ambient);
                 // Point lights: the campfire and the lamps. URP's own falloff
                 // is inverse-square, which lights a fire's stone ring and
