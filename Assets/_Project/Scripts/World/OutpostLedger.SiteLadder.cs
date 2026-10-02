@@ -29,6 +29,10 @@ namespace SeaSick.World
     /// so with the first site blocked on a material nobody could get, the
     /// books waited for a body at the second site that never came, and the
     /// crew stood at the fire.
+    ///
+    /// **With runners on the island (2026-10-02, OutpostLedger.Runners.cs)**
+    /// rung 1 is theirs -- the barrows stock the sites -- and rung 3 only
+    /// cuts/quarries a material nobody has in the store or on a rack.
     /// </summary>
     public partial class OutpostLedger
     {
@@ -131,7 +135,9 @@ namespace SeaSick.World
             var site = StickySite(h);
             if (site == null)
             {
-                if (FetchForSites(h, false)) return true;          // 1. from the store
+                // 1. from the store -- not once the island has runners
+                // (2026-10-02): their barrows stock the sites.
+                if (MayHaul(h) && FetchForSites(h, false)) return true;
                 site = PickPlot(h);                                // 2. clear / hammer
                 if (site == null) return FetchForSites(h, true);   // 3. off the island
                 workSite[h] = site;
@@ -258,12 +264,27 @@ namespace SeaSick.World
                         continue;
                     }
                     if (res == Res.Brick) continue;   // nobody quarries a brick
+                    // **With runners, only what nobody has in store** or on
+                    // a rack (2026-10-02): that is gathering, a builder's to
+                    // do; anything a barrow can bring, a runner brings.
+                    if (!MayHaul(h) && SiteStockFree(res)) continue;
                     int standing = FieldFree(res);
                     if (standing <= 0) continue;
                     StartTimedTrip(h, res, Mathf.Min(cap, standing), HaulPlace.Field, -1, HaulPlace.Site, -1, site);
                     return true;
                 }
             }
+            return false;
+        }
+
+        /// Any `res` in the store or on a station rack that nobody is
+        /// already walking to fetch.
+        bool SiteStockFree(string res)
+        {
+            if (StoreFree(res) > 0) return true;
+            if (stations != null)
+                for (int i = 0; i < stations.Count; i++)
+                    if (RowFree(i, stations[i]?.Rack(res), false) > 0) return true;
             return false;
         }
 

@@ -120,6 +120,13 @@ namespace SeaSick.UI.Sheets
                 hugTabs = hasUpgrade
                     ? new[] { PageMake, PageWork, PageLevel }
                     : new[] { PageMake, PageWork };
+            // **The store hut pages too (2026-10-02):** its racks, the
+            // runners' slots (`RunnerCard`) and the upgrade do not fit one
+            // half-screen page together.
+            else if (isStore)
+                hugTabs = hasUpgrade
+                    ? new[] { PageRacks, PageRunners, PageLevel }
+                    : new[] { PageRacks, PageRunners };
             ResolveRaisedIndex();
             // Open on the recipe a fix asked for (`FocusNext`), else on the
             // first spot that is running something.
@@ -239,6 +246,7 @@ namespace SeaSick.UI.Sheets
         int tab = -1;
         readonly string[] hugTabs;
         const string PageMake = "make", PageWork = "work", PageLevel = "level";
+        const string PageRacks = "racks", PageRunners = "runners";
 
         StationPage.Header header;
 
@@ -263,6 +271,7 @@ namespace SeaSick.UI.Sheets
 
         VisualElement root;
         StationPage.WorkerCard worker;
+        RunnerCard runners;
         StationPage.UpgradeCard upgrade;
 
         /// The make page (spots + grid + detail) was built this tab; the
@@ -354,7 +363,7 @@ namespace SeaSick.UI.Sheets
 
         public VisualElement Build()
         {
-            storeTiles = null; storeHolds = null; storeAll = null; stallLine = null; worker = null; upgrade = null;
+            storeTiles = null; storeHolds = null; storeAll = null; stallLine = null; worker = null; runners = null; upgrade = null;
             // Every refresh target is re-bound by the page that builds it;
             // the others stay null so `Refresh` skips them.
             spotTiles = null; tiles = null; grid = null; gridEyebrow = null;
@@ -394,7 +403,7 @@ namespace SeaSick.UI.Sheets
                 s.Add(worker.Root);
             }
 
-            if (isStore && (all || on == PageWork))
+            if (isStore && (all || on == PageRacks))
             {
                 // Two rows of icon tiles, no eyebrow when hugging -- the
                 // Backpack's Island page is the goods' home, this is the glance.
@@ -435,6 +444,16 @@ namespace SeaSick.UI.Sheets
                 foot.Add(storeAll);
                 card.Add(foot);
                 s.Add(card);
+            }
+
+            if (isStore && (all || on == PageRunners))
+            {
+                // **Runners (2026-10-02):** the store hut's own worker slots
+                // -- two at level 1, four at level 2 -- for the hands who push
+                // wheelbarrows. Assign / Swap / Free like any station's worker.
+                var s = Section(null);
+                runners = new RunnerCard(outpost, planId, () => { ResolveRaisedIndex(); return L != null ? L.OrdinalOfRaised(raisedIndex, planId) : -1; }, () => Refresh());
+                s.Add(runners.Root);
             }
 
             if (hasMake && (all || on == PageMake))
@@ -1517,6 +1536,7 @@ namespace SeaSick.UI.Sheets
                 header.Refresh();
             }
             worker?.Update(l, hand, 0);
+            runners?.Update(l);
             if (makeBuilt) FillMake(l, st, hand, tapped);
             FillFlow(l, st, hand, tapped);
             FillStore(l);
@@ -1885,7 +1905,13 @@ namespace SeaSick.UI.Sheets
                     string n = string.IsNullOrEmpty(hand.name) ? "?" : hand.name;
                     initial.text = n.Substring(0, 1).ToUpperInvariant();
                     name.text = n;
-                    sub.text = $"{role} · {hand.MoodWord}" + (others > 0 ? $" · +{others} more" : "");
+                    // **"Waiting for a runner" (2026-10-02):** a worker whose
+                    // goods are on a runner's barrow says so in amber, not
+                    // "role · mood", so a stopped bench has a reason.
+                    bool waiting = l.StatusWord(hand) == "Waiting for a runner";
+                    sub.text = waiting ? "Waiting for a runner"
+                        : $"{role} · {hand.MoodWord}" + (others > 0 ? $" · +{others} more" : "");
+                    sub.style.color = waiting ? new StyleColor(Amber) : new StyleColor(StyleKeyword.Null);
                     main.text = "Swap";
                     main.style.display = free != null ? DisplayStyle.Flex : DisplayStyle.None;
                     main.SetEnabled(free != null);
@@ -1897,6 +1923,7 @@ namespace SeaSick.UI.Sheets
                     initial.text = "?";
                     name.text = "No worker";
                     sub.text = free != null ? $"needs a {role}" : "no free hand to assign";
+                    sub.style.color = new StyleColor(StyleKeyword.Null);
                     main.text = "Assign free hand";
                     main.style.display = DisplayStyle.Flex;
                     main.SetEnabled(free != null);

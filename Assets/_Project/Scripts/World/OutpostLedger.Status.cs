@@ -11,14 +11,18 @@ namespace SeaSick.World
     ///
     /// For the UI:
     /// - `StatusWord(h)`   -- one or two words: "Building", "Hauling",
-    ///   "Gathering", "Hunting", "Working", "Reserve", "No work", "Stuck",
-    ///   "Sleeping", "Evening", "Downed", "Fighting", "Hiding", "Rescuing",
-    ///   "Pouting".
+    ///   "Gathering", "Hunting", "Working", "Reserve", "Idle" (was "No
+    ///   work" until 2026-10-02), "Stuck", "Sleeping", "Supper", "Evening",
+    ///   "Downed", "Fighting", "Hiding", "Rescuing", "Pouting"; and since the
+    ///   runners (2026-10-02, OutpostLedger.Runners.cs) "Runner, waiting",
+    ///   "Running 6 boards to Sawmill" (prefix "Running ") and, for a
+    ///   stationed worker whose bench waits on a barrow, "Waiting for a
+    ///   runner".
     /// - `StatusReason(h)` -- the longer why ("walled off", "store is full
     ///   of timber", "! No stone" ...), "" when there is nothing to add.
     /// - `Tally()`         -- `CampTally`: how many hands fall in each of
     ///   building / hauling / working / gathering / reserve / noWork /
-    ///   stuck / downed. Sleep and evening count by the job underneath.
+    ///   stuck / downed / runners. Sleep and evening count by the job underneath.
     /// - `UnmannedStations()` / `StationUnmanned(s)` -- stations with an
     ///   order standing (or queued) and no Work hand on them.
     /// - `FreeHandFor(planId)` -- the best hand with no job to put there
@@ -119,22 +123,31 @@ namespace SeaSick.World
             {
                 var phase = Life.CampLifeTuning.PhaseAtHour(TimeOfDay.Hour);
                 if (phase == Life.CampLifeTuning.RoutinePhase.Sleep) return "Sleeping";
-                if (phase == Life.CampLifeTuning.RoutinePhase.Evening) return "Evening";
+                // **Supper (2026-10-02)** until he has sat down to it at the
+                // fire (or the bell has not been booked yet); "Evening" after,
+                // and for a hand the supper had nothing for.
+                if (phase == Life.CampLifeTuning.RoutinePhase.Evening)
+                    return supperDay < TimeOfDay.Day || h.SupperWaiting(TimeOfDay.Day) ? "Supper" : "Evening";
             }
             if (Reserve(h)) return h.Hauling ? "Hauling" : "Reserve";
             if (h.TopUpTrip) return "Gathering";
+            // **Runners (2026-10-02)**: "Running 6 boards to Sawmill", or
+            // waiting at the store -- never idle.
+            if (IsRunner(h)) return h.Hauling && !h.eating ? RunWords(h) : "Runner, waiting";
+            // "No work" became "Idle" (2026-10-02, the runners' UI): a hand
+            // with nothing to do rests at the fire.
             switch (h.order)
             {
                 case OutpostOrder.Gather:
-                    if (string.IsNullOrEmpty(h.target)) return "No work";
+                    if (string.IsNullOrEmpty(h.target)) return "Idle";
                     return h.target == Res.Game ? "Hunting" : "Gathering";
                 case OutpostOrder.Work:
-                    return "Working";
+                    return WaitingForRunner(h) ? "Waiting for a runner" : "Working";
                 case OutpostOrder.Build:
                     if (BuildSiteFor(h) != null) return "Building";
-                    return h.Hauling ? "Hauling" : "No work";
+                    return h.Hauling ? "Hauling" : "Idle";
                 default:
-                    return h.Hauling ? "Hauling" : "No work";
+                    return h.Hauling ? "Hauling" : "Idle";
             }
         }
 
@@ -147,6 +160,10 @@ namespace SeaSick.World
             if (!string.IsNullOrEmpty(h.bodyBlocked)) return h.bodyBlocked;
             if (Reserve(h)) return "held in reserve";
             if (h.TopUpTrip) return "topping up the store's " + ResLabel(h.topUpRes);
+            // The runners (2026-10-02).
+            if (IsRunner(h) && !h.Hauling) return "at the store hut, nothing to carry";
+            if (WaitingForRunner(h))
+                return RunnerBound(stations.IndexOf(StationOfHand(h))) ? "a runner is on the way" : "waiting on the barrows";
             if (h.autoFood && FoodDraftOrder(h)) return "food is low";
             string why = StallReason(h);
             if (!string.IsNullOrEmpty(why)) return why;
@@ -163,6 +180,8 @@ namespace SeaSick.World
         public struct CampTally
         {
             public int building, hauling, working, gathering, reserve, noWork, stuck, downed;
+            /// Runners, running or waiting at the store (2026-10-02).
+            public int runners;
         }
 
         /// Every hand counted once, by `StatusWord` with sleep/evening read
@@ -174,17 +193,23 @@ namespace SeaSick.World
             if (hands == null) return t;
             foreach (var h in hands)
             {
-                switch (Word(h, false))
+                string w = Word(h, false);
+                switch (w)
                 {
                     case "Building": t.building++; break;
                     case "Hauling": t.hauling++; break;
-                    case "Working": t.working++; break;
+                    case "Working":
+                    case "Waiting for a runner": t.working++; break;
                     case "Gathering":
                     case "Hunting": t.gathering++; break;
                     case "Reserve": t.reserve++; break;
-                    case "No work": t.noWork++; break;
+                    case "Idle": t.noWork++; break;
                     case "Stuck": t.stuck++; break;
                     case "Downed": t.downed++; break;
+                    case "Runner, waiting": t.runners++; break;
+                    default:
+                        if (w.StartsWith("Running ", System.StringComparison.Ordinal)) t.runners++;
+                        break;
                 }
             }
             return t;

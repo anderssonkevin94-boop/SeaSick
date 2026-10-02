@@ -75,12 +75,35 @@ namespace SeaSick.World
 
             phase = Phase.Resting;
             Face(camp.CampCentre - transform.position, dt);
+            // **Supper at the ring (2026-10-02).** The books served him at
+            // the bell; here he eats it, a bowl or two, then sits the
+            // evening out. Late arrivals eat on arrival; one still walking
+            // at bedtime skips the picture -- the meal was counted anyway.
+            if (TrySupperBite(r)) return true;
             acting?.Set(VillagerActing.Mode.None);
-            // A fed camp sings; a hungry one just stands there. Which hands
-            // sing is hashed off the name so it does not flicker frame to
-            // frame or hand to hand at random.
-            bool fed = camp.Ledger != null && !camp.Ledger.Hungry;
+            // A camp that ate its fill together sings; an under-fed one just
+            // stands there. Which hands sing is hashed off the name so it
+            // does not flicker frame to frame or hand to hand at random.
+            bool fed = camp.Ledger != null && camp.Ledger.fedTogether;
             if (fed && SingsAtFire(r)) Sway(dt);
+            return true;
+        }
+
+        /// Bowls this body still has to eat at tonight's supper.
+        int supperBites;
+
+        /// **One bowl of tonight's supper**, if the ledger served him one he
+        /// has not eaten yet (`OutpostHand.SupperWaiting`): the same Eat
+        /// mime a meal trip used (`StartEat`, played out by `TickDelivery`),
+        /// once per serving up to two. True = a bowl just started.
+        bool TrySupperBite(OutpostHand r)
+        {
+            var l = camp.Ledger;
+            if (l == null || !r.SupperWaiting(l.supperDay)) { supperBites = 0; return false; }
+            if (supperBites <= 0) supperBites = Mathf.Clamp(r.supperServings, 1, 2);
+            supperBites--;
+            if (supperBites <= 0) r.supperMimedDay = r.supperOn;
+            StartEat(camp.CampCentre, string.IsNullOrEmpty(r.lastMeal) ? Res.Meals : r.lastMeal);
             return true;
         }
 

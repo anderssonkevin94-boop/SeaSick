@@ -18,6 +18,9 @@ namespace SeaSick.Save
     /// (docs/DELIVERY-ON-ARRIVAL.md). Buildings the arithmetic finishes are
     /// raised by `CatchUp` between chunks, so a hut done at hour one recruits
     /// for the other eleven.
+    /// Supper too (2026-10-02): every quantum carries its own instant, so the
+    /// 21:00 bell rings once per sky day away (`OutpostLedger.SupperBellAt`)
+    /// and `eaten`/`hungryDays` below are those suppers and their shortfalls.
     ///
     /// **Frozen:** raids and threat (each ledger's absence record is swapped
     /// for a closed one, so the threat block never runs, and the threat is put

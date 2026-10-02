@@ -291,7 +291,7 @@ namespace SeaSick.World
 
                 if (h.pouting) return Pick(Pouting, h, 1);
 
-                if (camp.Ledger != null && h.full < 0.35f) return Pick(Hungry, h, 2);
+                if (camp.Ledger != null && h.supperHunger > 0.25f) return Pick(Hungry, h, 2); // short at last supper (2026-10-02), not the daily stomach
 
                 var life = Lives.Record(h.name);
                 if (life != null && life.events != null)

@@ -258,6 +258,36 @@ namespace SeaSick.World
         /// One carry crate's worth of small goods (`CarryLook.CrateSlots`).
         public const int CrateArmful = 8;
 
+        /// **What a runner's wheelbarrow takes in one trip (2026-10-02,
+        /// approved design: runners push barrows).** About three armfuls of
+        /// the heavy things, two crates of small goods. Guesses, none
+        /// played; tune here if a load reads wrong on the phone. Read
+        /// through `OutpostLedger.CarryArmful`, which picks this or `Armful`
+        /// by who is carrying.
+        public static int BarrowArmful(string r) => r switch
+        {
+            Timber => 6,
+            Stone => 8,
+            Ore => 8,
+            Hide => 8,
+            Boards => 10,
+            FineBoards => 10,
+            Brick => 12,
+            Iron => 8,
+            Tools => 6,
+            Spear => 6,
+            IronSpear => 6,
+            Bow => 6,
+            SawBlade => 2,
+            Arrows => 36,
+            Fish => System.Math.Max(BarrowSmallGoods, FishArmful),
+            // Crate goods: two crates; anything else: three armfuls.
+            _ => Armful(r) >= CrateArmful ? BarrowSmallGoods : 3 * Armful(r),
+        };
+
+        /// Two carry crates of small goods in the barrow.
+        public const int BarrowSmallGoods = 16;
+
         /// **Fish go all at once (Kevin, 2026-09-30):** *"For the fish in
         /// particular he will carry all the fish at once since they aren't
         /// that heavy compared to logs."* A full fishing-hut box is ONE trip

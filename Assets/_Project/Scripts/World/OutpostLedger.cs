@@ -181,15 +181,35 @@ namespace SeaSick.World
         public float basket;
 
         // --- eating by fill (food rework, 2026-09-27; OutpostLedger.Food.cs) ---
-        /// How full he is, 0..1; drains `EatPerHandPerDay` x rations a game
-        /// day. Below `EconomyTuning.HungryBelow` he walks to the store and
-        /// eats. Old saves: the initialiser (full).
+        /// How full he is, 0..1; drains `EatPerHandPerDay` x rations a sky
+        /// day and is topped up once a day at supper (2026-10-02,
+        /// OutpostLedger.Supper.cs) -- a gauge now: mood reads
+        /// `supperHunger`, not this. Old saves: the initialiser (full).
         public float full = 1f;
-        /// The last thing he ate: its mood/work bonus holds while he is fed.
+        /// The last thing he ate (the best dish of his last supper): its
+        /// mood/work bonus holds while he is fed.
         public string lastMeal = "";
-        /// The load in his arms is his meal: he eats it at the store instead
-        /// of putting it down.
+        /// **Old saves only since 2026-10-02**: the load in his arms was a
+        /// daytime meal trip. Nothing starts one any more; `EatStep` finishes
+        /// or drops one found in a loaded save on its first step.
         public bool eating;
+        /// **How under-fed he went from the last supper, 0..1** (2026-10-02):
+        /// the share of a full day's fill he did not get, with the ration
+        /// cut counted (half rations = 0.5 at best, none = 1). Drives the
+        /// mood drift until the next supper. Old saves: 0, fed.
+        public float supperHunger;
+        /// The sky day of the last supper he was served at, and how many
+        /// servings (the body mimes up to two bowls). Presentation only.
+        [System.NonSerialized] public int supperOn = -1;
+        [System.NonSerialized] public int supperServings;
+        /// The sky day whose supper his body has finished eating at the
+        /// fire (`CampWorker.TrySupperBite`). Presentation only.
+        [System.NonSerialized] public int supperMimedDay = -1;
+
+        /// Served at `day`'s supper and his body has not sat down to it yet:
+        /// the status reads "Supper" and the body eats at the ring.
+        public bool SupperWaiting(int day) =>
+            day >= 0 && supperOn == day && supperServings > 0 && supperMimedDay != day;
 
         /// A body is walking this hand right now (`CampWorker`): the ledger
         /// does not advance his legs. Not saved.
@@ -415,6 +435,12 @@ namespace SeaSick.World
         /// `TopUpTrip`, which is false once the trip is over.
         [System.NonSerialized] public string topUpRes;
 
+        /// **A runner's backhaul (2026-10-02)**: 1 + the station whose bay
+        /// he just filled, 0 = none. His next trip takes that station's
+        /// rack home if there is any (`OutpostLedger.RunnerDay`). Not saved:
+        /// a reload simply asks the ladder.
+        [System.NonSerialized] public int backhaulStation;
+
         /// On a stock top-up trip right now (no job of his own, walking
         /// timber/stone from the island into the store).
         public bool TopUpTrip =>
@@ -484,7 +510,7 @@ namespace SeaSick.World
                     if (routinePhase == Life.CampLifeTuning.RoutinePhase.Sleep)
                         return sleepHutId != 0 ? "asleep in the hut" : "asleep by the fire";
                     if (routinePhase == Life.CampLifeTuning.RoutinePhase.Evening)
-                        return "at the fire";
+                        return SupperWaiting(TimeOfDay.Day) ? "at supper" : "at the fire";
                 }
                 // **A free hand's stock top-up (2026-09-28)** -- a system
                 // errand, his order is unchanged; the row says what he is
@@ -2988,6 +3014,8 @@ namespace SeaSick.World
             FeedFirst();
             ReleaseIdleBuilders();
             EnlistFree();
+            // Who may haul this quantum (2026-10-02, OutpostLedger.Runners.cs).
+            CountRunners();
             AgeStallSkips();
             EnsureStations();
             // She cast off: store -> ship armfuls go home; done orders go.
@@ -2999,7 +3027,8 @@ namespace SeaSick.World
             // 2026-09-23): hauls for the stations if there is hauling to do,
             // else lends a hand to the build. Decided once per quantum so the
             // two cannot both take his day.
-            bool haulChores = HasHaulChore();
+            // (None for a gatherer once the island has a runner, 2026-10-02.)
+            bool haulChores = SpareHaulChore();
             bool gatherersBuild = !haulChores && Focus != null;
 
             // Regrowth first, so a camp that stripped its ground last step has
@@ -3123,6 +3152,8 @@ namespace SeaSick.World
                 // `StepStations` below. This loop is left with the buildings
                 // whose input is the ground (the farm).
                 if (IsStation(h.target)) continue;
+                // A runner's day is the station pass's (`RunnerDay`).
+                if (IsRunner(h)) continue;
                 // **Carrying his basket to the store** (2026-09-27): walked
                 // by the station pass; no harvesting on the way.
                 if (h.Hauling) continue;
@@ -3243,10 +3274,11 @@ namespace SeaSick.World
             // --- upkeep: eating -----------------------------------------------
             //
             // Since the food rework (2026-09-27) every hand has a fullness
-            // that drains, and a hungry hand WALKS to the store for the best
-            // dish there (`EatStep`, OutpostLedger.Food.cs). Still every
-            // quantum, so D2 holds.
-            EatStep(days);
+            // that drains; since 2026-10-02 the camp eats once a day, at the
+            // supper bell, served at the fire out of the books (`EatStep`,
+            // OutpostLedger.Food.cs / .Supper.cs). The bell is read off this
+            // quantum's own instant, so a catch-up rings it once a day too.
+            EatStep(days, atSeconds);
 
             // --- upkeep: recruiting ---------------------------------------------
             //
@@ -3458,6 +3490,8 @@ namespace SeaSick.World
                 // A lookout makes nothing and that is the job -- never
                 // stalled for having nothing to show for standing watch.
                 if (h.target == WatchtowerId) return null;
+                // Nor a runner waiting at the store (2026-10-02).
+                if (IsRunner(h)) return null;
                 if (IsStation(h.target)) return StationStallCause(h);
                 if (h.target == BuildPlans.Farm.id) return FarmStallCause(h);
                 if (!Conversion(h.target, out string makes, out Economy.Ingredient[] takes,

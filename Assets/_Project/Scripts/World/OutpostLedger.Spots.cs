@@ -303,7 +303,11 @@ namespace SeaSick.World
         /// An input made at another station and not in the store is not
         /// fetched (no auto-chaining); nor is anything for a spot whose
         /// output has nowhere to go.
-        bool StartInputFetch(OutpostHand h, StationStock st, int si)
+        ///
+        /// `fieldOnly` (2026-10-02, runners on the island): the store is the
+        /// runners' to bring from -- he only goes for a gatherable raw the
+        /// store has none of, which no runner would fetch.
+        bool StartInputFetch(OutpostHand h, StationStock st, int si, bool fieldOnly = false)
         {
             if (RackJam(st) != null) return false;
             foreach (var sp in st.spots)
@@ -320,6 +324,7 @@ namespace SeaSick.World
                     int space = st.InputCap - have;
                     if (space <= 0) continue;
                     int inStore = StoreFree(line.res);
+                    if (inStore > 0 && fieldOnly) continue;      // a runner's
                     if (inStore > 0)
                     {
                         int n = Mathf.Min(Res.Armful(line.res), Mathf.Min(space, inStore));

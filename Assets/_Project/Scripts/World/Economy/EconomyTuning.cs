@@ -156,8 +156,10 @@ namespace SeaSick.World.Economy
         public CropRow[] crops = new CropRow[0];
         [Tooltip("Overrides for FoodBook.Edibles, matched by res.")]
         public DishRow[] dishes = new DishRow[0];
-        [Tooltip("Fullness below which a hand goes to storage to eat (0..1).")]
+        [Tooltip("Fullness below which the sheets call a hand hungry (0..1). Since 2026-10-02 nobody walks to eat by it: the camp eats once a day, at supper.")]
         public float hungryBelow = 0.4f;
+        [Tooltip("Mood each hand gets when the whole camp ate a full day at supper together (2026-10-02).")]
+        public float fedTogetherMood = 0.05f;
         [Tooltip("Fill of a raw crop/fish eaten when nothing cooked is left.")]
         public float rawFill = 0.25f;
         [Tooltip("Mood a day while a hand's last meal was raw.")]
@@ -290,6 +292,7 @@ namespace SeaSick.World.Economy
         public static float ClearSecondsPerTree => F(t => t.clearSecondsPerTree, 5f);
         public static float ClearSecondsPerRock => F(t => t.clearSecondsPerRock, 8f);
         public static float HungryBelow => Mathf.Clamp01(F(t => t.hungryBelow, 0.4f));
+        public static float FedTogetherMood => Mathf.Clamp(F(t => t.fedTogetherMood, 0.05f), 0f, 0.5f);
         public static float RawFill => Mathf.Max(0.01f, F(t => t.rawFill, 0.25f));
         public static float RawMoodPerDay => F(t => t.rawMoodPerDay, -0.1f);
         public static float PlantSeconds => Mathf.Max(0.1f, F(t => t.plantSeconds, 4f));

@@ -219,6 +219,9 @@ namespace SeaSick.UI.Sheets
                 {
                     var plan = BuildPlans.Named(h.target);
                     string post = string.IsNullOrEmpty(plan.position) ? "worker" : plan.position;
+                    // A runner's job is the wheelbarrow (2026-10-02), whatever
+                    // the store hut's plan calls its post.
+                    if (OutpostLedger.IsRunner(h)) post = "runner";
                     return $"{StationPage.Cap(post)} · {StationPage.Cap(plan.label)}";
                 }
                 case OutpostOrder.Gather:
@@ -244,6 +247,7 @@ namespace SeaSick.UI.Sheets
             if (h.order == OutpostOrder.Idle) return ("waiting", StationPage.PillWait);
             if (h.walkingIn) return ("walking up", StationPage.PillWait);
             if (StuckReason(l, h) != null) return ("stuck", StationPage.PillBad);
+            if (l.RunnerWaiting(h)) return ("on call", StationPage.PillGood);
             string why = l.StallReason(h);
             if (why != null) return ("slow", StationPage.PillWait);
             if (h.order == OutpostOrder.Build) return ("helping build", StationPage.PillGood);
@@ -532,6 +536,8 @@ namespace SeaSick.UI.Sheets
             {
                 case OutpostOrder.Work:
                 {
+                    // "Runner, waiting" / "Running 6 boards to Sawmill".
+                    if (OutpostLedger.IsRunner(h)) return StationPage.Cap(l.StatusWord(h));
                     var plan = BuildPlans.Named(h.target);
                     return $"{StationPage.Cap(h.Doing)} at the {plan.label}";
                 }
@@ -562,6 +568,8 @@ namespace SeaSick.UI.Sheets
                 case OutpostOrder.Idle:
                     if (OutpostLedger.Reserve(h)) return "held in reserve";
                     return l.Building ? "free hands help at the sites on their own" : "waiting for orders";
+                case OutpostOrder.Work when OutpostLedger.IsRunner(h):
+                    return "moves goods to workshops and sites";
                 default:
                     return "between trips";
             }
@@ -709,12 +717,15 @@ namespace SeaSick.UI.Sheets
                 case JobKind.Post:
                 {
                     var plan = BuildPlans.Named(t.job.id);
-                    name = StationPage.Cap(plan.label);
+                    bool runner = t.job.id == BuildPlans.Storage.id;
+                    // The store hut's post is the runner (2026-10-02): its
+                    // tile says "Runner" and counts the store's own slots.
+                    name = runner ? "Runner" : StationPage.Cap(plan.label);
                     here = h.order == OutpostOrder.Work && h.target == t.job.id;
                     var other = FirstOn(l, h, t.job.id);
                     int filled = CountOn(l, h, t.job.id);
-                    int posts = Mathf.Max(1, outpost.CountOf(t.job.id));
-                    string role = string.IsNullOrEmpty(plan.position) ? "hand" : plan.position;
+                    int posts = runner ? Mathf.Max(1, l.RunnerSlots()) : Mathf.Max(1, outpost.CountOf(t.job.id));
+                    string role = runner ? "runner" : string.IsNullOrEmpty(plan.position) ? "hand" : plan.position;
                     if (here) sub = "here now";
                     else if (other != null && filled >= posts)
                     {
@@ -822,7 +833,8 @@ namespace SeaSick.UI.Sheets
                 {
                     string planId = t.job.id;
                     var other = FirstOn(l, h, planId);
-                    int posts = Mathf.Max(1, outpost.CountOf(planId));
+                    int posts = planId == BuildPlans.Storage.id ? Mathf.Max(1, l.RunnerSlots())
+                        : Mathf.Max(1, outpost.CountOf(planId));
                     bool swap = other != null && CountOn(l, h, planId) >= posts;
                     var oldOrder = h.order;
                     string oldTarget = h.target;
@@ -875,6 +887,7 @@ namespace SeaSick.UI.Sheets
         static string PostIcon(string planId)
         {
             var plan = BuildPlans.Named(planId);
+            if (planId == BuildPlans.Storage.id) return Res.Boards;   // the goods a runner moves
             if (!string.IsNullOrEmpty(plan.makes) && ItemIconSet.Get(plan.makes) != null) return plan.makes;
             var recipes = Recipes.At(planId);
             if (recipes.Count > 0 && recipes[0] != null && !string.IsNullOrEmpty(recipes[0].makes)) return recipes[0].makes;

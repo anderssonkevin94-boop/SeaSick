@@ -253,6 +253,8 @@ namespace SeaSick.World
             foreach (var h in hands)
             {
                 if (h == null || h.Hauling) continue;
+                // With runners on the island only they carry (2026-10-02).
+                if (RunnersOn) { if (IsRunner(h) && !h.Busy) return true; continue; }
                 if ((h.order == OutpostOrder.Idle && !Reserve(h)) || h.order == OutpostOrder.Build || GatherBlocked(h)) return true;
             }
             return false;
@@ -301,7 +303,8 @@ namespace SeaSick.World
             {
                 if (o == null || o.left <= 0 || string.IsNullOrEmpty(o.resource)) continue;
                 string res = o.resource;
-                int n = Mathf.Min(Mathf.Max(1, Res.Armful(res)), o.left);
+                // A runner's barrow, anybody else's armful (2026-10-02).
+                int n = Mathf.Min(Mathf.Max(1, CarryArmful(h, res)), o.left);
                 if (o.toShip)
                 {
                     n = Mathf.Min(n, Mathf.Min(StoreFree(res), ShipRoomNet()));
@@ -338,7 +341,8 @@ namespace SeaSick.World
                     if (!AdvanceHaul(h, ref budget)) return;
                     continue;
                 }
-                if (!StartTransferTrip(h)) return;
+                // Runners carry the cargo once there are any (2026-10-02).
+                if (!MayHaul(h) || !StartTransferTrip(h)) return;
             }
         }
 

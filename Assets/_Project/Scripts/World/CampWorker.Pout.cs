@@ -1,4 +1,5 @@
 using UnityEngine;
+using SeaSick.World.Life;
 
 namespace SeaSick.World
 {
@@ -27,16 +28,11 @@ namespace SeaSick.World
         {
             if (r == null || !r.pouting) return false;
 
-            // **His meal first (2026-09-30).** A hungry hand is the one who
-            // pouts, and `EatStep` can hand him a store-and-back meal trip
-            // before or during the pout. The books leave a watched walker's
-            // legs to his body (`OutpostLedger.AdvanceHaul`: driven), and
-            // this branch outranks `TickHaul`, so the meal was never walked:
-            // on Kevin's save four hands stood at the fire all night at
-            // "full 0", starving, sulking because they were starving. He
-            // walks it now (the books pay the stoop at full pace,
-            // `FinishScale`), then comes back to sulk.
-            if (r.eating && r.Hauling) return false;
+            // **No meal to walk any more (2026-10-02).** He used to leave
+            // the pout for a store-and-back meal trip; since supper is
+            // served at the fire he eats where he sulks: a bowl being eaten
+            // plays out here (this branch outranks `TickDelivery`).
+            if (eatLeft > 0f) { TickDelivery(dt); return true; }
 
             // **At the ring, not in the flames (2026-09-30):** every pouter
             // used to walk to the fire's own centre and stand stacked inside
@@ -55,6 +51,10 @@ namespace SeaSick.World
             if (!Near(fire, HideArriveMetres) && !Walk(fire, dt)) { phase = Phase.Going; return true; }
 
             phase = Phase.Resting;
+            // Sulking, but not skipping supper: at the ring after the bell
+            // he eats what the books served him, like the rest.
+            if (CampLifeTuning.PhaseAtHour(TimeOfDay.Hour) == CampLifeTuning.RoutinePhase.Evening)
+                TrySupperBite(r);
             return true;
         }
     }

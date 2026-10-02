@@ -61,14 +61,12 @@ namespace SeaSick.UI.Sheets
             var h = l.hands[index];
             if (h == null || h.downed) return 0f;
             float d = 0f;
-            if (l.rations == Rations.None || h.full <= 0f) d -= OutpostLedger.MoodDropPerHungryDay;
-            else
-            {
-                d += l.rations == Rations.Half
-                    ? -OutpostLedger.MoodDropPerHungryDay * 0.5f
-                    : OutpostLedger.MoodRecoverPerFedDay;
-                d += FoodBook.MoodPerDay(h.lastMeal);
-            }
+            // Mirrors EatStep since supper (2026-10-02): mood follows how
+            // short the last supper left him, not his stomach right now.
+            float hunger = l.rations == Rations.None ? 1f : Mathf.Clamp01(h.supperHunger);
+            if (hunger > 1e-3f) d -= OutpostLedger.MoodDropPerHungryDay * hunger;
+            else d += OutpostLedger.MoodRecoverPerFedDay;
+            if (hunger < 1f - 1e-3f) d += FoodBook.MoodPerDay(h.lastMeal);
             if (l.IsHandWarm(index)) d += OutpostLedger.WarmMoodBonusPerDay;
             return d;
         }
@@ -122,7 +120,7 @@ namespace SeaSick.UI.Sheets
             why = "";
             if (l == null || h == null) return HandKind.Busy;
             string w = l.StatusWord(h);
-            if (w == "Sleeping" || w == "Evening") w = UnderWord(l, h);
+            if (w == "Sleeping" || w == "Evening" || w == "Supper") w = UnderWord(l, h);
             switch (w)
             {
                 case "Downed":
@@ -135,6 +133,7 @@ namespace SeaSick.UI.Sheets
                 case "Reserve":
                     why = "held in reserve";
                     return HandKind.Unassigned;
+                case "Idle":
                 case "No work":
                     why = h.order == OutpostOrder.Build ? "builder · nothing to build"
                         : h.order == OutpostOrder.Gather ? "gatherer · nothing picked"
@@ -152,7 +151,20 @@ namespace SeaSick.UI.Sheets
                     }
                     why = JobOf(l, h);
                     return HandKind.Working;
+                // **Runners (2026-10-02).** A runner's words ("Runner,
+                // waiting", "Running 6 boards to Sawmill") are working --
+                // waiting on call is his job; "Waiting for a runner" is a
+                // station worker held up for want of one, and "Idle" is the
+                // ledger's word for a hand with no job.
+                case "Waiting for a runner":
+                    why = JobOf(l, h) + " · waiting for a runner";
+                    return HandKind.HeldUp;
                 default:
+                    if (OutpostLedger.IsRunner(h) && (w.StartsWith("Runner") || w.StartsWith("Running")))
+                    {
+                        why = JobOf(l, h);
+                        return HandKind.Working;
+                    }
                     // Pouting, rescuing, a raid's fighting/hiding: busy with
                     // something that is not his job, and not the tally's.
                     why = h.Doing;
@@ -169,15 +181,15 @@ namespace SeaSick.UI.Sheets
             switch (h.order)
             {
                 case OutpostOrder.Gather:
-                    if (string.IsNullOrEmpty(h.target)) return "No work";
+                    if (string.IsNullOrEmpty(h.target)) return "Idle";
                     return h.target == Res.Game ? "Hunting" : "Gathering";
                 case OutpostOrder.Work:
                     return "Working";
                 case OutpostOrder.Build:
                     if (l.BuildSiteFor(h) != null) return "Building";
-                    return h.Hauling ? "Hauling" : "No work";
+                    return h.Hauling ? "Hauling" : "Idle";
                 default:
-                    return h.Hauling ? "Hauling" : "No work";
+                    return h.Hauling ? "Hauling" : "Idle";
             }
         }
 
@@ -191,6 +203,7 @@ namespace SeaSick.UI.Sheets
             {
                 case OutpostOrder.Work:
                 {
+                    if (OutpostLedger.IsRunner(h)) return "runner · pushes goods around the camp";
                     string label = BuildPlans.Named(h.target).label;
                     string post = BuildPlans.PositionAt(h.target);
                     if (string.IsNullOrEmpty(post)) post = "working";
