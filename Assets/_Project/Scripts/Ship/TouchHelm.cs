@@ -55,7 +55,9 @@ namespace SeaSick.Ship
         /// The gesture zone is the whole lower half of the screen (Kevin,
         /// 2026-09-22: "the steering needs to be applicable on the whole
         /// bottom half of the screen"), minus whatever another control has
-        /// already claimed with `UIBlocker`.
+        /// already claimed with `UIBlocker`. Since 2026-10-02 that includes
+        /// the very bottom: the sea HUD's order strip does not block, so the
+        /// thumb can start the stick where it rests (`DrawCentre`).
         const float ZoneFrac = 0.5f;
         /// Ring radius as a fraction of the shorter screen dimension — big
         /// enough to find and move inside of with a thumb, DPI-sane on both
@@ -306,11 +308,35 @@ namespace SeaSick.Ship
         {
             if (!Dragging && fade <= 0.001f) return;
             int u = HudLayout.Unit;
-            if (direct) DrawStickDirect(u, rudderStickX, throttleOrder, astern, burning);
-            else DrawStick(u, astern, burning);
+            Vector2 c = DrawCentre(u, direct);
+            if (direct) DrawStickDirect(u, c, rudderStickX, throttleOrder, astern, burning);
+            else DrawStick(u, c, astern, burning);
         }
 
-        void DrawStick(int u, bool astern, bool burning)
+        /// **Where the ring is DRAWN** (2026-10-02). The stick may start
+        /// anywhere in the lower half, the sea HUD's slim order strip at the
+        /// very bottom included (Kevin: the stick sat "very far up" above
+        /// the old helm row), so a thumb can land a few px off the bottom
+        /// edge. The ORDER stays anchored at the touch point -- the rudder
+        /// and the latched lever are both relative to it, so moving the
+        /// anchor would buy no real room below the thumb, and a tap must
+        /// still read as a tap -- but the ring (and the direct mode's
+        /// throttle gauge beside it) is drawn shifted just enough to sit
+        /// fully on screen, never under the edge.
+        Vector2 DrawCentre(int u, bool direct)
+        {
+            float R = ringRadiusPx;
+            float m = u * 0.2f;
+            // Sideways only the ring counts (the direct gauge flips sides
+            // on its own); downward the free knob of the autopilot mode can
+            // sit past the rim.
+            float half = direct ? R : R * KnobClampFrac + u * 0.45f;
+            float x = Mathf.Clamp(anchorPoint.x, R + m, Mathf.Max(R + m, Screen.width - R - m));
+            float y = Mathf.Min(anchorPoint.y, Screen.height - half - m);
+            return new Vector2(x, y);
+        }
+
+        void DrawStick(int u, Vector2 c, bool astern, bool burning)
         {
             float a = fade;
             var deadCol = UITheme.TextDim; deadCol.a *= a;
@@ -318,23 +344,25 @@ namespace SeaSick.Ship
             var knobCol = burning ? UITheme.Warn : astern ? UITheme.Bad : UITheme.Sea;
             knobCol.a *= a;
 
-            Ring(anchorPoint, ringRadiusPx * DeadZoneFrac, 3f, deadCol, 18);
-            Ring(anchorPoint, ringRadiusPx, 4f, rimCol, 30);
+            Ring(c, ringRadiusPx * DeadZoneFrac, 3f, deadCol, 18);
+            Ring(c, ringRadiusPx, 4f, rimCol, 30);
 
             if (ringRadiusPx <= 1f) return;
 
-            Vector2 knob = knobPoint;
+            // The knob keeps its offset from the thumb's anchor, drawn
+            // around the (possibly shifted) ring centre.
+            Vector2 knob = c + (knobPoint - anchorPoint);
             float knobSize = u * 0.9f;
             UITheme.Rect(new Rect(knob.x - knobSize * 0.5f, knob.y - knobSize * 0.5f,
                 knobSize, knobSize), knobCol);
 
             // A pull line from the anchor to the knob, so the direction and
             // the amount both read at a glance.
-            float len = Vector2.Distance(anchorPoint, knob);
+            float len = Vector2.Distance(c, knob);
             if (len > 1f)
             {
-                Vector2 mid = (anchorPoint + knob) * 0.5f;
-                float ang = Mathf.Atan2(knob.x - anchorPoint.x, -(knob.y - anchorPoint.y)) * Mathf.Rad2Deg;
+                Vector2 mid = (c + knob) * 0.5f;
+                float ang = Mathf.Atan2(knob.x - c.x, -(knob.y - c.y)) * Mathf.Rad2Deg;
                 var prev = GUI.matrix;
                 GUIUtility.RotateAroundPivot(ang, mid);
                 UITheme.Rect(new Rect(mid.x - 1.5f, mid.y - len * 0.5f, 3f, len), knobCol);
@@ -346,12 +374,12 @@ namespace SeaSick.Ship
         /// ahead — the same ceiling the readout bar uses.
         const float GaugeCeiling = 1.4f;
 
-        /// Direct-rudder stick: a horizontal rudder track through the anchor
+        /// Direct-rudder stick: a horizontal rudder track through the ring centre
         /// with the knob sitting at the blade's CURRENT angle, and a vertical
         /// throttle gauge beside the ring whose fill is the LATCHED order —
         /// it does not follow the thumb back when it lifts, because the order
         /// doesn't either.
-        void DrawStickDirect(int u, float rudderStickX, float throttle, bool astern, bool burning)
+        void DrawStickDirect(int u, Vector2 c, float rudderStickX, float throttle, bool astern, bool burning)
         {
             float a = fade;
             float R = ringRadiusPx;
@@ -365,31 +393,31 @@ namespace SeaSick.Ship
             thrCol.a *= a;
             var notchCol = UITheme.Text; notchCol.a *= a;
 
-            Ring(anchorPoint, R * DeadZoneFrac, 3f, deadCol, 18);
-            Ring(anchorPoint, R, 4f, rimCol, 30);
+            Ring(c, R * DeadZoneFrac, 3f, deadCol, 18);
+            Ring(c, R, 4f, rimCol, 30);
 
             // Rudder: a dim track rim to rim, a midships tick, a filled bar
             // from midships out to the knob, and the knob itself.
             float trackH = Mathf.Max(3f, u * 0.12f);
-            UITheme.Rect(new Rect(anchorPoint.x - R, anchorPoint.y - trackH * 0.5f,
+            UITheme.Rect(new Rect(c.x - R, c.y - trackH * 0.5f,
                 2f * R, trackH), dimCol);
-            UITheme.Rect(new Rect(anchorPoint.x - 1.5f, anchorPoint.y - u * 0.35f,
+            UITheme.Rect(new Rect(c.x - 1.5f, c.y - u * 0.35f,
                 3f, u * 0.7f), dimCol);
-            float kx = anchorPoint.x + Mathf.Clamp(rudderStickX, -1f, 1f) * R;
+            float kx = c.x + Mathf.Clamp(rudderStickX, -1f, 1f) * R;
             float barH = u * 0.3f;
-            UITheme.Rect(new Rect(Mathf.Min(anchorPoint.x, kx), anchorPoint.y - barH * 0.5f,
-                Mathf.Abs(kx - anchorPoint.x), barH), rudCol);
+            UITheme.Rect(new Rect(Mathf.Min(c.x, kx), c.y - barH * 0.5f,
+                Mathf.Abs(kx - c.x), barH), rudCol);
             float knobSize = u * 0.9f;
-            UITheme.Rect(new Rect(kx - knobSize * 0.5f, anchorPoint.y - knobSize * 0.5f,
+            UITheme.Rect(new Rect(kx - knobSize * 0.5f, c.y - knobSize * 0.5f,
                 knobSize, knobSize), rudCol);
 
-            // Throttle gauge: 2R tall, centred on the anchor, on whichever
+            // Throttle gauge: 2R tall, centred on the drawn ring, on whichever
             // side of the ring has room (a thumb that lands near the right
             // edge of a portrait phone gets it on the left).
             float gw = u * 0.45f;
-            float gx = anchorPoint.x + R + u * 0.6f;
-            if (gx + gw > Screen.width - u * 0.2f) gx = anchorPoint.x - R - u * 0.6f - gw;
-            float top = anchorPoint.y - R, bottom = anchorPoint.y + R;
+            float gx = c.x + R + u * 0.6f;
+            if (gx + gw > Screen.width - u * 0.2f) gx = c.x - R - u * 0.6f - gw;
+            float top = c.y - R, bottom = c.y + R;
             float span = 1f + GaugeCeiling;                 // -1 (full astern) .. +ceiling (burn)
             float YOf(float v) => bottom - (Mathf.Clamp(v, -1f, GaugeCeiling) + 1f) / span * (bottom - top);
 

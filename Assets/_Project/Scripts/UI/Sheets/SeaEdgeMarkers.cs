@@ -178,6 +178,9 @@ namespace SeaSick.UI.Sheets
             if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen) return;
             if (SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
+            // Not over the loading screen (seen drawn on it, 2026-10-02).
+            var loading = SeaSick.UI.Menus.LoadingScreen.Instance;
+            if (loading != null && !loading.Finished) return;
             if (SheetHost.FrameOpen || Sheets.Current != null) return;
             var cam = Camera.main;
             if (cam == null) return;

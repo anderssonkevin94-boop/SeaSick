@@ -56,8 +56,11 @@ namespace SeaSick.Ship
     ///   order at touch-down, so a thumb landing anywhere never jumps the
     ///   throttle. Then every frame the lever moves by the change in
     ///   yEff = sign(y) * max(0,|y|-throttleDeadZone) / (1-throttleDeadZone)
-    ///   (y = thumb height above the touch-down point in ring radii): one
-    ///   ring radius of drag moves the lever exactly 1.0, i.e. stop to full.
+    ///   (y = thumb height above the touch-down point in ring radii, counting
+    ///   only VERTICAL travel: each frame's Y step less
+    ///   throttleArcAllowance x its X step, so the drift of a thumb sweeping
+    ///   an arc to steer never moves the lever, 2026-10-02): one ring radius
+    ///   of straight drag moves the lever exactly 1.0, i.e. stop to full.
     ///   The lever maps to the order as: 0..1 = stop..full ahead;
     ///   1..burnEngageFrac = ramp from full ahead into full burn
     ///   (motor.Overdrive); 0..-stopDetent = a stop DETENT (still stop, so
@@ -69,9 +72,10 @@ namespace SeaSick.Ship
     ///   the thumb doesn't owe it anything back), so reversing the drag
     ///   responds at once. Lifting the thumb keeps whatever was set.
     /// - A tap = stop (when HelmTuning.tapStops).
-    /// No axis lock: a diagonal drag moves both. The keyboard is unchanged in
-    /// both modes; a held A/D still hands back a held heading on release,
-    /// which the next thumb on the stick lets go of.
+    /// No hard axis lock: a steep diagonal drag moves both (a 45 degree one
+    /// moves the lever at half rate), a flat one only steers. The keyboard
+    /// is unchanged in both modes; a held A/D still hands back a held
+    /// heading on release, which the next thumb on the stick lets go of.
     [RequireComponent(typeof(ShipMotor))]
     public class HelmInput : MonoBehaviour
     {
@@ -115,6 +119,8 @@ namespace SeaSick.Ship
         // --- direct-rudder state (see the class doc) ---
         float lever;              // throttle lever position, picked up from the order at touch-down
         float prevYEff;           // last frame's dead-zoned stick Y, so the lever moves by the change
+        float yTravel;            // stick Y with sideways-sweep drift filtered out (throttleArcAllowance)
+        Vector2 prevStick;        // last frame's StickOffset, for that filter
         float stickRudder;        // rudder the thumb is asking for this frame
         bool stickRudderActive;   // a thumb is on the stick in direct mode
         bool wasDragging;
@@ -443,9 +449,20 @@ namespace SeaSick.Ship
             stickRudderActive = true;
 
             // --- throttle: a latched lever, moved by the CHANGE in stick Y ---
+            // Steering sweeps are arcs, so Y drifts while X moves. Only the
+            // part of each frame's vertical step steeper than
+            // throttleArcAllowance x its sideways step is travel; a straight
+            // up/down drag counts in full, a sweep tilted under the
+            // allowance not at all (2026-10-02).
+            if (dragBegan) { yTravel = 0f; prevStick = s; }
+            float stepY = s.y - prevStick.y;
+            float steep = Mathf.Abs(stepY)
+                          - Mathf.Max(0f, HelmTuning.throttleArcAllowance) * Mathf.Abs(s.x - prevStick.x);
+            if (steep > 0f) yTravel += Mathf.Sign(stepY) * steep;
+            prevStick = s;
             float dz = Mathf.Clamp(HelmTuning.throttleDeadZone, 0f, 0.9f);
-            float ay = Mathf.Abs(s.y);
-            float yEff = ay <= dz ? 0f : Mathf.Sign(s.y) * (ay - dz) / (1f - dz);
+            float ay = Mathf.Abs(yTravel);
+            float yEff = ay <= dz ? 0f : Mathf.Sign(yTravel) * (ay - dz) / (1f - dz);
             if (dragBegan)
             {
                 lever = LeverFromOrder(throttleOrder);

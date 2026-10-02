@@ -1,7 +1,7 @@
 /* The sea HUD (SeaHud.cs, phase 6 of the island UI restructure, 2026-09-30,
    Kevin's approved mockups "8 · Sea: sailing" and "8c · Anchored off a fresh
    island"). Every size is in DESIGN px of the 390-wide mockup: SeaHud scales
-   each root (.sea-top, .sea-alerts, .sea-card, .sea-helm, .sea-hint) by
+   each root (.sea-top, .sea-alerts, .sea-card, .sea-helm (the order strip), .sea-hint) by
    style.scale so a design px is the same on the phone whatever reference
    resolution the panel is on (CombatHud does the same). */
 
@@ -94,61 +94,43 @@
 }
 .sea-card-chevron { width: 28px; height: 28px; }
 
-/* ---------------- the helm row: Oars · order readout · Ease ---------------- */
+/* ---------------- the order strip (2026-10-02): "half ahead · 6.2 m/s" + bar ----------------
+   One slim line at the very bottom; information only (nothing here picks),
+   so a thumb landing on it starts the stick. Height is also set from code. */
 .sea-helm {
-    position: absolute; left: 0; bottom: 0; width: 370px; height: 120px;
-    flex-direction: row; align-items: stretch; margin: 0; padding: 0;
+    position: absolute; left: 0; bottom: 0; width: 370px; height: 30px;
+    flex-direction: row; align-items: center; margin: 0; padding: 0 12px;
+    background-color: rgba(22, 41, 58, 0.82);
+    border-width: 1px; border-color: rgb(44, 74, 94); border-radius: 15px;
     transform-origin: left bottom;
 }
-.sea-toggle {
-    width: 84px; flex-shrink: 0; margin: 0; padding: 4px;
-    flex-direction: column; align-items: center; justify-content: center;
-    background-color: rgb(22, 41, 58); border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 16px;
+.sea-strip-words {
+    width: 158px; flex-shrink: 0; flex-direction: row; align-items: center;
+    overflow: hidden; margin: 0; padding: 0;
 }
-.sea-toggle:hover { background-color: rgb(28, 50, 70); border-color: rgb(44, 74, 94); }
-.sea-toggle:active { background-color: rgb(32, 57, 72); }
-.sea-toggle--on, .sea-toggle--on:hover { background-color: rgb(36, 62, 82); border-width: 2px; border-color: rgb(164, 210, 232); }
-.sea-toggle:disabled { opacity: 0.45; }
-.sea-toggle-icon { width: 24px; height: 24px; flex-shrink: 0; }
-.sea-toggle-label {
-    margin: 4px 0 0 0; padding: 0; font-size: 14px; color: rgb(232, 242, 246); white-space: nowrap;
-    -unity-text-align: middle-center;
-    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
-}
-.sea-toggle-sub {
-    margin: 2px 0 0 0; padding: 0; font-size: 10px; color: rgb(166, 186, 198); white-space: nowrap;
-    -unity-text-align: middle-center;
-    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
-}
-.sea-toggle--on .sea-toggle-sub { color: rgb(164, 210, 232); }
-
-.sea-readout {
-    flex-grow: 1; flex-shrink: 1; min-width: 0; margin: 0 8px; padding: 10px 12px;
-    flex-direction: column; justify-content: center;
-    background-color: rgb(22, 41, 58); border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 16px;
-}
-.sea-readout-top { flex-direction: row; align-items: flex-end; justify-content: space-between; }
 .sea-order {
-    margin: 0; padding: 0; font-size: 17px; color: rgb(232, 242, 246); white-space: nowrap;
+    margin: 0; padding: 0; font-size: 14px; color: rgb(232, 242, 246); white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
 .sea-order--burn { color: rgb(242, 196, 109); }
 .sea-order--astern { color: rgb(242, 196, 109); }
 .sea-speed {
-    margin: 0 0 0 6px; padding: 0; font-size: 13px; color: rgb(166, 186, 198); white-space: nowrap; flex-shrink: 0;
+    margin: 0 0 0 5px; padding: 0; font-size: 13px; color: rgb(166, 186, 198); white-space: nowrap; flex-shrink: 0;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
 }
-.sea-bar { height: 8px; margin: 8px 0 0 0; border-radius: 4px; background-color: rgb(44, 74, 94); }
+.sea-bar {
+    flex-grow: 1; flex-shrink: 1; min-width: 0; height: 8px; margin: 0 0 0 10px;
+    border-radius: 4px; background-color: rgb(44, 74, 94);
+}
+.sea-bar-burn {
+    position: absolute; left: 70%; right: 0; top: 0; bottom: 0;
+    border-top-right-radius: 4px; border-bottom-right-radius: 4px;
+    background-color: rgba(242, 196, 109, 0.28);
+}
 .sea-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 4px; background-color: rgb(164, 210, 232); }
 .sea-bar-fill--astern, .sea-bar-fill--burn { background-color: rgb(242, 196, 109); }
-.sea-bar-tick { position: absolute; top: -3px; width: 2px; height: 14px; background-color: rgb(242, 196, 109); }
-.sea-bar-labels { flex-direction: row; justify-content: space-between; margin: 5px 0 0 0; }
-.sea-bar-label {
-    margin: 0; padding: 0; font-size: 10px; color: rgb(166, 186, 198); white-space: nowrap;
-    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
-}
-.sea-bar-label--burn { color: rgb(242, 196, 109); }
+.sea-bar-tick { position: absolute; top: -4px; width: 2px; height: 16px; background-color: rgb(242, 196, 109); }
 
 /* ---------------- first-use hint: "drag here to sail" ---------------- */
 .sea-hint {

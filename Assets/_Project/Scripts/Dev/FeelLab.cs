@@ -90,6 +90,7 @@ namespace SeaSick.Dev
             {"HelmTuning.holdGain",            (0.1f, 2f)},
             {"HelmTuning.holdMaxDegPerSec",    (0.5f, 10f)},
             {"HelmTuning.holdCaptureDegPerSec",(0.2f, 5f)},
+            {"HelmTuning.throttleArcAllowance", (0f, 1.5f)},
 
             {"HandlingTuning.yawTauBuild",          (0.1f, 1.5f)},
             {"HandlingTuning.yawTauRelease",        (0.1f, 2f)},
@@ -116,9 +117,14 @@ namespace SeaSick.Dev
             {"JuiceTuning.camPitchDeg",         (10f, 26f)},
             {"JuiceTuning.camRisePitchDeg",     (0f, 12f)},
             {"JuiceTuning.camRiseBackFraction", (0f, 0.6f)},
-            {"JuiceTuning.camRiseSeconds",      (0.1f, 2f)},
+            {"JuiceTuning.camRiseSeconds",      (0.1f, 2f)},   // 2026-10-02 easing: spring time, default 0.6
+            {"JuiceTuning.camRiseFallSeconds",  (0.2f, 4f)},
             {"JuiceTuning.camTurnLeadDeg",      (0f, 20f)},
-            {"JuiceTuning.camLeadSeconds",      (0f, 1.5f)},
+            {"JuiceTuning.camLeadSeconds",      (0f, 1.5f)},   // spring time, default 0.4
+            {"JuiceTuning.camLeadRudderShare",  (0f, 1f)},
+            {"JuiceTuning.camSeatSeconds",      (0f, 1f)},
+            {"JuiceTuning.camPitchSeconds",     (0f, 1f)},
+            {"JuiceTuning.camLockSeconds",      (0.1f, 1.5f)},
             {"JuiceTuning.camLockSwingDeg",     (0f, 85f)},
             {"JuiceTuning.camLockMaxBack",      (25f, 80f)},
             {"JuiceTuning.sprayScale",       (0f, 5f)},   // Kevin pinned 3; particle caps bound it
@@ -221,6 +227,14 @@ namespace SeaSick.Dev
                 "HandlingTuning.turnCircleLengths",
                 "HelmTuning.rudderMoveSpeed",
                 "HelmTuning.rudderReturnPerSec",
+            },
+            // 2026-10-02 rebase 3: the sea camera's easing pass (Kevin: "the
+            // camera feels too snappy. there needs to be easing.") -- these
+            // two are spring times now, with new defaults.
+            new[]
+            {
+                "JuiceTuning.camRiseSeconds",
+                "JuiceTuning.camLeadSeconds",
             },
         };
         const string RebaseKey = "FeelLab.rebase";

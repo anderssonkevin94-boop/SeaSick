@@ -7,15 +7,16 @@ namespace SeaSick.UI.Sheets
 {
     /// **The sea combat controls, 2026-09-30 (island UI restructure, phase 6;
     /// Kevin approved mockup "8b · Sea: combat").** One red target chip under
-    /// the sea top bar and ONE combat row above the helm row replace the
+    /// the sea top bar and ONE combat row above the order strip replace the
     /// IMGUI fire chips (`CannonBattery.OnGUI`, "◀ port 1/1 ready" / "stbd ▶")
     /// and the round lock button (`CombatLock.OnGUI`, `HudLayout.Slot.Lock`).
     /// <list type="bullet">
     /// <item>**Chip** -- "RAIDER · 120 m · locked" (or "RAIDER · 140 m" with a
     ///   candidate only). Shown while a lock or a candidate exists.</item>
     /// <item>**Row** -- [◀ Fire port] [Lock / Release] [Fire stbd ▶], 64 design
-    ///   px tall, in the bottom 150 px (`BottomPx`: the helm row is 120 tall
-    ///   on a 16 margin, plus a gap). A Fire button is bright ice when a gun
+    ///   px tall, just above the sea HUD's order strip (`BottomPx`: since
+    ///   2026-10-02 the strip is 30 tall on a 6 margin, plus a 14 gap = 50;
+    ///   it was a 120 px helm row). A Fire button is bright ice when a gun
     ///   on that side is loaded, dark while it reloads, with the reload bar
     ///   inside. Lock reads "Lock · 120 m" with a candidate, "Release" ember
     ///   while held, amber while the lock is slipping out of range. Nobody
@@ -47,7 +48,7 @@ namespace SeaSick.UI.Sheets
     /// row is centred. Built once, re-texted only when its state key moves,
     /// nothing allocated per frame (the distance strings change at 4 Hz).
     ///
-    /// The sea HUD (top bar, helm row, action card) is another file: it sets
+    /// The sea HUD (top bar, order strip, action card) is another file: it sets
     /// `TopPx` / `BottomPx` if its bars are not where the mockup has them and
     /// hides its action card while `Visible`.
     public static class CombatHud
@@ -60,9 +61,9 @@ namespace SeaSick.UI.Sheets
         public const float NoteHeight = 16f;
         public const float NoteGap = 6f;
         /// Design px from the safe area's bottom edge to the row's bottom:
-        /// the helm row's 16 margin + 120 height + 14 gap. The sea HUD may
-        /// change this if its helm row changes height.
-        public static float BottomPx = 150f;
+        /// the order strip's 6 margin + 30 height + 14 gap. The sea HUD sets
+        /// it every frame from its own constants (`SeaHud.HelmBottom` ...).
+        public static float BottomPx = 50f;
         /// Design px from the safe area's top edge to the chip's top: under
         /// the sea top bar (10 margin + 52 bar + 10 gap).
         public static float TopPx = 72f;

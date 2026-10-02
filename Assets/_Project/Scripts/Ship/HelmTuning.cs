@@ -30,6 +30,14 @@ namespace SeaSick.Ship
         public static float rudderReturnPerSec = 8f;
         /// Stick Y, in ring radii from the touch-down point, ignored before the throttle moves. Range 0..0.3.
         public static float throttleDeadZone = 0.10f;
+        /// Sideways sweeps never move the throttle (2026-10-02, Kevin: "it
+        /// still feels very awkward to steer"): a thumb steering left/right
+        /// travels an ARC, so its Y drifts. Each frame only the part of the
+        /// vertical motion beyond this x the sideways motion moves the lever
+        /// -- 0.5 lets a sweep tilt ~27 degrees and still read as pure
+        /// steering; a straight up/down drag counts in full. 0 = old
+        /// behaviour (every bit of Y counts). Range 0..1.5.
+        public static float throttleArcAllowance = 0.5f;
         /// A tap (no drag) rings the telegraph to stop. Applies to both modes.
         public static bool tapStops = true;
 

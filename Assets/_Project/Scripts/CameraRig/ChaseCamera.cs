@@ -496,6 +496,49 @@ namespace SeaSick.CameraRig
         const float HorizonMaxFrac = 0.84f;
         /// Smoothed lean into the turn, degrees, +ve to starboard.
         float turnLead;
+
+        // --- V2 easing (2026-10-02, Kevin: "the camera feels too snappy.
+        // there needs to be easing.") ----------------------------------------
+        //
+        // V2 shipped with first-order lags (velocity jumps the instant their
+        // target moves), a lean keyed 65% off a rudder that now snaps, and
+        // hard clamps the aim ran into. Every V2 follow is a critically
+        // damped spring now (`JuiceTuning.Spring`), the limits are soft
+        // (`JuiceTuning.SoftLimit`), and the lean rides the yaw rate. All of
+        // it is behind camStyleV2; false still runs the old rig line for line.
+        float needVel, needHeld, leadVel, rudderSm, rudderSmVel, lockVel;
+        /// Seconds the "something to see" want is held before it may fall.
+        const float RiseHoldSeconds = 1f;
+        /// Spring time on the rudder before it feeds the rise and the lean.
+        const float RudderSmoothSeconds = 0.25f;
+        /// The coaster sailing view's lean: the ORDER running ahead of the
+        /// turn (smoothed rudder minus yaw rate), so the view starts round as
+        /// the stick goes over and eases off as she answers. Zero in a steady
+        /// turn and negative as the thumb lifts, so it helps the view stop
+        /// with her instead of swinging past. `turnLead` is the lock and
+        /// other-hull lean.
+        float quarterLead, quarterLeadVel;
+        /// Her yaw rate, deg/s, through a short spring: the yaw spring's
+        /// feed-forward. Her rate rather than the seat's own swing, because
+        /// the seat keeps swinging while it catches up after she stops and
+        /// feeding that forward carried the view past her heading.
+        float yawRateSm, yawRateSmVel;
+        const float YawRateSmoothSeconds = 0.25f;
+        /// The seat's own velocity relative to her (the spring's state).
+        Vector3 seatVel;
+        Vector3 prevRigPos, prevShipFlat;
+        bool wasV2Follow, wasRigTracked;
+        /// The V2 aim: yaw and pitch springs, seeded from the drawn pose.
+        float v2Yaw, v2Pitch, yawVel, pitchVel;
+        bool v2RotSeeded;
+        /// The drawn yaw/pitch last frame and how fast they moved, so a spring
+        /// taking over from another mode starts at the speed already on screen.
+        float lastDrawnYaw, lastDrawnPitch, drawnYawRate, drawnPitchRate;
+        bool haveDrawn;
+        /// Where the lock target last was, so the framing eases OUT of a lock
+        /// that ended (the target sank or was dropped) instead of snapping.
+        Vector3 lastLockPos;
+        bool haveLockPos;
         public float Need01 => need01;
         public float TurnLead => turnLead;
 
@@ -787,6 +830,46 @@ namespace SeaSick.CameraRig
             }
 
             float slow = 1f - Mathf.InverseLerp(RiseSlowFull, RiseSlowNone, s01);
+            float peak = motor != null ? Mathf.Max(8f, motor.MaxTurnRate) : 15f;
+            float yaw01 = Mathf.Clamp(yaw / peak, -1f, 1f);
+            if (SeaSick.Ship.JuiceTuning.camStyleV2)
+            {
+                // Eased: the rudder is smoothed before anything reads it, the
+                // want is HELD a second before it may fall (hysteresis: a
+                // helm flicking past the threshold cannot pump it), and both
+                // the rise and the lean are springs, so they ease in and out.
+                rudderSm = SeaSick.Ship.JuiceTuning.Spring(rudderSm, rudder, ref rudderSmVel,
+                    RudderSmoothSeconds, dt);
+                yawRateSm = SeaSick.Ship.JuiceTuning.Spring(yawRateSm, yaw, ref yawRateSmVel,
+                    YawRateSmoothSeconds, dt);
+                float turningSm = Mathf.Max(Mathf.InverseLerp(0.35f, 0.75f, turn01),
+                                            Mathf.InverseLerp(0.45f, 0.9f, Mathf.Abs(rudderSm)));
+                float wantSm = plainChase ? Mathf.Max(Mathf.Max(slow, turningSm), surroundings01) : 0f;
+                needHeld = Mathf.Max(wantSm, needHeld - dt / RiseHoldSeconds);
+                if (!plainChase) needHeld = 0f;
+                float rise = needHeld > need01
+                    ? SeaSick.Ship.JuiceTuning.camRiseSeconds
+                    : SeaSick.Ship.JuiceTuning.camRiseFallSeconds;
+                need01 = SeaSick.Ship.JuiceTuning.Spring(need01, needHeld, ref needVel,
+                    Mathf.Max(0f, rise), dt);
+                if (need01 < 0f || need01 > 1f) { need01 = Mathf.Clamp01(need01); needVel = 0f; }
+
+                float share = Mathf.Clamp01(SeaSick.Ship.JuiceTuning.camLeadRudderShare);
+                float wantLeadSm = plainChase
+                    ? Mathf.Max(0f, SeaSick.Ship.JuiceTuning.camTurnLeadDeg)
+                      * Mathf.Clamp(share * rudderSm + (1f - share) * yaw01, -1f, 1f)
+                    : 0f;
+                turnLead = SeaSick.Ship.JuiceTuning.Spring(turnLead, wantLeadSm, ref leadVel,
+                    Mathf.Max(0f, SeaSick.Ship.JuiceTuning.camLeadSeconds), dt);
+                float wantQuarter = plainChase
+                    ? Mathf.Max(0f, SeaSick.Ship.JuiceTuning.camTurnLeadDeg)
+                      * Mathf.Clamp(rudderSm - yaw01, -1f, 1f)
+                    : 0f;
+                quarterLead = SeaSick.Ship.JuiceTuning.Spring(quarterLead, wantQuarter, ref quarterLeadVel,
+                    Mathf.Max(0f, SeaSick.Ship.JuiceTuning.camLeadSeconds), dt);
+                return;
+            }
+            rudderSm = rudder; rudderSmVel = needVel = leadVel = 0f; needHeld = need01;
             float turning = Mathf.Max(Mathf.InverseLerp(0.35f, 0.75f, turn01),
                                       Mathf.InverseLerp(0.45f, 0.9f, Mathf.Abs(rudder)));
             float want = plainChase ? Mathf.Max(Mathf.Max(slow, turning), surroundings01) : 0f;
@@ -796,8 +879,6 @@ namespace SeaSick.CameraRig
 
             // The order leads, the yaw rate confirms: the rudder is what the
             // player just asked for, so the view starts round before the hull.
-            float peak = motor != null ? Mathf.Max(8f, motor.MaxTurnRate) : 15f;
-            float yaw01 = Mathf.Clamp(yaw / peak, -1f, 1f);
             float wantLead = plainChase
                 ? Mathf.Max(0f, SeaSick.Ship.JuiceTuning.camTurnLeadDeg)
                   * Mathf.Clamp(LeadRudderShare * rudder + (1f - LeadRudderShare) * yaw01, -1f, 1f)
@@ -850,8 +931,15 @@ namespace SeaSick.CameraRig
                 && !PointOfInterest.HasValue && !SailOverride.HasValue
                 && !Overview.HasValue && !OverviewOverride.HasValue && overviewLevel < .001f
                 && LockTarget == null && lockLevel < .001f;
+            // V2 at sea: the plain chase or a lock, no tuner, shore party or
+            // island view. The rig then rides her translation exactly and
+            // springs only the seat's swing round her (see the position
+            // update below), so the travel step here is not needed.
+            bool v2Follow = SeaSick.Ship.JuiceTuning.camStyleV2
+                && !PointOfInterest.HasValue && !SailOverride.HasValue
+                && !Overview.HasValue && !OverviewOverride.HasValue && overviewLevel < .001f;
             // Follow translation promptly, retaining angular smoothing around the hull.
-            if (sailingQuarter && wasSailingQuarter)
+            if (sailingQuarter && wasSailingQuarter && !v2Follow)
             {
                 Vector3 travel = target.position - previousSailingPosition;
                 travel.y = 0f;
@@ -1008,8 +1096,24 @@ namespace SeaSick.CameraRig
                 cruiseLevel = Mathf.Lerp(cruiseLevel, wantCruise,
                     1f - Mathf.Exp(-(wantCruise > cruiseLevel ? cruiseInRate : cruiseOutRate) * dt));
 
-                lockLevel = Mathf.Lerp(lockLevel, locked ? 1f : 0f,
-                    1f - Mathf.Exp(-lockResponse * dt));
+                if (v2Follow)
+                {
+                    // Eased in AND out: the old lag started at full speed.
+                    lockLevel = SeaSick.Ship.JuiceTuning.Spring(lockLevel, locked ? 1f : 0f,
+                        ref lockVel, Mathf.Max(0f, SeaSick.Ship.JuiceTuning.camLockSeconds), dt);
+                    if (lockLevel < 0f || lockLevel > 1f) { lockLevel = Mathf.Clamp01(lockLevel); lockVel = 0f; }
+                }
+                else
+                {
+                    lockLevel = Mathf.Lerp(lockLevel, locked ? 1f : 0f,
+                        1f - Mathf.Exp(-lockResponse * dt));
+                    lockVel = 0f;
+                }
+                // Remember where the target was, so a lock that ENDS (sunk,
+                // dropped) eases out from where it was rather than snapping
+                // the seat and the aim home the frame LockTarget goes null.
+                if (locked) { lastLockPos = LockTarget.position; haveLockPos = true; }
+                else if (lockLevel <= 0.001f) haveLockPos = false;
 
                 // The tuner overrides the BASE numbers, not the seat, so the
                 // per-hull scaling still applies and what it prints is what
@@ -1102,9 +1206,10 @@ namespace SeaSick.CameraRig
                     sternDir = Quaternion.AngleAxis(orbitAngle * (1f - lockLevel), Vector3.up) * sternDir;
 
                 float lockBlend = 0f, lockAim = 0f;
-                if (lockLevel > 0.001f && LockTarget != null && v2Seat)
+                if (lockLevel > 0.001f && (LockTarget != null || haveLockPos) && v2Seat)
                 {
-                    Vector3 tgt = new Vector3(LockTarget.position.x, 0f, LockTarget.position.z);
+                    Vector3 lockPos = LockTarget != null ? LockTarget.position : lastLockPos;
+                    Vector3 tgt = new Vector3(lockPos.x, 0f, lockPos.z);
                     Vector3 toTarget = tgt - shipFlat;
                     float sep = toTarget.magnitude;
                     Vector3 dirToTarget = sep < 0.5f ? flatForward : toTarget / sep;
@@ -1148,7 +1253,7 @@ namespace SeaSick.CameraRig
                     float depth = back + fT;
                     float bearing = Mathf.Atan2(xT, Mathf.Max(0.1f, depth)) * Mathf.Rad2Deg
                                   * Mathf.InverseLerp(0f, 10f, depth);
-                    lockAim = Mathf.Clamp(bearing * 0.5f + turnLead, -keepOffDeg, keepOffDeg);
+                    lockAim = SeaSick.Ship.JuiceTuning.SoftLimit(bearing * 0.5f + turnLead, keepOffDeg);
                 }
                 else if (lockLevel > 0.001f && LockTarget != null)
                 {
@@ -1195,7 +1300,7 @@ namespace SeaSick.CameraRig
                     Vector3 plain = shipFlat + lookAheadDir * ahead;
                     if (!sailingQuarter)
                         plain = seatFlat + Quaternion.AngleAxis(
-                            Mathf.Clamp(turnLead, -keepOffDeg, keepOffDeg), Vector3.up) * (plain - seatFlat);
+                            SeaSick.Ship.JuiceTuning.SoftLimit(turnLead, keepOffDeg), Vector3.up) * (plain - seatFlat);
                     Vector3 lockLook = seatFlat + Quaternion.AngleAxis(lockAim, Vector3.up)
                                      * (-sternDir * (back + ahead));
                     lookPoint = Vector3.Lerp(plain, lockLook, lockBlend)
@@ -1399,7 +1504,35 @@ namespace SeaSick.CameraRig
                 if (directOffset.sqrMagnitude < 1e-6f) directOffset = Vector3.zero;
                 rigPos = desired + directOffset;
             }
+            else if (v2Follow && dt > 0f)
+            {
+                // V2: ride her translation exactly (so at 12 m/s she cannot
+                // trail off the frame) and spring only the seat's offset from
+                // her -- its swing round her in a turn, the dolly, the rise,
+                // the lock backing off. A spring, so a start or stop of any of
+                // those eases in and out instead of starting at full speed.
+                if (!wasV2Follow)
+                {
+                    // Taking over from the lerp: keep the speed the seat
+                    // already had relative to her, so the hand-off is seamless.
+                    seatVel = wasRigTracked
+                        ? ((rigPos - prevRigPos) - (shipFlat - prevShipFlat)) / dt
+                        : Vector3.zero;
+                }
+                Vector3 offset = rigPos - shipFlat;
+                Vector3 wantOffset = desired - shipFlat;
+                float seatT = Mathf.Max(0f, SeaSick.Ship.JuiceTuning.camSeatSeconds);
+                offset = SeaSick.Ship.JuiceTuning.Spring(offset, wantOffset, ref seatVel, seatT, dt);
+                rigPos = shipFlat + offset;
+            }
             else rigPos = Vector3.Lerp(rigPos, desired, 1f - Mathf.Exp(-(sailingQuarter ? 3.5f : positionResponse) * dt));
+            if (dt > 0f)
+            {
+                wasV2Follow = v2Follow && !direct;
+                prevRigPos = rigPos;
+                prevShipFlat = shipFlat;
+                wasRigTracked = true;
+            }
 
             OverviewSettled = overviewLevel >= 1f && shot.HasValue
                 && (direct || (rigPos - desired).magnitude < 0.02f * Mathf.Max(10f, CurrentSpan));
@@ -1499,8 +1632,66 @@ namespace SeaSick.CameraRig
             // movement"). Now the aim eases after her with camYawLagSeconds, so
             // she drifts a little off centre in a turn; camMaxOffCentreDeg keeps
             // her inside the portrait frame (half-FOV ~17-20 deg) on a hard one.
-            if (sailingQuarter)
+            if (v2Follow && !direct)
             {
+                // V2: yaw and pitch are springs, so the aim eases into a turn
+                // and out of it -- the old lag changed speed the instant she
+                // did, and its clamp stopped it dead against a wall.
+                //
+                // Sailing quarter: the aim trails the line to her by the yaw
+                // spring (camYawLagSeconds, the same trail in a steady turn
+                // as the old lag) and the lean pulls it back in. Anywhere
+                // else (a lock, a non-coaster hull) it springs to the framed
+                // look, which already carries the lean and the lock aim.
+                // Either way how far she may sit off centre is a SOFT limit
+                // about the line to her, so nearing it bends, never bumps.
+                Vector3 toShip = target.position - transform.position; toShip.y = 0f;
+                float directYaw = toShip.sqrMagnitude > 1e-4f
+                    ? Mathf.Atan2(toShip.x, toShip.z) * Mathf.Rad2Deg
+                    : desiredRot.eulerAngles.y;
+                // The yaw spring is fed her line PLUS her yaw rate x the spring
+                // time (velocity feed-forward), so in a steady turn it adds no
+                // lag of its own -- the seat spring's swing is the one trail,
+                // the same framing the old lag+lean pair netted out to -- but
+                // every start and stop is eased.
+                float yawT = Mathf.Max(0f, SeaSick.Ship.JuiceTuning.camYawLagSeconds);
+                float feedForward = yawRateSm * yawT;
+                float wantYaw, limit;
+                if (sailingQuarter)
+                {
+                    float maxOff = Mathf.Max(0f, SeaSick.Ship.JuiceTuning.camMaxOffCentreDeg);
+                    wantYaw = directYaw + feedForward + quarterLead;
+                    limit = Mathf.Min(
+                        Mathf.Max(maxOff, Mathf.Max(0f, SeaSick.Ship.JuiceTuning.camTurnLeadDeg)), keepOffDeg);
+                }
+                else
+                {
+                    wantYaw = desiredRot.eulerAngles.y + feedForward;
+                    limit = keepOffDeg < 89f ? keepOffDeg + 2f : 89f;
+                }
+                float wantPitch = Mathf.DeltaAngle(0f, desiredRot.eulerAngles.x);
+                if (!v2RotSeeded)
+                {
+                    float y0 = unrolled.eulerAngles.y, p0 = Mathf.DeltaAngle(0f, unrolled.eulerAngles.x);
+                    v2Yaw = y0; v2Pitch = p0;
+                    // Start at the speed already on screen, not from rest.
+                    yawVel = haveDrawn ? drawnYawRate : 0f;
+                    pitchVel = haveDrawn ? drawnPitchRate : 0f;
+                    v2RotSeeded = true;
+                }
+                v2Yaw = SeaSick.Ship.JuiceTuning.SpringAngle(v2Yaw, wantYaw, ref yawVel, yawT, dt);
+                v2Pitch = SeaSick.Ship.JuiceTuning.SpringAngle(v2Pitch, wantPitch, ref pitchVel,
+                    Mathf.Max(0f, SeaSick.Ship.JuiceTuning.camPitchSeconds), dt);
+                float shownYaw = directYaw + SeaSick.Ship.JuiceTuning.SoftLimit(
+                    Mathf.DeltaAngle(directYaw, v2Yaw), limit);
+                framed = Quaternion.Euler(v2Pitch, shownYaw, 0f);
+                // The yaw filter below re-seeds from the drawn pose if V2 is
+                // switched off mid-voyage.
+                sailYawSeeded = false;
+            }
+            else if (sailingQuarter)
+            {
+                v2RotSeeded = false;
                 float directYaw = desiredRot.eulerAngles.y;
                 if (!sailYawSeeded) { sailYaw = transform.rotation.eulerAngles.y; sailYawSeeded = true; }
                 float tau = Mathf.Max(0f, SeaSick.Ship.JuiceTuning.camYawLagSeconds);
@@ -1522,7 +1713,17 @@ namespace SeaSick.CameraRig
                 }
                 framed = Quaternion.Euler(framed.eulerAngles.x, shownYaw, 0f);
             }
-            else sailYawSeeded = false;
+            else { sailYawSeeded = false; v2RotSeeded = false; }
+            if (dt > 0f)
+            {
+                float fy = framed.eulerAngles.y, fp = Mathf.DeltaAngle(0f, framed.eulerAngles.x);
+                if (haveDrawn)
+                {
+                    drawnYawRate = Mathf.DeltaAngle(lastDrawnYaw, fy) / dt;
+                    drawnPitchRate = Mathf.DeltaAngle(lastDrawnPitch, fp) / dt;
+                }
+                lastDrawnYaw = fy; lastDrawnPitch = fp; haveDrawn = true;
+            }
             appliedRoll = sailingYard != null && sailingYard.IsCoaster ? 0f : juiceRoll * atSea;
             transform.rotation = framed * Quaternion.Euler(0f, 0f, appliedRoll);
 

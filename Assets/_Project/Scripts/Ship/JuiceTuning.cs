@@ -51,14 +51,33 @@ namespace SeaSick.Ship
         public static float camRisePitchDeg = 6f;
         /// ...and how much further back the seat sits then, as a fraction. 0..0.6
         public static float camRiseBackFraction = 0.2f;
-        /// Time constant of that rise, seconds; it settles back 2.5x slower so a
-        /// chattering helm cannot pump the camera up and down.             0.1..2
-        public static float camRiseSeconds = 0.5f;
-        /// The aim leans this far INTO a turn, degrees, keyed mostly off the rudder
-        /// so it moves before she does.                                    0..20
+        /// Spring time of that rise coming UP, seconds (eased in and out; it is
+        /// all but there after ~2.4x this). 2026-10-02 easing pass: 0.5 -> 0.6,
+        /// and it is a critically damped spring now, not a lag. Kevin: "the
+        /// camera feels too snappy. there needs to be easing."          0.1..2
+        public static float camRiseSeconds = 0.6f;
+        /// ...and going back DOWN, slower, so a chattering helm cannot pump it. 0.2..4
+        public static float camRiseFallSeconds = 1.25f;
+        /// The aim leans this far INTO a turn, degrees.                    0..20
         public static float camTurnLeadDeg = 12f;
-        /// Smoothing on that lean, seconds.                                 0..1.5
-        public static float camLeadSeconds = 0.5f;
+        /// Spring time on that lean, seconds (easing pass: 0.5 -> 0.4, and a spring
+        /// now rather than a lag).                                          0..1.5
+        public static float camLeadSeconds = 0.4f;
+        /// How much of the lean comes from the rudder ORDER (anticipates) and how
+        /// much from her actual yaw rate (smooth). Was a hard 0.65; the rudder snaps
+        /// now (return 8/s), so the lean is mostly the yaw rate. The coaster's
+        /// sailing view leans only by the order running AHEAD of the turn (see
+        /// ChaseCamera's quarter lean), so this is the lock / other-hull lean. 0..1
+        public static float camLeadRudderShare = 0.25f;
+        /// V2 seat follow: spring time of the seat swinging round her, seconds.
+        /// Translation is followed exactly (she can't drift off at speed); this
+        /// only eases the seat's swing and in/out moves.                  0..1
+        public static float camSeatSeconds = 0.3f;
+        /// V2: spring time of the camera's pitch, seconds (was a 3/s lag). 0..1
+        public static float camPitchSeconds = 0.33f;
+        /// V2: spring time of the lock-on framing coming in and going out, seconds
+        /// (was a 2.4/s lag that started with a jolt).                 0.1..1.5
+        public static float camLockSeconds = 0.45f;
         /// Locked on: most the seat may swing off dead astern, degrees. Under 90, so her
         /// bow never points at the lens and the stick never reads mirrored; 30 lost a
         /// raider on the beam off a portrait frame (smoke test 2026-10-02).  0..85
@@ -142,6 +161,62 @@ namespace SeaSick.Ship
         {
             if (tauSeconds <= 1e-4f) return target;
             return Mathf.Lerp(current, target, 1f - Mathf.Exp(-dt / tauSeconds));
+        }
+
+        /// **Critically damped spring** (`Mathf.SmoothDamp`): eases out of rest
+        /// AND into the target, and its velocity never jumps, so a target that
+        /// steps (a rudder snapping over) still moves the picture smoothly.
+        /// `smoothSeconds` is the spring time: a ramp is trailed by
+        /// speed x smoothSeconds, a step is ~95% there after 2.4x it. 0 = instant.
+        /// dt-correct; a frozen frame (dt 0) leaves it untouched.
+        ///
+        /// The exact step of a critically damped spring (omega = 2 / smoothSeconds),
+        /// NOT `Mathf.SmoothDamp`: that one zeroes the velocity whenever it would
+        /// cross its target, and with a moving target that is a jolt.
+        public static float Spring(float current, float target, ref float velocity,
+                                   float smoothSeconds, float dt)
+        {
+            if (dt <= 0f) return current;
+            if (smoothSeconds <= 1e-4f) { velocity = 0f; return target; }
+            float omega = 2f / smoothSeconds;
+            float decay = Mathf.Exp(-omega * dt);
+            float error = current - target;
+            float push = (velocity + omega * error) * dt;
+            velocity = (velocity - omega * push) * decay;
+            return target + (error + push) * decay;
+        }
+
+        /// `Spring` for degrees, the short way round.
+        public static float SpringAngle(float current, float target, ref float velocity,
+                                        float smoothSeconds, float dt)
+        {
+            return Spring(current, current + Mathf.DeltaAngle(current, target),
+                          ref velocity, smoothSeconds, dt);
+        }
+
+        /// `Spring` per axis.
+        public static Vector3 Spring(Vector3 current, Vector3 target, ref Vector3 velocity,
+                                     float smoothSeconds, float dt)
+        {
+            float vx = velocity.x, vy = velocity.y, vz = velocity.z;
+            var r = new Vector3(Spring(current.x, target.x, ref vx, smoothSeconds, dt),
+                                Spring(current.y, target.y, ref vy, smoothSeconds, dt),
+                                Spring(current.z, target.z, ref vz, smoothSeconds, dt));
+            velocity = new Vector3(vx, vy, vz);
+            return r;
+        }
+
+        /// A limit with a soft knee: linear (slope 1) up to 60% of `limit`, then
+        /// bending smoothly toward it and never past it. Unlike a clamp the
+        /// slope never jumps, so whatever rides it never "hits a wall".
+        public static float SoftLimit(float x, float limit)
+        {
+            if (limit <= 1e-4f) return 0f;
+            float knee = 0.6f * limit;
+            float a = Mathf.Abs(x);
+            if (a <= knee) return x;
+            float room = limit - knee;
+            return Mathf.Sign(x) * (knee + room * (float)System.Math.Tanh((a - knee) / room));
         }
     }
 }

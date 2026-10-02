@@ -31,10 +31,17 @@ namespace SeaSick.UI.Sheets
     ///   offered this frame, the highest priority, in the Next card's look;
     ///   an offer that is information draws with no chevron and takes no
     ///   tap. Hidden while the combat row is up (`CombatHud`).</item>
-    /// <item>**The helm row**, under way: **Oars** · the order readout
-    ///   ("half ahead" + "6.2 m/s", a stop-to-full bar with the burn tick) ·
-    ///   **Ease** ("−8% speed"). Replaces the rest of `HelmInput.OnGUI` and
-    ///   `TouchHelm`'s readout; the floating stick ring itself stays IMGUI.</item>
+    /// <item>**The order strip**, under way (2026-10-02, was the helm row):
+    ///   one slim line at the very bottom of the safe area, "half ahead ·
+    ///   6.2 m/s" beside the stop-to-full bar (full-ahead tick, the burn
+    ///   stretch past it in dim amber). Information only: it does not block,
+    ///   so a thumb resting there starts the stick. Kevin, after playing the
+    ///   old 96-120 px row: "I don't like how far up the joystick is pushed
+    ///   given all the UI below it", and "remove the ease and the oars from
+    ///   the UI" -- the Oars and Ease toggles are gone (rowing stays on
+    ///   desktop R; easing has no control left and stays off). Replaces the
+    ///   rest of `HelmInput.OnGUI` and `TouchHelm`'s readout; the floating
+    ///   stick ring itself stays IMGUI.</item>
     /// <item>**First-use hint**: a faint dashed ring and "drag here to sail"
     ///   in the stick zone until the stick has been used once
     ///   (`GestureHints`).</item>
@@ -45,23 +52,29 @@ namespace SeaSick.UI.Sheets
     /// `safe.width / 390` screen px; on a desk it is one panel unit and the
     /// bar, row and card are centred. The panel's reference resolution is
     /// never touched. Built once; the bar and chips re-text on a 0.25 s
-    /// tick when a number moves, the card and helm row each frame only when
+    /// tick when a number moves, the card and order strip each frame only when
     /// a word changes. No per-frame allocation.
     ///
     /// **Taps never reach the helm or the world**: `Blocks` (read by
-    /// `UIBlocker.SheetBlocked`) covers the bar, the chip, the helm row and
-    /// the card while it is a button; an information card leaves the stick
-    /// free under it. The bottom-centre IMGUI slot (`HudLayout.Slot.Wheel`)
-    /// is reserved to the card's top so the prompts left in IMGUI still
-    /// stack above all of it.
+    /// `UIBlocker.SheetBlocked`) covers the bar, the chip and the card while
+    /// it is a button; an information card and the order strip leave the
+    /// stick free under them. `HelmRect` is still the strip's rect, so
+    /// `Overlaps` keeps the IMGUI edge markers off it. The action card and
+    /// the combat row (`CombatHud.BottomPx`) stack just above the strip, and
+    /// the bottom-centre IMGUI slot (`HudLayout.Slot.Wheel`) is reserved to
+    /// the highest of them so the prompts left in IMGUI still stack above
+    /// all of it.
     public static class SeaHud
     {
         public const float DesignWidth = 390f;
         public const float Side = 10f;
         public const float BarTop = 10f, BarHeight = 52f;
         public const float AlertTop = 72f, AlertHeight = 44f;
-        public const float HelmBottom = 16f, HelmHeight = 120f, HelmHeightWide = 96f;
-        /// Gap between the helm row (or the thumb bar) and the card, design px.
+        /// The order strip: its margin off the safe area's bottom edge and
+        /// its height, design px (2026-10-02: was a 120/96 px helm row on a
+        /// 16 px margin).
+        public const float HelmBottom = 6f, HelmHeight = 30f;
+        /// Gap between the order strip (or the thumb bar) and the card, design px.
         public const float CardGap = 14f;
         const float LaneWidth = DesignWidth - Side * 2f;
         const float WideBarWidth = 560f;
@@ -85,7 +98,9 @@ namespace SeaSick.UI.Sheets
         public static bool Blocks(Vector2 guiPoint)
         {
             if (Time.frameCount - tickFrame > 1) return false;
-            return TopRect.Contains(guiPoint) || AlertRect.Contains(guiPoint) || HelmRect.Contains(guiPoint)
+            // Not `HelmRect`: the order strip is information, and the very
+            // bottom of the screen is where the thumb starts the stick.
+            return TopRect.Contains(guiPoint) || AlertRect.Contains(guiPoint)
                    || (cardTaps && SeaActions.Visible && SeaActions.Rect.Contains(guiPoint));
         }
 
@@ -130,11 +145,10 @@ namespace SeaSick.UI.Sheets
             readonly Button card;
             readonly Label eyebrow, title, detail;
             readonly VisualElement track, fill, go;
-            // --- helm row
+            // --- order strip
             readonly VisualElement helmRow;
-            readonly Button oarsBtn, easeBtn;
-            readonly Label oarsSub, easeSub, orderText, speedText;
-            readonly VisualElement barFill, barTick;
+            readonly Label orderText, speedText;
+            readonly VisualElement barBurn, barFill, barTick;
             // --- hint
             readonly VisualElement hint;
 
@@ -161,7 +175,7 @@ namespace SeaSick.UI.Sheets
             // Helm state.
             string shownOrder;
             bool shownMoving;
-            int speedKey = int.MinValue, easeKey = int.MinValue, oarsKey = int.MinValue;
+            int speedKey = int.MinValue;
             float fillShown = -1f, tickShown = -1f;
             readonly Dictionary<string, string> movingWords = new Dictionary<string, string>();
             static readonly string[] speedTexts = new string[400];
@@ -246,32 +260,21 @@ namespace SeaSick.UI.Sheets
                 card.Add(go);
                 root.Add(card);
 
-                // --- the helm row
+                // --- the order strip: words, then the bar. Every piece
+                // ignores picking, so a thumb landing on it reaches the stick.
                 helmRow = Box("sea-helm");
-                oarsBtn = Toggle(SeaGlyph.Kind.Oars, "Oars", ToggleOars, "Row: labour, not wind (R)", out oarsSub);
-                helmRow.Add(oarsBtn);
-                var readout = Box("sea-readout");
-                var line = Box("sea-readout-top");
-                orderText = Text(line, "sea-order");
-                speedText = Text(line, "sea-speed");
-                readout.Add(line);
+                var words = Box("sea-strip-words");
+                orderText = Text(words, "sea-order");
+                speedText = Text(words, "sea-speed");
+                helmRow.Add(words);
                 var bar = Box("sea-bar");
+                barBurn = Box("sea-bar-burn");
                 barFill = Box("sea-bar-fill");
                 barTick = Box("sea-bar-tick");
+                bar.Add(barBurn);
                 bar.Add(barFill);
                 bar.Add(barTick);
-                readout.Add(bar);
-                var labels = Box("sea-bar-labels");
-                Text(labels, "sea-bar-label").text = "stop";
-                Text(labels, "sea-bar-label").text = "full";
-                var burn = Text(labels, "sea-bar-label");
-                burn.text = "burn";
-                burn.AddToClassList("sea-bar-label--burn");
-                readout.Add(labels);
-                helmRow.Add(readout);
-                easeBtn = Toggle(SeaGlyph.Kind.Ease, "Ease", ToggleEase,
-                    "Ease her through a head sea: slower, smoother", out easeSub);
-                helmRow.Add(easeBtn);
+                helmRow.Add(bar);
                 root.Add(helmRow);
 
                 // --- first-use hint (never a target)
@@ -309,19 +312,6 @@ namespace SeaSick.UI.Sheets
                 b.Add(icon);
                 label = Text(b, "sea-top-text");
                 top.Add(b);
-                return b;
-            }
-
-            static Button Toggle(SeaGlyph.Kind kind, string name, System.Action tap, string tip, out Label sub)
-            {
-                var b = new Button(tap) { text = "" };
-                b.AddToClassList("sea-toggle");
-                b.tooltip = tip;
-                var g = new SeaGlyph(kind);
-                g.AddToClassList("sea-toggle-icon");
-                b.Add(g);
-                Text(b, "sea-toggle-label").text = name;
-                sub = Text(b, "sea-toggle-sub");
                 return b;
             }
 
@@ -380,18 +370,6 @@ namespace SeaSick.UI.Sheets
                         OpenShip();
                         break;
                 }
-            }
-
-            static void ToggleOars()
-            {
-                var m = SheetBits.Motor;
-                if (m != null) m.Rowing = !m.Rowing;
-            }
-
-            static void ToggleEase()
-            {
-                var m = SheetBits.Motor;
-                if (m != null) m.Easing = !m.Easing;
             }
 
             HelmInput Helm()
@@ -480,8 +458,8 @@ namespace SeaSick.UI.Sheets
                 }
                 else AlertRect = Rect.zero;
 
-                // --- the helm row
-                float helmH = wide ? HelmHeightWide : HelmHeight;
+                // --- the order strip
+                float helmH = HelmHeight;
                 Show(helmRow, ref helmShown, helmOn);
                 if (helmOn)
                 {
@@ -495,7 +473,7 @@ namespace SeaSick.UI.Sheets
                 }
                 else HelmRect = Rect.zero;
                 HelmShowing = helmOn;
-                // The combat row sits just above this row (mockup 8b).
+                // The combat row sits just above the strip (mockup 8b).
                 CombatHud.BottomPx = HelmBottom + helmH + CardGap;
 
                 // --- the action card
@@ -559,7 +537,7 @@ namespace SeaSick.UI.Sheets
 
                 // --- keep what is left of the IMGUI HUD above all of this
                 float reserve = Mathf.Max(cardTop, helmOn ? safe.yMin + (HelmBottom + helmH) * ppd : 0f) - safe.yMin;
-                // The combat row sits above the helm row: the reserve covers it
+                // The combat row sits above the order strip: the reserve covers it
                 // too (2026-09-30), and it is the one rect `HudOverlapProbe`
                 // sees for both -- the row used to declare its own rect inside
                 // this one, which the probe (rightly) reads as two placed
@@ -786,7 +764,7 @@ namespace SeaSick.UI.Sheets
                 }
             }
 
-            // --- the helm row (each frame, re-texted only on change) -----------------
+            // --- the order strip (each frame, re-texted only on change) -------------
 
             void TickHelm(ShipMotor motor)
             {
@@ -809,7 +787,7 @@ namespace SeaSick.UI.Sheets
                 if (sk != speedKey)
                 {
                     speedKey = sk;
-                    speedTexts[sk] ??= (sk / 10f).ToString("0.0") + " m/s";
+                    speedTexts[sk] ??= "· " + (sk / 10f).ToString("0.0") + " m/s";
                     speedText.text = speedTexts[sk];
                 }
 
@@ -820,28 +798,11 @@ namespace SeaSick.UI.Sheets
                 f = Mathf.Round(f * 250f) / 250f;
                 if (!Mathf.Approximately(f, fillShown)) { fillShown = f; barFill.style.width = Length.Percent(f * 100f); }
                 float t = 1f / ceiling;
-                if (!Mathf.Approximately(t, tickShown)) { tickShown = t; barTick.style.left = Length.Percent(t * 100f); }
-
-                // Oars: no hands at the sweeps greys it out (unless rowing is
-                // already ordered, so it can still be switched off).
-                float power = motor.OarPower01;
-                int ok = power < 0.02f ? 0 : motor.Rowing ? 2 : 1;
-                if (motor.Rowing && ok == 0) ok = 3;
-                if (ok != oarsKey)
+                if (!Mathf.Approximately(t, tickShown))
                 {
-                    oarsKey = ok;
-                    oarsSub.text = ok == 0 || ok == 3 ? "no hands" : ok == 2 ? "on" : "off";
-                    oarsBtn.EnableInClassList("sea-toggle--on", motor.Rowing);
-                    oarsBtn.SetEnabled(ok != 0);
-                }
-
-                int pct = Mathf.RoundToInt(motor.EaseCost01 * 100f);
-                int ek = motor.Easing ? pct : -1;
-                if (ek != easeKey)
-                {
-                    easeKey = ek;
-                    easeSub.text = motor.Easing ? "−" + pct + "% speed" : "off";
-                    easeBtn.EnableInClassList("sea-toggle--on", motor.Easing);
+                    tickShown = t;
+                    barTick.style.left = Length.Percent(t * 100f);
+                    barBurn.style.left = Length.Percent(t * 100f);   // the burn stretch, tick to end
                 }
             }
 
@@ -854,12 +815,13 @@ namespace SeaSick.UI.Sheets
     }
 
     /// **The sea HUD's pictograms (2026-09-30)**: the sea-state wave, the ☰
-    /// menu lines, the oars, the ease arrow and the dashed first-use ring.
+    /// menu lines and the dashed first-use ring (the oars and the ease
+    /// arrow went with their toggles, 2026-10-02).
     /// Painted like `HudGlyph` / `LandIcon` (no font glyphs: "❚❚" and "⌂"
     /// drew as blank boxes on the phone's font).
     public sealed class SeaGlyph : VisualElement
     {
-        public enum Kind { Wave, Menu, Oars, Ease, DashedRing }
+        public enum Kind { Wave, Menu, DashedRing }
 
         readonly Kind kind;
         Color tint;
@@ -867,9 +829,7 @@ namespace SeaSick.UI.Sheets
         public SeaGlyph(Kind kind)
         {
             this.kind = kind;
-            tint = kind == Kind.Oars ? new Color32(201, 216, 224, 255)
-                : kind == Kind.Ease ? new Color32(164, 210, 232, 255)
-                : kind == Kind.DashedRing ? new Color(232f / 255f, 242f / 255f, 246f / 255f, 0.35f)
+            tint = kind == Kind.DashedRing ? new Color(232f / 255f, 242f / 255f, 246f / 255f, 0.35f)
                 : (Color)new Color32(232, 242, 246, 255);
             pickingMode = PickingMode.Ignore;
             generateVisualContent += Draw;
@@ -928,19 +888,6 @@ namespace SeaSick.UI.Sheets
                     {
                         p.BeginPath(); p.MoveTo(V(4, 7 + i * 5)); p.LineTo(V(20, 7 + i * 5)); p.Stroke();
                     }
-                    break;
-                case Kind.Oars:
-                    p.BeginPath(); p.MoveTo(V(4, 20)); p.LineTo(V(18, 6)); p.Stroke();
-                    p.BeginPath(); p.MoveTo(V(15, 4)); p.LineTo(V(20, 9)); p.Stroke();
-                    p.BeginPath(); p.MoveTo(V(6, 14)); p.LineTo(V(10, 18)); p.Stroke();
-                    break;
-                case Kind.Ease:
-                    p.BeginPath(); p.MoveTo(V(3, 15));
-                    p.BezierCurveTo(V(6, 11), V(9, 11), V(12, 15));
-                    p.BezierCurveTo(V(15, 19), V(18, 19), V(21, 15));
-                    p.Stroke();
-                    p.BeginPath(); p.MoveTo(V(12, 4)); p.LineTo(V(12, 11)); p.Stroke();
-                    p.BeginPath(); p.MoveTo(V(9, 8)); p.LineTo(V(12, 11)); p.LineTo(V(15, 8)); p.Stroke();
                     break;
             }
         }
