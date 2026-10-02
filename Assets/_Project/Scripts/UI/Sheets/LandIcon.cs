@@ -69,6 +69,11 @@ namespace SeaSick.UI.Sheets
                 case "stores":
                     p.BeginPath(); p.MoveTo(V(4,8)); p.LineTo(V(16,3)); p.LineTo(V(28,8)); p.LineTo(V(28,25)); p.LineTo(V(16,30)); p.LineTo(V(4,25)); p.ClosePath(); p.Stroke();
                     Line(4,8,16,13); Line(28,8,16,13); Line(16,13,16,30); Line(4,8,16,30); Line(28,8,16,30); break;
+                case "idle":
+                    // One figure standing with empty hands: the idle chip.
+                    var amber = StationPage.Amber;
+                    Circle(16,8,5,amber);
+                    Poly(amber,new Vector2(8,29),new Vector2(8,20),new Vector2(12,14),new Vector2(20,14),new Vector2(24,20),new Vector2(24,29)); break;
                 case "close": Line(8,8,24,24); Line(24,8,8,24); break;
                 default: Line(5,16,27,16); Line(20,9,27,16); Line(20,23,27,16); break;
             }
