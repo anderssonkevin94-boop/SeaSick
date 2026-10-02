@@ -139,18 +139,71 @@ namespace SeaSick.World
 
         // --- sleep -----------------------------------------------------------
 
+        // **Tonight's bed, reserved (2026-10-02).** Kevin on the phone: the
+        // whole camp walked to the nearest hut, found it full, walked on to
+        // the next, and the last few wandered back to the fire. A bed used
+        // to count as taken only once its sleeper had ARRIVED
+        // (`sleepHutId`), and every walker re-picked every frame. Now a
+        // hand picks once, the moment he turns in, and that bed counts as
+        // taken from then on (`BedsTaken`), so nobody is sent to a hut that
+        // is already spoken for -- and a hand with no bed left knows it at
+        // once and goes straight to the fire.
+        //
+        // Picked per hand, nearest to HIM, not dealt out camp-wide: at
+        // bedtime the routine hands are all standing in the fire ring
+        // (`TickEvening`), so who asks first barely matters, and a camp-wide
+        // deal would have to hold beds for hands still on a haul or a raid
+        // role further up `Update` -- the per-body priority chain decides
+        // when each one is free, not the clock.
+        //
+        // **Released without anybody calling it**: a walker's reservation
+        // only counts while `TickSleep` ran for him this frame or last
+        // (`bedTickFrame`), so an alarm, a rescue, a pout, a haul, the Hand
+        // picking him up, a death or the player's own order all drop it on
+        // their own, and he picks again from wherever he is once he turns
+        // in again. A sleeper's bed is held for as long as he is `asleep`;
+        // `WakeBody` (dawn, alarm, rescue, override) lets it go. Body-only,
+        // never saved: a reload just picks again.
+
+        /// Metres of walk a hand will add to sleep in last night's hut
+        /// again. Mild: Kevin is fine with a different tent each night.
+        const float LastBedPreferMetres = 3f;
+
+        /// Tonight's choice has been made (hut or fire).
+        bool bedChosen;
+        /// ...and it was a hut (`bedHut`); false = the fire. Kept apart
+        /// from `bedHut == null` so a hut demolished under him reads as
+        /// "pick again", not as "chose the fire".
+        bool bedInHut;
+        Building bedHut;
+        /// `Time.frameCount` of the last `TickSleep` for this body -- what
+        /// keeps a walker's reservation alive (see above).
+        int bedTickFrame = -10;
+        /// Where he slept last night, for `LastBedPreferMetres`.
+        Building lastBedHut;
+
         bool TickSleep(OutpostHand r, float dt)
         {
+            // Not ticked last frame while still walking: something above in
+            // `Update` had him, and his old pick may be across camp from
+            // where he is now (and no longer held) -- choose again.
+            int now = Time.frameCount;
+            if (bedChosen && !asleep && !lyingByFire && now - bedTickFrame > 1) bedChosen = false;
+            bedTickFrame = now;
+
             if (asleep)
             {
-                // Held pose; nothing more to do until dawn (`TickRoutine`
-                // above) or `orderOverride` pulls him back out.
+                // The hut came down under him: out he comes, and turns in
+                // again next frame like anyone else.
+                if (bedInHut && bedHut == null) WakeBody(r);
+                // Otherwise a held pose; nothing more to do until dawn
+                // (`TickRoutine` above) or `orderOverride` pulls him out.
                 return true;
             }
             if (lyingByFire) return true;
 
-            var hut = FindBedHut(r);
-            Vector3 goal = hut != null ? WorkSpot(camp, hut) : camp.CampCentre;
+            if (!bedChosen || (bedInHut && bedHut == null)) ChooseBed();
+            Vector3 goal = bedInHut ? WorkSpot(camp, bedHut) : camp.CampCentre;
             if (!Near(goal, SleepArriveMetres) && !Walk(goal, dt))
             {
                 phase = Phase.Going;
@@ -158,9 +211,9 @@ namespace SeaSick.World
                 return true;
             }
 
-            r.sleepHutId = hut != null ? hut.GetInstanceID() : 0;
+            r.sleepHutId = bedInHut ? bedHut.GetInstanceID() : 0;
             acting?.Set(VillagerActing.Mode.None);
-            if (hut != null)
+            if (bedInHut)
             {
                 asleep = true;
                 if (!bodyHidden) HideBody(r);
@@ -174,38 +227,56 @@ namespace SeaSick.World
             return true;
         }
 
-        /// **The nearest hut with a free bed**, first-come-first-served by
-        /// distance -- `BuildPlan.houses` beds a hut, occupancy counted off
-        /// every OTHER hand's own `sleepHutId` (no separate roster to keep
-        /// in sync). Null with no hut standing, or every one already full;
-        /// the caller lies by the fire instead.
-        Building FindBedHut(OutpostHand r)
+        void ChooseBed()
+        {
+            bedChosen = true;
+            bedHut = FindBedHut();
+            bedInHut = bedHut != null;
+        }
+
+        /// **The nearest hut with a bed nobody has spoken for**, measured
+        /// from this hand (straight line, flat; last night's hut a little
+        /// closer, `LastBedPreferMetres`). Beds per hut are the plan's
+        /// `houses` plus its level's bonus, the same sum `OutpostLedger.
+        /// HousingCapacity` counts. Null with no hut standing or every one
+        /// spoken for; the caller lies by the fire instead.
+        Building FindBedHut()
         {
             var built = camp != null ? camp.Built : null;
-            var hands = camp?.Ledger?.hands;
             if (built == null) return null;
+            Vector3 at = transform.position;
             Building best = null;
-            float bestSq = float.MaxValue;
+            float bestScore = float.MaxValue;
             for (int i = 0; i < built.Count; i++)
             {
                 var b = built[i];
                 if (b == null || b.Id != BuildPlans.Hut.id) continue;
-                int capacity = BuildPlans.Hut.houses;
-                if (capacity <= 0) continue;
+                int capacity = BuildPlans.Hut.houses
+                    + Economy.Techs.HousesBonus(BuildPlans.Hut.id, camp.LevelOfBuilding(b));
+                if (capacity <= 0 || BedsTaken(b) >= capacity) continue;
 
-                int occupied = 0;
-                if (hands != null)
-                    for (int j = 0; j < hands.Count; j++)
-                    {
-                        var hh = hands[j];
-                        if (hh != null && hh != r && hh.sleepHutId == b.GetInstanceID()) occupied++;
-                    }
-                if (occupied >= capacity) continue;
-
-                float d = (b.transform.position - transform.position).sqrMagnitude;
-                if (d < bestSq) { bestSq = d; best = b; }
+                Vector3 d = b.transform.position - at;
+                d.y = 0f;
+                float score = d.magnitude;
+                if (b == lastBedHut) score -= LastBedPreferMetres;
+                if (score < bestScore) { bestScore = score; best = b; }
             }
             return best;
+        }
+
+        /// Beds in `hut` other bodies of this camp hold tonight: asleep in
+        /// it, or on their way there and still turning in (ticked this
+        /// frame or last -- see the note above `LastBedPreferMetres`).
+        int BedsTaken(Building hut)
+        {
+            int now = Time.frameCount, n = 0;
+            for (int i = 0; i < Bodies.Count; i++)
+            {
+                var w = Bodies[i];
+                if (w == null || w == this || w.camp != camp || !w.bedInHut || w.bedHut != hut) continue;
+                if (w.asleep || now - w.bedTickFrame <= 1) n++;
+            }
+            return n;
         }
 
         /// Lying pose, calm -- the downed pose (flat, snapped to the
@@ -240,6 +311,12 @@ namespace SeaSick.World
                 StandUp();
             }
             r.sleepHutId = 0;
+            // Tonight's bed goes back (see `TickSleep`); remembered for a
+            // mild pull back to it tomorrow night.
+            if (bedInHut && bedHut != null) lastBedHut = bedHut;
+            bedChosen = false;
+            bedInHut = false;
+            bedHut = null;
             phase = Phase.Resting;
             wait = 0f;
         }
