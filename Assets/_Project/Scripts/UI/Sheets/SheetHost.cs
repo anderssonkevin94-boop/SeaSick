@@ -280,9 +280,10 @@ namespace SeaSick.UI.Sheets
             framed = null;
             hug = false;
             hugPending = false;
-            hugLast = -1f;
+            hugShown = -1f;
             FrameSettled = false;
             card.RemoveFromClassList(HugClass);
+            head.style.flexShrink = StyleKeyword.Null;
             card.style.visibility = Visibility.Visible;
             body.Clear();
             head.Clear();
@@ -309,6 +310,9 @@ namespace SeaSick.UI.Sheets
             if (hug)
             {
                 card.AddToClassList(HugClass);
+                // The header is never squeezed either: past the ceiling the
+                // body (min-height 0) gives way and clips, the title stays.
+                head.style.flexShrink = 0f;
                 // Hidden until the first measure, so the frame never flashes
                 // at the cap and then snaps down to its content.
                 hugPending = true;
@@ -420,24 +424,31 @@ namespace SeaSick.UI.Sheets
 
         bool hug, hugPending;
         int hugWaited;
-        float hugLast = -1f;
+        /// The hugging frame's height last PUBLISHED to `FrameRect`, screen
+        /// pixels, or -1 before the first layout of this sheet.
+        float hugShown = -1f;
 
-        /// **The content's height, panel units, or -1 before a layout.** The
-        /// page is laid out at its natural height (`FillTab`: no grow, no
-        /// shrink), so the card it needs is its current chrome (everything
-        /// that is not the body: border, header, strip, action row) plus the
-        /// body's padding plus that page. A pure function of the content --
-        /// setting the card's height does not move it -- so it cannot
-        /// oscillate.
-        float MeasureHug()
+        /// **The hugging card's laid-out height, panel units, or -1 before
+        /// the page in it has had a layout.**
+        ///
+        /// 2026-10-02 (Kevin on the phone, the Sawmill's work tab: "it glitches
+        /// hyper fast up and down"): this used to MEASURE the page and write
+        /// the result back as the card's height. That loop was not pure: the
+        /// layout engine measures a column child, text included, with "at
+        /// most" the space its parent has, so the page's measured height
+        /// depended on the card height written the frame before -- and
+        /// wrapped labels made it worse. Now the card's height is never
+        /// written in a hugging frame (`Place`: height auto, bottom-anchored,
+        /// max-height = the ceiling): the layout engine sizes it to its
+        /// content in one pass, and this only READS the result for
+        /// `FrameRect`. Nothing read here feeds back into the card's size.
+        float HugLaidHeight()
         {
             if (page == null || page.parent != body) return -1f;
-            float cardH = card.layout.height, bodyH = body.layout.height, pageH = page.layout.height;
-            if (float.IsNaN(cardH) || float.IsNaN(bodyH) || float.IsNaN(pageH)) return -1f;
+            float cardH = card.layout.height, pageH = page.layout.height;
+            if (float.IsNaN(cardH) || float.IsNaN(pageH)) return -1f;
             if (cardH <= 1f || pageH <= 1f) return -1f;
-            float pad = body.resolvedStyle.paddingTop + body.resolvedStyle.paddingBottom;
-            if (float.IsNaN(pad)) pad = 0f;
-            return cardH - bodyH + pad + pageH;
+            return cardH;
         }
 
         ISheetFramed framed;
@@ -483,8 +494,9 @@ namespace SeaSick.UI.Sheets
             // frame should scroll.
             page = new VisualElement();
             page.style.flexDirection = FlexDirection.Column;
-            // A hugging frame reads the page's NATURAL height (`MeasureHug`),
-            // so there it neither grows into the band nor shrinks to it; a
+            // A hugging frame is as tall as the page's NATURAL height (the
+            // card's height is auto there, `Place` / `HugLaidHeight`), so
+            // there it neither grows into the band nor shrinks to it; a
             // page past the cap grows the frame (`Place`, 2026-09-30) and only
             // one past the tall ceiling is ever clipped.
             page.style.flexGrow = hug ? 0f : 1f;
@@ -1030,30 +1042,50 @@ namespace SeaSick.UI.Sheets
                 w = size.x; h = size.y;
                 if (MidnightLandHud.Active) yBottom += (MidnightLandHud.NavHeight + 10f) / PanelScale;
             }
-            // **The hugging frame (2026-09-30)**: as tall as its content, never
-            // past the cap `FrameSizeScreen` gave. Bottom-anchored, so it
-            // grows and shrinks upwards and the thumb row stays put.
+            // **The hugging frame (2026-09-30)**: as tall as its content,
+            // bottom-anchored, so it grows and shrinks upwards and the thumb
+            // row stays put. **Grow, never clip (Kevin, 2026-09-30: "I can
+            // tell there's a button down there but I can't press it"):** its
+            // ceiling is the tall sheet's (`TallCeilingScreen`), not the
+            // half-screen cap -- the cap stays what pages PLAN for
+            // (`HugBodyBudget`); the ceiling is the net for a page whose
+            // estimate was short, or whose labels wrapped.
+            float hugMax = hug ? Mathf.Max(h, TallCeilingScreen()) : 0f;
+
+            // **The thumb bar hides while a sheet is open** -- except in
+            // placement mode, where it IS the active control; a sheet left
+            // open then is lifted clear of it rather than drawn under it.
+            if (ThumbBar.PlacementActive && ThumbBar.Visible)
+            {
+                float lift = ThumbBar.ReservePanel / PanelScale - yBottom;
+                if (lift > 0f)
+                {
+                    yBottom += lift;
+                    h = Mathf.Max(80f / PanelScale, h - lift);
+                    if (hug) hugMax = Mathf.Max(80f / PanelScale, hugMax - lift);
+                }
+            }
+
+            // Panel space. The panel is scaled by its match rule, so every
+            // screen pixel becomes `scale` panel units.
+            float scale = W / Mathf.Max(1f, Screen.width);
+
             if (hug)
             {
-                float want = MeasureHug();
-                float unit = W / Mathf.Max(1f, Screen.width);
-                // A page swapped in this frame (a tab, a swipe) has no layout
-                // yet: keep the last height rather than blink to the cap.
-                if (want > 0f) hugLast = want;
-                else if (!hugPending) want = hugLast;
-                if (want > 0f)
+                // **Sized by the layout engine, read back here (2026-10-02).**
+                // The card's height is NOT written: height auto, max-height
+                // the ceiling, so the engine lays it out at its content in
+                // the same pass that lays out the content (wrapped labels
+                // included) -- there is no measure -> write -> re-measure
+                // loop left to oscillate (`HugLaidHeight`). What the card
+                // drew is published to `FrameRect` (the IMGUI HUD's claim,
+                // the camera's framing) only when it moved more than a pixel,
+                // so sub-pixel layout noise never reaches them.
+                float laid = HugLaidHeight();
+                if (laid > 0f)
                 {
-                    // **Grow, never clip (Kevin, 2026-09-30: "I can tell
-                    // there's a button down there but I can't press it").**
-                    // `want` is MEASURED -- the resolved header, strip, action
-                    // row and page -- so a page taller than the half-screen
-                    // cap no longer loses its bottom row under the thumb
-                    // row: the frame grows past the cap, up to the tall
-                    // sheet's ceiling (`TallCeilingScreen`). The cap stays
-                    // what pages plan for (`HugBodyBudget`); this is the
-                    // safety net for a page whose estimate was short.
-                    float ceiling = Mathf.Max(h, TallCeilingScreen());
-                    h = Mathf.Min(ceiling, Mathf.Ceil(want) / unit);
+                    float shown = Mathf.Min(hugMax, laid / scale);
+                    if (hugShown < 0f || Mathf.Abs(shown - hugShown) > 1f) hugShown = shown;
                     if (hugPending)
                     {
                         hugPending = false;
@@ -1062,22 +1094,18 @@ namespace SeaSick.UI.Sheets
                 }
                 else if (hugPending && ++hugWaited > 3)
                 {
-                    // Never measured (an empty page): show it at the cap
-                    // rather than leave an invisible card eating taps.
+                    // Never laid out (an empty page): show it rather than
+                    // leave an invisible card eating taps.
                     hugPending = false;
                     card.style.visibility = Visibility.Visible;
                 }
+                // A page swapped in this frame (a tab, a swipe) has no layout
+                // yet: `FrameRect` keeps the last height rather than blink
+                // to the cap; before the first layout it is the cap.
+                h = hugShown > 0f ? hugShown : Mathf.Min(h, hugMax);
             }
             FrameSettled = !hugPending;
 
-            // **The thumb bar hides while a sheet is open** -- except in
-            // placement mode, where it IS the active control; a sheet left
-            // open then is lifted clear of it rather than drawn under it.
-            if (ThumbBar.PlacementActive && ThumbBar.Visible)
-            {
-                float lift = ThumbBar.ReservePanel / PanelScale - yBottom;
-                if (lift > 0f) { yBottom += lift; h = Mathf.Max(80f / PanelScale, h - lift); }
-            }
             FrameRect = new Rect(x, Screen.height - (yBottom + h), w, h);
             FrameOpen = true;
             // Told once a frame, to the IMGUI HUD's own space. It used to be
@@ -1089,17 +1117,27 @@ namespace SeaSick.UI.Sheets
             if (MidnightLandHud.Active) claimed.yMax = MidnightLandHud.NavigationRect.yMax;
             HudLayout.ClaimSheet(claimed);
 
-            // Panel space. The panel is scaled by its match rule, so every
-            // screen pixel above becomes `scale` panel units — the y flip is
-            // already done, because the card is positioned from the top.
-            float scale = W / Mathf.Max(1f, Screen.width);
             card.style.left = x * scale;
             card.style.right = StyleKeyword.Auto;
-            card.style.top = FrameRect.y * scale;
-            card.style.bottom = StyleKeyword.Auto;
             card.style.width = w * scale;
-            card.style.height = h * scale;
-            card.style.maxHeight = StyleKeyword.None;
+            if (hug)
+            {
+                // Anchored by its BOTTOM edge (the panel is `Screen.height *
+                // scale` tall, so this is the same edge the top/height pair
+                // used to give), grown upwards by its own content.
+                card.style.top = StyleKeyword.Auto;
+                card.style.bottom = yBottom * scale;
+                card.style.height = StyleKeyword.Auto;
+                card.style.maxHeight = hugMax * scale;
+            }
+            else
+            {
+                // The y flip is already done: the card is positioned from the top.
+                card.style.top = FrameRect.y * scale;
+                card.style.bottom = StyleKeyword.Auto;
+                card.style.height = h * scale;
+                card.style.maxHeight = StyleKeyword.None;
+            }
 
             if (hugPending) shadow.style.display = DisplayStyle.None;
             else Shadow(x * scale, FrameRect.y * scale, w * scale, h * scale);

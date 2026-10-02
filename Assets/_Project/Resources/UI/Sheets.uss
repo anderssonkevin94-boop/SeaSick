@@ -644,15 +644,18 @@
     flex-shrink: 0;
 }
 
-/* A row in a paginated list. The height is fixed because the page count is
- * worked out from it (`SheetKit.RowPx`) -- a row that grows is a row that
- * pushes the last one off a page nothing scrolls. */
+/* A row in a list. 40 px is a MINIMUM (`SheetKit.RowPx`), never a fixed
+ * height (Kevin, permanent: text is never cut off): a row whose label wraps
+ * grows to fit it, and the list around it (a ScrollView, or a hugging frame)
+ * grows or scrolls with it. Nothing pages by this height -- the one list that
+ * uses the row (`GatherSheet`'s "on it") scrolls -- so growing cannot push a
+ * row off a page. `overflow` stays visible so a row never clips its own text. */
 .sheet-list-row {
     flex-direction: row;
     align-items: center;
-    height: 40px;
+    height: auto;
+    min-height: 40px;
     flex-shrink: 0;
-    overflow: hidden;
 }
 
 /* ---------------- the hugging frame (Kevin, 2026-09-30) ----------------

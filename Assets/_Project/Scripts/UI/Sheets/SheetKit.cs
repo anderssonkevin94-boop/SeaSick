@@ -391,13 +391,14 @@ namespace SeaSick.UI.Sheets
         // Paginated lists
         // ------------------------------------------------------------------
 
-        /// **The height of one row in a paginated list.** Fixed, because the
-        /// page count is divided out of it (`SheetHost.RowsThatFit`): a row
-        /// that grows to fit its text is a row that pushes the last one off
-        /// a page that no longer scrolls.
+        /// **The MINIMUM height of a list row** (touch size), not a fixed one:
+        /// a row whose label wraps grows (`.sheet-list-row`, height auto).
+        /// Nothing pages by this value -- paging in this kit counts tiles
+        /// (`SheetHost.RowsThatFit` with each caller's own estimate) -- so
+        /// it is only the floor an estimate may use for a one-line row.
         public const float RowPx = 40f;
 
-        /// A row of that exact height. Same children as `Row`, same gaps.
+        /// A row at least that tall, taller when its text wraps. Same children as `Row`, same gaps.
         public static VisualElement ListRow(params VisualElement[] children)
         {
             var e = Row(children);
