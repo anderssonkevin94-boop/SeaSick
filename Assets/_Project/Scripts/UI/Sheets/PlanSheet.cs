@@ -111,6 +111,8 @@ namespace SeaSick.UI.Sheets
             // The drawn plans (palisade, ladder, road) have no copy cap.
             string capWhy = null;
             bool canBuild = unlocked && (BuildSheet.IsDrawn(planId) || l.CanAddCopy(planId, out capWhy));
+            string homeNeed = canBuild && outpost != null ? outpost.HomeBerthNeed(planId) : null;
+            if (homeNeed != null) { canBuild = false; capWhy = homeNeed; }
             string whyNot = !unlocked
                 ? $"Needs campfire {RecipeGraph.Roman(needLevel)} (this camp is {RecipeGraph.Roman(l.CampfireLevel)})."
                 : canBuild ? null : Cap(capWhy) + ".";

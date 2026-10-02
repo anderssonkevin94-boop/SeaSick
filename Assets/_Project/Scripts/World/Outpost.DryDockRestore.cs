@@ -40,6 +40,21 @@ namespace SeaSick.World
         /// `ResiteOrphanDryDocks`.
         bool orphanDryDock;
 
+        /// Why the build list cannot offer `planId` here for want of a home
+        /// berth (the dry dock only): none yet, or it is on another island.
+        /// Null when nothing is in the way.
+        public string HomeBerthNeed(string planId)
+        {
+            if (planId != BuildPlans.DryDock.id) return null;
+            if (Dock.Home == null) return DryDockNeedsHome;
+            var isle = Island.Home;
+            if (isle != null && Island != null && isle != Island) return $"build it at {isle.name}";
+            return null;
+        }
+
+        public const string DryDockNeedsHome =
+            "needs a home berth: tie up at your pier, then Ship → Make home berth";
+
         /// Skip this saved row? True for a dry dock row once the camp
         /// already stands as many as its cap allows (one).
         bool SkipExtraDryDockRow(BuildPlan plan)

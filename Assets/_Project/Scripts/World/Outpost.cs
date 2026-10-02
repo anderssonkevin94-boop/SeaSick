@@ -5131,10 +5131,10 @@ namespace SeaSick.World
             if (!Sited) { why = "this ground was never surveyed"; return false; }
 
             var home = Dock.Home;
-            if (home == null) { why = "there is no home berth yet"; return false; }
+            if (home == null) { why = DryDockNeedsHome; return false; }
             if (Island.FlatDistance(picked, home.Berth) > BuildPlans.DryDockMaxFromHome)
             {
-                why = $"the dry dock must stand beside your home berth ({Dock.HomeLabel})";
+                why = $"the dry dock must stand within {BuildPlans.DryDockMaxFromHome:0} m of your home berth";
                 return false;
             }
 
@@ -5188,7 +5188,7 @@ namespace SeaSick.World
 
             if (Island.FlatDistance(centre, home.Berth) > BuildPlans.DryDockMaxFromHome)
             {
-                why = $"the dry dock must stand beside your home berth ({Dock.HomeLabel})";
+                why = $"the dry dock must stand within {BuildPlans.DryDockMaxFromHome:0} m of your home berth";
                 return false;
             }
             return true;
@@ -5211,10 +5211,10 @@ namespace SeaSick.World
             if (!adoptingRows)
             {
                 var home = Dock.Home;
-                if (home == null) { why = "there is no home berth yet"; return false; }
+                if (home == null) { why = DryDockNeedsHome; return false; }
                 if (Island.FlatDistance(at, home.Berth) > BuildPlans.DryDockMaxFromHome)
                 {
-                    why = $"the dry dock must stand beside your home berth ({Dock.HomeLabel})";
+                    why = $"the dry dock must stand within {BuildPlans.DryDockMaxFromHome:0} m of your home berth";
                     return false;
                 }
             }

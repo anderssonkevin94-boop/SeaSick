@@ -48,7 +48,8 @@
     color: rgb(31, 45, 56);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Fraunces-Black.ttf");
     -unity-text-align: middle-center;
-    margin-bottom: 4px;
+    margin-top: 6px;
+    margin-bottom: 6px;
 }
 
 .menu-subtitle {
@@ -57,15 +58,19 @@
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
     -unity-text-align: middle-center;
     white-space: normal;
-    margin-bottom: 14px;
+    margin-bottom: 20px;
 }
 
 /* One big decision per screen, stacked and full-width -- the phone-thumb
  * button, same floor (44pt-ish at the default panel scale) as the sheet
  * action row. */
-.menu-btn {
-    height: 48px;
-    margin-bottom: 10px;
+/* `.menu-card` in front so this beats `.sheet-btn { margin: 0 }`: Sheets.uss is
+   added after Menus.uss, and at equal specificity the later sheet won, so the
+   Home buttons sat touching (Kevin's phone screenshot, 2026-10-02). */
+.menu-card .menu-btn {
+    height: 52px;
+    margin-top: 0;
+    margin-bottom: 12px;
 }
 
 .menu-btn:disabled {

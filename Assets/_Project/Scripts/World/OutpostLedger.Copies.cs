@@ -90,6 +90,11 @@ namespace SeaSick.World
                 string shortWhy = why.Replace($" {p.label} needs", " needs");
                 return $"{p.label}{count} — {shortWhy}";
             }
+            if (p.kind == BuildKind.DryDock && Dock.Home == null)
+            {
+                enabled = false;
+                return $"{p.label} — {Outpost.DryDockNeedsHome}";
+            }
             enabled = true;
             var priced = PriceOfNext(p);
             string price = priced.stoneCost > 0

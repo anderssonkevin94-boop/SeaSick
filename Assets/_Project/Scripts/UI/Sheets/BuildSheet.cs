@@ -443,6 +443,19 @@ namespace SeaSick.UI.Sheets
                     continue;
                 }
 
+                string homeNeed = outpost.HomeBerthNeed(p.id);
+                if (homeNeed != null)
+                {
+                    // Locked until a home berth stands (the dry dock): no
+                    // campfire level, so it sorts after the fire's unlocks.
+                    locked.Add(new Entry
+                    {
+                        plan = p, id = p.id, label = Cap(p.label), level = 0,
+                        reason = Cap(homeNeed) + ".",
+                    });
+                    continue;
+                }
+
                 var priced = l.PriceOfNext(p);
                 string timberRes = TimberOf(p);
                 int haveT = l.SpendableOf(timberRes), haveS = l.SpendableOf(Res.Stone), haveB = l.SpendableOf(Res.Brick);
@@ -593,7 +606,7 @@ namespace SeaSick.UI.Sheets
                 }
                 if (c.root.style.display != DisplayStyle.Flex) c.root.style.display = DisplayStyle.Flex;
                 var e = locked[i];
-                if (e.level < minLevel) minLevel = e.level;
+                if (e.level > 0 && e.level < minLevel) minLevel = e.level;
                 bool on = pickedChip == e.id;
                 if (on) { pickedStill = true; pickedReason = e.reason; }
                 c.Set(e, on);
@@ -605,7 +618,7 @@ namespace SeaSick.UI.Sheets
             if (lockedLabel.style.display != want) lockedLabel.style.display = want;
             if (any)
             {
-                string t = "CAMPFIRE " + RecipeGraph.Roman(minLevel) + " UNLOCKS";
+                string t = minLevel == int.MaxValue ? "LOCKED" : "CAMPFIRE " + RecipeGraph.Roman(minLevel) + " UNLOCKS";
                 if (lockedLabel.text != t) lockedLabel.text = t;
             }
             var noteWant = pickedReason != null ? DisplayStyle.Flex : DisplayStyle.None;
