@@ -209,8 +209,11 @@ namespace SeaSick.World
         }
 
         /// A station row's units nobody is already walking to fetch.
+        /// (An empty row skips the claim scan: the runners' ladder asks
+        /// this of every rack for every input, 2026-10-02.)
         int RowFree(int station, OutpostStore row, bool bay) =>
-            row == null ? 0 : Mathf.Max(0, row.whole - Claimed(HaulPlace.Station, station, row.resource, bay));
+            row == null || row.whole <= 0 ? 0
+                : Mathf.Max(0, row.whole - Claimed(HaulPlace.Station, station, row.resource, bay));
 
         // --- the pickup --------------------------------------------------------
 
@@ -509,7 +512,7 @@ namespace SeaSick.World
             {
                 case OutpostOrder.Gather:
                     if (!string.IsNullOrEmpty(h.target))
-                        GatherDay(h, Sliver, Focus != null && !HasHaulChore());
+                        GatherDay(h, Sliver, Focus != null && !SpareHaulChore());
                     break;
                 case OutpostOrder.Build:
                     if (sites != null) BuilderDay(h, ref b);
@@ -521,6 +524,8 @@ namespace SeaSick.World
                     break;
                 case OutpostOrder.Work:
                 {
+                    // A runner's next barrow at once (2026-10-02).
+                    if (IsRunner(h)) { RunnerDay(h, ref b); break; }
                     if (!IsStation(h.target)) break;
                     var s = StationOfHand(h);
                     if (s != null) WorkerDay(h, s, stations.IndexOf(s), ref b);

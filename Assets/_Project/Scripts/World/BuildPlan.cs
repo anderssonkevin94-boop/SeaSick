@@ -355,6 +355,12 @@ namespace SeaSick.World
             resource = Res.Timber,
             baseCost = 16,
             storeCapacity = 20,
+            // **Runners work here (2026-10-02, approved design):** a Work
+            // hand on the store hut pushes a barrow and does the camp's
+            // hauling (OutpostLedger.Runners.cs). The position is what lets
+            // the Hand, `Outpost.Assign` and the caps treat it as a post;
+            // it has no recipes, so it is not a station (`IsStation`).
+            position = "runner",
             footprint = new Vector2(6.46f, 5.14f),
             ridge = 3.84f,
             // Astra's level-one storage hut (art-staging/storage-astra-lvl1-v1,
