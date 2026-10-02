@@ -17,7 +17,7 @@
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
     margin: 0;
     padding: 0;
-    white-space: nowrap;
+    white-space: normal;
 }
 .ys .ys-black, .ys .ys-ttl-b, .ys .ys-sec-title, .ys .ys-sn, .ys .ys-mn, .ys .ys-dh-title,
 .ys .ys-tab-label, .ys .ys-tot-v, .ys .ys-tot-k, .ys .ys-cnt-n, .ys .ys-strip-label,
@@ -144,7 +144,7 @@
 }
 .ys-sec-head { flex-direction: row; align-items: center; }
 .ys .ys-sec-title { font-size: 16px; }
-.ys .ys-sec-sub { font-size: 12.5px; color: rgb(166, 186, 198); margin-left: 6px; flex-grow: 1; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
+.ys .ys-sec-sub { font-size: 12.5px; color: rgb(166, 186, 198); margin-left: 6px; flex-grow: 1; flex-shrink: 1; min-width: 0; }
 .ys-cnt { flex-direction: row; flex-shrink: 0; }
 .ys-cnt-chip {
     flex-direction: row;
@@ -195,7 +195,7 @@
     flex-grow: 1;
     flex-basis: 0;
     min-width: 0;
-    height: 50px;
+    min-height: 50px;
     border-radius: 12px;
     background-color: rgb(42, 29, 18);
     border-width: 2px;
@@ -224,8 +224,8 @@
     justify-content: center;
     flex-shrink: 0;
 }
-.ys .ys-sn { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; }
-.ys .ys-ss { font-size: 11.5px; color: rgb(216, 195, 162); overflow: hidden; text-overflow: ellipsis; }
+.ys .ys-sn { font-size: 13.5px; }
+.ys .ys-ss { font-size: 11.5px; color: rgb(216, 195, 162); }
 
 .ys-del { position: absolute; top: -14px; right: -14px; width: 44px; height: 44px; align-items: center; justify-content: center; }
 .ys .ys-del-dot {

@@ -77,25 +77,29 @@
  * ------------------------------------------------------------------ */
 
 .ck-col { flex-grow: 1; flex-shrink: 1; min-height: 0; overflow: hidden; }
-.ck-pills { flex-direction: row; flex-wrap: nowrap; margin-top: 8px; flex-shrink: 0; }
+/* Pills wrap onto further rows; a long pill takes its own row and its words
+ * wrap inside it (2026-10-02 rule: UI text is never cut with an ellipsis). */
+.ck-pills { flex-direction: row; flex-wrap: wrap; margin-top: 8px; flex-shrink: 0; }
 .st .ck-pill {
-    height: 44px;
+    min-height: 44px;
     min-width: 0;
+    max-width: 100%;
     flex-shrink: 1;
-    padding: 0 14px;
-    margin: 0 8px 0 0;
+    padding: 5px 14px;
+    margin: 0 8px 8px 0;
     border-radius: 22px;
     background-color: rgb(19, 34, 46);
     border-width: 2px;
     border-color: rgb(44, 74, 94);
     color: rgb(232, 242, 246);
     font-size: 14px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
 .st .ck-pill:disabled { opacity: 0.6; }
+/* A pill that carries a sentence (a blocker, a two-tap question): its own
+ * full-width row, words left-aligned like the notes (ShipSheet). */
+.st .ck-pill--line { width: 100%; margin-right: 0; border-radius: 16px; -unity-text-align: middle-left; }
 .st .ck-pill--ice { border-color: rgb(164, 210, 232); color: rgb(164, 210, 232); }
 .st .ck-pill--wait { border-color: rgb(240, 195, 106); color: rgb(240, 195, 106); }
 .st .ck-pill--good { border-color: rgb(159, 224, 194); color: rgb(159, 224, 194); }
@@ -169,6 +173,6 @@
 .st .gr-row:hover { background-color: rgb(26, 48, 64); }
 .st .gr-row .ck-av { width: 36px; height: 36px; border-radius: 18px; margin-right: 10px; }
 .st .gr-row .ck-av-t { font-size: 17px; }
-.st .gr-name { font-size: 17px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.st .gr-name { font-size: 17px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); white-space: normal; max-width: 100%; }
 .st .gr-sub { font-size: 13px; color: rgb(166, 186, 198); white-space: normal; max-width: 100%; }
 .st .gr-go { font-size: 26px; color: rgb(110, 132, 148); margin-left: 8px; flex-shrink: 0; }

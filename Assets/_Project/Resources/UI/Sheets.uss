@@ -128,7 +128,7 @@
     color: rgb(31, 45, 56);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Fraunces-Black.ttf");
     -unity-font-style: normal;
-    white-space: nowrap;
+    white-space: normal;
 }
 
 .sheet-eyebrow {
@@ -454,7 +454,7 @@
     font-size: 17px;
     color: rgb(244, 232, 207);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
-    white-space: nowrap;
+    white-space: normal;
 }
 
 .chart-tab-weather {
@@ -498,7 +498,7 @@
 
 /* 44px is the thumb floor this project holds every touch target to. */
 .sheet-tab {
-    height: 44px;
+    min-height: 44px;
     flex-grow: 1;
     flex-basis: 0;
     border-width: 0;
@@ -508,9 +508,8 @@
     font-size: 13px;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
     margin: 0;
-    padding: 0;
-    white-space: nowrap;
-    overflow: hidden;
+    padding: 2px 2px;
+    white-space: normal;
 }
 
 .sheet-tab:hover {
@@ -581,7 +580,7 @@
     font-size: 14px;
     color: rgb(31, 45, 56);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
-    white-space: nowrap;
+    white-space: normal;
 }
 
 /* ---------------- the pager strip ----------------
@@ -625,8 +624,7 @@
     color: rgb(31, 45, 56);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
     -unity-text-align: middle-center;
-    white-space: nowrap;
-    overflow: hidden;
+    white-space: normal;
 }
 
 .sheet-dots {
@@ -683,7 +681,7 @@
 
 .sheet-fit .st .st-section { margin-top: 8px; }
 .sheet-fit .st .st-upgrade { margin-top: 10px; }
-.sheet-fit .st .st-btn { height: 48px; }
+.sheet-fit .st .st-btn { height: auto; min-height: 48px; }
 .sheet-fit .st .st-seg-btn { height: 48px; }
 .sheet-fit .st .st-seg { padding: 3px; border-radius: 14px; }
 .sheet-fit .st .st-worker-person { min-height: 48px; }

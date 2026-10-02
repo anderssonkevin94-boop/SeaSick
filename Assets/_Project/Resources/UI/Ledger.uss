@@ -15,14 +15,14 @@
 
 /* ---------------- alert strip ---------------- */
 .ledger-alerts {
-    position: absolute; height: 36px; flex-direction: row; overflow: hidden;
+    position: absolute; min-height: 36px; flex-direction: row; flex-wrap: wrap;
 }
 .ledger-chip {
-    flex-shrink: 0; height: 36px; margin: 0 6px 0 0; padding: 0 12px;
-    border-radius: 18px; border-width: 1.5px; font-size: 13px; white-space: nowrap;
+    flex-shrink: 1; min-height: 36px; margin: 0 6px 6px 0; padding: 4px 12px;
+    border-radius: 18px; border-width: 1.5px; font-size: 13px; white-space: normal;
     -unity-text-align: middle-center;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
-    max-width: 260px; overflow: hidden; text-overflow: ellipsis;
+    max-width: 260px;
 }
 .ledger-chip--raid { background-color: rgb(228, 98, 58); border-width: 0; color: rgb(255, 255, 255);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
@@ -64,12 +64,12 @@
 .ledger-head-col { flex-grow: 1; flex-shrink: 1; min-width: 0; flex-direction: column; }
 .ledger-title {
     font-size: 21px; color: rgb(232, 242, 246); margin: 0; padding: 0;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    white-space: normal;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
 .ledger-subtitle {
     font-size: 13px; color: rgb(166, 186, 198); margin: 2px 0 0 0; padding: 0;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    white-space: normal;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
 }
 .ledger-head-btn {
@@ -119,8 +119,8 @@
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
 .ledger-sub {
-    font-size: 13px; margin: 0; padding: 0; white-space: nowrap; flex-shrink: 1; min-width: 0;
-    overflow: hidden; text-overflow: ellipsis; -unity-text-align: middle-right;
+    font-size: 13px; margin: 0; padding: 0; white-space: normal; flex-shrink: 1; min-width: 0;
+    -unity-text-align: middle-right;
     color: rgb(166, 186, 198);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
 }

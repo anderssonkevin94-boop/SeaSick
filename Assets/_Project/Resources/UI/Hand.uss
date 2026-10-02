@@ -16,7 +16,7 @@
 .hs-av { width: 46px; height: 46px; flex-shrink: 0; }
 .hs-av .st-avatar { width: 46px; height: 46px; border-radius: 23px; }
 .st.hs-head .st-title { font-size: 24px; }
-.st.hs-head .st-sub { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st.hs-head .st-sub { font-size: 15px; white-space: normal; }
 .st.hs-head .st-square { width: 46px; height: 46px; }
 .hs-badge {
     position: absolute;
@@ -49,8 +49,8 @@
 }
 .hs-now-ico-img { width: 32px; height: 32px; -unity-background-scale-mode: scale-to-fit; }
 .hs-now-words { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-width: 0; }
-.st .hs-now-t { font-size: 17px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.st .hs-now-s { font-size: 14px; color: rgb(166, 186, 198); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st .hs-now-t { font-size: 17px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); white-space: normal; }
+.st .hs-now-s { font-size: 14px; color: rgb(166, 186, 198); margin-top: 1px; white-space: normal; }
 
 .hs-legs { flex-direction: row; margin-top: 8px; }
 .hs-leg {
@@ -77,9 +77,9 @@
     flex-grow: 1;
     flex-basis: 0;
     min-width: 0;
-    height: 30px;
+    min-height: 30px;
     margin-left: 6px;
-    padding: 0 8px;
+    padding: 3px 8px;
     border-radius: 15px;
     background-color: rgb(19, 34, 46);
     border-width: 2px;
@@ -90,7 +90,7 @@
 }
 .hs-chip--first { margin-left: 0; }
 .st .hs-chip-k { font-size: 12px; color: rgb(127, 151, 166); letter-spacing: 1px; margin-right: 5px; flex-shrink: 0; }
-.st .hs-chip-v { font-size: 14px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
+.st .hs-chip-v { font-size: 14px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); white-space: normal; flex-shrink: 1; min-width: 0; }
 .st .hs-tone--good { color: rgb(159, 224, 194); }
 .st .hs-tone--warn { color: rgb(240, 195, 106); }
 .st .hs-tone--bad { color: rgb(246, 146, 128); }
@@ -99,14 +99,14 @@
 
 .hs-eye-row { flex-direction: row; align-items: flex-end; margin-top: 8px; margin-bottom: 6px; flex-shrink: 0; }
 .st .hs-eye-row .st-eyebrow { margin-bottom: 0; font-size: 12px; }
-.st .hs-eye-em { font-size: 12px; color: rgb(110, 132, 148); margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; }
+.st .hs-eye-em { font-size: 12px; color: rgb(110, 132, 148); margin-left: 8px; white-space: normal; flex-shrink: 1; min-width: 0; }
 
 .hs-grid { flex-direction: row; flex-wrap: wrap; justify-content: flex-start; flex-shrink: 0; }
 .st .hs-tile {
     width: 32%;
-    height: 50px;
+    min-height: 50px;
     margin: 0 2% 6px 0;
-    padding: 0 6px;
+    padding: 4px 6px;
     border-radius: 12px;
     background-color: rgb(19, 34, 46);
     border-width: 2px;
@@ -124,8 +124,8 @@
 .hs-tile-ico { width: 26px; height: 26px; margin-right: 6px; flex-shrink: 0; -unity-background-scale-mode: scale-to-fit; }
 .hs-tile--lock .hs-tile-ico { opacity: 0.4; }
 .hs-tile-words { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-width: 0; align-items: flex-start; }
-.st .hs-tile-n { font-size: 14px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.st .hs-tile-s { font-size: 12px; color: rgb(166, 186, 198); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.st .hs-tile-n { font-size: 14px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); white-space: normal; max-width: 100%; }
+.st .hs-tile-s { font-size: 12px; color: rgb(166, 186, 198); white-space: normal; max-width: 100%; }
 .st .hs-tile--on .hs-tile-s { color: rgb(159, 224, 194); }
 .st .hs-tile--lock .hs-tile-s { color: rgb(246, 146, 128); }
 .st .hs-tile--lock .hs-tile-n { color: rgb(166, 186, 198); }
@@ -145,7 +145,7 @@
 /* --- the actions and the toast ------------------------------------------ */
 
 .hs-acts { flex-direction: row; margin-top: 8px; flex-shrink: 0; }
-.st .hs-act { flex-grow: 1; flex-basis: 0; height: 50px; margin: 0 0 0 8px; padding: 0 8px; }
+.st .hs-act { flex-grow: 1; flex-basis: 0; height: auto; min-height: 50px; margin: 0 0 0 8px; padding: 4px 8px; white-space: normal; }
 .st .hs-act--first { margin-left: 0; }
 .st .hs-act--stop { border-color: rgb(246, 146, 128); background-color: rgb(42, 26, 26); color: rgb(246, 146, 128); }
 .st .hs-act--stop:hover { background-color: rgb(58, 34, 34); }

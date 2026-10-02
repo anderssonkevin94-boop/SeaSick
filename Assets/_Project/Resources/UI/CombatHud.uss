@@ -18,8 +18,8 @@
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
 .combat-note {
-    height: 16px; margin: 0 0 6px 4px; padding: 0; font-size: 12px; white-space: nowrap;
-    color: rgba(232, 242, 246, 0.85); -unity-text-align: middle-left; overflow: hidden;
+    min-height: 16px; margin: 0 0 6px 4px; padding: 0; font-size: 12px; white-space: normal;
+    color: rgba(232, 242, 246, 0.85); -unity-text-align: middle-left;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
 .combat-row { flex-direction: row; align-items: stretch; height: 64px; margin: 0; padding: 0; }

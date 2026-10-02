@@ -1792,11 +1792,9 @@ namespace SeaSick.UI.Sheets
                     line.Add(pill);
                     sub.style.flexShrink = 1f;
                     sub.style.minWidth = 0f;
-                    sub.style.overflow = Overflow.Hidden;
-                    sub.style.whiteSpace = WhiteSpace.NoWrap;
-                    sub.style.textOverflow = TextOverflow.Ellipsis;
+                    // Wraps, never cut (2026-10-02 rule: no ellipsis in UI text).
+                    sub.style.whiteSpace = WhiteSpace.Normal;
                     line.style.minWidth = 0f;
-                    line.style.overflow = Overflow.Hidden;
                     line.Add(sub);
                     words.Add(line);
                     Root.Add(words);

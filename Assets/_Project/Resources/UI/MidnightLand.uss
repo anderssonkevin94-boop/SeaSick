@@ -87,7 +87,7 @@
 }
 .pack-tile-name {
     font-size: 12px; color: rgb(166, 186, 198); -unity-text-align: middle-center; margin: 0; padding: 0;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    white-space: normal;
 }
 .pack-tile-pending { font-size: 12px; color: rgb(164, 210, 232); -unity-text-align: middle-center; margin: 0; padding: 0; height: 16px; }
 .pack-tile-btns { flex-direction: row; margin-top: 3px; }
@@ -121,7 +121,7 @@
 .land-flow-progress { height: 7px; width: 90%; margin-top: 5px; background-color: rgb(74,96,108); border-radius: 3px; }
 .land-flow-progress-fill { height: 7px; background-color: rgb(127,200,173); border-radius: 3px; }
 .land-production { flex-shrink: 0; }
-.land-production-status { height: 40px; margin: 0; white-space: normal; overflow: hidden; }
+.land-production-status { min-height: 40px; margin: 0; white-space: normal; }
 .land-production .land-flow { height: 86px; }
 .land-production .land-flow-cell .land-icon { width: 25px; height: 25px; }
 .land-product-choice, .land-amount-choice { height: 44px; min-height: 44px; margin: 0; flex-shrink: 0; }
@@ -275,7 +275,7 @@
 .thumb-glyph { width: 28px; height: 28px; flex-shrink: 0; }
 .thumb-label {
     margin: 4px 0 0 0; padding: 0; font-size: 15px; color: rgb(232, 242, 246);
-    -unity-text-align: middle-center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    -unity-text-align: middle-center; white-space: normal; flex-shrink: 0;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
 .thumb-btn--primary .thumb-label { color: rgb(11, 23, 32); }

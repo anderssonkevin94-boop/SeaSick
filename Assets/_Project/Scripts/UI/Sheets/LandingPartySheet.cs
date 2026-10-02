@@ -151,9 +151,8 @@ namespace SeaSick.UI.Sheets
                 sub.RemoveFromHierarchy();
                 sub.style.marginTop = 2f;
                 sub.style.flexShrink = 0f;
-                sub.style.whiteSpace = WhiteSpace.NoWrap;
-                sub.style.overflow = Overflow.Hidden;
-                sub.style.textOverflow = TextOverflow.Ellipsis;
+                // Wraps, never cut (2026-10-02 rule: no ellipsis in UI text).
+                sub.style.whiteSpace = WhiteSpace.Normal;
                 words.Add(sub);
             }
             FillHeader();
@@ -311,7 +310,7 @@ namespace SeaSick.UI.Sheets
                 b.style.flexDirection = FlexDirection.Column;
                 b.style.justifyContent = Justify.Center;
                 b.style.alignItems = Align.Center;
-                b.style.height = 60f;
+                b.style.minHeight = 60f;   // grows if a name wraps
                 var g = new LandGlyph(OrderGlyph(t), t == order ? MidnightLandHud.Ice : new Color32(201, 216, 224, 255));
                 g.style.width = 22f; g.style.height = 22f;
                 b.Add(g);
@@ -434,7 +433,7 @@ namespace SeaSick.UI.Sheets
                 if (reach <= 0) b.AddToClassList("ck-tile--short");
                 b.style.width = Length.Percent(23.5f);
                 b.style.marginRight = i % 4 == 3 ? 0f : (StyleLength)Length.Percent(2f);
-                b.style.height = 64f;
+                b.style.minHeight = 64f;   // grows if a name wraps
                 b.style.flexDirection = FlexDirection.Column;
                 b.style.justifyContent = Justify.Center;
                 b.style.alignItems = Align.Center;

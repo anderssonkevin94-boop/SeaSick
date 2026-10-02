@@ -376,7 +376,10 @@ namespace SeaSick.UI.Sheets
                     chip.style.scale = new Scale(new Vector3(k, k, 1f));
                 }
 
-                float h = (NoteHeight + NoteGap + RowHeight) * ppd;
+                // The note wraps instead of being cut (2026-10-02): reserve what it is.
+                float nh = note.resolvedStyle.height;
+                nh = float.IsNaN(nh) ? NoteHeight : Mathf.Max(NoteHeight, nh);
+                float h = (nh + NoteGap + RowHeight) * ppd;
                 Rect = new Rect(x, Screen.height - bottom - h, rowW, h);
 
                 var lb = lockBtn.worldBound;

@@ -327,13 +327,16 @@ namespace SeaSick.UI.Sheets
                 anchorHint = new Label { pickingMode = PickingMode.Position };
                 anchorHint.AddToClassList("thumb-card-hint");
                 anchorHint.style.position = Position.Absolute;
-                anchorHint.style.height = HintHeight;
+                // Never cut (Kevin, 2026-10-02: "you cut off the sentence
+                // without me knowing wtf it says"): a long hint wraps and the
+                // pill grows upward from its bottom anchor.
+                anchorHint.style.minHeight = HintHeight;
                 anchorHint.style.marginTop = 0f;
                 anchorHint.style.paddingLeft = 14f;
                 anchorHint.style.paddingRight = 14f;
-                anchorHint.style.whiteSpace = WhiteSpace.NoWrap;
-                anchorHint.style.overflow = Overflow.Hidden;
-                anchorHint.style.textOverflow = TextOverflow.Ellipsis;
+                anchorHint.style.paddingTop = 5f;
+                anchorHint.style.paddingBottom = 5f;
+                anchorHint.style.whiteSpace = WhiteSpace.Normal;
                 anchorHint.style.unityTextAlign = TextAnchor.MiddleCenter;
                 anchorHint.style.backgroundColor = new Color(11f / 255f, 23f / 255f, 32f / 255f, .92f);
                 anchorHint.style.borderTopWidth = anchorHint.style.borderBottomWidth =
@@ -498,9 +501,12 @@ namespace SeaSick.UI.Sheets
                         anchorHint.style.left = left;
                         anchorHint.style.width = width;
                         anchorHint.style.bottom = hb;
-                        HintRect = new Rect(left * inv, Screen.height - (hb + HintHeight) * inv,
-                                            width * inv, HintHeight * inv);
-                        HintPanel = HintHeight + Gap;
+                        // A wrapped hint is taller than one line: reserve what it is.
+                        float hh = anchorHint.resolvedStyle.height;
+                        hh = float.IsNaN(hh) ? HintHeight : Mathf.Max(HintHeight, hh);
+                        HintRect = new Rect(left * inv, Screen.height - (hb + hh) * inv,
+                                            width * inv, hh * inv);
+                        HintPanel = hh + Gap;
                         ReservePanel += HintPanel;
                     }
                     // No land HUD here to keep the IMGUI HUD (the helm's

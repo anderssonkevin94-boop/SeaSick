@@ -170,7 +170,9 @@ namespace SeaSick.UI.Sheets
             cargoLink.style.paddingLeft = 14f;
             cargoLink.style.paddingRight = 14f;
             cargoLinkT = new Label { pickingMode = PickingMode.Ignore };
-            cargoLinkT.style.whiteSpace = WhiteSpace.NoWrap;
+            cargoLinkT.style.whiteSpace = WhiteSpace.Normal;
+            cargoLinkT.style.flexShrink = 1f;
+            cargoLinkT.style.minWidth = 0f;
             cargoLinkArrow = new Label("→") { pickingMode = PickingMode.Ignore };
             cargoLink.text = "";
             cargoLink.Add(cargoLinkT);
@@ -238,6 +240,9 @@ namespace SeaSick.UI.Sheets
                 if (yardPill.text != t) yardPill.text = t;
                 yardPill.SetEnabled(ok);
                 CardKit.PillTone(yardPill, ok ? "ice" : "wait");
+                // The blocker is a sentence ("Build a dry dock near your home
+                // berth"): its own full-width row, every word shown.
+                CardKit.PillLine(yardPill, !ok);
             }
 
             var a = Anchor;
@@ -249,6 +254,7 @@ namespace SeaSick.UI.Sheets
                 : Time.unscaledTime < homeArmedUntil ? "Tap again · make this home?"
                 : SeaSick.World.Dock.Home == null ? "Make this island home" : "Move home here";
             if (homePill.text != ht) homePill.text = ht;
+            CardKit.PillLine(homePill, feedback || Time.unscaledTime < homeArmedUntil);
 
             // The hull: a pill only when there is something to press.
             var hull = a != null ? a.GetComponent<HullIntegrity>() : null;
@@ -266,9 +272,11 @@ namespace SeaSick.UI.Sheets
                 if (repairPill.text != st) repairPill.text = st;
                 repairPill.SetEnabled(false);
                 CardKit.PillTone(repairPill, "wait");
+                CardKit.PillLine(repairPill, true);
                 return;
             }
             WatchTiles.Show(repairPill, show);
+            CardKit.PillLine(repairPill, false);
             if (show)
             {
                 string rt = on ? $"Stop repairs · {pct}%" : $"Repair hull · {pct}%";
@@ -293,6 +301,7 @@ namespace SeaSick.UI.Sheets
                 : Time.unscaledTime < seaHomeArmedUntil ? "Tap again · sail home?" : "Home";
             if (seaHomePill.text != t) seaHomePill.text = t;
             CardKit.PillTone(seaHomePill, refused ? "wait" : "ice");
+            CardKit.PillLine(seaHomePill, refused);
             if (ledgerPill != null) WatchTiles.Show(ledgerPill, SeaLedger.Available);
         }
 

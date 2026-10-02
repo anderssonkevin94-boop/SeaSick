@@ -180,6 +180,14 @@ namespace SeaSick.UI.Sheets
                 b.EnableInClassList("ck-pill--" + t, t == tone);
         }
 
+        /// A pill that carries a sentence (a blocker, a two-tap question)
+        /// takes its own full-width row and wraps (`.ck-pill--line`,
+        /// Lookout.uss): UI text is never cut with an ellipsis (2026-10-02).
+        public static void PillLine(Button b, bool on)
+        {
+            if (b != null) b.EnableInClassList("ck-pill--line", on);
+        }
+
         public static VisualElement Acts(VisualElement root)
         {
             var acts = WatchTiles.Box("hs-acts");

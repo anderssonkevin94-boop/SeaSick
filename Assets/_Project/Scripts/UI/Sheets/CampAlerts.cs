@@ -214,7 +214,7 @@ namespace SeaSick.UI.Sheets
         static bool IsWalledOff(OutpostHand h) =>
             h.bodyBlocked != null && h.bodyBlocked.StartsWith("walled off", StringComparison.Ordinal);
 
-        /// A stall reason cut down to chip length. "waiting for stone: none
+        /// A stall reason in chip words. "waiting for stone: none
         /// left here" -> "no stone left"; anything else keeps its head.
         internal static string Short(string why)
         {
@@ -231,7 +231,8 @@ namespace SeaSick.UI.Sheets
             }
             int dash = why.IndexOf(" — ", StringComparison.Ordinal);
             if (dash > 0) why = why.Substring(0, dash);
-            return why.Length > 24 ? why.Substring(0, 23) + "…" : why;
+            // Never cut mid-word with an ellipsis (Kevin, 2026-10-02): the chip wraps.
+            return why;
         }
 
         /// Camp › People (2026-09-27; was the campfire sheet's hands tab),
