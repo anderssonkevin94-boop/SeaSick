@@ -85,8 +85,11 @@ namespace SeaSick.Dev
             {"HelmTuning.rudderPerRim",        (0.3f, 1.5f)},
             {"HelmTuning.rudderCurve",         (0.5f, 3f)},
             {"HelmTuning.rudderMoveSpeed",     (1f, 12f)},
-            {"HelmTuning.rudderReturnPerSec",  (0.5f, 8f)},
+            {"HelmTuning.rudderReturnPerSec",  (0.5f, 15f)}, // 2026-10-02: default 8
             {"HelmTuning.throttleDeadZone",    (0f, 0.3f)},
+            {"HelmTuning.holdGain",            (0.1f, 2f)},
+            {"HelmTuning.holdMaxDegPerSec",    (0.5f, 10f)},
+            {"HelmTuning.holdCaptureDegPerSec",(0.2f, 5f)},
 
             {"HandlingTuning.yawTauBuild",          (0.1f, 1.5f)},
             {"HandlingTuning.yawTauRelease",        (0.1f, 2f)},
@@ -98,6 +101,8 @@ namespace SeaSick.Dev
             {"HandlingTuning.topSpeedScale",        (0.5f, 2f)},   // 2 = PaddleDrive.TopSpeedNow clamp; Kevin pinned 1.5 (09-24; default now 1.15)
             {"HandlingTuning.coastDownScale",       (0.3f, 3f)},
             {"HandlingTuning.paddleResponsiveness", (0f, 1.5f)},
+            {"HandlingTuning.yawReleaseBrake",      (0f, 120f)},
+            {"HandlingTuning.pivotTurnDegPerSec",   (0f, 15f)},
 
             {"JuiceTuning.camFovBoostDeg",    (0f, 25f)},
             {"JuiceTuning.camDropMeters",     (0f, 5f)},
@@ -107,7 +112,16 @@ namespace SeaSick.Dev
             {"JuiceTuning.camMaxOffCentreDeg",(0f, 18f)},  // past ~18 she leaves a portrait frame
             {"JuiceTuning.camTurnOrbitDeg",   (0f, 30f)},  // 0 = no orbit; 25 = the old quarter
             {"JuiceTuning.camDollyMax",       (1f, 1.5f)}, // 1.3 = the old far end
-            {"JuiceTuning.sprayScale",        (0f, 5f)},   // Kevin pinned 3; particle caps bound it
+            // 2026-10-02 sea camera V2 (camStyleV2 = the old/new switch)
+            {"JuiceTuning.camPitchDeg",         (10f, 26f)},
+            {"JuiceTuning.camRisePitchDeg",     (0f, 12f)},
+            {"JuiceTuning.camRiseBackFraction", (0f, 0.6f)},
+            {"JuiceTuning.camRiseSeconds",      (0.1f, 2f)},
+            {"JuiceTuning.camTurnLeadDeg",      (0f, 20f)},
+            {"JuiceTuning.camLeadSeconds",      (0f, 1.5f)},
+            {"JuiceTuning.camLockSwingDeg",     (0f, 85f)},
+            {"JuiceTuning.camLockMaxBack",      (25f, 80f)},
+            {"JuiceTuning.sprayScale",       (0f, 5f)},   // Kevin pinned 3; particle caps bound it
             {"JuiceTuning.wakeScale",         (0f, 3f)},
             {"JuiceTuning.soundPitchRange",   (0f, 1f)},
 
@@ -187,26 +201,42 @@ namespace SeaSick.Dev
         /// this change drops them from the saved JSON (rewritten without them)
         /// and sets `RebaseKey`. Later SAVEs write whatever he tunes and are
         /// kept, because the flag is already set.
-        static readonly HashSet<string> RebasedKeys = new HashSet<string>
+        /// 2026-10-02 rebase 2: steering and sea camera rework (Kevin: "I
+        /// can't get the boat where I want it", "turning blind") moved more
+        /// defaults; each rebase level drops its own keys once.
+        static readonly string[][] RebasedKeys =
         {
-            "HandlingTuning.turnCircleLengths",
-            "HandlingTuning.turnRateAtRest01",
-            "HandlingTuning.topSpeedScale",
-            "JuiceTuning.camFovBoostDeg",
-            "JuiceTuning.camDropMeters",
+            new[]
+            {
+                "HandlingTuning.turnCircleLengths",
+                "HandlingTuning.turnRateAtRest01",
+                "HandlingTuning.topSpeedScale",
+                "JuiceTuning.camFovBoostDeg",
+                "JuiceTuning.camDropMeters",
+            },
+            new[]
+            {
+                "HandlingTuning.yawTauBuild",
+                "HandlingTuning.yawTauRelease",
+                "HandlingTuning.turnCircleLengths",
+                "HelmTuning.rudderMoveSpeed",
+                "HelmTuning.rudderReturnPerSec",
+            },
         };
         const string RebaseKey = "FeelLab.rebase";
 
         void Awake()
         {
             savedAtStartup = ParseFlatJson(PlayerPrefs.GetString(PrefsKey, string.Empty));
-            if (PlayerPrefs.GetInt(RebaseKey, 0) < 1)
+            int done = PlayerPrefs.GetInt(RebaseKey, 0);
+            if (done < RebasedKeys.Length)
             {
                 bool changed = false;
-                foreach (var key in RebasedKeys)
-                    changed |= savedAtStartup.Remove(key);
+                for (int level = done; level < RebasedKeys.Length; level++)
+                    foreach (var key in RebasedKeys[level])
+                        changed |= savedAtStartup.Remove(key);
                 if (changed) PlayerPrefs.SetString(PrefsKey, DictToJson(savedAtStartup));
-                PlayerPrefs.SetInt(RebaseKey, 1);
+                PlayerPrefs.SetInt(RebaseKey, RebasedKeys.Length);
                 PlayerPrefs.Save();
             }
         }

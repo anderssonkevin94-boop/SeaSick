@@ -36,8 +36,35 @@ namespace SeaSick.Ship
         /// Portrait half-FOV is ~17-20, so 12 keeps her on screen.
         public static float camMaxOffCentreDeg = 12f;
         /// Coaster sailing camera: side swing of the seat in a sustained turn, degrees. 0..30
-        /// (2026-09-29: was a hard-coded 25 in SailingTurnOrbit.)
+        /// (2026-09-29: was a hard-coded 25 in SailingTurnOrbit.) The seat goes to the
+        /// OUTSIDE of the turn, which turns the view (through her) toward the inside.
         public static float camTurnOrbitDeg = 8f;
+        /// **Sailing camera V2 (2026-10-02)**, Kevin: "when I turn I'm often
+        /// turning blind" and "when I engage the enemy I have a real hard time
+        /// controlling the ship". Off = the camera exactly as it was before,
+        /// for an A/B on the phone. The knobs below only act while it is on.
+        public static bool camStyleV2 = true;
+        /// Upright cruise pitch, degrees down to the look point (was an implicit ~15.7
+        /// on the coaster). Capped so the horizon stays under 84% of the screen. 10..26
+        public static float camPitchDeg = 20f;
+        /// Extra pitch when she needs to see (slow, hard turn, raider or land near). 0..12
+        public static float camRisePitchDeg = 6f;
+        /// ...and how much further back the seat sits then, as a fraction. 0..0.6
+        public static float camRiseBackFraction = 0.2f;
+        /// Time constant of that rise, seconds; it settles back 2.5x slower so a
+        /// chattering helm cannot pump the camera up and down.             0.1..2
+        public static float camRiseSeconds = 0.5f;
+        /// The aim leans this far INTO a turn, degrees, keyed mostly off the rudder
+        /// so it moves before she does.                                    0..20
+        public static float camTurnLeadDeg = 12f;
+        /// Smoothing on that lean, seconds.                                 0..1.5
+        public static float camLeadSeconds = 0.5f;
+        /// Locked on: most the seat may swing off dead astern, degrees. Under 90, so her
+        /// bow never points at the lens and the stick never reads mirrored; 30 lost a
+        /// raider on the beam off a portrait frame (smoke test 2026-10-02).  0..85
+        public static float camLockSwingDeg = 70f;
+        /// Locked on: farthest astern the seat backs off to hold both ships, metres. 25..80
+        public static float camLockMaxBack = 45f;
         /// Camera roll (deg) per deg/s of yaw rate, INTO the turn.     0..0.5
         public static float camLeanPerYawDeg = 0.028f;
         /// Smoothing time on the three camera effects above, seconds. 0 = instant. 0..1

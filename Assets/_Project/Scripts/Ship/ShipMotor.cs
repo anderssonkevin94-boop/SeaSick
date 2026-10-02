@@ -848,6 +848,13 @@ namespace SeaSick.Ship
             return Rudder;
         }
 
+        // Heading hold for the ladder (sail) hulls (2026-10-02, see
+        // `HeadingHold`); the steamer's lives in `PaddleDrive`. The helm is
+        // looked up once: AI hulls have none and are never held.
+        HeadingHold yawHold;
+        HelmInput holdHelm;
+        bool holdHelmLooked;
+
         void FixedUpdate()
         {
             if (rb == null) return;
@@ -936,6 +943,10 @@ namespace SeaSick.Ship
             float turnRate = peakTurn
                 * HandlingTuning.TurnRate01(speedFactor, HandlingTuning.turnRateAtRest01)
                 * (1f - 0.15f * laden - 0.20f * over) * helm;
+            // The pivot floor (2026-10-02), as on the steamer: she can be
+            // pointed from a standstill, whatever the canvas is doing.
+            turnRate = Mathf.Max(turnRate,
+                HandlingTuning.PivotRate(speedFactor) * Mathf.Rad2Deg * helm);
             // --- the broach: a DIVERGENT yaw the rudder has to hold off -----
             //
             // Square to the face she is stable; a few degrees off and the sea
@@ -973,6 +984,14 @@ namespace SeaSick.Ship
 
             Vector3 av = rb.angularVelocity;
             float targetYawRate = effectiveRudder * turnRate * Mathf.Deg2Rad + broachBias;
+            // Heading hold: once the helm is centred and the turn has died
+            // it owns the rudder's share of the command; the broach still
+            // pushes on top, so a following sea is still felt and fought.
+            if (!holdHelmLooked) { holdHelm = GetComponent<HelmInput>(); holdHelmLooked = true; }
+            bool holdOk = !Anchored && !AutopilotTarget.HasValue && holdHelm != null
+                          && holdHelm.isActiveAndEnabled && holdHelm.HoldAllowed;
+            float holdRate = yawHold.Step(holdOk, effectiveRudder, Heading, av.y, dt);
+            if (yawHold.Active) targetYawRate = holdRate + broachBias;
             // First-order lag toward the commanded rate (was a 4 rad/s^2
             // rate limit: full rate in 0.08 s, dead in 0.04 s). tau is the
             // BUILD lag while the command is pulling away from zero and the
@@ -981,10 +1000,11 @@ namespace SeaSick.Ship
             // `yawResponse` (4 x hull scale on the ladder) scales the lag, so
             // the long hulls still start slower; the broach's rudder loss
             // (`helm`) slows it further, as it slowed the old limiter.
-            float yawTau = HandlingTuning.YawTau(targetYawRate, av.y)
-                * (BaseYawResponse / Mathf.Max(0.1f, yawResponse))
+            // 2026-10-02: plus HandlingTuning.yawReleaseBrake while easing
+            // (`YawStep`), stretched by the same factor as the lag.
+            float yawTauScale = (BaseYawResponse / Mathf.Max(0.1f, yawResponse))
                 / Mathf.Max(0.15f, helm);
-            av.y += (targetYawRate - av.y) * (1f - Mathf.Exp(-dt / yawTau));
+            av.y = HandlingTuning.YawStep(av.y, targetYawRate, dt, yawTauScale);
             rb.angularVelocity = av;
             float yaw01 = Mathf.Clamp(av.y / peakTurnRad, -1f, 1f);
 

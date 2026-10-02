@@ -80,7 +80,18 @@ namespace SeaSick.Combat
         // player is already the one deciding the ship's heading.
         [Range(0f, 1f)] [SerializeField] float leadFactor = 0.8f;
         [SerializeField] float engageRange = 150f;
-        [SerializeField] float gunStandoff = 46f;
+        // **Beatable circling (2026-10-02).** Kevin: "when I engage with the
+        // enemy I have a real hard time controlling the ship." At 46 m, 26
+        // deg of lead and 26 deg/s she swung round the player at ~21 deg/s,
+        // faster than the player's hull can turn, so no broadside could ever
+        // be held on her. Engaged, she now circles wider, slower and with a
+        // gentler helm: at 55 m, 0.85 x 17 m/s and 16 deg/s her bearing from
+        // the player moves at ~15 deg/s, which a ~22 deg/s player helm can
+        // catch and hold. Her approach (Chase outside engageRange) is as before.
+        [SerializeField] float gunStandoff = 55f;
+        [SerializeField] float engageLeadDeg = 16f;     // was orbitLeadDeg (26) while circling
+        [SerializeField] float engageTurnRate = 16f;    // deg/sec at speed while circling (was turnRate, 26)
+        [Range(0.3f, 1f)] [SerializeField] float engageSpeedFactor = 0.85f;
         // Same rail positions as the player's battery, because a raider is
         // wearing the player's hull — the geometry that fits one fits the other.
         [SerializeField] Vector2 gunFore = new Vector2(1.45f, 4.8f);
@@ -180,6 +191,15 @@ namespace SeaSick.Combat
         /// hit box at all.
         public Vector3 HitAxis => transform.forward * (length * 0.46f);
         public bool Alive => diedAt < 0f;
+
+        /// Her flat velocity over the water, for the player's gun crews to
+        /// lead her by (`CannonBattery.AimPointFor`). She moves by heading
+        /// and speed, not a rigidbody, so this is exactly what she does.
+        public Vector3 Velocity => Alive ? Forward() * speed : Vector3.zero;
+
+        /// True this frame while she is circling the player inside
+        /// `engageRange` (the gentler helm and wider standoff apply).
+        bool circling;
         public int HitPoints => hitPoints;
         public int DamageTaken => damage;
         public float Health01 => Mathf.Clamp01(1f - (float)damage / Mathf.Max(1, hitPoints));
@@ -588,6 +608,7 @@ namespace SeaSick.Combat
                 nextPlayerLookup = Time.unscaledTime + 1f;
             }
 
+            circling = false;
             Vector3 goal = DecideGoal();
             float desired = Steer(goal);
             Vector3 before = transform.position;
@@ -681,7 +702,8 @@ namespace SeaSick.Combat
                         Vector3 fromPlayer = Flat(pos - pp);
                         if (fromPlayer.sqrMagnitude < 1f) fromPlayer = -Forward();
                         float a = Mathf.Atan2(fromPlayer.x, fromPlayer.z) * Mathf.Rad2Deg
-                                  + orbitLeadDeg * patrolSign;
+                                  + engageLeadDeg * patrolSign;
+                        circling = true;
                         return pp + new Vector3(
                             Mathf.Sin(a * Mathf.Deg2Rad), 0f, Mathf.Cos(a * Mathf.Deg2Rad)) * gunStandoff;
                     }
@@ -919,7 +941,8 @@ namespace SeaSick.Combat
             // Raiders sail exactly the sea the player does: no polar, no no-go,
             // no tacking. They can steer anywhere, and heavy water on the bow
             // slows them by the same rule and the same amount.
-            float turn = turnRate * Mathf.Lerp(0.45f, 1f, Mathf.Clamp01(speed / maxSpeed));
+            float turn = (circling ? engageTurnRate : turnRate)
+                         * Mathf.Lerp(0.45f, 1f, Mathf.Clamp01(speed / maxSpeed));
             float delta = Mathf.DeltaAngle(heading, wantedHeading);
             heading += Mathf.Clamp(delta, -turn * dt, turn * dt);
 
@@ -928,7 +951,7 @@ namespace SeaSick.Combat
                 Forward(), 0.45f, out _, out _, out _);
 
             // Hard turns cost way, same as the player's hull.
-            float target = maxSpeed * sea
+            float target = maxSpeed * sea * (circling ? engageSpeedFactor : 1f)
                            * Mathf.Lerp(1f, 0.72f, Mathf.Clamp01(Mathf.Abs(delta) / 60f));
 
             // Aground: she holds. The wind is still on her sails in the fiction

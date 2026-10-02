@@ -112,6 +112,10 @@ namespace SeaSick.Ship
         void Start()
         {
             motor = GetComponent<ShipMotor>();
+            // The arcs on the water belong to the battery: added here so no
+            // bootstrap has to know about them (2026-10-02).
+            if (GetComponent<Combat.FiringArcs>() == null)
+                gameObject.AddComponent<Combat.FiringArcs>();
             // Only the authored four. A ship with a Shipyard on her calls
             // `Fit` instead, from the bays the player assigned to a battery,
             // and this default never runs.
@@ -451,16 +455,63 @@ namespace SeaSick.Ship
         public int AutoShots { get; private set; }
 
         [Header("Auto-fire")]
-        [Tooltip("Extra metres of slack either side of the target's hull a laid gun may be off and still fire. The shot's own aim assist is 8 m at the muzzle, so this only needs to cover the last of the laying.")]
-        [SerializeField] float autoFireSlack = 2.5f;
         [Tooltip("Fire out to this fraction of the gun's flat-water reach. Below 1 so a shot that falls just short is not the first thing the lock does.")]
         [Range(0.5f, 1.2f)] [SerializeField] float autoFireReach01 = 1f;
+        [Tooltip("How much of a raider's motion the crews lay ahead of her, 0..1. At 15 m/s and ~1.3 s of flight an unled ball lands ~20 m astern of her centre -- past her whole hull -- so a lock on a circling raider missed every time it fired.")]
+        [Range(0f, 1f)] [SerializeField] float crewLead01 = 1f;
+
+        // Muzzle speed over the water: the guns are laid ~9 deg up.
+        const float FlatSpeedOfMuzzle = 0.985f;
+
+        /// **Where a crew lays on a target** (2026-10-02): its hit centre,
+        /// plus where a raider will have sailed to by the time the ball
+        /// arrives. The handspike traverse already lays the gun on the
+        /// target; this only says WHERE on the target, so a ship still has
+        /// to bring a side to bear. Two passes, since the lead lengthens
+        /// the flight. Beasts carry no velocity and are laid on directly.
+        Vector3 AimPointFor(Combat.IHittable t, Vector3 from, float muzzleSpeed)
+        {
+            Vector3 aim = t.HitCentre;
+            if (crewLead01 <= 0f || !(t is Combat.EnemyShip raider)) return aim;
+            Vector3 v = raider.Velocity * crewLead01;
+            float flat = Mathf.Max(1f, muzzleSpeed * FlatSpeedOfMuzzle);
+            for (int i = 0; i < 2; i++)
+            {
+                Vector3 d = aim - from;
+                d.y = 0f;
+                aim = t.HitCentre + v * (d.magnitude / flat);
+            }
+            return aim;
+        }
+
+        /// **Can this gun reach the target at all?** Inside its flat range
+        /// and inside its traverse arc (rest bearing +- `MaxTraverseDeg`,
+        /// widened by the target's own half-width at that range). This is
+        /// the gate auto-fire uses and the firing-arc wedge lights on, so
+        /// what the wedge shows and what the guns do cannot disagree.
+        /// `to` is the flat line from the muzzle to the laid aim point.
+        bool InReach(Cannon c, Combat.IHittable t, out Vector3 to, out float dist)
+        {
+            Vector3 from = c.MuzzlePoint;
+            to = AimPointFor(t, from, c.MuzzleSpeed) - from;
+            to.y = 0f;
+            dist = to.magnitude;
+            if (dist < 0.5f || dist > c.FlatRange * autoFireReach01) return false;
+            float half = Mathf.Atan2(t.HitRadius, dist) * Mathf.Rad2Deg;
+            return Vector3.Angle(c.RestDirection, to) <= c.MaxTraverseDeg + half;
+        }
 
         /// **Each gun decides for itself.** A gun speaks when it is loaded,
-        /// manned, laid on the target (its own barrel bearing, after the
-        /// handspike traverse, within the hull's width at that range), the
-        /// target is inside its reach, and the first thing along the line of
-        /// fire is not a friendly tower. So nothing new is said about reload,
+        /// manned, the target is inside what it can reach (`InReach`: range
+        /// and traverse arc), its crew has finished training onto the laid
+        /// aim point (the muzzle assist takes up the last metres), and the
+        /// first thing along the line of fire is not a friendly tower.
+        ///
+        /// 2026-10-02: the old gate was "barrel within the hull's width +
+        /// 2.5 m" against the target's CENTRE, with an 18 deg traverse and
+        /// no lead -- in practice a near-perfect beam on a raider that was
+        /// crossing too fast to hold, and a ball laid astern of her when it
+        /// did fire. The window is now the whole 25 deg arc the wedges draw. So nothing new is said about reload,
         /// crew or traverse: those still decide WHEN a gun is ready, and the
         /// helm still decides whether a side bears. What goes away is only
         /// the button press.
@@ -482,17 +533,16 @@ namespace SeaSick.Ship
             foreach (var c in side)
             {
                 if (c == null || !c.Ready) continue;
+                if (!InReach(c, t, out Vector3 to, out float dist)) continue;
                 Vector3 from = c.MuzzlePoint;
-                Vector3 to = t.HitCentre - from;
-                to.y = 0f;
-                float dist = to.magnitude;
-                if (dist < 0.5f || dist > c.FlatRange * autoFireReach01) continue;
 
+                // Still swinging onto it (55 deg/s): wait the few frames
+                // until the barrel is on, rather than throw the ball wide.
                 Vector3 bore = c.FireDirection;
                 bore.y = 0f;
                 if (bore.sqrMagnitude < 1e-6f) continue;
                 float off = Vector3.Angle(bore, to);
-                float allow = Mathf.Atan2(t.HitRadius + autoFireSlack, dist) * Mathf.Rad2Deg;
+                float allow = Mathf.Atan2(t.HitRadius + c.AimAssistCap, dist) * Mathf.Rad2Deg;
                 if (off > Mathf.Max(1.5f, allow)) continue;
 
                 // Never through a friend. The first thing along the line
@@ -562,7 +612,9 @@ namespace SeaSick.Ship
                 toTarget.y = 0f;
                 float rel = Vector3.SignedAngle(transform.forward, toTarget, Vector3.up);
                 if (Mathf.Abs(Mathf.DeltaAngle(rel, starboardSide ? 90f : -90f)) <= trainWithinDeg)
-                    aim = target.HitCentre;
+                    aim = side.Count > 0 && side[0] != null
+                        ? AimPointFor(target, side[0].MuzzlePoint, side[0].MuzzleSpeed)
+                        : target.HitCentre;
             }
 
             foreach (var c in side) if (c != null) c.TrainOn(aim, dt);
@@ -599,12 +651,64 @@ namespace SeaSick.Ship
             nextEnemyLook = Time.unscaledTime + 0.25f;
             if (self == null) self = GetComponent<Combat.PlayerHull>();
             var locked = AutoFireTarget;
-            if (locked != null && locked.Alive) return enemyInRange = true;
+            if (locked != null && locked.Alive) { nearestHostile = null; return enemyInRange = true; }
             var t = NearestHostile(transform.position, out float dist, self);
-            return enemyInRange = t != null && dist <= Mathf.Max(GunRange, 40f) * 1.5f;
+            enemyInRange = t != null && dist <= Mathf.Max(GunRange, 40f) * 1.5f;
+            nearestHostile = enemyInRange ? t : null;
+            return enemyInRange;
         }
         bool enemyInRange;
         float nextEnemyLook;
+        Combat.IHittable nearestHostile;
+
+        // ---- what the firing arcs draw (`Combat.FiringArcs`, 2026-10-02) ----
+
+        /// The target the arcs light up for: the lock, else the nearest
+        /// hostile that made the combat row show. Null when neither.
+        public Combat.IHittable ArcTarget
+        {
+            get
+            {
+                if (!EnemyInRange()) return null;
+                var locked = AutoFireTarget;
+                if (locked != null && locked.Alive) return locked;
+                return nearestHostile != null && nearestHostile.Alive ? nearestHostile : null;
+            }
+        }
+
+        /// Half-angle of a side's arc: the guns' own traverse limit.
+        public float ArcHalfDeg => allGuns.Count > 0 && allGuns[0] != null ? allGuns[0].MaxTraverseDeg : 0f;
+
+        /// How far out auto-fire reaches, which is how far the arc is drawn.
+        public float ArcRange => GunRange * autoFireReach01;
+
+        /// The middle of a side's guns in ship-local space (y zeroed): the
+        /// apex of that side's arc. False for a side with no guns.
+        public bool ArcApex(bool starboardSide, out Vector3 local)
+        {
+            var side = starboardSide ? starboard : port;
+            local = Vector3.zero;
+            int n = 0;
+            foreach (var c in side)
+            {
+                if (c == null) continue;
+                local += transform.InverseTransformPoint(c.transform.position);
+                n++;
+            }
+            if (n == 0) return false;
+            local /= n;
+            local.y = 0f;
+            return true;
+        }
+
+        /// Any gun on this side can reach `t` (`InReach`), loaded or not.
+        public bool SideReaches(bool starboardSide, Combat.IHittable t)
+        {
+            if (t == null || !t.Alive) return false;
+            foreach (var c in starboardSide ? starboard : port)
+                if (c != null && InReach(c, t, out _, out _)) return true;
+            return false;
+        }
 
         // ---- the fire controls live in `UI/Sheets/CombatHud` (2026-09-30) ----
         //

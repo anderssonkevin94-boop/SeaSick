@@ -21,12 +21,41 @@ namespace SeaSick.Ship
         /// Exponent on |stickX|: above 1 = finer near centre. Range 0.5..3.
         public static float rudderCurve = 1.4f;
         /// Rudder units/s the blade follows the thumb at. Range 1..12.
-        public static float rudderMoveSpeed = 3.5f;
-        /// Rudder units/s it springs back to midships at once the thumb lifts. Range 0.5..8.
-        public static float rudderReturnPerSec = 2.5f;
+        /// 2026-10-02: 3.5 -> 5 (full helm in 0.2 s).
+        public static float rudderMoveSpeed = 5f;
+        /// Rudder units/s it springs back to midships at once the thumb lifts. Range 0.5..15.
+        /// 2026-10-02: 2.5 -> 8 (midships from hard over in 0.125 s): the
+        /// turn stops when the thumb lifts, `HandlingTuning.yawReleaseBrake`
+        /// does the rest.
+        public static float rudderReturnPerSec = 8f;
         /// Stick Y, in ring radii from the touch-down point, ignored before the throttle moves. Range 0..0.3.
         public static float throttleDeadZone = 0.10f;
         /// A tap (no drag) rings the telegraph to stop. Applies to both modes.
         public static bool tapStops = true;
+
+        // --- heading hold (2026-10-02, direct mode; see `HeadingHold`) ---
+        /// Once the helm is centred and the turn has died, hold that heading
+        /// against waves and heel. Any rudder lets go; a stop tap does not.
+        public static bool headingHold = true;
+        /// Hold's yaw rate per degree off, deg/s per deg (1/s). ~1 is
+        /// critically damped through the yaw lag; above ~1.5 it can overshoot.
+        /// Range 0.1..2.
+        public static float holdGain = 0.7f;
+        /// Most yaw rate the hold ever asks for, deg/s: it nudges, it never
+        /// throws her round. Range 0.5..10.
+        public static float holdMaxDegPerSec = 4f;
+        /// Yaw rate, deg/s, under which the dying turn counts as over and the
+        /// heading is captured. Range 0.2..5.
+        public static float holdCaptureDegPerSec = 1.5f;
+        /// Blade (0..1 of full) beyond which the helm is steering and the
+        /// hold lets go. 0.05 is a thumb ~0.12 ring radii off centre, above a
+        /// tap's 0.10 dead zone, so a stop tap never breaks the hold.
+        public const float HoldBreakRudder = 0.05f;
+        /// s after the helm centres that the heading is captured even if the
+        /// sea never lets the turn settle under `holdCaptureDegPerSec`.
+        public const float HoldCaptureMaxSeconds = 1f;
+        /// deg off the held heading past which the hold takes the new
+        /// heading instead of hauling her back (a ram, a broach).
+        public const float HoldLetGoDeg = 30f;
     }
 }

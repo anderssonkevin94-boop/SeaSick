@@ -24,7 +24,13 @@ namespace SeaSick.Ship
         // Guns could be trained with handspikes, so they do. This widens "the
         // side bears" from a knife-edge into a zone without bending any
         // physics — the ball still flies exactly where the barrel points.
-        [SerializeField] float maxTraverseDeg = 18f;
+        //
+        // 18 -> 25 (2026-10-02, Kevin: "a real hard time controlling the
+        // ship" in a fight). Auto-fire now fires whenever the target is
+        // inside this arc, and the firing-arc wedges on the water draw it,
+        // so a wider arc is directly a wider window to hold a side on a
+        // circling raider.
+        [SerializeField] float maxTraverseDeg = 25f;
         [SerializeField] float traverseSpeed = 55f;
 
         // Last-mile help, applied once at the muzzle rather than as steering in
@@ -65,6 +71,25 @@ namespace SeaSick.Ship
         public Vector3 FireDirection => AimRotation() * Vector3.forward;
         public float MuzzleSpeed => muzzleSpeed;
         public float TraverseDeg => trainYaw;
+        /// How far either side of its rest bearing the crew can train it.
+        public float MaxTraverseDeg => maxTraverseDeg;
+        /// Metres at the target's range the muzzle assist will still lay a
+        /// shot over (`CannonBall.LayBetter`).
+        public float AimAssistCap => aimAssistCap;
+
+        /// The bearing the gun rests on, flat and world-space: the middle of
+        /// its traverse arc. Falls back to its own facing with no parent.
+        public Vector3 RestDirection
+        {
+            get
+            {
+                Vector3 rest = transform.parent != null
+                    ? transform.parent.rotation * (restLocalRotation * Vector3.forward)
+                    : transform.forward;
+                rest.y = 0f;
+                return rest.sqrMagnitude > 1e-6f ? rest.normalized : Vector3.forward;
+            }
+        }
 
         /// Where the barrel actually points, in world space.
         ///

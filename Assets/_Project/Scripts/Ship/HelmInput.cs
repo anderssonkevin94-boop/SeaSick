@@ -47,7 +47,10 @@ namespace SeaSick.Ship
     ///   sign(x) * min(1,|x|)^rudderCurve * rudderPerRim (x in ring radii,
     ///   clamped to full rudder). The blade follows the thumb at
     ///   rudderMoveSpeed and, the moment the thumb lifts, springs back to
-    ///   midships at rudderReturnPerSec. It never holds an angle.
+    ///   midships at rudderReturnPerSec. It never holds an angle. The turn
+    ///   is braked out as the blade centres, and once it has died the drive
+    ///   HOLDS that heading (`HoldAllowed`, `HeadingHold`, 2026-10-02) until
+    ///   the next rudder -- a stop tap keeps it.
     /// - **Stick Y is a LATCHED throttle lever, RELATIVE to where the thumb
     ///   landed.** The lever position `lever` is picked up from the current
     ///   order at touch-down, so a thumb landing anywhere never jumps the
@@ -117,6 +120,7 @@ namespace SeaSick.Ship
         bool wasDragging;
         bool lastDirect;
         float throttleOut;        // what went to motor.ThrottleOrder this frame
+        bool holdAllowed;         // see HoldAllowed
 
         /// The rudder the helm is putting on her right now (what was written
         /// to `motor.Rudder`), -1 hard a-port .. 1 hard a-starboard.
@@ -128,6 +132,14 @@ namespace SeaSick.Ship
         /// True when the stick is a direct rudder + latched throttle rather
         /// than the heading autopilot. Read live from `HelmTuning`.
         public bool DirectMode => HelmTuning.directRudder;
+        /// **The helm's say on the heading hold** (2026-10-02): true when
+        /// nobody is steering -- direct mode, `HelmTuning.headingHold` on, no
+        /// thumb or key putting on rudder, no autopilot course (a tapped
+        /// destination, a swimmer, the non-direct stick). The drive that
+        /// turns her (`PaddleDrive`, `ShipMotor`) still waits for the blade
+        /// to centre and the turn to die before it captures the heading.
+        /// A stop tap leaves it true.
+        public bool HoldAllowed => holdAllowed;
 
         // --- tap-to-sail (the seam for Astra's cinematic tap, 2026-09-24) ---
         Vector3? sailTo;
@@ -321,13 +333,33 @@ namespace SeaSick.Ship
                 else SteerForSailTo();
             }
 
+            // Heading hold: the drive holds the course once nobody steers.
+            // Read before the branches below, which is fine: they only ever
+            // clear `hasTarget` for a thumb or key that already counts here.
+            bool holdOn = direct && HelmTuning.headingHold;
+            holdAllowed = holdOn && !manualSteer && !hasTarget
+                && !(stickRudderActive && Mathf.Abs(stickRudder) > HelmTuning.HoldBreakRudder);
+
             float rudderTarget;
             float rudderRate = rudderEaseSpeed;
             if (manualSteer)
             {
                 rudderTarget = manualRudder;
-                targetHeadingDeg = motor.Heading;
-                hasTarget = true;
+                if (holdOn)
+                {
+                    // A/D with the hold: released, the blade springs home
+                    // like the stick's and the drive captures the heading
+                    // where the turn dies -- not the heading at the instant
+                    // of release, which the autopilot would haul her back to
+                    // after she carried past it.
+                    hasTarget = false;
+                    rudderRate = HelmTuning.rudderMoveSpeed;
+                }
+                else
+                {
+                    targetHeadingDeg = motor.Heading;
+                    hasTarget = true;
+                }
             }
             else if (stickRudderActive)
             {

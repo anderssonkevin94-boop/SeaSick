@@ -29,6 +29,16 @@ namespace SeaSick.Ship
         [SerializeField] float ramDamageScale = 0.55f;
         [SerializeField] float enemyHullRadius = 9f;
 
+        [Header("Hull to hull")]
+        [Tooltip("Share of the closing speed she comes back off a raider's hull with. 0 = dead stop against it, 1 = a billiard ball.")]
+        [Range(0f, 1f)] [SerializeField] float ramRestitution = 0.3f;
+        [Tooltip("Seconds over which an overlap with a raider's hull is eased out, as velocity rather than a teleport.")]
+        [SerializeField] float ramResolveSeconds = 0.3f;
+        [Tooltip("Cap on that easing-out speed, m/s, so a deep overlap never launches her.")]
+        [SerializeField] float ramMaxSeparation = 4f;
+        [Tooltip("Metres of overlap past which she is snapped back out as before: a safety for a raider shoved straight into her, not the normal contact.")]
+        [SerializeField] float ramDeepOverlap = 5f;
+
         [Header("Under fire")]
         // ~12 hits to wreck a hull. Deliberately slow: the damage is not what
         // ends a voyage — the wallow it adds and the crew it terrifies are,
@@ -148,9 +158,67 @@ namespace SeaSick.Ship
         /// off the beach the bow is on.
         void FixedUpdate()
         {
-            if (motor == null || body == null || motor.Anchored) return;
+            if (motor == null || body == null) return;
+            HoldOffRaiders();
+            if (motor.Anchored) return;
             if (Island.TerrainHeight == null) return;
             HoldOffTheLand();
+        }
+
+        /// **A raider's hull is a fender, not a wall** (2026-10-02). Kevin:
+        /// "when I engage with the enemy I have a real hard time controlling
+        /// the ship." Contact used to go through `Aground`: her transform
+        /// snapped 16 m out from the raider's centre and her speed into it
+        /// killed -- a stop-dead teleport, every frame she touched, in the
+        /// middle of the fight. Now it is done on the rigidbody each physics
+        /// step, like the land: the closing speed is reflected at
+        /// `ramRestitution`, the overlap is eased out as a capped seaward
+        /// velocity over `ramResolveSeconds`, and only an overlap deeper than
+        /// `ramDeepOverlap` is snapped (to that depth, not all the way).
+        /// Billing, crew jolt and overboard are `Bill`, unchanged: on impact
+        /// above `freeImpactSpeed`, once per `billCooldown`.
+        void HoldOffRaiders()
+        {
+            // Locked at a pier nothing shoves her (see `Aground`), and a
+            // kinematic body ignores velocity: `Update` snaps her instead.
+            if (body.isKinematic || motor.StationLock01 > 0f) return;
+
+            float solid = enemyHullRadius + hullMargin;
+            Vector3 pos = body.position;
+            foreach (var raider in EnemyShip.All)
+            {
+                if (raider == null || !raider.Alive) continue;
+                Vector3 d = pos - raider.transform.position;
+                d.y = 0f;
+                float sq = d.sqrMagnitude;
+                if (sq >= solid * solid || sq < 1e-4f) continue;
+
+                float dist = Mathf.Sqrt(sq);
+                Vector3 outward = d / dist;
+                float overlap = solid - dist;
+
+                if (overlap > ramDeepOverlap)
+                {
+                    pos += outward * (overlap - ramDeepOverlap);
+                    body.position = pos;
+                    overlap = ramDeepOverlap;
+                }
+
+                Vector3 v = body.linearVelocity;
+                float into = Vector3.Dot(v, outward);
+                float closingSpeed = -into;
+                // Bounce: the inward part comes back out at the restitution.
+                if (into < 0f) v -= outward * (into * (1f + ramRestitution));
+                // Ease out of the overlap: at least this much seaward way
+                // until clear, which shrinks as she comes clear.
+                float ease = Mathf.Min(overlap / Mathf.Max(0.05f, ramResolveSeconds), ramMaxSeparation);
+                float outNow = Vector3.Dot(v, outward);
+                if (outNow < ease) v += outward * (ease - outNow);
+                body.linearVelocity = v;
+
+                if (closingSpeed > freeImpactSpeed && Time.time - lastBillTime > billCooldown)
+                    Bill(closingSpeed, ramDamageScale, "ram");
+            }
         }
 
         void HoldOffTheLand()
@@ -299,8 +367,10 @@ namespace SeaSick.Ship
             }
             // Enemy hulls are solid as well. Without this the player sails
             // clean through a raider, which reads as the raider having no
-            // hit box at all.
-            if (!intruding)
+            // hit box at all. A dynamic body bounces off them in
+            // `HoldOffRaiders` (FixedUpdate); this snap is only the fallback
+            // for a kinematic one, which ignores velocity.
+            if (!intruding && (body == null || body.isKinematic))
                 foreach (var raider in EnemyShip.All)
                 {
                     if (raider == null || !raider.Alive) continue;

@@ -28,7 +28,10 @@ namespace SeaSick.Steamer
     /// exactly when she has no way on. Ring her ahead with the helm over and
     /// she comes round on the spot; drift with the engine stopped and the
     /// helm does nothing, which is true of the real thing and is the honest
-    /// price of the single wheel.
+    /// price of the single wheel. (2026-10-02: the phone needs her pointable
+    /// from a standstill, so the response assists give a modest PIVOT --
+    /// `HandlingTuning.pivotTurnDegPerSec`, the wheel drawn kicking over --
+    /// where the physics alone gives nothing. The strip forces are unchanged.)
     ///
     /// The motor stays on the ship as the helm's inputs and the instruments'
     /// outputs (`ExternalDrive`), so HelmInput, the HUD, SpeedJuice, the crew
@@ -126,6 +129,8 @@ namespace SeaSick.Steamer
         // Fore and aft of the axle, metres: two points so the dip is the mean
         // over the part of the sea the wheel is actually in, not one spike.
         const float ProbeSpread = 0.8f;
+        // Drawn wheel rate, rad/s, at a full pivot with the engine stopped.
+        const float PivotWheelRate = 1.2f;
 
         HullFormData data;
         HullFormBody body;
@@ -140,6 +145,14 @@ namespace SeaSick.Steamer
         // pair the estimate is measured from). rad/s, rad/s^2.
         float yawRef, yawDist, lastYawRate, lastServoAcc;
         bool servoPrimed;
+        // Heading hold (HelmTuning.headingHold) and the helm that allows it,
+        // looked up once per Configure: AI hulls have no HelmInput, no hold.
+        HeadingHold hold;
+        HelmInput helmInput;
+        bool helmLooked;
+        // Share of the helm the pivot floor is paying for (0..1): the drawn
+        // wheel ticks over with it, the kick that turns her on the spot.
+        float pivot01;
 
         readonly OceanProbeRegistry.Handle[] handles = new OceanProbeRegistry.Handle[2];
         readonly Vector3[] probeWorld = new Vector3[2];
@@ -217,6 +230,8 @@ namespace SeaSick.Steamer
             omega = 0f;
             surgeAssistN = yawAssistNm = heelAssistNm = 0f;
             servoPrimed = false;
+            hold.Reset();
+            helmLooked = false;
             probesWritten = false;
             if (!Configured) return;
             // Visual-only water rig reads this hull and the drawn rotor; forces are unchanged.
@@ -565,6 +580,7 @@ namespace SeaSick.Steamer
             float wServo = Mathf.Clamp01(r01) * sub;
             float servoAcc = 0f;
             float peak = PeakYawRate(topNow);
+            pivot01 = 0f;
             if (wServo <= 0f || anchored)
             {
                 // Off (pure physics, thrown clear, or moored -- the mooring
@@ -572,17 +588,42 @@ namespace SeaSick.Steamer
                 // picks up from where she is, not from a stale reference.
                 yawRef = yawRate;
                 yawDist = 0f;
+                hold.Reset();
             }
             else
             {
                 float inflow = Mathf.Clamp(RudderInflow, -topNow, topNow);
-                float dir = inflow < -0.05f ? -1f : (inflow > 0.05f ? 1f : (way < 0f ? -1f : 1f));
+                // Dead still, ahead: a hair of sternway from the sea must not
+                // flip which way the pivot goes under a held helm.
+                float dir = inflow < -0.05f ? -1f : (inflow > 0.05f ? 1f : (way < -0.05f ? -1f : 1f));
                 // The at-rest share needs water on the blade: none with the
                 // engine stopped and no way on, all of it once the race runs.
                 float steer = Mathf.Clamp01(Mathf.Abs(inflow) / (steerageInflow01 * Mathf.Max(0.5f, topNow)));
-                float avail = peak * HandlingTuning.TurnRate01(Mathf.Abs(way) / Mathf.Max(0.1f, topNow),
-                                                               HandlingTuning.turnRateAtRest01 * steer);
+                float speed01 = Mathf.Abs(way) / Mathf.Max(0.1f, topNow);
+                float avail = peak * HandlingTuning.TurnRate01(speed01, HandlingTuning.turnRateAtRest01 * steer);
+                // The pivot (2026-10-02): with little or no water on the
+                // blade she can still be pointed, the wheel kicked against
+                // the helm. A floor, so it only shows where the race and her
+                // way give less.
+                float pivot = HandlingTuning.PivotRate(speed01);
+                if (pivot > avail)
+                {
+                    pivot01 = Mathf.Abs(helm) * (pivot - avail) / pivot;
+                    avail = pivot;
+                }
                 float rCmd = helm * dir * avail;
+
+                // Heading hold: once the helm is centred and the turn has
+                // died it owns the rate command outright (a stray few
+                // hundredths of blade from a thumb resting on the stick do
+                // not drift her). The capture waits on the REFERENCE, which
+                // the release brake takes to zero cleanly; her actual rate
+                // carries the sea.
+                if (!helmLooked) { helmInput = GetComponent<HelmInput>(); helmLooked = true; }
+                bool holdOk = helmInput != null && helmInput.isActiveAndEnabled && helmInput.HoldAllowed
+                              && !motor.AutopilotTarget.HasValue;
+                float holdRate = hold.Step(holdOk, helm, motor.Heading, yawRef, dt);
+                if (hold.Active) { rCmd = holdRate; pivot01 = 0f; }
 
                 if (!servoPrimed) { yawRef = yawRate; yawDist = 0f; servoPrimed = true; }
                 else
@@ -592,8 +633,10 @@ namespace SeaSick.Steamer
                     yawDist += (other - yawDist) * (1f - Mathf.Exp(-dt / Mathf.Max(0.02f, yawDisturbanceSeconds)));
                 }
                 float prevRef = yawRef;
-                float tau = HandlingTuning.YawTau(rCmd, yawRef);
-                yawRef += (rCmd - yawRef) * (1f - Mathf.Exp(-dt / tau));
+                // Lag + release brake (HandlingTuning.YawStep): she bites at
+                // yawTauBuild and, when the helm eases, is braked to the new
+                // rate instead of carrying the swing on.
+                yawRef = HandlingTuning.YawStep(yawRef, rCmd, dt, 1f);
                 float acc = (yawRef - prevRef) / Mathf.Max(1e-4f, dt)
                           + (yawRef - yawRate) / Mathf.Max(0.02f, yawTrackSeconds)
                           - yawDist;
@@ -636,6 +679,10 @@ namespace SeaSick.Steamer
             // Positive about +X carries the top of the wheel toward the bow
             // and the bottom floats aft, which is ahead.
             float rate = cap * (float)System.Math.Tanh(omega / cap);
+            // The pivot's kick: a slow churn ahead while she turns on the
+            // spot with the engine stopped, so the turn has a visible cause.
+            if (pivot01 > 0f && rate > -0.05f)
+                rate = Mathf.Max(rate, PivotWheelRate * pivot01);
             visualAngle = Mathf.Repeat(visualAngle + rate * Mathf.Rad2Deg * dt, 360f);
             wheel.localRotation = Quaternion.Euler(visualAngle, 0f, 0f);
         }
