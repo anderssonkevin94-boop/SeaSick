@@ -27,7 +27,11 @@ namespace SeaSick.UI.Sheets
         public static Color Ice => new Color32(164, 210, 232, 255);
         public static Color Muted => new Color32(166, 186, 198, 255);
         readonly VisualElement top;
-        readonly Label mood, people, food, day;
+        readonly Label mood, people, food, day, idle;
+        readonly Button idleChip;
+        /// Who the idle chip last sent the camera to, so the next tap goes
+        /// to the next idle hand in `IdleHands()`'s order.
+        string lastIdle;
         readonly HudGlyph moodFace, foodTrend;
         readonly CampStatusHud campStatus;
         readonly AlertStrip alerts;
@@ -75,6 +79,25 @@ namespace SeaSick.UI.Sheets
             foodTrend = new HudGlyph(HudGlyph.Kind.Up);
             foodTrend.AddToClassList("land-trend");
             food.parent.Add(foodTrend);
+            // **The idle chip (2026-10-02):** "2 idle", only while some hand
+            // has no job at all (`IdleCount`: runners, the downed and the
+            // pouting are not idle). A tap goes to the next idle hand and
+            // opens his sheet, so the player can put him to work.
+            idleChip = new Button(NextIdle);
+            idleChip.AddToClassList("land-resource");
+            idleChip.AddToClassList("land-resource--tap");
+            idleChip.tooltip = "Hands with nothing to do: tap to go to the next one";
+            idleChip.style.flexGrow = 0f;
+            idleChip.style.flexShrink = 0f;
+            idleChip.style.minWidth = 72f;
+            idleChip.style.paddingLeft = 6f;
+            idleChip.style.paddingRight = 6f;
+            idleChip.style.display = DisplayStyle.None;
+            idleChip.Add(new LandIcon("idle"));
+            idle = new Label { pickingMode = PickingMode.Ignore };
+            idle.style.color = StationPage.Amber;
+            idleChip.Add(idle);
+            top.Add(idleChip);
             day = new Label(); day.AddToClassList("land-day"); top.Add(day);
             campStatus = new CampStatusHud(root);
             alerts = new AlertStrip(root);
@@ -104,6 +127,29 @@ namespace SeaSick.UI.Sheets
             var label = new Label { pickingMode = PickingMode.Ignore };
             if (!withLabel) label.style.display = DisplayStyle.None;
             btn.Add(label); parent.Add(btn); return label;
+        }
+
+        /// Go to the next idle hand after the last one visited (wrapping),
+        /// the way a tap on a row of the Workers sheet does: pan the camera
+        /// to him and open his sheet.
+        void NextIdle()
+        {
+            var camp = Camp;
+            var l = camp != null ? camp.Ledger : null;
+            if (l == null) return;
+            OutpostHand first = null, pick = null;
+            bool passed = lastIdle == null;
+            foreach (var h in l.IdleHands())
+            {
+                if (h == null || string.IsNullOrEmpty(h.name)) continue;
+                if (first == null) first = h;
+                if (passed) { pick = h; break; }
+                if (h.name == lastIdle) passed = true;
+            }
+            if (pick == null) pick = first;
+            if (pick == null) return;
+            lastIdle = pick.name;
+            CampReadouts.GoToHand(camp, pick.name);
         }
 
         public static Outpost Camp => Sheets.Anchor != null && Sheets.Anchor.CurrentIsland != null
@@ -169,6 +215,10 @@ namespace SeaSick.UI.Sheets
             moodFace.Set(m < 0f ? .5f : Mathf.Clamp01(m));
 
             people.text = ledger != null ? CampReadouts.Working(ledger) + "/" + total : "0/0";
+
+            int idleN = ledger != null ? ledger.IdleCount() : 0;
+            idleChip.style.display = idleN > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            if (idleN > 0) idle.text = idleN + " idle"; else lastIdle = null;
 
             float days = ledger != null ? CampReadouts.FoodDays(ledger) : -1f;
             food.text = ledger == null || total == 0 ? "--"

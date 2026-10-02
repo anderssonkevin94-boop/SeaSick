@@ -152,7 +152,23 @@ namespace SeaSick.UI.Sheets
                     }
                     why = JobOf(l, h);
                     return HandKind.Working;
+                // **Runners (2026-10-02).** A runner's words ("Runner,
+                // waiting", "Running 6 boards to Sawmill") are working --
+                // waiting on call is his job; "Waiting for a runner" is a
+                // station worker held up for want of one, and "Idle" is the
+                // ledger's word for a hand with no job.
+                case "Waiting for a runner":
+                    why = JobOf(l, h) + " · waiting for a runner";
+                    return HandKind.HeldUp;
+                case "Idle":
+                    why = "no job";
+                    return HandKind.Unassigned;
                 default:
+                    if (OutpostLedger.IsRunner(h) && (w.StartsWith("Runner") || w.StartsWith("Running")))
+                    {
+                        why = JobOf(l, h);
+                        return HandKind.Working;
+                    }
                     // Pouting, rescuing, a raid's fighting/hiding: busy with
                     // something that is not his job, and not the tally's.
                     why = h.Doing;
@@ -191,6 +207,7 @@ namespace SeaSick.UI.Sheets
             {
                 case OutpostOrder.Work:
                 {
+                    if (OutpostLedger.IsRunner(h)) return "runner · pushes goods around the camp";
                     string label = BuildPlans.Named(h.target).label;
                     string post = BuildPlans.PositionAt(h.target);
                     if (string.IsNullOrEmpty(post)) post = "working";
