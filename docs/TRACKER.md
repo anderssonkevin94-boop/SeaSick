@@ -20,6 +20,7 @@ Sessions end every report with a **"loose ends:"** line. The orchestrator copies
 | Harpoon phase 0: art (bow mount, barb, rope look, 🪝 + marker mock) | in progress; Blender scripts being written in art-staging/harpoon-v1 | Blender window from sailing, then shots → Kevin's approval | Villager |
 | Harpoon harpooner crew role (IHarpoonCrewSource on the gun-shift map) | queued after phase 0 shots; seam agreed (HarpoonCrew / IHarpoonCrewSource / BowPost) | phase 0 | Villager |
 | Farm-sheet bugs: half-picked field reports full yield; crop change relabels ripe harvest | Kevin: FIX (2026-10-04) | after harpooner role | Villager |
+| Harpoon gun-lamp (Kevin's final lantern design): a hooded lamp on the side of the gun, a forward spot light that follows the aim; it replaces the nose block + hanging lantern (removed, no dangling art/code) | spec sent | sailing's placement fix lands → art + light → in-engine shots → Kevin's OK → the NEXT build | Sailing |
 | Harpoon phase 1: hook & reel salvage, markers, 90° arc, snap + 5 s reload, captain-fallback crew seam | LANDED 17d4b95b (with phase-0 art b479be1f), editor-tested | Kevin's OK on the art shots → phone build → Kevin plays | Sailing |
 
 | App icon (Kevin's ship-at-sunset art) | committed bc7fd04a, set as the default icon | the next phone build | Orchestrator |
@@ -44,7 +45,6 @@ Sessions end every report with a **"loose ends:"** line. The orchestrator copies
 - Harpoon art landed before Kevin approved the shots. The look needs his OK before the build.
 - Harpoon mount may block the nose of the crew passage. Show Kevin.
 
-- Harpoon: lantern DECIDED (Kevin 2026-10-04): it hangs from a short beam over the bow, just below the harpoon gun, lighting the way forward. In the phase 0 art (villager); closes when Kevin approves the shots.
 
 - Cannon shift: nothing on screen shows the 3 s wait. Untested: switching the locked side mid-walk, and the ~6 s walk on a big hull.
 - Landing: false "Sheer cliff" off bays and headlands; islets under 3000 m² have no landing.
