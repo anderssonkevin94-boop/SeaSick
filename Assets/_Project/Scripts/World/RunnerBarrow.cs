@@ -21,6 +21,19 @@ namespace SeaSick.World
     /// Pure show, visual only: no collider, no ledger, no pathing. Driven
     /// by `Sync` from `CampWorker.Update` every frame; a body that is not
     /// synced this frame (flying, downed, aboard, no row) hides it.
+    ///
+    /// **Always his barrow (2026-10-03, Kevin: "make sure that the runners
+    /// are a lot faster than the normal villager and that they always use
+    /// their wheelbarrow").** He jogs behind it (`VillagerActing.PushGait`,
+    /// Run legs, arms held on the grips) and the grips follow his fists
+    /// (`VillagerActing.BarrowFists`), so this runs after the acting layer.
+    /// Where a barrow cannot go with him -- up a ladder chain, lying down by
+    /// the fire, a meal in his hands -- it is **parked in the world** on its
+    /// legs where he left it (`Park`), empty, and he takes it up again when
+    /// he is back beside it (`ReattachMetres`), or it catches him up after
+    /// `ReattachSeconds`. It is placed by his YAW only, so a body rolled
+    /// flat never rolls the barrow with him.
+    [DefaultExecutionOrder(100)]
     public class RunnerBarrow : MonoBehaviour
     {
         // --- tunables ---------------------------------------------------------
@@ -47,6 +60,14 @@ namespace SeaSick.World
         /// Scale of a pile-unit stone (0.49 m) / brick (0.36 m).
         [SerializeField] private float rockScale = 0.32f;
         [SerializeField] private float brickScale = 0.46f;
+
+        /// Parked in the world (2026-10-03): he takes it again within this
+        /// many metres (flat) of it...
+        public static float ReattachMetres = 2.5f;
+        /// ...or it is back with him after this many seconds away from it.
+        public static float ReattachSeconds = 6f;
+        /// Seconds the grips take to follow his fists (smoothing the stride's bob).
+        const float FistFollowSeconds = 0.06f;
 
         /// Most of one load drawn in the tray (the ledger's count is the truth).
         const int MaxLogs = 6, MaxPlanks = 10, MaxRocks = 12, MaxBricks = 24;
@@ -92,8 +113,10 @@ namespace SeaSick.World
 
         /// **Called every frame from `CampWorker.Update`** for a body on the
         /// ground with a row. Adds the component the first time its hand is a
-        /// runner; otherwise costs one `GetComponent`.
-        public static void Sync(Component body, OutpostHand r, VillagerActing acting)
+        /// runner; otherwise costs one `GetComponent`. `park` (2026-10-03):
+        /// the barrow cannot go where he is going (a ladder climb, lying down
+        /// by the fire) -- it is set down where he left it.
+        public static void Sync(Component body, OutpostHand r, VillagerActing acting, bool park = false)
         {
             if (body == null) return;
             bool runner = IsRunner(r);
@@ -105,6 +128,7 @@ namespace SeaSick.World
             }
             b.acting = acting;
             b.syncFrame = Time.frameCount;
+            b.parkWant = park;
             b.want = runner && !r.downed && !r.hiddenInHut && !r.hidingHut && !r.hidingCrouch
                      && !r.fetchingSpear && !r.defending && !r.pouting && string.IsNullOrEmpty(r.rescuing);
         }
@@ -122,6 +146,22 @@ namespace SeaSick.World
         bool hasLast;
         float speed, push, spin;
 
+        // Parked in the world (2026-10-03, `Park`).
+        bool parkWant, parked;
+        Vector3 parkPos;
+        Quaternion parkRot = Quaternion.identity, parkTilt = Quaternion.identity;
+        float awayFor;
+        // His body the last two frames. A park is set down from the OLDER:
+        // `CampWorker` asks for it (`Sync`) before his walk starts a climb,
+        // so the first frame it hears of one he already stands at the foot.
+        Vector3 bodyWas, bodyWas2;
+        float yawWas, yawWas2;
+        bool hasBodyWas, hasBodyWas2;
+        // The grips' target: his fists' reach ahead of his root and their
+        // height over his feet (live off `BarrowFists`, else the Carry
+        // clip's measured numbers).
+        float fistReach = FistReach, fistRise = -1f;
+
         /// True while the barrow is drawn (probes / shots).
         public bool Showing => root != null && root.activeSelf;
 
@@ -136,6 +176,8 @@ namespace SeaSick.World
             if (root != null) root.SetActive(false);
             SetActing(false, false);
             hasLast = false;
+            parked = false;
+            hasBodyWas = hasBodyWas2 = false;
         }
 
         void OnDestroy()
@@ -158,9 +200,23 @@ namespace SeaSick.World
                 SetActing(false, false);
                 hasLast = false;
                 push = 0f;
+                parked = false;
+                hasBodyWas = hasBodyWas2 = false;
                 return;
             }
             if (!root.activeSelf) root.SetActive(true);
+
+            // **Parked where he left it** (2026-10-03): asked for (a climb,
+            // lying down), or his hands are on a meal; then held there until
+            // he is back beside it or it has been away long enough.
+            bool eating = acting != null && (acting.Current == VillagerActing.Mode.Reach || acting.Current == VillagerActing.Mode.Eat);
+            if (parkWant || eating || (parked && !Reattach(dt)))
+            {
+                if (parkWant || eating) awayFor = 0f;   // the catch-up clock runs only once he has left it
+                Park();
+                RememberBody();
+                return;
+            }
 
             // How far he went this frame, along his facing (the wheel) and
             // flat (pushing or not). A jump of metres is a teleport, not a roll.
@@ -183,7 +239,9 @@ namespace SeaSick.World
 
             push = Mathf.MoveTowards(push, moving ? 1f : 0f, dt / Mathf.Max(0.01f, easeSeconds));
             float k = Mathf.SmoothStep(0f, 1f, push);
+            FollowFists(dt);
             Settle(k);
+            RememberBody();
             spin = Mathf.Repeat(spin + fwd / WheelRadius * Mathf.Rad2Deg, 360f);
             wheel.localRotation = Quaternion.Euler(spin, 0f, 0f);
 
@@ -217,9 +275,9 @@ namespace SeaSick.World
         float Ground(Vector3 q, bool flat)
         {
             if (GroundOverride != null) return GroundOverride(q.x, q.z);
-            if (flat) return transform.position.y;
+            if (flat) return settleFeetY;
             var h = CameraRig.GroundPick.Height;
-            return WorkerPad.Foot(q, h != null ? h(q.x, q.z) : transform.position.y);
+            return WorkerPad.Foot(q, h != null ? h(q.x, q.z) : settleFeetY);
         }
 
         Vector3 settledAt;
@@ -240,14 +298,19 @@ namespace SeaSick.World
         ///   leg comes within `LegClear` of the ground under it;
         /// - parked: the lower leg foot on the ground (both, on a plane).
         /// Seven height samples, and none while he stands still.
-        void Settle(float k)
+        void Settle(float k) => Settle(k, transform.position, transform.eulerAngles.y);
+
+        /// The same for a body standing at `p` facing `yaw` (a park is set
+        /// down from where he stood LAST frame, before a climb moved him).
+        void Settle(float k, Vector3 p, float yaw)
         {
             var art = Art.Load();
-            Vector3 p = transform.position;
-            float yaw = transform.eulerAngles.y;
-            if (settledK == k && (p - settledAt).sqrMagnitude < 1e-6f && Mathf.Abs(Mathf.DeltaAngle(yaw, settledYaw)) < 0.05f)
+            if (settledK == k && (p - settledAt).sqrMagnitude < 1e-6f && Mathf.Abs(Mathf.DeltaAngle(yaw, settledYaw)) < 0.05f
+                && !fistsLive)
                 return;
             settledAt = p; settledYaw = yaw; settledK = k;
+            settleYaw = Quaternion.Euler(0f, yaw, 0f);
+            settleFeetY = p.y;
 
             // On a slope the pitch that keeps the grips at fist height also
             // swings them nearer or further (15 deg downhill left them 0.30 m
@@ -255,16 +318,102 @@ namespace SeaSick.World
             // grips are back at the reach his fists hold on flat ground.
             SettleAt(art, p, k, 0f);
             if (k <= 0f) return;
-            Vector3 gripMid = (art.gripL + art.gripR) * 0.5f, fwd = transform.forward;
-            fwd.y = 0f;
-            fwd = fwd.sqrMagnitude > 1e-6f ? fwd.normalized : Vector3.forward;
+            Vector3 gripMid = (art.gripL + art.gripR) * 0.5f, fwd = settleYaw * Vector3.forward;
             float slide = 0f;
             for (int i = 0; i < 2; i++)
             {
                 float reach = Vector3.Dot(tilt.TransformPoint(gripMid) - p, fwd);
-                slide -= (reach - FistReach) * k;
+                slide -= (reach - fistReach) * k;
                 SettleAt(art, p, k, slide);
             }
+        }
+
+        /// The yaw the barrow is laid out on (his heading, never his roll).
+        Quaternion settleYaw = Quaternion.identity;
+        /// His feet's height for the settle (a park: where he stood last frame).
+        float settleFeetY;
+        bool fistsLive;
+
+        /// **The grips go where his fists are** (2026-10-03): jogging, the
+        /// fists ride the run's lean and bob (`VillagerActing.BarrowFists`);
+        /// their reach and height, smoothed over `FistFollowSeconds`, replace
+        /// the Carry clip's measured 0.42 m reach / flat-ground grip height.
+        /// Otherwise they ease back to those.
+        void FollowFists(float dt)
+        {
+            var art = Art.Load();
+            if (art == null) return;
+            float flatRise = FlatGripRise(art);
+            if (fistRise < 0f) fistRise = flatRise;
+            float wantReach = FistReach, wantRise = flatRise;
+            Vector3 mid = default;
+            fistsLive = acting != null && acting.BarrowFists(out mid);
+            if (fistsLive)
+            {
+                Vector3 fwd = Quaternion.Euler(0f, transform.eulerAngles.y, 0f) * Vector3.forward;
+                wantReach = Vector3.Dot(mid - transform.position, fwd);
+                wantRise = mid.y - transform.position.y;
+            }
+            float a = dt > 0f ? 1f - Mathf.Exp(-dt / FistFollowSeconds) : 1f;
+            fistReach = Mathf.Lerp(fistReach, wantReach, a);
+            fistRise = Mathf.Lerp(fistRise, wantRise, a);
+        }
+
+        /// The grips' height over his feet at `pushTilt` on flat ground.
+        float FlatGripRise(Art art)
+        {
+            Vector3 grip = (art.gripL + art.gripR) * 0.5f;
+            float pt = pushTilt * Mathf.Deg2Rad;
+            return art.pivot.y + grip.y * Mathf.Cos(pt) - grip.z * Mathf.Sin(pt);
+        }
+
+        void RememberBody()
+        {
+            bodyWas2 = bodyWas; yawWas2 = yawWas; hasBodyWas2 = hasBodyWas;
+            bodyWas = transform.position;
+            yawWas = transform.eulerAngles.y;
+            hasBodyWas = true;
+        }
+
+        /// **Set down and left in the world** (2026-10-03): on its legs where
+        /// he stood two frames ago (before a climb took him up the ladder), and
+        /// held there every frame though it hangs off his body; empty -- what
+        /// he hauls is in his arms meanwhile (`VillagerActing.Barrow` off).
+        void Park()
+        {
+            if (!parked)
+            {
+                parked = true;
+                awayFor = 0f;
+                settledK = -1f;
+                if (hasBodyWas2) Settle(0f, bodyWas2, yawWas2);
+                else if (hasBodyWas) Settle(0f, bodyWas, yawWas);
+                else Settle(0f);
+                parkPos = holder.position;
+                parkRot = holder.rotation;
+                parkTilt = tilt.localRotation;
+                settledK = -1f;
+            }
+            holder.SetPositionAndRotation(parkPos, parkRot);
+            tilt.localRotation = parkTilt;
+            ShowLoad(null, 0);
+            SetActing(false, false);
+            hasLast = false;
+            push = 0f;
+            speed = 0f;
+        }
+
+        /// No longer asked to stay parked: back with him when he is beside
+        /// it, or after `ReattachSeconds` (it catches him up). True = re-attached.
+        bool Reattach(float dt)
+        {
+            Vector3 d = transform.position - parkPos;
+            d.y = 0f;
+            awayFor += dt;
+            if (d.magnitude > ReattachMetres && awayFor < ReattachSeconds) return false;
+            parked = false;
+            settledK = -1f;
+            return true;
         }
 
         /// The fists' reach ahead of his root while the `Carry` clip pushes
@@ -274,8 +423,9 @@ namespace SeaSick.World
 
         void SettleAt(Art art, Vector3 p, float k, float slide)
         {
-            holder.localPosition = Vector3.Lerp(parkOffset, pushOffset, k) + Vector3.forward * slide;
-            holder.localRotation = Quaternion.identity;
+            // By his yaw only, in the world (2026-10-03): a body laid flat by
+            // the fire must not roll the barrow over with him.
+            holder.SetPositionAndRotation(p + settleYaw * (Vector3.Lerp(parkOffset, pushOffset, k) + Vector3.forward * slide), settleYaw);
             Vector3 right = holder.right, ahead = holder.forward;
             right.y = 0f; ahead.y = 0f;
             right = right.sqrMagnitude > 1e-6f ? right.normalized : Vector3.right;
@@ -338,8 +488,9 @@ namespace SeaSick.World
             }
             float park = LegsAt(0f);
             Vector3 grip = (art.gripL + art.gripR) * 0.5f;
-            float pt = pushTilt * Mathf.Deg2Rad;
-            float gripRise = art.pivot.y + grip.y * Mathf.Cos(pt) - grip.z * Mathf.Sin(pt);   // above his feet, flat ground
+            // Above his feet: his fists' height (`FollowFists`; the flat-ground
+            // grip height until they are on the grips).
+            float gripRise = fistRise >= 0f ? fistRise : FlatGripRise(art);
             float held = Mathf.Max(PitchFor(grip.y, -grip.z, p.y + gripRise - axleY), LegsAt(LegClear));
             float pitch = Mathf.Clamp(Mathf.Lerp(park, held, k), -MaxPitch, MaxPitch);
             // +X about the axle lifts the handles (the rear, -Z); the wheel

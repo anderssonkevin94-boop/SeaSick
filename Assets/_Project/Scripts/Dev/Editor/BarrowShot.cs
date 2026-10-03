@@ -16,6 +16,14 @@ using SeaSick.World;
 /// side, front three-quarter, the game camera (50 degrees down). Logs the
 /// grips against his fists and the wheel / leg heights per row.
 ///
+/// **Jogging (2026-10-03, Kevin: "make sure that the runners are a lot
+/// faster than the normal villager and that they always use their
+/// wheelbarrow").** Every pushed row now runs at `VillagerGaits.Barrow`
+/// (2.04 m/s; the road row x1.3) on the `Run` legs with the arms held on
+/// the grips (`VillagerActing.ApplyBarrowGrip`), stepped in the game's
+/// order (Animator, acting, barrow). A pushed row also FAILS when the legs
+/// are not on `Run` or his fists are more than `GripGapMax` off the grips.
+///
 /// `unity cmd eval --json --code 'return BarrowShot.Run("<dir>");'`
 /// Everything it creates is destroyed before it returns.
 public static class BarrowShot
@@ -25,6 +33,8 @@ public static class BarrowShot
         | BindingFlags.Public | BindingFlags.NonPublic;
     const float Dt = 1f / 30f;
     static Vector3 Origin => new Vector3(0f, 1500f, 0f);
+    /// Most his fists' midpoint may be off the grips' midpoint while pushing, metres.
+    const float GripGapMax = 0.06f;
 
     public static string Run(string outDir)
     {
@@ -86,17 +96,18 @@ public static class BarrowShot
             // grade = rise per metre along his walk (+Z), cross = rise per metre to his right (+X).
             var states = new List<(string name, string res, int n, float speed, float grade, float cross)>
             {
-                ("push empty", null, 0, 1.29f, 0f, 0f),
-                ("push logs x6", Res.Timber, 6, VillagerGaits.Carry, 0f, 0f),
-                ("push planks x10", Res.Boards, 10, VillagerGaits.Carry, 0f, 0f),
-                ("push bricks x24", Res.Brick, 24, VillagerGaits.Carry, 0f, 0f),
-                ("push stone x12", Res.Stone, 12, VillagerGaits.Carry, 0f, 0f),
-                ("push potatoes x8", Res.Potato, 8, VillagerGaits.Carry, 0f, 0f),
+                ("jog empty", null, 0, VillagerGaits.Barrow, 0f, 0f),
+                ("jog logs x6", Res.Timber, 6, VillagerGaits.Barrow, 0f, 0f),
+                ("jog planks x10", Res.Boards, 10, VillagerGaits.Barrow, 0f, 0f),
+                ("jog bricks x24", Res.Brick, 24, VillagerGaits.Barrow, 0f, 0f),
+                ("jog stone x12", Res.Stone, 12, VillagerGaits.Barrow, 0f, 0f),
+                ("jog potatoes x8", Res.Potato, 8, VillagerGaits.Barrow, 0f, 0f),
+                ("jog logs on a road x1.3", Res.Timber, 6, VillagerGaits.Barrow * 1.3f, 0f, 0f),
                 ("parked logs x6", Res.Timber, 6, 0f, 0f, 0f),
                 ("parked stone x5", Res.Stone, 5, 0f, 0f, 0f),
-                ("push logs uphill 15deg", Res.Timber, 6, VillagerGaits.Carry, 0.268f, 0f),
-                ("push logs downhill 15deg", Res.Timber, 6, VillagerGaits.Carry, -0.268f, 0f),
-                ("push stone across 10deg", Res.Stone, 12, VillagerGaits.Carry, 0.05f, 0.176f),
+                ("jog logs uphill 15deg", Res.Timber, 6, VillagerGaits.Barrow, 0.268f, 0f),
+                ("jog logs downhill 15deg", Res.Timber, 6, VillagerGaits.Barrow, -0.268f, 0f),
+                ("jog stone across 10deg", Res.Stone, 12, VillagerGaits.Barrow, 0.05f, 0.176f),
                 ("parked logs uphill 12deg + across 8deg", Res.Timber, 6, 0f, 0.213f, 0.14f),
                 ("parked stone downhill 12deg - across 8deg", Res.Stone, 5, 0f, -0.213f, -0.14f),
             };
@@ -124,10 +135,13 @@ public static class BarrowShot
                     var bp = body.transform.position + body.transform.forward * speed * Dt;
                     bp.y = G(bp.x, bp.z);
                     body.transform.position = bp;
+                    // The game's order: the walker commands, the Animator
+                    // writes the run, the acting layer lays the grip arms on
+                    // it, then the barrow follows his fists (DefaultExecutionOrder 100).
                     acting.Commanded(speed);
-                    barrow.Step(Dt, true);
                     if (anim != null) anim.Update(Dt);
                     step.Invoke(acting, new object[] { Dt });
+                    barrow.Step(Dt, true);
                     if (k >= 15) Contact(body.transform, G, verts, low);
                 }
                 Vector3 o = body.transform.position;
@@ -145,12 +159,15 @@ public static class BarrowShot
 
                 var bt = body.transform;
                 string grips = "no grips";
+                float gripGap = float.MaxValue;
                 if (barrow.Grips(out var gl, out var gr))
                 {
                     Vector3 fl = bones.TryGetValue("hand.L", out var hl) ? hl.TransformPoint(VillagerActing.ToolGripLocal) : Vector3.zero;
                     Vector3 fr = bones.TryGetValue("hand.R", out var hr) ? hr.TransformPoint(VillagerActing.ToolGripLocal) : Vector3.zero;
-                    grips = $"gripL {F(bt.InverseTransformPoint(gl))} gripR {F(bt.InverseTransformPoint(gr))} | fistL {F(bt.InverseTransformPoint(fl))} fistR {F(bt.InverseTransformPoint(fr))}";
+                    gripGap = Vector3.Distance((gl + gr) * 0.5f, (fl + fr) * 0.5f);
+                    grips = $"gripL {F(bt.InverseTransformPoint(gl))} gripR {F(bt.InverseTransformPoint(gr))} | fistL {F(bt.InverseTransformPoint(fl))} fistR {F(bt.InverseTransformPoint(fr))} gap {gripGap:0.000}";
                 }
+                bool running = anim != null && anim.GetCurrentAnimatorStateInfo(0).shortNameHash == Animator.StringToHash("Run");
                 float feet = float.MaxValue;
                 foreach (var fb in new[] { "foot.L", "foot.R", "toe.L", "toe.R" })
                     if (bones.TryGetValue(fb, out var f)) feet = Mathf.Min(feet, f.position.y - G(f.position.x, f.position.z));
@@ -164,9 +181,11 @@ public static class BarrowShot
                 if (low.all < -0.005f) why.Add($"barrow/load {low.all:0.000} under the ground");
                 if (parked && (low.legs < -0.005f || low.legs > 0.01f)) why.Add($"parked legs {low.legs:0.000} not on the ground");
                 if (!parked && low.legs < 0.01f) why.Add($"pushed legs {low.legs:0.000} drag");
+                if (!parked && !running) why.Add("legs not on Run");
+                if (!parked && gripGap > GripGapMax) why.Add($"fists {gripGap:0.000} m off the grips (max {GripGapMax})");
                 if (why.Count > 0) fail = true;
                 sb.Append($"tray fit {TrayFit(bt)} | ");
-                sb.AppendLine($"{(why.Count == 0 ? "ok" : "FAIL (" + string.Join("; ", why) + ")")} {name}: showing={barrow.Showing} acting={acting.Current} clipArms={acting.BarrowArms} {grips} wheelLow {low.wheelMin:0.000}..{low.wheelMax:0.000} legsLow {low.legs:0.000} barrowLow {low.all:0.000} footBone {feet:0.00}");
+                sb.AppendLine($"{(why.Count == 0 ? "ok" : "FAIL (" + string.Join("; ", why) + ")")} {name}: showing={barrow.Showing} acting={acting.Current} run={running} pushGait={acting.PushGait} clipArms={acting.BarrowArms} {grips} wheelLow {low.wheelMin:0.000}..{low.wheelMax:0.000} legsLow {low.legs:0.000} barrowLow {low.all:0.000} footBone {feet:0.00}");
             }
             barrow.GroundOverride = null;
             sb.Insert(0, fail ? "BARROW CONTACT FAIL\n" : "BARROW CONTACT PASS (wheel on the ground every frame, nothing under it, legs down when parked)\n");

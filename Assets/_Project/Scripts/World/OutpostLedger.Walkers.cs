@@ -19,7 +19,7 @@ namespace SeaSick.World
     /// Who walks: the body (`CampWorker`) while the camp is watched
     /// (`OutpostHand.driven`; it reports `BodyAt` / `BodyArrived` /
     /// `BodyWorked`), else this file's invisible walker, advanced by `Step`
-    /// at `WalkMetresPerSecond` along the leg's measured route. Same events,
+    /// at `WalkSpeedOf(h)` (a runner faster, 2026-10-03) along the leg's measured route. Same events,
     /// same rules -- a watched and an unwatched camp differ only in who moves
     /// the feet.
     public partial class OutpostLedger
@@ -425,7 +425,7 @@ namespace SeaSick.World
                 if (leg == TripLeg.ToPickup || leg == TripLeg.ToDrop)
                 {
                     if (scale <= 0f) return false;
-                    float cost = SecondsToDays(h.legLeft / WalkMetresPerSecond) * scale;
+                    float cost = SecondsToDays(h.legLeft / WalkSpeedOf(h)) * scale;
                     if (budget + Eps >= cost)
                     {
                         budget = Mathf.Max(0f, budget - cost);
@@ -433,7 +433,7 @@ namespace SeaSick.World
                         ArriveLeg(h);
                         continue;
                     }
-                    float metres = budget / scale * TimeOfDay.WorkDaySeconds * WalkMetresPerSecond;
+                    float metres = budget / scale * TimeOfDay.WorkDaySeconds * WalkSpeedOf(h);
                     MoveAlong(h, metres, leg == TripLeg.ToPickup ? PickPoint(h) : DropPoint(h));
                     budget = 0f;
                     return true;
@@ -489,14 +489,14 @@ namespace SeaSick.World
             float shortBy = OnSiteMetres * 0.25f;
             float route = RouteMetres(p, goal);
             float walk = Mathf.Max(0f, route - shortBy);
-            float cost = SecondsToDays(walk / WalkMetresPerSecond) * scale;
+            float cost = SecondsToDays(walk / WalkSpeedOf(h)) * scale;
             if (budget + Eps >= cost)
             {
                 budget = Mathf.Max(0f, budget - cost);
                 SetHandAt(h, Vector3.Lerp(p, goal, Mathf.Clamp01((d - shortBy) / d)));
                 return true;
             }
-            float metres = budget / scale * TimeOfDay.WorkDaySeconds * WalkMetresPerSecond;
+            float metres = budget / scale * TimeOfDay.WorkDaySeconds * WalkSpeedOf(h);
             float frac = route > 1e-4f ? metres / route : 1f;
             SetHandAt(h, Vector3.Lerp(p, goal, Mathf.Clamp01(frac)));
             budget = 0f;

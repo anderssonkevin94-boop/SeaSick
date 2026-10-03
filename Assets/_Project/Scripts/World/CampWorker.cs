@@ -673,7 +673,10 @@ namespace SeaSick.World
                     : VillagerActing.Gait.Errand;
 
             // A store runner pushes his wheelbarrow (visual only, `RunnerBarrow`).
-            RunnerBarrow.Sync(this, r, acting);
+            // **Parked where it cannot go with him** (2026-10-03, Kevin: "they
+            // always use their wheelbarrow"): up a ladder chain, or lying
+            // down by the fire, it is set down where he left it.
+            RunnerBarrow.Sync(this, r, acting, climb.Active || lyingByFire);
 
             // **The rescuer (death/rescue phase 2), ahead of everything
             // else** -- a hand sent to drag somebody home is not doing his
@@ -1544,7 +1547,10 @@ namespace SeaSick.World
                 if (!Walk(stand, dt)) { phase = Phase.Going; return; }
                 // At his post (the phase the walk-in check reads).
                 phase = Phase.Working;
-                Face(face - transform.position, dt);
+                // **Facing out into the yard (2026-10-03)**: his barrow is
+                // parked a step in front of him and reaches ~1.3 m; facing
+                // the hut it stood inside the wall. Out, it is ready to go.
+                Face(post != null ? transform.position - face : face - transform.position, dt);
                 return;
             }
 
