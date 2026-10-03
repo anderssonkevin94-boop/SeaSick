@@ -129,10 +129,44 @@ namespace SeaSick.Voyage
                     Respawn(set[i]);
                     rebuilt++;
                 }
+                if (isCrate) AttachWreck(set[i]);
                 handles[i] = OceanProbeRegistry.Register(set[i].position);
             }
             return handles;
         }
+
+        /// Makes a crate cluster harpoonable (`WreckSalvage`). Runs for every
+        /// crate on every bind, so a cluster that survived a domain reload
+        /// gets its owner back rather than a second component.
+        void AttachWreck(Transform f)
+        {
+            if (!f.TryGetComponent(out WreckSalvage wreck)) wreck = f.gameObject.AddComponent<WreckSalvage>();
+            wreck.Init(this, ship, salvageValue);
+        }
+
+        /// **The one pickup**: the timber, the banner, and the cluster going
+        /// back into the sea. The sail-over and the harpoon
+        /// (`WreckSalvage.OnHauled`) both end here, so the reward cannot differ.
+        public void Collect(Transform f)
+        {
+            voyage.AddSalvage(salvageValue);
+            // Kevin, 2026-09-30 (island UI phase 6): the pickup was an
+            // IMGUI toast of its own; it is the game's one notice toast
+            // now (`Banner` -> `PartyReportToast`, UI Toolkit). Not a
+            // prompt: sailing over the wreckage is the whole action.
+            if (salvageText == null || salvageTextFor != salvageValue)
+            {
+                salvageTextFor = salvageValue;
+                salvageText = "+" + salvageValue + " timber";
+            }
+            SeaSick.Ship.Overboard.Banner.Show(salvageText, 1.8f);
+            Respawn(f);
+        }
+
+        /// True while the harpoon's line holds this cluster: it is the gun's
+        /// to move and deliver, so neither the sail-over nor the distance
+        /// respawn may take it.
+        static bool Hooked(Transform f) => f.TryGetComponent(out WreckSalvage w) && w.BeingHauled;
 
         void EnsureMaterials()
         {
@@ -250,20 +284,11 @@ namespace SeaSick.Voyage
             flat.y = 0f;
             float dist = flat.magnitude;
 
+            if (isCrate && Hooked(f)) return;
+
             if (isCrate && dist < pickupRadius)
             {
-                voyage.AddSalvage(salvageValue);
-                // Kevin, 2026-09-30 (island UI phase 6): the pickup was an
-                // IMGUI toast of its own; it is the game's one notice toast
-                // now (`Banner` -> `PartyReportToast`, UI Toolkit). Not a
-                // prompt: sailing over the wreckage is the whole action.
-                if (salvageText == null || salvageTextFor != salvageValue)
-                {
-                    salvageTextFor = salvageValue;
-                    salvageText = "+" + salvageValue + " timber";
-                }
-                SeaSick.Ship.Overboard.Banner.Show(salvageText, 1.8f);
-                Respawn(f);
+                Collect(f);
             }
             else if (dist > despawnDistance)
             {
