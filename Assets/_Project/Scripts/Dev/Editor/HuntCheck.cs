@@ -96,8 +96,8 @@ public static class HuntCheck
                     sb.AppendLine($"  BAD step {i}: food {df:+0;-0}, hide {dh:+0;-0}, game -{dg:0.000}, kills {dk}, deposits {dd}");
             }
             int hideGot = l.Store(Res.Hide).whole - hide0;
-            bool camp = bad == 0 && deposits >= 3 && hideGot == deposits && kills >= deposits && kills <= deposits + 1
-                        && l.Store(Res.Food).whole <= 30;
+            bool camp = bad == 0 && deposits >= 3 && hideGot == deposits && kills >= deposits && kills <= deposits + 1;
+            // Store-cap gate retired 2026-10-03: island stores are unlimited (Kevin). (food <= 30 larder ceiling)
             sb.AppendLine($"larder {food}/30: kills {kills}, deposits {deposits}, hide +{hideGot} (part {l.Store(Res.Hide).part}), food {food0} -> {l.Store(Res.Food).whole}, game {game0:0} -> {l.Stock(Res.Game).standing:0.00}, spear {l.Store(Res.Spear).whole + l.Store(Res.Spear).part:0.00}  {(camp ? "ok" : "FAIL")}");
             pass &= camp;
         }

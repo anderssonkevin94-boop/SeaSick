@@ -124,16 +124,7 @@ namespace SeaSick.World
             var cs = c.StationOf(BuildPlans.Quarry.id);
             Gate(sb, ref fails, "bay-rack-within-capacity", capOk, capOk ? $"rack {cs.RackTotal}/{cs.OutputCap}" : capWhy);
             Gate(sb, ref fails, "nothing-created-or-destroyed", consOk, consOk ? "60 stone in, 60 accounted" : consWhy);
-            // Spots (2026-09-30): with the rack full and the store full of
-            // bricks the spot AUTO-PAUSES ("store full of brick") instead of
-            // loading a batch it could not put down; a batch that finished
-            // into a nearly-full rack may still wait on the bench.
-            var cspot = cs.Spots[0];
-            Gate(sb, ref fails, "full-rack-pauses-spot",
-                cs.RackFull && !cspot.BenchBusy && cspot.pauseReason != null
-                && cspot.pauseReason.StartsWith("store full of") && cspot.Selected,
-                $"rack {cs.RackTotal}/{cs.OutputCap}, bench {cs.benchState}, spot '{cspot.pauseReason ?? "running"}', "
-                + $"stall '{c.StallReason(c.hands[0])}'");
+            // Store-cap gate retired 2026-10-03: island stores are unlimited (Kevin). (full-rack-pauses-spot)
 
             // --- (d) repeat until stopped -------------------------------------
             var d = Quarry(200, 1000, 1);
@@ -200,9 +191,8 @@ namespace SeaSick.World
                 took == 2 && gs.BayCount(Res.Stone) == 5 && spendable == 2 && shown == 7 && tookBrick == 1,
                 $"took {took} of 10 (bay kept {gs.BayCount(Res.Stone)}), spendable {spendable}, shown {shown}, brick {tookBrick}");
 
-            // --- (h) the store ceiling holds with loads walking in -------------
-            // An unmanned quarry's bay goes home while a gatherer fills the
-            // same pile: nothing over the ceiling, nothing lost.
+            // --- (h) bay goes home while gatherers fill the same pile: conserved ---
+            // (the "store ceiling holds" half was a store-cap gate)
             var h = new OutpostLedger { ceilingPer = 10, stationsMigrated = true, campfireLevel = 2 };
             h.SetCentre(Vector3.zero);
             h.SetSourceMetres(Res.Stone, 20f);
@@ -219,24 +209,17 @@ namespace SeaSick.World
             h.EnsureStations();
             h.StationOf(BuildPlans.Quarry.id).Bay(Res.Stone, true).whole = 6;
             double nowH = h.lastTicked;
-            bool ceilOk = true, consH = true, hauled = false;
-            string ceilWhy = "", consHWhy = "";
+            bool consH = true;
+            string consHWhy = "";
             for (int i = 0; i < 200; i++)
             {
                 Advance(h, ref nowH, 0.05);
-                // A 15 m trip (~14 s) starts and lands inside one 0.05-day
-                // check, so "seen in arms" is not enough: a trip counter
-                // or the bay going down says it happened.
-                if (h.CarriedOf(Res.Stone) > 0 || h.hands[0].haulSerial > 0) hauled = true;
-                if (h.StoreCountOf(Res.Stone) > h.ceilingPer && ceilOk)
-                { ceilOk = false; ceilWhy = $"tick {i}: store {h.StoreCountOf(Res.Stone)} > {h.ceilingPer}"; }
                 var st = h.Store(Res.Stone);
                 float all = (st != null ? st.whole + st.part : 0f) + h.CountOf(Res.Stone) - h.StoreCountOf(Res.Stone)
                             + h.CarriedOf(Res.Stone) + h.Stock(Res.Stone).standing;
                 if (Mathf.Abs(all - 213f) > 0.01f && consH) { consH = false; consHWhy = $"tick {i}: {all:0.###} of 213"; }
             }
-            Gate(sb, ref fails, "store-ceiling-holds", ceilOk && hauled,
-                ceilOk ? $"store stone {h.StoreCountOf(Res.Stone)}/{h.ceilingPer}, bay {h.StationOf(BuildPlans.Quarry.id).BayCount(Res.Stone)}, hauled {hauled}" : ceilWhy);
+            // Store-cap gate retired 2026-10-03: island stores are unlimited (Kevin). (store-ceiling-holds)
             Gate(sb, ref fails, "store-ceiling-conserves", consH, consH ? "213 stone accounted every tick" : consHWhy);
 
             // --- (i) a build site: stock exactly the cost, THEN build ----------
@@ -379,63 +362,9 @@ namespace SeaSick.World
                         $"{GatherState(d1)} | {GatherState(d2)} | {GatherState(d3)}");
                 }
 
-                // (3) two gatherers, ceiling 10: never over, every log accounted.
-                var two = Gatherers(2, 10);
-                double nt = two.lastTicked;
-                bool ceilG = true, consG = true;
-                string ceilGWhy = "", consGWhy = "";
-                for (int i = 0; i < 60; i++)
-                {
-                    Advance(two, ref nt, 0.05);
-                    if (two.StoreCountOf(Res.Timber) > two.ceilingPer && ceilG)
-                    { ceilG = false; ceilGWhy = $"tick {i}: store {two.StoreCountOf(Res.Timber)} > {two.ceilingPer}"; }
-                    float all = GatherAll(two);
-                    if (Mathf.Abs(all - 40f) > 1e-3f && consG) { consG = false; consGWhy = $"tick {i}: {all:0.###} of 40"; }
-                }
-                string full0 = two.StallReason(two.hands[0]) ?? "";
-                Gate(sb, ref fails, "gather-ceiling-two-gatherers",
-                    ceilG && consG && two.StoreCountOf(Res.Timber) == 10 && two.CarriedOf(Res.Timber) == 0
-                    && full0.Contains("store is full of timber"),
-                    ceilG && consG ? $"store {two.StoreCountOf(Res.Timber)}/10, arms {two.CarriedOf(Res.Timber)}, "
-                                     + $"40 logs accounted every tick, stall '{full0}'"
-                                   : ceilGWhy + consGWhy);
+                // Store-cap gate retired 2026-10-03: island stores are unlimited (Kevin). (gather-ceiling-two-gatherers)
 
-                // (4a) store full + a site queued: says so, helps build, resumes.
-                var bs = Gatherers(1, 10);
-                bs.Store(Res.Timber).whole = 10;
-                bs.sites.Add(new PendingBuild { planId = BuildPlans.Hut.id, x = 5f, z = 5f, needed = 4, phased = true });
-                var bh = bs.hands[0];
-                string whyB = bs.StallReason(bh) ?? "";
-                double nb = bs.lastTicked;
-                Advance(bs, ref nb, OutpostLedger.QuantumDays);   // ONE quantum: after it room is back and he resumes
-                bool helpedB = bh.haulSerial > 0 && (bs.sites[0].done > 0 || bs.HaulOf(bh).to == HaulPlace.Site)
-                               && bs.Stock(Res.Timber).standing >= 40f - 1e-3f;
-                for (int i = 0; i < 40 && !(bs.sites[0].Complete && bs.StoreCountOf(Res.Timber) == 10); i++) Advance(bs, ref nb, 0.1);
-                Gate(sb, ref fails, "gather-full-store-helps-build",
-                    whyB.Contains("store is full of timber, helping build") && helpedB
-                    && bs.sites[0].Complete && bs.StoreCountOf(Res.Timber) == 10,
-                    $"stall '{whyB}', first quantum a site trip {helpedB}, site complete {bs.sites[0].Complete}, "
-                    + $"store back to {bs.StoreCountOf(Res.Timber)}/10 at {nb / TimeOfDay.WorkDaySeconds:0.0} d");
-
-                // (4b) store full + a manned station wanting it: hauls for it, resumes.
-                var q = Quarry(10, 10, 0);
-                q.SetSourceMetres(Res.Stone, 20f);
-                q.AddStanding(Res.Stone, 40f).regrowPerDay = 0f;
-                q.hands.Add(new OutpostHand { name = "Gatherer", order = OutpostOrder.Gather, target = Res.Stone });
-                q.PlaceOrder(BuildPlans.Quarry.id, "brick", OutpostLedger.RepeatOrder);
-                var qh = q.hands[1];
-                string whyQ = q.StallReason(qh) ?? "";
-                double nq = q.lastTicked;
-                Advance(q, ref nq, OutpostLedger.QuantumDays);     // ONE quantum (was 0.1 d = the old quantum)
-                var qv = q.HaulOf(qh);
-                bool haulQ = qh.haulSerial > 0 && q.Stock(Res.Stone).standing >= 40f - 1e-3f
-                             && (!qv.active || (qv.from == HaulPlace.Store && qv.to == HaulPlace.Station));
-                Advance(q, ref nq, 2.0);
-                Gate(sb, ref fails, "gather-full-store-hauls",
-                    whyQ.Contains("store is full of stone, hauling for the stations") && haulQ
-                    && q.Stock(Res.Stone).standing < 40f - 1e-3f,
-                    $"stall '{whyQ}', first quantum a station haul {haulQ}, "
-                    + $"field {q.Stock(Res.Stone).standing:0.#}/40 after 2 d (resumed)");
+                // Store-cap gate retired 2026-10-03: island stores are unlimited (Kevin). (gather-full-store-helps-build, gather-full-store-hauls)
             }
 
             // --- (l) clearing a plot is seconds of builder time --------------
@@ -658,23 +587,7 @@ namespace SeaSick.World
                     + $"count-3 order done {!s.HasOrder}");
             }
 
-            // (2) Rack 11/12 and the store full of boards: 1 goes on, 2 wait
-            // on the bench (Finished), which blocks -- nothing lost.
-            {
-                var l = Sawmill(5, 0);
-                l.Store(Res.Boards, true).whole = 5;
-                var s = l.StationOf(BuildPlans.Sawmill.id);
-                s.Rack(Res.Boards, true).whole = 11;
-                s.Bay(Res.Timber, true).whole = 1;
-                l.PlaceOrder(BuildPlans.Sawmill.id, "boards", OutpostLedger.RepeatOrder);
-                double now = 0.0;
-                Advance(l, ref now, 2.0 * jobSec / day);
-                string why = l.StallReason(l.hands[0]) ?? "";
-                Gate(sb, ref fails, "boards-short-rack-holds-rest",
-                    s.RackTotal == 12 && s.benchState == BenchState.Finished && s.benchOut == 2
-                    && l.CountOf(Res.Boards) == 5 + 11 + 3 && why.Contains("rack and store are full of boards"),
-                    $"rack {s.RackTotal}/12, bench {s.benchState} holding {s.benchOut}, boards counted {l.CountOf(Res.Boards)} of 19, stall '{why}'");
-            }
+            // Store-cap gate retired 2026-10-03: island stores are unlimited (Kevin). (boards-short-rack-holds-rest)
 
             // (3) A sawyer fetching from the store 15 m off: the load lands in
             // the first quantum that reaches the walked time
@@ -923,28 +836,7 @@ namespace SeaSick.World
                     + $"'{paused}', fish in the store -> resumed {resumed}, {fishUsed} more used");
             }
 
-            // (3) the store full: paused without loading, resumes with room
-            {
-                var l = Sawmill(5, 0);
-                l.Store(Res.Boards, true).whole = 5;
-                var st = l.StationOf(BuildPlans.Sawmill.id);
-                st.Rack(Res.Boards, true).whole = st.OutputCap;
-                st.Bay(Res.Timber, true).whole = 3;
-                l.hands[0].wHas = true; l.hands[0].wx = 15f; l.hands[0].wz = 0f;
-                l.SelectRecipe(st, 0, "boards", out _);
-                double now = 0.0;
-                for (int i = 0; i < 10; i++) Advance(l, ref now, 0.05);
-                var sp = st.Spots[0];
-                string paused = sp.pauseReason ?? "";
-                int timberWhilePaused = st.BayCount(Res.Timber);
-                bool idleBench = sp.benchState == BenchState.Empty;
-                l.ceilingPer = 100;
-                for (int i = 0; i < 20; i++) Advance(l, ref now, 0.05);
-                int timberAfter = st.BayCount(Res.Timber);
-                Gate(sb, ref fails, "spot-pauses-on-full-store-and-resumes",
-                    paused.StartsWith("store full of") && timberWhilePaused == 3 && idleBench && timberAfter < 3,
-                    $"'{paused}', timber kept {timberWhilePaused}/3, bench empty {idleBench}; store room -> timber {timberAfter}");
-            }
+            // Store-cap gate retired 2026-10-03: island stores are unlimited (Kevin). (spot-pauses-on-full-store-and-resumes)
         }
 
         /// A sawmill 15 m from the store (the fire square at 0,0), one
@@ -1160,25 +1052,7 @@ namespace SeaSick.World
                     $"ashore {Ashore(l, S)} aboard {ship.HeldOf(S)} arms {l.CarriedOf(S)} landed {l.transferredAshore}");
             }
 
-            // A full store waits, says so, and resumes.
-            {
-                var l = Porters(4, 1, out var ship);
-                ship.held[S] = 10;
-                l.OrderTransfer(S, OutpostLedger.TransferAll, false);
-                double now = l.lastTicked;
-                Advance(l, ref now, 2.0);
-                string why = l.TransferStall(S, false);
-                string line = l.TransferSummary();
-                bool waited = Ashore(l, S) == 4 && ship.HeldOf(S) == 6 && l.CarriedOf(S) == 0
-                              && why == OutpostLedger.StallStoreFull && l.TransferPending(S, false)
-                              && line.Contains(OutpostLedger.StallStoreFull);
-                l.ceilingPer = 10;
-                Advance(l, ref now, 2.0);
-                bool resumed = Ashore(l, S) == 10 && ship.HeldOf(S) == 0 && l.CarriedOf(S) == 0
-                               && !l.TransferPending(S, false);
-                Gate(sb, ref fails, "transfer-store-full-waits", waited && resumed,
-                    $"waited {waited} (stall '{why}', line '{line}'), after room: ashore {Ashore(l, S)} aboard {ship.HeldOf(S)}");
-            }
+            // Store-cap gate retired 2026-10-03: island stores are unlimited (Kevin). (transfer-store-full-waits)
 
             // A full hold waits, says so, and resumes.
             {

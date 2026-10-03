@@ -235,15 +235,7 @@ public class SinkProbe : MonoBehaviour
              $"carried {gotBoards} boards, landed {bankBoards}");
         Gate("tools-are-not-squeezed-out-by-timber", bankTools == gotTools,
              $"carried {gotTools} tools, landed {bankTools}");
-        Gate("timber-fills-its-own-pile-and-stops", bankTimber == Mathf.Min(gotTimber, keeps),
-             $"carried {gotTimber}, home keeps {keeps}, landed {bankTimber}");
-        Gate("only-the-timber-spoiled",
-             voyage.Spoiled == Mathf.Max(0, gotTimber - keeps)
-             && Has(voyage.SpoiledDetail, "timber")
-             && !Has(voyage.SpoiledDetail, "boards")
-             && !Has(voyage.SpoiledDetail, "tools"),
-             $"spoiled {voyage.Spoiled} \"{voyage.SpoiledDetail}\", "
-             + $"want {Mathf.Max(0, gotTimber - keeps)} of timber alone");
+        // Store-cap gate retired 2026-10-03: island stores are unlimited (Kevin). (timber-fills-its-own-pile-and-stops, only-the-timber-spoiled)
 
         // The carry-ashore is a coroutine, one unit every 0.18 s, so the beach
         // is behind the ledger until it finishes. Counting it early is how a

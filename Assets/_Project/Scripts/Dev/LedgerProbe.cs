@@ -101,16 +101,9 @@ public class LedgerProbe : MonoBehaviour
         Gate(sb, ref fails, "no-free-timber-from-a-scrub",
             back.Timber <= beforeScrub + 2, $"{beforeScrub} -> {back.Timber}");
 
-        // --- 4. the ceiling is the whole design ------------------------------
+        // --- 4. the ceiling was the whole design (retired) --------------------
 
-        var full = Working(t0);
-        full.Tick(t0 + 400.0 * day);
-        sb.AppendLine();
-        sb.AppendLine($"CEILING after 400 days: timber {full.Timber} against a ceiling of {full.ceilingPer}");
-        Gate(sb, ref fails, "ceiling-holds", full.Timber <= full.ceilingPer,
-            $"{full.Timber} logs, ceiling {full.ceilingPer}");
-        Gate(sb, ref fails, "ceiling-is-reached", full.Timber == full.ceilingPer,
-            $"{full.Timber} of {full.ceilingPer} after 400 days");
+        // Store-cap gate retired 2026-10-03: island stores are unlimited (Kevin). (ceiling-holds, ceiling-is-reached)
 
         // --- 5. depletion has to actually bite -------------------------------
         //
@@ -349,13 +342,7 @@ public class LedgerProbe : MonoBehaviour
         sb.AppendLine($"TWO RESOURCES, 40 days, one hand on each, ceiling {two.ceilingPer} of each:");
         sb.AppendLine($"  timber {two.CountOf(Res.Timber)}   ore {two.CountOf(Res.Ore)}   "
             + $"total on the ground {two.Total}");
-        Gate(sb, ref fails, "each-resource-has-its-own-ceiling",
-            two.CountOf(Res.Timber) == two.ceilingPer && two.CountOf(Res.Ore) == two.ceilingPer,
-            $"{two.CountOf(Res.Timber)} timber and {two.CountOf(Res.Ore)} ore, "
-            + $"{two.ceilingPer} allowed of each");
-        Gate(sb, ref fails, "a-full-pile-does-not-block-another",
-            two.Total == two.ceilingPer * 2,
-            $"{two.Total} on the ground against {two.ceilingPer * 2} the two ceilings allow");
+        // Store-cap gate retired 2026-10-03: island stores are unlimited (Kevin). (each-resource-has-its-own-ceiling, a-full-pile-does-not-block-another)
 
         // Ore does not grow back. That is what makes a mining island a thing
         // you use up rather than a thing you farm.
