@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using SeaSick.Ship;
+using SeaSick.Ship.Harpoon;
 using SeaSick.Ship.Overboard;
 using SeaSick.Voyage;
 using SeaSick.World;
@@ -52,6 +53,19 @@ namespace SeaSick.UI.Sheets
     ///   button: `Blocks` covers `BoostRect`, so a thumb on it never starts
     ///   the stick. `HelmRect` is the whole bottom row (strip + button) so
     ///   the edge markers keep off both.</item>
+    /// <item>**The harpoon button** (2026-10-04, `docs/PLAN-harpoon.md` §4): a
+    ///   round hook button the same 48 design px as the bolt, its right edge
+    ///   on the bolt's and just above it, with a label pill running left
+    ///   from it (icon and pill are ONE tappable rect, `HarpoonRect`, in
+    ///   `Blocks`). Ready with a target: "crate · 22 m"; firing / reeling in:
+    ///   dimmed; hooked: scissors and "Cut" with a tension bar (slack,
+    ///   taut, strained); reloading: a ring countdown and "reload 3 s"; a
+    ///   full hold: "hold full". Hidden with no gun or no target in the arc.
+    ///   While the gun is fitted the space above the bolt is ALWAYS reserved
+    ///   (the card, the combat row, the hint and the IMGUI slot stack above
+    ///   it), so the stack does not jump as targets come and go. A short
+    ///   event word ("Missed", "Snapped", "Cut", "Aboard", "Hold full")
+    ///   fades in beside it. The world markers are `HarpoonMarkers`.</item>
     /// <item>**First-use hint**: a faint dashed ring and "Drag to sail · let
     ///   go to stop" in the stick zone until the stick has been used once
     ///   (`GestureHints`).</item>
@@ -87,6 +101,9 @@ namespace SeaSick.UI.Sheets
         /// The boost button's side (design px; 48 is >= 44 pt on a phone) and
         /// the gap between it and the strip.
         public const float BoostSize = 48f, BoostGap = 8f;
+        /// The harpoon button sits above the bolt: the same side, this gap.
+        public const float HarpoonGap = 8f;
+        const float ToastSeconds = 1.8f, ToastFade = .5f;
         /// Gap between the order strip (or the thumb bar) and the card, design px.
         public const float CardGap = 14f;
         const float LaneWidth = DesignWidth - Side * 2f;
@@ -101,6 +118,9 @@ namespace SeaSick.UI.Sheets
         public static Rect HelmRect { get; private set; }
         /// The boost button alone (GUI space; zero while hidden).
         public static Rect BoostRect { get; private set; }
+        /// The harpoon button and its label pill, one rect (GUI space; zero
+        /// while hidden). In `Blocks`, and in `HelmRect`'s union while shown.
+        public static Rect HarpoonRect { get; private set; }
         /// Panel units from the panel's top edge at which the chart
         /// instrument sits under the bar (0 = no bar, the chart keeps its
         /// corner). `ChartInstrument` reads it.
@@ -117,6 +137,7 @@ namespace SeaSick.UI.Sheets
             // Not `HelmRect`: the order strip is information, and the very
             // bottom of the screen is where the thumb starts the stick.
             return TopRect.Contains(guiPoint) || AlertRect.Contains(guiPoint) || BoostRect.Contains(guiPoint)
+                   || HarpoonRect.Contains(guiPoint)
                    || (cardTaps && SeaActions.Visible && SeaActions.Rect.Contains(guiPoint));
         }
 
@@ -133,7 +154,7 @@ namespace SeaSick.UI.Sheets
         static void Reset()
         {
             TopBarShowing = HelmShowing = cardTaps = false;
-            TopRect = AlertRect = HelmRect = BoostRect = Rect.zero;
+            TopRect = AlertRect = HelmRect = BoostRect = HarpoonRect = Rect.zero;
             ChartTopPanel = 0f;
             tickFrame = -10;
         }
@@ -168,6 +189,11 @@ namespace SeaSick.UI.Sheets
             // --- boost button
             readonly Button boostBtn;
             readonly SeaGlyph boostGlyph;
+            // --- harpoon button, its event word and its first-use hint
+            readonly Button harpoonBtn;
+            readonly Label harpoonText, harpoonToast, harpoonHintText;
+            readonly SeaGlyph hookGlyph, cutGlyph, reloadRing;
+            readonly VisualElement harpoonTrack, harpoonFill, harpoonHint;
             // --- hint
             readonly VisualElement hint;
             // The look hint (DREDGE controls step 2): text only, in the upper
@@ -176,6 +202,7 @@ namespace SeaSick.UI.Sheets
             readonly VisualElement lookHint;
 
             bool topShown = true, alertShown = true, cardShown = true, helmShown = true, hintShown = true, boostShown = true, lookHintShown = true;
+            bool harpoonShown = true, toastShown = true, harpoonHintShown = true;
             float nextRefresh;
 
             // Cached text keys (strings are rebuilt only when these move).
@@ -205,7 +232,7 @@ namespace SeaSick.UI.Sheets
 
             // The scale each root was last given (a root hidden when the
             // panel rescaled picks the new one up when it shows).
-            float kTop = -1f, kAlert = -1f, kHelm = -1f, kBoost = -1f, kCard = -1f, kHint = -1f, kLookHint = -1f;
+            float kTop = -1f, kAlert = -1f, kHelm = -1f, kBoost = -1f, kCard = -1f, kHint = -1f, kLookHint = -1f, kHarpoon = -1f, kToast = -1f, kHarpoonHint = -1f;
 
             static void SetScale(VisualElement e, ref float last, float k)
             {
@@ -213,6 +240,15 @@ namespace SeaSick.UI.Sheets
                 last = k;
                 e.style.scale = new Scale(new Vector3(k, k, 1f));
             }
+
+            // Harpoon state (re-textured only when one of these moves).
+            int hMode = -1, hBand = -1, hMetres = -1, hSeconds = -1;
+            string hLabel;
+            float hFill = -1f;
+            float toastStart = -10f, toastSeenAt;
+            bool toastSynced;
+            HarpoonGun toastGun;
+            static readonly string[] reloadTexts = new string[32];
 
             HelmInput helm;
             ShipMotor helmMotor;
@@ -310,6 +346,34 @@ namespace SeaSick.UI.Sheets
                 boostBtn.Add(boostGlyph);
                 root.Add(boostBtn);
 
+                // --- the harpoon button: the hook (or scissors) on the right,
+                // its label pill running left from it. One button, one rect.
+                harpoonBtn = new Button(TapHarpoon) { text = "" };
+                harpoonBtn.AddToClassList("sea-harpoon");
+                harpoonBtn.tooltip = "Harpoon";
+                harpoonText = Text(harpoonBtn, "sea-harpoon-text");
+                var harpoonIcon = Box("sea-harpoon-icon");
+                hookGlyph = new SeaGlyph(SeaGlyph.Kind.Hook);
+                hookGlyph.AddToClassList("sea-harpoon-glyph");
+                harpoonIcon.Add(hookGlyph);
+                cutGlyph = new SeaGlyph(SeaGlyph.Kind.Cut);
+                cutGlyph.AddToClassList("sea-harpoon-glyph");
+                harpoonIcon.Add(cutGlyph);
+                reloadRing = new SeaGlyph(SeaGlyph.Kind.Ring) { Tint = Ice };
+                reloadRing.AddToClassList("sea-harpoon-ring");
+                harpoonIcon.Add(reloadRing);
+                harpoonBtn.Add(harpoonIcon);
+                harpoonTrack = Box("sea-harpoon-track");
+                harpoonFill = Box("sea-harpoon-fill");
+                harpoonTrack.Add(harpoonFill);
+                harpoonBtn.Add(harpoonTrack);
+                root.Add(harpoonBtn);
+                harpoonToast = Text(root, "sea-harpoon-toast");
+                harpoonHint = Box("sea-harpoon-hint");
+                harpoonHintText = Text(harpoonHint, "sea-harpoon-hint-text");
+                harpoonHintText.text = "Hook it · tap the hook";
+                root.Add(harpoonHint);
+
                 // --- first-use hint (never a target)
                 hint = Box("sea-hint");
                 var ring = new SeaGlyph(SeaGlyph.Kind.DashedRing);
@@ -346,6 +410,15 @@ namespace SeaSick.UI.Sheets
                 if (h != null) h.ToggleBoost();
             }
 
+            /// Fires when ready, cuts the line when it is out; the gun decides.
+            void TapHarpoon()
+            {
+                var g = HarpoonGun.Player;
+                if (g == null) return;
+                GestureHints.MarkDone(GestureHints.Harpoon);
+                g.FireOrCut();
+            }
+
             Button TopButton(VisualElement icon, System.Action tap, string tip, out Label label)
             {
                 var b = new Button(tap) { text = "" };
@@ -372,10 +445,13 @@ namespace SeaSick.UI.Sheets
                 Show(card, ref cardShown, false);
                 Show(helmRow, ref helmShown, false);
                 Show(boostBtn, ref boostShown, false);
+                Show(harpoonBtn, ref harpoonShown, false);
+                Show(harpoonToast, ref toastShown, false);
+                Show(harpoonHint, ref harpoonHintShown, false);
                 Show(hint, ref hintShown, false);
                 Show(lookHint, ref lookHintShown, false);
                 TopBarShowing = HelmShowing = cardTaps = false;
-                TopRect = AlertRect = HelmRect = BoostRect = Rect.zero;
+                TopRect = AlertRect = HelmRect = BoostRect = HarpoonRect = Rect.zero;
                 ChartTopPanel = 0f;
                 SeaActions.Visible = false;
                 SeaActions.Rect = Rect.zero;
@@ -507,6 +583,13 @@ namespace SeaSick.UI.Sheets
                 // The bottom row is the strip (left) and the boost button
                 // (right, level with it); the row is as tall as the button.
                 float helmH = Mathf.Max(HelmHeight, BoostSize);
+                // The harpoon button's row above the bolt is reserved for as
+                // long as a gun is fitted, whether or not a target is up, so
+                // the card / combat row stack above it never jumps.
+                var gun = HarpoonGun.Player;
+                bool gunOn = helmOn && gun != null && gun.Available;
+                float harpH = gunOn ? HarpoonGap + BoostSize : 0f;     // design px
+                float stackH = helmH + harpH;
                 Show(helmRow, ref helmShown, helmOn);
                 Show(boostBtn, ref boostShown, helmOn);
                 if (helmOn)
@@ -527,11 +610,18 @@ namespace SeaSick.UI.Sheets
                     var stripRect = new Rect(laneX, Screen.height - stripBottom - HelmHeight * ppd, stripW * ppd, HelmHeight * ppd);
                     HelmRect = Union(stripRect, BoostRect);
                     TickHelm(motor);
+                    TickHarpoon(gun, gunOn, safe, s, ppd, k, bottom, boostX);
+                    HelmRect = Union(HelmRect, HarpoonRect);
                 }
-                else HelmRect = BoostRect = Rect.zero;
+                else
+                {
+                    HelmRect = BoostRect = HarpoonRect = Rect.zero;
+                    TickHarpoon(null, false, safe, s, ppd, k, 0f, 0f);
+                }
                 HelmShowing = helmOn;
-                // The combat row sits just above the strip (mockup 8b).
-                CombatHud.BottomPx = HelmBottom + helmH + CardGap;
+                // The combat row sits just above the strip, and above the
+                // harpoon row when there is one (mockup 8b).
+                CombatHud.BottomPx = HelmBottom + stackH + CardGap;
 
                 // --- the action card
                 bool cardOn = !sheet && !CombatHud.Visible && SeaActions.HasOffer;
@@ -540,7 +630,7 @@ namespace SeaSick.UI.Sheets
                 if (cardOn)
                 {
                     float fromBottom = helmOn
-                        ? safe.yMin + (HelmBottom + helmH + CardGap) * ppd
+                        ? safe.yMin + (HelmBottom + stackH + CardGap) * ppd
                         : safe.yMin + HelmBottom * ppd;
                     if (ThumbBar.ReservePanel > 0f) fromBottom = Mathf.Max(fromBottom, ThumbBar.ReservePanel / s);
                     card.style.left = laneX * s;
@@ -584,7 +674,7 @@ namespace SeaSick.UI.Sheets
                 if (hintOn)
                 {
                     float upper = Screen.height * .5f;                         // the stick zone's top (GUI)
-                    float lower = Screen.height - Mathf.Max(cardTop, safe.yMin + (HelmBottom + helmH) * ppd);
+                    float lower = Screen.height - Mathf.Max(cardTop, safe.yMin + (HelmBottom + stackH) * ppd);
                     float cy = (upper + lower) * .5f;
                     float cx = safe.xMin + safe.width * .5f;
                     hint.style.left = (cx - 100f * ppd) * s;
@@ -611,8 +701,27 @@ namespace SeaSick.UI.Sheets
                     SetScale(lookHint, ref kLookHint, k);
                 }
 
+                // --- the harpoon's first-use hint: only once a target is in the
+                // arc, after the stick and look hints are done, retired by
+                // the first shot (any path: the button, a key, a marker).
+                if (gunOn && gun.State != HarpoonState.Ready) GestureHints.MarkDone(GestureHints.Harpoon);
+                bool harpHintOn = gunOn && !hintOn && !lookOn && !CombatHud.Visible && gun.State == HarpoonState.Ready
+                                  && gun.InArc.Count > 0 && GestureHints.IsDone(GestureHints.Stick)
+                                  && !GestureHints.IsDone(GestureHints.Harpoon);
+                if (harpHintOn && GestureHints.Shown(GestureHints.Harpoon, Time.unscaledDeltaTime)) harpHintOn = false;
+                Show(harpoonHint, ref harpoonHintShown, harpHintOn);
+                if (harpHintOn)
+                {
+                    // Right-aligned with the buttons, just above whatever
+                    // stack stands on them.
+                    float above = Mathf.Max(cardTop, safe.yMin + (HelmBottom + stackH) * ppd) + 8f * ppd;
+                    harpoonHint.style.right = (Screen.width - (laneX + laneW)) * s;
+                    harpoonHint.style.bottom = above * s;
+                    SetScale(harpoonHint, ref kHarpoonHint, k);
+                }
+
                 // --- keep what is left of the IMGUI HUD above all of this
-                float reserve = Mathf.Max(cardTop, helmOn ? safe.yMin + (HelmBottom + helmH) * ppd : 0f) - safe.yMin;
+                float reserve = Mathf.Max(cardTop, helmOn ? safe.yMin + (HelmBottom + stackH) * ppd : 0f) - safe.yMin;
                 // The combat row sits above the order strip: the reserve covers it
                 // too (2026-09-30), and it is the one rect `HudOverlapProbe`
                 // sees for both -- the row used to declare its own rect inside
@@ -799,6 +908,134 @@ namespace SeaSick.UI.Sheets
                 }
             }
 
+            // --- the harpoon button (each frame, re-texted only on change) -----------
+
+            /// Modes of the pill, one per look.
+            const int MReady = 0, MFiring = 1, MReeling = 2, MHooked = 3, MReload = 4, MHoldFull = 5;
+
+            void TickHarpoon(HarpoonGun gun, bool gunOn, Rect safe, float s, float ppd, float k, float bottom, float boostX)
+            {
+                if (!gunOn)
+                {
+                    Show(harpoonBtn, ref harpoonShown, false);
+                    Show(harpoonToast, ref toastShown, false);
+                    HarpoonRect = Rect.zero;
+                    toastSynced = false;
+                    return;
+                }
+
+                var st = gun.State;
+                bool on = st != HarpoonState.Ready || gun.Target != null;
+                Show(harpoonBtn, ref harpoonShown, on);
+                float btnBottom = bottom + (BoostSize + HarpoonGap) * ppd;
+                float boostRight = boostX + BoostSize * ppd;
+                if (on)
+                {
+                    harpoonBtn.style.right = (Screen.width - boostRight) * s;
+                    harpoonBtn.style.bottom = btnBottom * s;
+                    SetScale(harpoonBtn, ref kHarpoon, k);
+                    RefreshHarpoon(gun, st);
+                    // Last frame's layout: the pill grows and shrinks with its words.
+                    HarpoonRect = ToGui(harpoonBtn.worldBound, s);
+                }
+                else HarpoonRect = Rect.zero;
+
+                // The event word, beside the button (or where it would be).
+                if (!toastSynced || !ReferenceEquals(toastGun, gun))
+                {
+                    toastGun = gun;
+                    toastSynced = true;
+                    toastSeenAt = gun.LastEventAt;
+                }
+                else if (!Mathf.Approximately(gun.LastEventAt, toastSeenAt))
+                {
+                    toastSeenAt = gun.LastEventAt;
+                    string word = gun.LastEventWord;
+                    if (!string.IsNullOrEmpty(word))
+                    {
+                        harpoonToast.text = word;
+                        harpoonToast.style.color = word == "Aboard" ? Ice : word == "Hold full" ? Amber : Ember;
+                        toastStart = Time.unscaledTime;
+                    }
+                }
+                float age = Time.unscaledTime - toastStart;
+                bool toastOn = age < ToastSeconds;
+                Show(harpoonToast, ref toastShown, toastOn);
+                if (toastOn)
+                {
+                    float edge = HarpoonRect.width > 0f ? HarpoonRect.xMin : boostRight - BoostSize * ppd;
+                    harpoonToast.style.right = (Screen.width - edge + 8f * ppd) * s;
+                    harpoonToast.style.bottom = (btnBottom + 9f * ppd) * s;
+                    SetScale(harpoonToast, ref kToast, k);
+                    harpoonToast.style.opacity = Mathf.Clamp01((ToastSeconds - age) / ToastFade);
+                }
+            }
+
+            void RefreshHarpoon(HarpoonGun gun, HarpoonState st)
+            {
+                int mode = st == HarpoonState.Flying ? MFiring
+                    : st == HarpoonState.Returning ? MReeling
+                    : st == HarpoonState.Reloading ? MReload
+                    : st == HarpoonState.Hooked ? (gun.HoldFull ? MHoldFull : MHooked)
+                    : MReady;
+                bool line = mode == MHooked || mode == MHoldFull;
+                int band = line ? (int)gun.Band : -1;
+                if (mode != hMode || band != hBand)
+                {
+                    hMode = mode;
+                    hBand = band;
+                    hLabel = null;
+                    hMetres = hSeconds = -1;
+                    harpoonBtn.EnableInClassList("sea-harpoon--dim", mode == MFiring || mode == MReeling);
+                    harpoonBtn.EnableInClassList("sea-harpoon--line", line);
+                    harpoonBtn.EnableInClassList("sea-harpoon--taut", band == (int)TensionBand.Taut);
+                    harpoonBtn.EnableInClassList("sea-harpoon--strained", band == (int)TensionBand.Strained);
+                    harpoonBtn.EnableInClassList("sea-harpoon--full", mode == MHoldFull);
+                    hookGlyph.style.display = line ? DisplayStyle.None : DisplayStyle.Flex;
+                    cutGlyph.style.display = line ? DisplayStyle.Flex : DisplayStyle.None;
+                    cutGlyph.Tint = band == (int)TensionBand.Strained ? Ember : Pearl;
+                    reloadRing.style.display = mode == MReload ? DisplayStyle.Flex : DisplayStyle.None;
+                    harpoonTrack.style.display = line ? DisplayStyle.Flex : DisplayStyle.None;
+                    hFill = -1f;
+                    switch (mode)
+                    {
+                        case MFiring: harpoonText.text = "firing"; break;
+                        case MReeling: harpoonText.text = "reeling in"; break;
+                        case MHooked: harpoonText.text = "Cut"; break;
+                        case MHoldFull: harpoonText.text = "hold full"; break;
+                    }
+                }
+
+                if (mode == MReady)
+                {
+                    string label = gun.TargetLabel;
+                    if (string.IsNullOrEmpty(label)) label = "target";
+                    int metres = Mathf.Max(0, Mathf.RoundToInt(gun.TargetDistance));
+                    if (metres != hMetres || !string.Equals(label, hLabel))
+                    {
+                        hMetres = metres;
+                        hLabel = label;
+                        harpoonText.text = label + " · " + metres + " m";
+                    }
+                }
+                else if (mode == MReload)
+                {
+                    int secs = Mathf.Clamp(Mathf.CeilToInt(gun.ReloadSecondsLeft), 0, reloadTexts.Length - 1);
+                    if (secs != hSeconds)
+                    {
+                        hSeconds = secs;
+                        reloadTexts[secs] ??= "reload " + secs + " s";
+                        harpoonText.text = reloadTexts[secs];
+                    }
+                    reloadRing.Progress = gun.Reload01;
+                }
+                else if (line)
+                {
+                    float f = Mathf.Round(Mathf.Clamp01(gun.Tension01) * 50f) / 50f;
+                    if (!Mathf.Approximately(f, hFill)) { hFill = f; harpoonFill.style.width = Length.Percent(f * 100f); }
+                }
+            }
+
             // --- the card (each frame, re-texted only on change) ---------------------
 
             void TickCard()
@@ -897,12 +1134,13 @@ namespace SeaSick.UI.Sheets
 
     /// **The sea HUD's pictograms (2026-09-30)**: the sea-state wave, the ☰
     /// menu lines and the dashed first-use ring (the oars and the ease
-    /// arrow went with their toggles, 2026-10-02).
+    /// arrow went with their toggles, 2026-10-02), the harpoon button's
+    /// hook, scissors and reload ring (2026-10-04).
     /// Painted like `HudGlyph` / `LandIcon` (no font glyphs: "❚❚" and "⌂"
     /// drew as blank boxes on the phone's font).
     public sealed class SeaGlyph : VisualElement
     {
-        public enum Kind { Wave, Menu, DashedRing, Bolt }
+        public enum Kind { Wave, Menu, DashedRing, Bolt, Hook, Cut, Ring }
 
         readonly Kind kind;
         Color tint;
@@ -928,6 +1166,47 @@ namespace SeaSick.UI.Sheets
         {
             get => tint;
             set { if (value == tint) return; tint = value; MarkDirtyRepaint(); }
+        }
+
+        float progress = 1f;
+        /// The ring only: how much of the circle is lit, 0..1 from the top,
+        /// clockwise (the harpoon's reload countdown). Quantised to 1/100 so
+        /// a smooth timer repaints at most a hundred times a reload.
+        public float Progress
+        {
+            get => progress;
+            set
+            {
+                value = Mathf.Round(Mathf.Clamp01(value) * 100f) / 100f;
+                if (Mathf.Approximately(value, progress)) return;
+                progress = value;
+                MarkDirtyRepaint();
+            }
+        }
+
+        /// The harpoon hook on the 24-unit grid, as polylines (a shank with a
+        /// stock, a round bowl, a barbed tip). Shared with `HarpoonMarkers`,
+        /// which rasterises the same strokes for its IMGUI ring.
+        internal static readonly Vector2[][] HookStrokes = BuildHook();
+
+        static Vector2[][] BuildHook()
+        {
+            var bowl = new Vector2[7];
+            for (int i = 0; i < bowl.Length; i++)
+            {
+                float a = i * 30f * Mathf.Deg2Rad;
+                bowl[i] = new Vector2(11.75f + 3.75f * Mathf.Cos(a), 14.5f + 3.75f * Mathf.Sin(a));
+            }
+            var hook = new Vector2[1 + bowl.Length + 1];
+            hook[0] = new Vector2(15.5f, 5f);
+            for (int i = 0; i < bowl.Length; i++) hook[1 + i] = bowl[i];
+            hook[1 + bowl.Length] = new Vector2(8f, 11f);
+            return new[]
+            {
+                hook,
+                new[] { new Vector2(13f, 5.5f), new Vector2(18f, 5.5f) },
+                new[] { new Vector2(5.5f, 13.6f), new Vector2(8f, 11f), new Vector2(10.5f, 13.6f) },
+            };
         }
 
         void Draw(MeshGenerationContext context)
@@ -981,6 +1260,40 @@ namespace SeaSick.UI.Sheets
                     if (filled) p.Fill();
                     p.Stroke();
                     break;
+                case Kind.Hook:
+                    for (int i = 0; i < HookStrokes.Length; i++)
+                    {
+                        var path = HookStrokes[i];
+                        p.BeginPath();
+                        p.MoveTo(V(path[0].x, path[0].y));
+                        for (int j = 1; j < path.Length; j++) p.LineTo(V(path[j].x, path[j].y));
+                        p.Stroke();
+                    }
+                    break;
+                case Kind.Cut:
+                    // Scissors: two crossed blades over two finger rings.
+                    p.BeginPath(); p.MoveTo(V(9f, 3f)); p.LineTo(V(15.5f, 14.5f)); p.Stroke();
+                    p.BeginPath(); p.MoveTo(V(15f, 3f)); p.LineTo(V(8.5f, 14.5f)); p.Stroke();
+                    p.BeginPath(); p.Arc(V(7f, 17.6f), 2.8f * s, 0f, 360f); p.Stroke();
+                    p.BeginPath(); p.Arc(V(17f, 17.6f), 2.8f * s, 0f, 360f); p.Stroke();
+                    break;
+                case Kind.Ring:
+                    {
+                        float r = Mathf.Min(w, h) * .5f - 1.5f;
+                        var c = new Vector2(w * .5f, h * .5f);
+                        p.lineWidth = 2.6f;
+                        p.lineCap = LineCap.Butt;
+                        var track = tint;
+                        track.a *= .28f;
+                        p.strokeColor = track;
+                        p.BeginPath(); p.Arc(c, r, 0f, 360f); p.Stroke();
+                        if (progress > 0.005f)
+                        {
+                            p.strokeColor = tint;
+                            p.BeginPath(); p.Arc(c, r, -90f, -90f + 360f * progress); p.Stroke();
+                        }
+                        break;
+                    }
                 case Kind.Menu:
                     p.lineWidth = 2.4f * s;
                     for (int i = 0; i < 3; i++)

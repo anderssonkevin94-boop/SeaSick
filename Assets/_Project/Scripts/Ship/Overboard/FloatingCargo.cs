@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using SeaSick.Ship.Harpoon;
 using SeaSick.Voyage;
 using SeaSick.World;
 using SeaSick.World.Life;
@@ -20,7 +21,7 @@ namespace SeaSick.Ship.Overboard
     /// was a second ago on deck. A stack of up to four units, tilted a
     /// little off the wave's own normal so it reads as floating rather than
     /// standing.
-    public class FloatingCargo : MonoBehaviour, IOverboardTarget
+    public class FloatingCargo : MonoBehaviour, IOverboardTarget, IHarpoonable
     {
         static readonly List<FloatingCargo> all = new List<FloatingCargo>();
         public static IReadOnlyList<FloatingCargo> All => all;
@@ -50,6 +51,18 @@ namespace SeaSick.Ship.Overboard
         public Vector3 HaulAnchor { get; set; }
         void IOverboardTarget.OnHauled(string rescuerName) => Recover(rescuerName);
 
+        // --- IHarpoonable (the bow harpoon: hooked, reeled, then the same
+        // `OnHauled` above, so the reward is the sail-over one) -----------
+        /// "crate", or "loot" for the kraken's haul (`KrakenLoot` sets it).
+        public string HarpoonKind { get; set; } = "crate";
+        Transform IHarpoonable.Transform => transform;
+        public Vector3 HookPoint => transform.position + Vector3.up * 0.35f;
+        string IHarpoonable.HarpoonLabel => HarpoonKind;
+        public bool CanBeHarpooned => !Resolved && !BeingHauled;
+        /// One unit is a crate's worth; a full stack of four drags.
+        public float HarpoonMass => Mathf.Clamp(0.5f + 0.4f * Units, 0.8f, 3f);
+        public int HarpoonHoldUnits => Units;
+
         /// **Spawn one.** `hull` is the ship she fell from — used for the
         /// reach check and to find her again once recovered.
         public static FloatingCargo Spawn(string resource, int units, Transform hull, Vector3 worldPos)
@@ -75,6 +88,7 @@ namespace SeaSick.Ship.Overboard
 
             c.BuildVisual();
             all.Add(c);
+            HarpoonRegistry.Add(c);
             return c;
         }
 
@@ -90,7 +104,7 @@ namespace SeaSick.Ship.Overboard
             }
         }
 
-        void OnDestroy() => all.Remove(this);
+        void OnDestroy() { all.Remove(this); HarpoonRegistry.Remove(this); }
 
         void Update()
         {
@@ -121,7 +135,8 @@ namespace SeaSick.Ship.Overboard
             Quaternion tiltTarget = Quaternion.FromToRotation(Vector3.up, normal);
             transform.rotation = Quaternion.Slerp(transform.rotation, tiltTarget, dt * 2f);
 
-            timeLeft -= dt;
+            // Nothing sinks out of a haul (crew, jolly boat or harpoon).
+            if (!BeingHauled) timeLeft -= dt;
             if (timeLeft <= 0f) Sink();
         }
 

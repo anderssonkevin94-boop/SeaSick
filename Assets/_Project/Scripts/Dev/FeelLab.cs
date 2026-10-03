@@ -87,6 +87,8 @@ namespace SeaSick.Dev
             // When, where and how the kraken is announced (GDD §6, build
             // step 4) and the haul it leaves.
             "SeaSick.Combat.KrakenSpawnTuning",
+            // The bow harpoon: reach, shot, winch, tension, pull (PLAN-harpoon phase 1).
+            "SeaSick.Ship.Harpoon.HarpoonTuning",
         };
 
         /// The spec's range table, keyed "ClassName.fieldName". Anything not
@@ -196,6 +198,37 @@ namespace SeaSick.Dev
             {"SailControlTuning.steerTowardThrottle",    (0.1f, 1f)},
             {"SailControlTuning.steerTowardSlowThrottle",(0.05f, 1f)},
             {"SailControlTuning.steerTowardSlowHulls",   (0.5f, 6f)},
+            // The bow harpoon (HarpoonTuning), ranges from its docs
+            {"HarpoonTuning.range",                 (10f, 60f)},
+            {"HarpoonTuning.arcHalfDeg",            (15f, 90f)},
+            {"HarpoonTuning.windupSeconds",         (0f, 1.5f)},
+            {"HarpoonTuning.barbSpeed",             (15f, 90f)},
+            {"HarpoonTuning.barbArcMetres",         (0f, 6f)},
+            {"HarpoonTuning.biteRadius",            (0.5f, 4f)},
+            {"HarpoonTuning.leadErrorMetres",       (0f, 6f)},
+            {"HarpoonTuning.missReelSeconds",       (0.5f, 5f)},
+            {"HarpoonTuning.reloadSeconds",         (1f, 15f)},
+            {"HarpoonTuning.reelSpeed",             (0.5f, 8f)},
+            {"HarpoonTuning.reelEaseSeconds",       (0.05f, 2f)},
+            {"HarpoonTuning.reelSpring",            (2f, 40f)},
+            {"HarpoonTuning.reelDamper",            (0.2f, 2f)},
+            {"HarpoonTuning.waterDrag",             (0.2f, 4f)},
+            {"HarpoonTuning.railMetres",            (0.5f, 5f)},
+            {"HarpoonTuning.snapForce",             (3f, 30f)},
+            {"HarpoonTuning.winchStallStart",       (0.3f, 0.95f)},
+            {"HarpoonTuning.tautBand",              (0.05f, 0.6f)},
+            {"HarpoonTuning.strainBand",            (0.4f, 0.95f)},
+            {"HarpoonTuning.snapTension",           (0.7f, 1f)},
+            {"HarpoonTuning.snapHoldSeconds",       (0.2f, 4f)},
+            {"HarpoonTuning.tensionSmoothSeconds",  (0f, 0.5f)},
+            {"HarpoonTuning.pullScale",             (0f, 0.1f)},
+            {"HarpoonTuning.servoPullYaw",          (0f, 0.3f)},
+            {"HarpoonTuning.captainWorkRate",       (0.2f, 1f)},
+            {"HarpoonTuning.crewWalkWaitSeconds",   (0f, 5f)},
+            {"HarpoonTuning.releaseIdleSeconds",    (0.2f, 5f)},
+            {"HarpoonTuning.swivelDegPerSec",       (30f, 720f)},
+            {"HarpoonTuning.drumTurnsPerMetre",     (0f, 3f)},
+
             {"HelmTuning.holdGain",            (0.1f, 2f)},
             {"HelmTuning.holdMaxDegPerSec",    (0.5f, 10f)},
             {"HelmTuning.holdCaptureDegPerSec",(0.2f, 5f)},

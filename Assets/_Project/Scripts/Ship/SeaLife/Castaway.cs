@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using SeaSick.Ship.Overboard;
+using SeaSick.Ship.Harpoon;
 using SeaSick.World.Life;
 
 namespace SeaSick.Ship.SeaLife
@@ -29,7 +30,7 @@ namespace SeaSick.Ship.SeaLife
     /// draws its edge arrow and tap-to-steer for it (like a fish shoal) but
     /// never runs its own sail-over boarding: pulling them aboard is the
     /// spawner's button.
-    public class Castaway : MonoBehaviour, IOverboardTarget
+    public class Castaway : MonoBehaviour, IOverboardTarget, IHarpoonable
     {
         static readonly List<Castaway> all = new List<Castaway>();
         public static IReadOnlyList<Castaway> All => all;
@@ -63,9 +64,18 @@ namespace SeaSick.Ship.SeaLife
         public Transform Hull => ship;
         public bool BeingHauled { get; set; }
         public Vector3 HaulAnchor { get; set; }
-        /// Only reached if some haul code ever holds one of these (none does
-        /// today) -- routed to the same commit the button uses.
+        /// Reached when the bow harpoon reels them to the rail -- routed to the
+        /// same commit the Pull aboard button uses.
         void IOverboardTarget.OnHauled(string rescuerName) => Hauled?.Invoke(this, rescuerName);
+
+        // --- IHarpoonable: a line to the board they cling to. Crew, not cargo:
+        // no hold room needed. ------------------------------------------------
+        Transform IHarpoonable.Transform => transform;
+        public Vector3 HookPoint => transform.position + Vector3.up * 0.2f;
+        string IHarpoonable.HarpoonLabel => "castaway";
+        public bool CanBeHarpooned => !Resolved && !Pulling && !BeingHauled;
+        public float HarpoonMass => 1.2f;
+        public int HarpoonHoldUnits => 0;
 
         /// Raised by `OnHauled`; the spawner listens.
         public static event System.Action<Castaway, string> Hauled;
@@ -102,6 +112,7 @@ namespace SeaSick.Ship.SeaLife
             c.BuildVisual(bundle);
             c.FaceShip(1f);
             all.Add(c);
+            HarpoonRegistry.Add(c);
             return c;
         }
 
@@ -231,6 +242,7 @@ namespace SeaSick.Ship.SeaLife
         void OnDestroy()
         {
             all.Remove(this);
+            HarpoonRegistry.Remove(this);
             if (ringMat != null) Destroy(ringMat);
             if (lineMat != null) Destroy(lineMat);
         }
@@ -252,7 +264,7 @@ namespace SeaSick.Ship.SeaLife
 
             FaceShip(dt * 1.2f);
 
-            if (!Pulling)
+            if (!Pulling && !BeingHauled)
             {
                 timeLeft -= dt;
                 if (timeLeft <= 0f) { Resolve(); return; }

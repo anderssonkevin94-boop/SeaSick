@@ -44,6 +44,9 @@ namespace SeaSick.UI.Sheets
         /// The Backpack's first open with island tiles: "Hold a tile to keep
         /// some ashore". Retired by a hold on an island tile.
         public const string Keep = "keep";
+        /// At sea, the first time a harpoon target is in the bow arc: "Hook it
+        /// · tap the hook" (`SeaHud`). Retired by the first shot, any path.
+        public const string Harpoon = "harpoon";
 
         /// **How long a hint may stand before it retires on its own**
         /// (Kevin's brief: "auto-hide after the gesture is done once, or
@@ -52,7 +55,7 @@ namespace SeaSick.UI.Sheets
         /// six seconds.
         public const float ShowSeconds = 6f;
 
-        static readonly string[] All = { Stick, SeaLook, Look, Carry, FlyTo, Lock, Keep };
+        static readonly string[] All = { Stick, SeaLook, Look, Carry, FlyTo, Lock, Keep, Harpoon };
         static readonly Dictionary<string, float> shownFor = new Dictionary<string, float>();
 
         /// Count `dt` of on-screen time against `key`; true (and the flag

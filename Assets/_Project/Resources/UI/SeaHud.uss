@@ -154,6 +154,64 @@
     background-color: rgb(242, 196, 109); border-color: rgb(255, 224, 150);
 }
 
+/* ---------------- the harpoon button (2026-10-04): hook / scissors, just above the bolt ----------------
+   One button: the round 48 px icon on the right (its edge on the bolt's), the
+   label pill running left from it. Anchored by its RIGHT edge (SeaHud sets
+   right + bottom), so the pill grows leftward with its words. Words wrap,
+   never cut. States by class: --dim (firing / reeling in), --line (the line
+   is out: scissors + "Cut" + tension bar), --taut / --strained (the tension
+   colour), --full ("hold full", amber). */
+.sea-harpoon {
+    position: absolute; right: 0; bottom: 0; min-height: 48px; max-width: 250px;
+    flex-direction: row; align-items: center; justify-content: flex-end;
+    margin: 0; padding: 0 0 0 16px;
+    background-color: rgba(22, 41, 58, 0.92);
+    border-width: 2px; border-color: rgb(44, 74, 94); border-radius: 24px;
+    transform-origin: right bottom;
+}
+.sea-harpoon:hover { background-color: rgb(28, 50, 70); }
+.sea-harpoon:active { background-color: rgb(32, 57, 72); }
+.sea-harpoon-text {
+    flex-shrink: 1; margin: 0 2px 0 0; padding: 4px 0; font-size: 14px; color: rgb(232, 242, 246);
+    white-space: normal; -unity-text-align: middle-right;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.sea-harpoon-icon { width: 44px; height: 44px; flex-shrink: 0; align-items: center; justify-content: center; }
+.sea-harpoon-glyph { position: absolute; left: 9px; top: 9px; width: 26px; height: 26px; }
+.sea-harpoon-ring { position: absolute; left: 1px; top: 1px; width: 42px; height: 42px; display: none; }
+.sea-harpoon--dim { opacity: 0.55; }
+.sea-harpoon--line { border-color: rgb(110, 150, 172); }
+.sea-harpoon--taut { border-color: rgb(164, 210, 232); background-color: rgb(24, 52, 70); }
+.sea-harpoon--strained { border-color: rgb(246, 146, 128); background-color: rgb(58, 28, 26); }
+.sea-harpoon--full { border-color: rgb(242, 196, 109); }
+.sea-harpoon--full .sea-harpoon-text { color: rgb(242, 196, 109); }
+.sea-harpoon-track {
+    position: absolute; left: 18px; right: 40px; bottom: 5px; height: 4px; display: none;
+    border-radius: 2px; background-color: rgba(44, 74, 94, 0.9);
+}
+.sea-harpoon-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 2px; background-color: rgb(166, 186, 198); }
+.sea-harpoon--taut .sea-harpoon-fill { background-color: rgb(164, 210, 232); }
+.sea-harpoon--strained .sea-harpoon-fill { background-color: rgb(246, 146, 128); }
+/* The event word ("Snapped", "Aboard") beside the button; SeaHud sets right + bottom + opacity. */
+.sea-harpoon-toast {
+    position: absolute; right: 0; bottom: 0; height: 30px; margin: 0; padding: 0 12px;
+    font-size: 14px; color: rgb(232, 242, 246); white-space: nowrap; -unity-text-align: middle-center;
+    background-color: rgba(22, 41, 58, 0.92); border-radius: 15px;
+    transform-origin: right bottom;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+/* First-use hint pill, right-aligned above the buttons. Never a target. */
+.sea-harpoon-hint {
+    position: absolute; right: 0; bottom: 0; max-width: 220px; margin: 0; padding: 7px 14px;
+    background-color: rgba(22, 41, 58, 0.92); border-radius: 16px;
+    transform-origin: right bottom;
+}
+.sea-harpoon-hint-text {
+    margin: 0; padding: 0; font-size: 12px; color: rgb(232, 242, 246); white-space: normal;
+    -unity-text-align: middle-center;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+
 /* ---------------- first-use hint: "Drag to sail · let go to stop" ---------------- */
 .sea-hint {
     position: absolute; left: 0; top: 0; width: 200px; height: 150px;

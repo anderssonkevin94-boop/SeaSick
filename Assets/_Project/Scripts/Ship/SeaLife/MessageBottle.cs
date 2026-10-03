@@ -4,6 +4,7 @@ using SeaSick.World;
 using SeaSick.World.Life;
 using SeaSick.UI.Sheets;
 using SeaSick.Ship.Overboard;
+using SeaSick.Ship.Harpoon;
 
 namespace SeaSick.Ship.SeaLife
 {
@@ -15,7 +16,7 @@ namespace SeaSick.Ship.SeaLife
     /// no name" state a real glimpse gives, since finding a note about an
     /// island is not the same as having anchored off it. If every island is
     /// already on the chart, it's just a line of flavour text instead.
-    public class MessageBottle : MonoBehaviour, IOverboardTarget
+    public class MessageBottle : MonoBehaviour, IOverboardTarget, IHarpoonable
     {
         static readonly List<MessageBottle> all = new List<MessageBottle>();
         public static IReadOnlyList<MessageBottle> All => all;
@@ -47,6 +48,16 @@ namespace SeaSick.Ship.SeaLife
         public Vector3 HaulAnchor { get; set; }
         void IOverboardTarget.OnHauled(string rescuerName) => Recover();
 
+        // --- IHarpoonable (hooked and reeled, then the same `OnHauled`) -------
+        Transform IHarpoonable.Transform => transform;
+        public Vector3 HookPoint => transform.position + Vector3.up * 0.1f;
+        string IHarpoonable.HarpoonLabel => "bottle";
+        public bool CanBeHarpooned => !Resolved && !BeingHauled;
+        /// Comes in almost at once.
+        public float HarpoonMass => 0.2f;
+        /// A note, not cargo.
+        public int HarpoonHoldUnits => 0;
+
         public static MessageBottle Spawn(Transform hull, Vector3 worldPos)
         {
             if (hull == null) return null;
@@ -62,6 +73,7 @@ namespace SeaSick.Ship.SeaLife
 
             b.BuildVisual();
             all.Add(b);
+            HarpoonRegistry.Add(b);
             return b;
         }
 
@@ -98,7 +110,7 @@ namespace SeaSick.Ship.SeaLife
             return bottleMat;
         }
 
-        void OnDestroy() => all.Remove(this);
+        void OnDestroy() { all.Remove(this); HarpoonRegistry.Remove(this); }
 
         void Update()
         {
@@ -129,7 +141,7 @@ namespace SeaSick.Ship.SeaLife
                 }
             }
 
-            timeLeft -= dt;
+            if (!BeingHauled) timeLeft -= dt;
             if (timeLeft <= 0f) Cull();
         }
 

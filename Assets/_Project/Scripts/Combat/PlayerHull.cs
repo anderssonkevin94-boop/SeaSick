@@ -25,6 +25,10 @@ namespace SeaSick.Combat
             // **Bows at sea (2026-09-30):** the crew shoots arrows from the
             // hold at raider hulls in range (`Ship.ShipArchers`).
             if (GetComponent<ShipArchers>() == null) gameObject.AddComponent<ShipArchers>();
+            // **The bow harpoon (2026-10-04, docs/PLAN-harpoon.md):** every
+            // hull has one from the start, a fixed fitting on her stem.
+            if (GetComponent<SeaSick.Ship.Harpoon.HarpoonGun>() == null)
+                gameObject.AddComponent<SeaSick.Ship.Harpoon.HarpoonGun>();
         }
 
         /// The capsule a ball has to cross, from the hull she actually wears.

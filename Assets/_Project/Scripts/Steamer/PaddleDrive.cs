@@ -140,6 +140,7 @@ namespace SeaSick.Steamer
         float omega, dip, thrust, visualAngle;
         // Eased assist outputs: surge N, yaw N m, roll N m.
         float surgeAssistN, yawAssistNm, heelAssistNm;
+        Vector3 linePullN;
         // Yaw servo: the lagged reference rate, the estimate of everything
         // else's yaw acceleration, and last step's rate and servo push (the
         // pair the estimate is measured from). rad/s, rad/s^2.
@@ -227,6 +228,7 @@ namespace SeaSick.Steamer
 
             omega = 0f;
             surgeAssistN = yawAssistNm = heelAssistNm = 0f;
+            linePullN = Vector3.zero;
             servoPrimed = false;
             hold.Reset();
             probesWritten = false;
@@ -684,6 +686,22 @@ namespace SeaSick.Steamer
                 rb.AddForceAtPosition(transform.forward * surgeAssistN, thrustAt, ForceMode.Force);
             if (yawAssistNm != 0f || heelAssistNm != 0f)
                 rb.AddTorque(transform.up * yawAssistNm + transform.forward * heelAssistNm, ForceMode.Force);
+
+            // A line at the bow (`ShipMotor.ExternalPull`, the harpoon): a
+            // real force, so she is held back and her head is drawn toward the
+            // load by its own lever arm. Mass-scaled, eased through the same
+            // lerp, gated by the hull being in the sea and off the anchor
+            // spring. Applied at the centre of mass's height so it yaws and
+            // drags her without heeling her (the roll rate is on the
+            // smoothness meter).
+            Vector3 wantPull = anchored ? Vector3.zero : motor.ExternalPull * (rb.mass * sub);
+            linePullN = Vector3.Lerp(linePullN, wantPull, ease);
+            if (linePullN.sqrMagnitude > 1e-6f)
+            {
+                Vector3 at = motor.ExternalPullPoint;
+                at.y = rb.worldCenterOfMass.y;
+                rb.AddForceAtPosition(linePullN, at, ForceMode.Force);
+            }
         }
 
         void Update()

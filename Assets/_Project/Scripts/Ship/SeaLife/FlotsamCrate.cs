@@ -4,6 +4,7 @@ using SeaSick.Voyage;
 using SeaSick.World;
 using SeaSick.World.Life;
 using SeaSick.Ship.Overboard;
+using SeaSick.Ship.Harpoon;
 
 namespace SeaSick.Ship.SeaLife
 {
@@ -14,7 +15,7 @@ namespace SeaSick.Ship.SeaLife
     /// real wave and drifts, same shape as `FloatingCargo`, and plugs into
     /// the exact same `RescueHud` sail-over pickup through `IOverboardTarget`
     /// — no new UI, no new haul code.
-    public class FlotsamCrate : MonoBehaviour, IOverboardTarget
+    public class FlotsamCrate : MonoBehaviour, IOverboardTarget, IHarpoonable
     {
         static readonly List<FlotsamCrate> all = new List<FlotsamCrate>();
         public static IReadOnlyList<FlotsamCrate> All => all;
@@ -42,6 +43,14 @@ namespace SeaSick.Ship.SeaLife
         public Vector3 HaulAnchor { get; set; }
         void IOverboardTarget.OnHauled(string rescuerName) => Recover(rescuerName);
 
+        // --- IHarpoonable (hooked and reeled, then the same `OnHauled`) -------
+        Transform IHarpoonable.Transform => transform;
+        public Vector3 HookPoint => transform.position + Vector3.up * 0.3f;
+        string IHarpoonable.HarpoonLabel => "flotsam";
+        public bool CanBeHarpooned => !Resolved && !BeingHauled;
+        public float HarpoonMass => Mathf.Clamp(0.5f + 0.25f * Units, 0.7f, 2f);
+        public int HarpoonHoldUnits => Units;
+
         public static FlotsamCrate Spawn(Transform hull, Vector3 worldPos)
         {
             if (hull == null) return null;
@@ -62,6 +71,7 @@ namespace SeaSick.Ship.SeaLife
 
             c.BuildVisual();
             all.Add(c);
+            HarpoonRegistry.Add(c);
             return c;
         }
 
@@ -131,7 +141,7 @@ namespace SeaSick.Ship.SeaLife
             return plankMat;
         }
 
-        void OnDestroy() => all.Remove(this);
+        void OnDestroy() { all.Remove(this); HarpoonRegistry.Remove(this); }
 
         void Update()
         {
@@ -170,7 +180,7 @@ namespace SeaSick.Ship.SeaLife
                 }
             }
 
-            timeLeft -= dt;
+            if (!BeingHauled) timeLeft -= dt;
             if (timeLeft <= 0f) Cull();
         }
 

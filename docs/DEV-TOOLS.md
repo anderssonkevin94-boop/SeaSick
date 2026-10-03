@@ -1535,6 +1535,17 @@ DREDGE-style sailing input (docs/PLAN-dredge-controls.md; the old tap-to-sail `S
 - **Smoke-test trap (b): `capture_game_view` returns 1280x720 and has no IMGUI / UITK HUD in it.** To check that the ⚡ button and the order strip are where they should be, read `SeaHud.BoostRect` / `SeaHud.HelmRect` instead of the picture.
 - **Trap (c): git 2.23 + sparse worktrees.** Never run `git config core.sparseCheckout` (it writes the SHARED config and flips every worktree and the main checkout); use `git -c core.sparseCheckout=true ...` per command.
 
+### Bow harpoon (2026-10-04, phase 1)
+
+The ship's hook and reel (docs/PLAN-harpoon.md; GDD §6 "The bow harpoon"). The code is in `Ship/Harpoon/`: `HarpoonGun` (state machine, line physics, the pull), `HarpoonLine` (the rope), `HarpoonMount` (fitting/barb art or stand-ins, bow-stem placement), `HarpoonRegistry`, `IHarpoonable`, `HarpoonTypes` (crew seam). The UI is lane B's: `SeaHud` 🪝 button and `HarpoonMarkers`.
+
+- **Where the knobs live:** `Ship/Harpoon/HarpoonTuning.cs`, on the phone's FEEL panel. They cover reach/arc, wind-up, barb speed/arc/bite, lead error, the winch (speed, ease, spring, damper, water drag), the tension bands, snap tension and hold, reload, the pull on the ship, captain rate and walk wait.
+- **A target on demand (editor eval, play mode, at sea):** `unity cmd eval --json --code 'return SeaSick.Ship.Harpoon.HarpoonGun.DevSpawnTargetAhead("crate", 22f);'`. The kinds are `crate` (2 timber), `heavy` (4 stone, mass ~2: the one to snap), `loot`, `flotsam` and `bottle`. Then fire with `SeaSick.Ship.Harpoon.HarpoonGun.Player.FireOrCut()`, and read `.State`, `.Tension01`, `.Band`, `.LastEventWord` and `.HoldFull`. Castaways only come from `CastawaySpawner` (its Commit only accepts its own `current`), so they cannot be spawned from here.
+- **Delivery is the target's own `IOverboardTarget.OnHauled`**, with `BeingHauled` held true for the whole reel. That keeps `RescueHud`'s sail-over and the jolly boat off a hooked load. The gun moves the load kinematically and parks `HaulAnchor` on the same spot, so the target's own `MoveTowards(HaulAnchor)` is a no-op whichever Update runs first.
+- **Trap: a destroyed target behind an interface.** `IHarpoonable.Transform` on a destroyed MonoBehaviour throws instead of returning null. Test with `HarpoonGun.Gone` (it casts to `UnityEngine.Object`), never with `t.Transform == null`.
+- **Trap: the servo hull cancels a raw force by the next step.** `ShipMotor.ExternalPull` is read as a lower target speed plus `ExternalPullYaw` on the servo path, and as a real force at `ExternalPullPoint` (at centre-of-mass height, so it never heels her) in `PaddleDrive`.
+- **Not harpoonable in phase 1:** `SalvageSpawner`'s timber-crate clusters (plain transforms with their own 6 m sail-over, not `IOverboardTarget`).
+
 ## 2026-09-27 — the economy tuning file and its FEEL dials
 
 **Where every camp number lives:** `Assets/_Project/Settings/Resources/EconomyTuning.asset` (`World/Economy/EconomyTuning.cs`). Plan prices + hammer seconds, fire and upgrade prices, rate multipliers, copy caps, per-copy step, recipes, cut seconds, rock yields, meat/hide, spear life, warmth. The live multipliers are `World/Economy/EconomyFeel.cs` statics, registered in `Dev/FeelLab.cs` (`TypeFullNames` + `Ranges`), so they show on the phone's FEEL panel. GDD §6 "Economy numbers" has the table and the reasoning.

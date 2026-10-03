@@ -286,6 +286,12 @@ namespace SeaSick.Voyage
             return take;
         }
 
+        /// **Room for `amount` more units under the same ceiling `AddLoot`
+        /// clamps to** (`MaxHold`). `ReturnCargo` stays unclamped for its own
+        /// callers; the bow harpoon asks this first and keeps a load at the
+        /// rail until it is true (Kevin 2026-10-03: the hold is finite).
+        public bool CargoFits(int amount) => amount <= 0 || TotalHeld + amount <= MaxHold;
+
         /// **Cargo overboard, recovered or returned unsalvaged on save**
         /// (phase 6). Unlike `AddLoot`, never clamped to `MaxHold` — these
         /// units already counted as aboard a moment before they went over

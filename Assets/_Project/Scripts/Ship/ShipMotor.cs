@@ -329,6 +329,20 @@ namespace SeaSick.Ship
         /// the sea-state readout, the anchor and the knockdown.
         public bool ExternalDrive { get; set; }
 
+        /// **A line on her** (the bow harpoon, `Ship/Harpoon/HarpoonGun`):
+        /// the horizontal acceleration the load puts on her, m/s², world
+        /// space, already eased by whoever sets it, at `ExternalPullPoint`.
+        /// The steamer takes it as a real force there (`PaddleDrive`); this
+        /// servo would cancel a raw force by the next step, so it lowers the
+        /// target speed by the share pulling astern (`PullSpeedPerAccel`) and
+        /// adds `ExternalPullYaw` (rad/s, + = to starboard) toward the load.
+        /// Zero = no line, and nothing below changes.
+        public Vector3 ExternalPull { get; set; }
+        public Vector3 ExternalPullPoint { get; set; }
+        public float ExternalPullYaw { get; set; }
+        /// m/s of target speed a 1 m/s² pull astern costs the servo hull.
+        const float PullSpeedPerAccel = 2.5f;
+
         /// The derived wave state an external drive measured for itself, so
         /// the gauges, SpeedJuice and the crew keep reading it from the one
         /// place they always have.
@@ -999,6 +1013,7 @@ namespace SeaSick.Ship
             bool holdOk = !Anchored && !AutopilotTarget.HasValue && HoldAllowed;
             float holdRate = yawHold.Step(holdOk, effectiveRudder, Heading, av.y, dt);
             if (yawHold.Active) targetYawRate = holdRate + broachBias;
+            if (!Anchored) targetYawRate += ExternalPullYaw;
             // First-order lag toward the commanded rate (was a 4 rad/s^2
             // rate limit: full rate in 0.08 s, dead in 0.04 s). tau is the
             // BUILD lag while the command is pulling away from zero and the
@@ -1063,6 +1078,11 @@ namespace SeaSick.Ship
                 targetSpeed = Mathf.Max(targetSpeed,
                     rowSpeed * (1f - 0.22f * laden - 0.30f * over) * OarPower01);
             if (Anchored) targetSpeed = 0f;
+            // A load on the line holds her back: less way to make, never a
+            // tow astern (phase 1 is salvage).
+            float pullAstern = -Vector3.Dot(ExternalPull, forward);
+            if (pullAstern > 0f && targetSpeed > 0f)
+                targetSpeed = Mathf.Max(0f, targetSpeed - pullAstern * PullSpeedPerAccel);
 
             // Above her target the engine stops pushing and starts holding
             // her back -- except on a face, where the brake was quietly
