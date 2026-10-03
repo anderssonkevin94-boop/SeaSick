@@ -172,7 +172,8 @@ namespace SeaSick.Crew
         public void StartBailing()
         {
             if (AtCamp) return;
-            if (state == State.Station || state == State.Returning) state = State.Bailing;
+            if (state == State.Station || state == State.Returning || state == State.Relocating)
+                state = State.Bailing;
         }
 
         /// Take them off the buckets and send them back to their post.
@@ -220,10 +221,63 @@ namespace SeaSick.Crew
             if (state == State.Station && !AtCamp) transform.localPosition = stationLocal;
         }
 
+        /// **Walk to a different gun (2026-10-03, Kevin: gunners walk to the
+        /// engaged side).** Same contract as `AssignStation` -- the new post
+        /// and its rail -- except a hand standing at his post does NOT snap:
+        /// he goes `Relocating` and WALKS there at deck gait (`WalkTo`, so
+        /// the coaster's deck graph routes him round the hatch and the
+        /// mast), and `Available` stays false until he arrives. That is the
+        /// whole of "a gun fires only once someone is standing at it": the
+        /// battery mans a gun from `Available`, which only `Station` is.
+        ///
+        /// A hand who is NOT at his post (bailing, at the rail, hauling, out
+        /// in the jolly boat, ashore) just has his post moved under him:
+        /// every one of those round trips ends by walking to `stationLocal`,
+        /// so he finishes what he is doing and then goes to the new gun.
+        /// His rail spot (`railLocal`, the heave) and his bucket spot
+        /// (`BailLocal`, derived from `stationLocal`) follow the new gun by
+        /// construction -- that is the "rail and bail follow the gun he is
+        /// at" half of the spec. Never onto a deck that is not there
+        /// (`AtCamp`): a parked hand only has his numbers changed.
+        public void RelocateStation(Vector3 station, Vector3 rail)
+        {
+            stationLocal = station;
+            railLocal = rail;
+            if (AtCamp) return;
+            if (state != State.Station && state != State.Relocating) return;
+            Vector3 d = transform.localPosition - stationLocal;
+            d.y = 0f;
+            // Already standing on it (a re-post to the same gun): no walk,
+            // and no blink of `Available`.
+            if (state == State.Station && d.sqrMagnitude < 0.04f) return;
+            state = State.Relocating;
+        }
+
+        /// Walking across the deck to a different gun (`RelocateStation`).
+        public bool IsRelocating => state == State.Relocating;
+
+        /// **Can the battery count on this body for a gun at all
+        /// (2026-10-03)?** Aboard this deck and not tied up in something
+        /// that takes him out of the ship's own work for a long while: a
+        /// haul (he is on a line with a swimmer) or the jolly boat. Short
+        /// round trips -- bailing, the rail, a walk to a gun -- keep him in
+        /// the battery's map, because he comes back to the gun he is
+        /// assigned. Overboard and ashore bodies fail `IsAboard` (and an
+        /// overboard one is inactive besides).
+        public bool CanCrewGun => gameObject.activeInHierarchy && IsAboard && !AtCamp && !Puppeted
+            && state != State.JollyBoatDuty && !IsHauling;
+
+        /// The gun this hand currently works (`CannonBattery`), or null.
+        /// Read by `CrewRoster.AssignBailers`, so the bail order follows the
+        /// gun he is AT, not the one he was first posted to.
+        public Cannon Gun => gun;
+
         enum State
         {
             // aboard
             Station, Bailing, Returning,
+            // 2026-10-03: walking to a different gun (`RelocateStation`)
+            Relocating,
             // phase 5a: the rail round-trip a heave now takes
             RailGoing, AtRail, RailHold, RailReturning,
             // phase 5b: the haul -- a hand sent to throw the line
@@ -246,7 +300,7 @@ namespace SeaSick.Crew
         /// refit guard, which will not rebuild a deck a hand is out of.
         public Transform HomeShip => ship;
         public bool IsAboard => state == State.Station || state == State.Bailing
-            || state == State.Returning || state == State.RailGoing
+            || state == State.Returning || state == State.Relocating || state == State.RailGoing
             || state == State.AtRail || state == State.RailHold || state == State.RailReturning
             || state == State.HaulGoing || state == State.Hauling || state == State.HaulReturning
             || state == State.JollyBoatDuty;
@@ -727,6 +781,7 @@ namespace SeaSick.Crew
                     break;
 
                 case State.Returning:
+                case State.Relocating:
                     if (WalkTo(stationLocal, dt))
                         state = State.Station;   // turns to his post in ActBody
                     break;

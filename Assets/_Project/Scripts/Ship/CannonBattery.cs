@@ -74,6 +74,8 @@ namespace SeaSick.Ship
         // Build order, and therefore the crew assignment order: each gun is
         // worked by one named hand. A gun goes silent because a person walked
         // away from it, which is a thing you can watch happen on deck.
+        // 2026-10-03: that hand is the gun's HOME; who stands at it NOW is
+        // `gunHand` (gunners walk to the engaged side, `RebalanceCrews`).
         readonly List<Cannon> allGuns = new List<Cannon>();
         ShipMotor motor;
         Crew.CrewRoster roster;
@@ -298,41 +300,65 @@ namespace SeaSick.Ship
         /// it, and you can watch the person who should be there walk away.
         public void SetGunnerClearance(float inboard) { gunnerInboard=inboard;PostGunCrews(); }
 
+        /// **Every gunner at his HOME gun** (2026-10-03: plus the seed of
+        /// the gun->hand map `RebalanceCrews` works from). Runs at every Fit,
+        /// FitAuthored and `SetGunnerClearance` -- the yard refitting, the
+        /// coaster install re-posting at 0.95 m -- so a refit mid-fight puts
+        /// everyone home and the next rebalance walks them out again: a
+        /// re-post can never leave the map pointing at a gun that is gone.
         void PostGunCrews()
         {
             if (roster == null) roster = GetComponent<Crew.CrewRoster>();
             if (roster == null) return;
+            EnsureShiftBuffers();
+            for (int i = 0; i < gunHand.Length; i++) gunHand[i] = null;
 
             for (int i = 0; i < allGuns.Count; i++)
             {
                 var hand = AssignedCrew(i);
                 if (hand == null || allGuns[i] == null) continue;
 
-                Vector3 gun = allGuns[i].transform.localPosition;
-                float side = Mathf.Sign(gun.x);
-                Vector3 station = new Vector3(gun.x - side * gunnerInboard, gun.y, gun.z);
-                // **The v15 gunner (GunRam / GunFire, 2026-10-01)** was
-                // authored at his station beside the BACK of the gun, the gun
-                // on his right, facing outboard with it: 1.05 m inboard of
-                // the gun's origin and 0.98 m to its left (gun frame), clear
-                // of the recoil. A body with those clips stands there.
-                if (hand.HasGunnerClips && allGuns[i].transform.parent == transform)
-                {
-                    var g = allGuns[i].transform;
-                    Vector3 fwd = g.localRotation * Vector3.forward;
-                    fwd.y = 0f;
-                    if (fwd.sqrMagnitude < 1e-4f) fwd = new Vector3(side, 0f, 0f);
-                    fwd.Normalize();
-                    // Outboard along the gun; its left is up x forward.
-                    if (Vector3.Dot(fwd, new Vector3(side, 0f, 0f)) < 0f) fwd = -fwd;
-                    Vector3 left = Vector3.Cross(fwd, Vector3.up);
-                    station = gun - fwd * Crew.CrewAgent.GunnerBehind + left * Crew.CrewAgent.GunnerBeside;
-                    station.y = gun.y;
-                }
-                hand.AssignStation(station,
-                    new Vector3(gun.x + side * gunportOutboard, gun.y, gun.z));
+                StationFor(i, hand, out Vector3 station, out Vector3 rail);
+                hand.AssignStation(station, rail);
                 hand.AssignGun(allGuns[i]);
+                // One body stands at one gun: on an authored hull the pair's
+                // hand is posted twice and the LAST post is where he stands.
+                for (int j = 0; j < gunHand.Length; j++)
+                    if (ReferenceEquals(gunHand[j], hand)) gunHand[j] = null;
+                gunHand[i] = hand;
             }
+            crewsPosted = true;
+            nextRebalance = 0f;   // on the next Update, after any re-post
+        }
+
+        /// Where a gunner stands to work gun `i`, and the rail he heaves
+        /// over from there (ship-local). Factored out of `PostGunCrews` on
+        /// 2026-10-03 so a hand who WALKS to another gun gets exactly the
+        /// spot he would have been posted to -- clips, clearance and all.
+        void StationFor(int i, Crew.CrewAgent hand, out Vector3 station, out Vector3 rail)
+        {
+            Vector3 gun = allGuns[i].transform.localPosition;
+            float side = Mathf.Sign(gun.x);
+            station = new Vector3(gun.x - side * gunnerInboard, gun.y, gun.z);
+            // **The v15 gunner (GunRam / GunFire, 2026-10-01)** was
+            // authored at his station beside the BACK of the gun, the gun
+            // on his right, facing outboard with it: 1.05 m inboard of
+            // the gun's origin and 0.98 m to its left (gun frame), clear
+            // of the recoil. A body with those clips stands there.
+            if (hand.HasGunnerClips && allGuns[i].transform.parent == transform)
+            {
+                var g = allGuns[i].transform;
+                Vector3 fwd = g.localRotation * Vector3.forward;
+                fwd.y = 0f;
+                if (fwd.sqrMagnitude < 1e-4f) fwd = new Vector3(side, 0f, 0f);
+                fwd.Normalize();
+                // Outboard along the gun; its left is up x forward.
+                if (Vector3.Dot(fwd, new Vector3(side, 0f, 0f)) < 0f) fwd = -fwd;
+                Vector3 left = Vector3.Cross(fwd, Vector3.up);
+                station = gun - fwd * Crew.CrewAgent.GunnerBehind + left * Crew.CrewAgent.GunnerBeside;
+                station.y = gun.y;
+            }
+            rail = new Vector3(gun.x + side * gunportOutboard, gun.y, gun.z);
         }
 
         /// Where a side's guns are trained to cross, in ship-local space:
@@ -423,7 +449,13 @@ namespace SeaSick.Ship
                 if (gun == null) continue;
                 if (roster == null) { gun.Manned = true; gun.ReloadScale = 1f; continue; }
 
-                var hand = AssignedCrew(i);
+                // 2026-10-03: whoever STANDS at this gun now (the map
+                // `RebalanceCrews` keeps), not the hand it was built for. A
+                // hand walking over is `Relocating`, not `Available`, so the
+                // gun stays silent until he arrives. Authored hulls keep
+                // their pairing: one hand works both guns of his pair
+                // (`AssignedCrew`) and only his standing spot moves.
+                var hand = authoredBattery ? AssignedCrew(i) : StandingCrew(i);
                 gun.Manned = hand != null && hand.Available;
                 gun.ReloadScale = hand != null ? hand.WorkRate01 : 0f;
             }
@@ -435,6 +467,275 @@ namespace SeaSick.Ship
             int n = 0;
             foreach (var c in side) if (c != null && c.Manned) n++;
             return n;
+        }
+
+        // ---- gunners walk to the engaged side (2026-10-03) ---------------
+        //
+        // Kevin, approved spec (relayed 2026-10-03): the engaged side is the
+        // locked target's, else the nearest hostile's; gunners whose gun
+        // faces away WALK -- no snap, real deck gait -- to unmanned guns on
+        // that side, and a gun only fires once somebody stands at it. The
+        // side must hold ~3 s before anyone moves (the kraken flips sides).
+        // Enemies both sides: the locked side fills first, spares man the
+        // other. Fight over (no lock, nobody in range, the same 3 s grace):
+        // everyone walks back to his HOME gun. Rail and buckets follow the
+        // gun he is at (`CrewAgent.RelocateStation`, `CrewRoster.
+        // AssignBailers`). Only this -- the full shipboard priority list
+        // (rescue -> bail -> engaged guns -> sails/oars) is later.
+        //
+        // **Player ships only, by construction.** Raiders (`EnemyShip`) work
+        // their own guns and carry no `CannonBattery`; the battery lives on
+        // the player's hull in Sea.unity and the art lab, and nothing here
+        // runs without a `CrewRoster` beside it.
+        //
+        // **Runtime only.** The map is not saved: on load the battery is
+        // fitted fresh (`PostGunCrews`), so everyone starts at his home gun
+        // and walks out again if the fight is still on.
+
+        [Header("Gun crews: walk to the engaged side (2026-10-03)")]
+        [Tooltip("Seconds the engaged side (or 'no fight') must hold before any gunner moves. Kevin: ~3 s, so a kraken flipping sides or a raider crossing the bow does not march the crew back and forth.")]
+        [SerializeField] float sideHoldSeconds = 3f;
+        [Tooltip("Seconds between re-plans of who stands where -- hands going down, coming back, the crew growing. A committed side change re-plans at once.")]
+        [SerializeField] float rebalanceInterval = 1f;
+
+        /// Who STANDS at each gun now (or is walking to it). Non-authored:
+        /// the only thing that mans a gun (`StandingCrew`). Authored: where
+        /// each pair's hand stands; manning still goes by the pair.
+        Crew.CrewAgent[] gunHand = System.Array.Empty<Crew.CrewAgent>();
+        bool crewsPosted;
+        float nextRebalance, nextSideLook;
+
+        // Engaged sides (GunCrewShift.Port / Starboard / None): what the
+        // last look saw (`pend*`, since `pendSince`) and what the crews are
+        // working to (`engaged*`, changed only after `sideHoldSeconds`).
+        int pendPrimary = GunCrewShift.None, pendSecondary = GunCrewShift.None;
+        int engagedPrimary = GunCrewShift.None, engagedSecondary = GunCrewShift.None;
+        float pendSince;
+
+        /// The side the crews are manning now (`GunCrewShift.Port`,
+        /// `.Starboard`, or `.None` out of a fight), for probes and a
+        /// later HUD hint.
+        public int EngagedSide => engagedPrimary;
+        public int EngagedSecondSide => engagedSecondary;
+
+        // Reused every re-plan: no per-frame (or per-second) garbage.
+        int[] shiftGunSide = System.Array.Empty<int>();
+        float[] shiftGunZ = System.Array.Empty<float>();
+        bool[] shiftGunTaken = System.Array.Empty<bool>();
+        Crew.CrewAgent[] shiftHands = System.Array.Empty<Crew.CrewAgent>();
+        int[] shiftHome = System.Array.Empty<int>(), shiftCurrent = System.Array.Empty<int>(),
+              shiftTarget = System.Array.Empty<int>();
+        bool[] shiftEligible = System.Array.Empty<bool>(), shiftPlaced = System.Array.Empty<bool>();
+
+        void EnsureShiftBuffers()
+        {
+            int n = allGuns.Count;
+            if (gunHand.Length != n)
+            {
+                gunHand = new Crew.CrewAgent[n];
+                shiftGunSide = new int[n]; shiftGunZ = new float[n]; shiftGunTaken = new bool[n];
+                // Never more gunners than guns: one named hand per gun.
+                shiftHands = new Crew.CrewAgent[n];
+                shiftHome = new int[n]; shiftCurrent = new int[n]; shiftTarget = new int[n];
+                shiftEligible = new bool[n]; shiftPlaced = new bool[n];
+            }
+        }
+
+        /// The hand standing at gun `i` and still on this deck, or null.
+        Crew.CrewAgent StandingCrew(int i)
+        {
+            if (i < 0 || i >= gunHand.Length) return null;
+            var hand = gunHand[i];
+            return hand != null && hand.gameObject.activeInHierarchy ? hand : null;
+        }
+
+        int GunOf(Crew.CrewAgent hand)
+        {
+            for (int i = 0; i < gunHand.Length; i++)
+                if (ReferenceEquals(gunHand[i], hand)) return i;
+            return -1;
+        }
+
+        /// 4x a second: which side the fight is on, held `sideHoldSeconds`
+        /// before the crews are told; then a re-plan when the side changes
+        /// and once a second regardless (somebody went over the side, came
+        /// back from the buckets, the crew grew).
+        void TickCrewShift()
+        {
+            if (!built || allGuns.Count == 0) return;
+            if (roster == null) roster = GetComponent<Crew.CrewRoster>();
+            if (roster == null) return;
+            // Fitted before the roster existed: post now.
+            if (!crewsPosted || gunHand.Length != allGuns.Count) PostGunCrews();
+
+            float now = Time.time;
+            if (now >= nextSideLook)
+            {
+                nextSideLook = now + 0.25f;
+                SenseEngagedSides(out int p, out int s);
+                if (p != pendPrimary || s != pendSecondary)
+                {
+                    pendPrimary = p; pendSecondary = s; pendSince = now;
+                }
+                if ((pendPrimary != engagedPrimary || pendSecondary != engagedSecondary)
+                    && now - pendSince >= sideHoldSeconds)
+                {
+                    engagedPrimary = pendPrimary;
+                    engagedSecondary = pendSecondary;
+                    nextRebalance = 0f;
+                }
+            }
+
+            if (now < nextRebalance) return;
+            nextRebalance = now + rebalanceInterval;
+            RebalanceCrews();
+        }
+
+        /// The engaged side: the lock's, else the nearest hostile's; plus
+        /// the other side when a hostile is in reach there too. "In reach"
+        /// is the same 1.5x-the-guns (at least 60 m) the combat row uses
+        /// (`EnemyInRange`): the crews start across when the Fire buttons
+        /// show, since the walk itself takes seconds.
+        void SenseEngagedSides(out int primary, out int secondary)
+        {
+            primary = secondary = GunCrewShift.None;
+            if (self == null) self = GetComponent<Combat.PlayerHull>();
+            float reach = Mathf.Max(GunRangeAny, 40f) * 1.5f;
+            float reachSq = reach * reach;
+            var locked = AutoFireTarget;
+            bool hasLock = locked != null && locked.Alive && !(locked is Combat.IFriendly);
+
+            float nearPort = float.MaxValue, nearStar = float.MaxValue;
+            Vector3 here = transform.position;
+            foreach (var t in Combat.HitTargets.All)
+            {
+                if (t == null || !t.Alive || ReferenceEquals(t, self) || t is Combat.IFriendly) continue;
+                if (hasLock && ReferenceEquals(t, locked)) continue;
+                Vector3 d = t.HitCentre - here;
+                d.y = 0f;
+                float sq = d.sqrMagnitude;
+                if (sq > reachSq) continue;
+                if (SideOf(t) == GunCrewShift.Starboard) { if (sq < nearStar) nearStar = sq; }
+                else if (sq < nearPort) nearPort = sq;
+            }
+
+            if (hasLock) primary = SideOf(locked);
+            else if (nearStar < float.MaxValue || nearPort < float.MaxValue)
+                primary = nearStar <= nearPort ? GunCrewShift.Starboard : GunCrewShift.Port;
+            if (primary == GunCrewShift.None) return;
+
+            float other = primary == GunCrewShift.Starboard ? nearPort : nearStar;
+            if (other < float.MaxValue)
+                secondary = primary == GunCrewShift.Starboard ? GunCrewShift.Port : GunCrewShift.Starboard;
+        }
+
+        int SideOf(Combat.IHittable t) =>
+            transform.InverseTransformPoint(t.HitCentre).x >= 0f
+                ? GunCrewShift.Starboard : GunCrewShift.Port;
+
+        /// `GunRange` reads the starboard guns; a ship armed only to port
+        /// still has a reach.
+        float GunRangeAny
+        {
+            get
+            {
+                foreach (var c in allGuns) if (c != null) return c.FlatRange;
+                return 0f;
+            }
+        }
+
+        /// **Re-plan who stands at which gun** and walk anybody whose gun
+        /// changed (`CrewAgent.RelocateStation`). The rules are
+        /// `GunCrewShift.Assign`; this only reads the deck into its arrays
+        /// and acts on the answer. A hand who is overboard, ashore, hauling
+        /// or in the jolly boat (`CanCrewGun` false) drops out of the map --
+        /// his gun stands empty and the next plan may send somebody to it;
+        /// when he is back he is planned like anyone else and never bumps
+        /// whoever covered for him.
+        public void RebalanceCrews()
+        {
+            if (roster == null || allGuns.Count == 0) return;
+            EnsureShiftBuffers();
+            if (authoredBattery) { RebalanceAuthored(); return; }
+
+            int g = allGuns.Count, h = 0;
+            for (int i = 0; i < g; i++)
+            {
+                var gun = allGuns[i];
+                shiftGunSide[i] = gun == null ? GunCrewShift.None
+                    : starboard.Contains(gun) ? GunCrewShift.Starboard : GunCrewShift.Port;
+                shiftGunZ[i] = gun != null ? gun.transform.localPosition.z : 0f;
+
+                // The named gunner for this gun, active or not (an inactive
+                // one is overboard: listed, ineligible, so his gun is free).
+                var hand = roster.GunCrew(i);
+                if (hand == null) continue;
+                shiftHands[h] = hand;
+                shiftHome[h] = i;
+                shiftEligible[h] = hand.CanCrewGun;
+                shiftCurrent[h] = GunOf(hand);
+                h++;
+            }
+
+            GunCrewShift.Assign(g, shiftGunSide, shiftGunZ, h, shiftHome, shiftEligible,
+                shiftCurrent, engagedPrimary, engagedSecondary,
+                shiftTarget, shiftGunTaken, shiftPlaced);
+
+            for (int i = 0; i < g; i++) gunHand[i] = null;
+            for (int k = 0; k < h; k++)
+            {
+                int t = shiftTarget[k];
+                var hand = shiftHands[k];
+                shiftHands[k] = null;   // hold no stale reference
+                if (t < 0 || allGuns[t] == null) continue;
+                gunHand[t] = hand;
+                if (t != shiftCurrent[k]) SendTo(hand, t);
+            }
+        }
+
+        /// Authored hulls (`FitAuthored`): one hand works a PAIR of guns
+        /// (`index / 2`, one each side by the import's order), so nobody
+        /// changes pairs -- each hand just walks to the gun of his own pair
+        /// on the engaged side, and home (the last of his pair, where
+        /// `PostGunCrews` stood him) after the fight. Manning stays by pair.
+        void RebalanceAuthored()
+        {
+            int g = allGuns.Count;
+            for (int k = 0; 2 * k < g; k++)
+            {
+                var hand = roster.GunCrew(k);
+                if (hand == null) continue;
+                int current = GunOf(hand);
+                if (!hand.CanCrewGun)
+                {
+                    if (current >= 0) gunHand[current] = null;
+                    continue;
+                }
+                int a = 2 * k, b = 2 * k + 1;
+                int home = b < g && allGuns[b] != null ? b : a;
+                int target = home;
+                int want = engagedPrimary;
+                for (int pass = 0; pass < 2 && want != GunCrewShift.None; pass++)
+                {
+                    if (PairSide(a) == want) { target = a; break; }
+                    if (b < g && PairSide(b) == want) { target = b; break; }
+                    want = engagedSecondary;
+                }
+                if (allGuns[target] == null || target == current) continue;
+                if (current >= 0) gunHand[current] = null;
+                gunHand[target] = hand;
+                SendTo(hand, target);
+            }
+        }
+
+        int PairSide(int i) => allGuns[i] == null ? GunCrewShift.None
+            : starboard.Contains(allGuns[i]) ? GunCrewShift.Starboard : GunCrewShift.Port;
+
+        void SendTo(Crew.CrewAgent hand, int gunIndex)
+        {
+            StationFor(gunIndex, hand, out Vector3 station, out Vector3 rail);
+            hand.RelocateStation(station, rail);
+            hand.AssignGun(allGuns[gunIndex]);
         }
 
         // ---- auto-fire (2026-09-27) -------------------------------------
@@ -572,6 +873,7 @@ namespace SeaSick.Ship
         void Update()
         {
             float dt = Time.deltaTime;
+            TickCrewShift();
             ServiceGuns();
             TrainSide(starboard, true, dt);
             TrainSide(port, false, dt);

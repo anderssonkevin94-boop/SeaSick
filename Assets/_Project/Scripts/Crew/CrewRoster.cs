@@ -135,24 +135,59 @@ namespace SeaSick.Crew
         /// before the forward ones** — so a little water costs you nothing, and
         /// only a serious flood starts silencing the battery. Anyone ashore or
         /// over the side simply isn't available to ask.
+        ///
+        /// **2026-10-03: by the gun he is AT, not his berth number.** This
+        /// was a fixed table of roster indices ({4,3,1,2,0}: the five berths
+        /// of the authored gun ship), which stopped being true the moment
+        /// gunners could walk to the engaged side (`CannonBattery.
+        /// RebalanceCrews`): the "aft gun" hand might be standing at a
+        /// forward gun on the other side. Now: every hand with no gun
+        /// (`CrewAgent.Gun` null) in roster order, then the gunners by their
+        /// CURRENT gun's ship-local z, aftmost first, ties to the higher
+        /// index -- which reproduces the old table exactly on the authored
+        /// four. One change on purpose: a big crew's extra spares used to
+        /// come after every gunner (the table only knew berth 4); they are
+        /// spare, so they now go before the guns, as the rule above says.
         public int AssignBailers(int wanted)
         {
             var all = All;
             if (all.Length == 0) return 0;
 
-            int placed = 0;
-            // The table names the five berths of the gun ship. A smaller crew
-            // simply has no one at the higher indices (this used to index past
-            // the array every frame on a two-hand skiff); a larger crew's extra
-            // hands are all spare, so they come after the table's own spare.
-            for (int p = 0; p < BailPriority.Length; p++)
+            if (bailOrder.Length != all.Length) bailOrder = new int[all.Length];
+            int n = 0;
+            for (int i = 0; i < all.Length; i++)
+                if (all[i] != null && all[i].Gun == null) bailOrder[n++] = i;
+            int spares = n;
+            for (int i = 0; i < all.Length; i++)
+                if (all[i] != null && all[i].Gun != null) bailOrder[n++] = i;
+            // Insertion sort of the gunners (a handful; no garbage).
+            for (int a = spares + 1; a < n; a++)
             {
-                int i = BailPriority[p];
-                if (i < all.Length) Consider(all[i], wanted, ref placed);
+                int v = bailOrder[a];
+                int b = a - 1;
+                while (b >= spares && BailsBefore(all, v, bailOrder[b]))
+                {
+                    bailOrder[b + 1] = bailOrder[b];
+                    b--;
+                }
+                bailOrder[b + 1] = v;
             }
-            for (int i = BailPriority.Length; i < all.Length; i++)
-                Consider(all[i], wanted, ref placed);
+
+            int placed = 0;
+            for (int k = 0; k < n; k++) Consider(all[bailOrder[k]], wanted, ref placed);
             return placed;
+        }
+
+        int[] bailOrder = System.Array.Empty<int>();
+
+        /// Gunner `x` goes to the buckets before gunner `y`: his gun is
+        /// further aft, or level with `y`'s and he is the higher index.
+        static bool BailsBefore(CrewAgent[] all, int x, int y)
+        {
+            float zx = all[x].Gun.transform.localPosition.z;
+            float zy = all[y].Gun.transform.localPosition.z;
+            if (!Mathf.Approximately(zx, zy)) return zx < zy;
+            return x > y;
         }
 
         static void Consider(CrewAgent c, int wanted, ref int placed)
@@ -166,13 +201,12 @@ namespace SeaSick.Crew
             else c.StopBailing();
         }
 
-        /// Order to pull hands in. Index 4 is the spare (no gun), then the two
-        /// aft guns, then the two forward ones.
-        static readonly int[] BailPriority = { 4, 3, 1, 2, 0 };
-
         /// The crew member who works a given gun. Guns are manned by named
         /// people so the loss reads on a body — "that gun is silent because
         /// Pip is at the rail" — rather than as a number going down.
+        /// 2026-10-03: this is the gun's HOME hand. In a fight gunners walk
+        /// to the engaged side's empty guns (`CannonBattery.RebalanceCrews`),
+        /// and a gun is manned by whoever stands at it, not by this answer.
         public CrewAgent GunCrew(int gunIndex)
         {
             var all = All;
