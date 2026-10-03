@@ -225,6 +225,28 @@ namespace SeaSick.UI
                       "TUNING — editor and dev builds only", UITheme.Small);
             y += u * 1.8f;
 
+            // The kraken, first in the dev list because the drawer does not
+            // scroll (Kevin 2026-10-03: "i want these options to be in
+            // settings" -- the floating LIFE panel never showed on his phone).
+            // Summoned while the menu is up, it rises once the game resumes.
+            float half = (body.width - u * 0.4f) * 0.5f;
+            var summon = new Rect(body.x, y, half, rowH);
+            var dismiss = new Rect(body.x + half + u * 0.4f, y, half, rowH);
+            UIBlocker.Block(summon);
+            UIBlocker.Block(dismiss);
+            bool krakenUp = SeaSick.Combat.Kraken.Active != null;
+            if (GUI.Button(summon, "Summon kraken", krakenUp ? UITheme.ButtonPressed : UITheme.Button))
+                krakenNote = SeaSick.Combat.Kraken.DevSummon();
+            if (GUI.Button(dismiss, "Dismiss kraken", UITheme.Button))
+                krakenNote = SeaSick.Combat.Kraken.DevDismiss();
+            y += rowH + u * 0.15f;
+            GUI.Label(new Rect(body.x + u * 0.3f, y, body.width, u * 1.3f),
+                      string.IsNullOrEmpty(krakenNote)
+                          ? "rises off the bow; harmless for now"
+                          : krakenNote,
+                      UITheme.Small);
+            y += u * 1.6f;
+
             // Straight in the list rather than behind a tuner, because the
             // thing it fixes only exists in a full-sized sea a long way from
             // home, and reaching it means sailing there -- the A/B has to be
@@ -296,6 +318,7 @@ namespace SeaSick.UI
         }
 
         string saveNote = "";
+        string krakenNote = "";
 
         /// Each row's two faces, { off, on }, built at load.
         ///
