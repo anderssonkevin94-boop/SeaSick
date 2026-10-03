@@ -19,10 +19,11 @@ namespace SeaSick.Terrain
     /// Tunable live in FeelLab (listed in Dev/FeelLab.cs TypeFullNames).
     public static class RichLight
     {
-        /// 0 = the island's old cel ambient, 1 = the ship's ambient. Off by
-        /// default (2026-10-02): at 1 the ground, palms and sand washed out
-        /// pale; only buildings in shade gained. Kept for A/B on FeelLab.
-        public static float amount = 0f;
+        /// 0 = the island's old cel ambient, 1 = the ship's ambient. ON by
+        /// default since 2026-10-03: shown off / half / on side by side
+        /// (softer palm shadows, lighter yellower grass), Kevin: "i like that
+        /// lighting a lot more though." Still tunable on FeelLab.
+        public static float amount = 1f;
 
         static readonly int RichLightId = Shader.PropertyToID("_SS_RichLight");
         static float sent = float.NaN;
