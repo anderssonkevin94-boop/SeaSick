@@ -26,8 +26,10 @@ namespace SeaSick.World
     /// within a family (Fish/Meat/Hide on the hang beam, the crop top on a
     /// sack, Brick courses in the crib) a per-resource set
     /// `Fill_<Res>_1..N` (`Fill_Fish_3`, `Res` = the ledger id) is
-    /// preferred; the generic set is the fallback. N may differ per set
-    /// (a log cradle 5, sacks 3: slumped / half / full).</item>
+    /// preferred; the generic step OF THE SAME NUMBER is the fallback, per
+    /// step (2026-10-03: `Sacks__Fill_1`, the slumped sack, serves every
+    /// crop, which have only `_2`/`_3` of their own). N may differ per
+    /// family (a log cradle 5, sacks 3: slumped / half / full).</item>
     /// <item>**The KIT path (2026-10-03, the shipping one):** the building
     /// FBX's anchors are EMPTY and the steps come from the shared fill kit
     /// `Resources/Kits/StorageL1/StorageFillKit` (.fbx) -- top-level
@@ -151,13 +153,16 @@ namespace SeaSick.World
                         var sets = table[(int)fam] ??= new KitSets();
                         AddFill(sets.generic, ref sets.perRes, stem.Substring(sep + 2), c.gameObject);
                     }
+                    // Only the generic set is compacted: a per-resource set
+                    // keeps its holes, because a missing per-resource step
+                    // falls back to the generic step of the SAME number
+                    // (CONTRACT "Runtime"): `Sacks__Fill_Potato_2/_3` exist,
+                    // `_1` does not -- one potato shows `Sacks__Fill_1`, the
+                    // slumped sack every crop shares (2026-10-03; compacting
+                    // made Potato a 2-step set that skipped the slumped sack).
                     foreach (var table in new[] { kit, kitFire })
                         foreach (var k in table)
-                        {
-                            if (k == null) continue;
-                            Compact(k.generic);
-                            if (k.perRes != null) foreach (var kv in k.perRes) Compact(kv.Value);
-                        }
+                            if (k != null) Compact(k.generic);
                 }
             }
         }
@@ -277,15 +282,16 @@ namespace SeaSick.World
         /// the fallback.
         static void Show(Slot s, string res, int units)
         {
-            List<GameObject> set = null;
-            if (units > 0 && res != null)
-            {
-                if (s.perRes == null || !s.perRes.TryGetValue(res, out set) || set.Count == 0)
-                    set = s.generic;
-            }
-            int steps = set != null ? set.Count : 0;
+            // **Per STEP, not per set (2026-10-03, CONTRACT "Runtime"):**
+            // step k is `Fill_<Res>_k` if authored, else the generic
+            // `Fill_k`. The step count is the longer of the two lists (a
+            // per-resource list keeps its holes, see `LoadKit`).
+            List<GameObject> own = null;
+            if (units > 0 && res != null && s.perRes != null) s.perRes.TryGetValue(res, out own);
+            int steps = units > 0 && res != null
+                ? Mathf.Max(own != null ? own.Count : 0, s.generic.Count) : 0;
             int step = 0;
-            if (steps > 0 && units > 0)
+            if (steps > 0)
             {
                 int bundle = Mathf.Max(1, StorageSlots.BundleOf(res));
                 // Ceil: one unit shows the first step, a full bundle the last.
@@ -295,7 +301,12 @@ namespace SeaSick.World
             if (step == s.shownStep && shownRes == s.shownRes) return;
             s.shownStep = step;
             s.shownRes = shownRes;
-            GameObject want = step > 0 ? set[step - 1] : null;
+            GameObject want = null;
+            if (step > 0)
+            {
+                if (own != null && step - 1 < own.Count) want = own[step - 1];
+                if (want == null && step - 1 < s.generic.Count) want = s.generic[step - 1];
+            }
             if (want != null && s.kit) want = Instance(s, want);
             if (s.shown == want) return;
             if (s.shown != null && s.shown.activeSelf) s.shown.SetActive(false);
@@ -343,8 +354,7 @@ namespace SeaSick.World
                     if (c == t) continue;
                     AddFill(s.generic, ref s.perRes, StripSuffix(c.name), c.gameObject);
                 }
-                Compact(s.generic);
-                if (s.perRes != null) foreach (var kv in s.perRes) Compact(kv.Value);
+                Compact(s.generic);   // per-resource sets keep holes (see `Show`)
                 if (s.generic.Count > 0 || s.perRes != null)
                 {
                     HideAll(s.generic);
@@ -356,10 +366,19 @@ namespace SeaSick.World
                     // No kit (not imported yet) = not a slot. An empty
                     // `Stock_` with neither is also how Astra's OLD storage
                     // kit looks to this view, so it stays StoreStockView's.
-                    var sets = KitFor(fam, UnderFireCache(t));
+                    // **Only under a slot building's own root (2026-10-03):**
+                    // Astra's old storage kit names its log and plank meshes
+                    // `Stock_Timber_NN` / `Stock_Boards_NN` -- words this
+                    // view also accepts -- so without this, the old hut (the
+                    // fallback while the new one is not imported) would
+                    // sprout kit logs inside its own. Those stay
+                    // `StoreStockView`'s.
+                    int site = SiteOf(t);
+                    if (site == 0) continue;
+                    var sets = KitFor(fam, site == 2);
                     if (sets == null)
                     {
-                        if (kit == null && !kitWarned && t.childCount == 0 && IsNewSite())
+                        if (kit == null && !kitWarned && t.childCount == 0)
                         {
                             kitWarned = true;
                             Debug.LogWarning($"[StorageSlotView] empty slot anchors but no fill kit at Resources/{KitPath}; the store is not drawn.");
@@ -378,26 +397,59 @@ namespace SeaSick.World
                 slots[f]?.Sort((a, b) => a.number.CompareTo(b.number));
         }
 
-        /// Is this anchor under the `FireCache` root (the fire's own kit
-        /// variants, `Fire<Family>__`)?
-        static bool UnderFireCache(Transform t)
+        /// Which slot building an anchor belongs to: 1 under a
+        /// `StorageHutL1` root, 2 under a `FireCache` root (the fire's own
+        /// kit variants, `Fire<Family>__`), 0 under neither (Astra's old
+        /// storage kit). The FBX roots keep their names in the wrappers
+        /// `Dev/Editor/StorageL1Import` builds.
+        static int SiteOf(Transform t)
         {
             for (var p = t.parent; p != null; p = p.parent)
-                if (StripSuffix(p.name) == "FireCache") return true;
-            return false;
+            {
+                string n = StripSuffix(p.name);
+                if (n == "FireCache") return 2;
+                if (n == "StorageHutL1") return 1;
+            }
+            return 0;
         }
 
-        /// True on the new slot buildings (`StorageHutL1`, `FireCache` roots
-        /// in the model), so the one missing-kit warning never fires for the
-        /// old Astra storage kit's `Stock_Timber_NN` meshes.
-        bool IsNewSite()
+        // --- edit-mode staging (Dev/Editor/StorageShot) -------------------------
+
+        /// **Show a fake ledger with no `Outpost` (2026-10-03).** For the
+        /// edit-mode shot tool only: discovers the anchors (a fresh kit load
+        /// if the last one found none), then shows `count` exactly as
+        /// `Refresh` would for a site whose slots of family f start at
+        /// `before[f]` in the camp-wide list (0 = the first store; the fire
+        /// cache after a hut passes the hut's counts). Returns one line per
+        /// slot: anchor, resource x units, the step shown. Never called in
+        /// play.
+        public string StageForShot(System.Func<string, int> count, int[] before)
         {
-            foreach (var t in GetComponentsInChildren<Transform>(true))
+            if (kit == null) kitTried = false;
+            Discover();
+            var sb = new System.Text.StringBuilder();
+            if (!any) return "no slots found (kit missing or no Stock_ anchors under a StorageHutL1/FireCache root)";
+            for (int f = 0; f < StorageSlots.FamilyCount; f++)
             {
-                string n = StripSuffix(t.name);
-                if (n == "StorageHutL1" || n == "FireCache") return true;
+                var mine = slots[f];
+                if (mine == null || mine.Count == 0) continue;
+                int off = before != null && f < before.Length ? before[f] : 0;
+                int total = off + mine.Count;
+                var res = new string[total];
+                var units = new int[total];
+                StorageSlots.Allocate((StoreFamily)f, total, count, res, units);
+                for (int i = 0; i < mine.Count; i++)
+                {
+                    var s = mine[i];
+                    s.shownStep = -1;   // force a fresh show
+                    Show(s, res[off + i], units[off + i]);
+                    sb.Append(s.anchor.name).Append(": ")
+                      .Append(units[off + i] > 0 ? $"{res[off + i]} x{units[off + i]}" : "empty")
+                      .Append(" -> ").Append(s.shown != null ? s.shown.name : "(nothing)")
+                      .Append('\n');
+                }
             }
-            return false;
+            return sb.ToString();
         }
 
         /// `Stock_<Family>_NN` -> family and NN.

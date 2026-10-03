@@ -3099,6 +3099,14 @@ namespace SeaSick.World
                         { h.order = OutpostOrder.Idle; h.target = ""; }
             }
             Destroy(b.gameObject);
+            // The fire's store cache goes with its fire (2026-10-03).
+            if (b == cacheFire)
+            {
+                DropFireCacheReservation();
+                cacheFire = null;
+                if (ledger != null && ledger.fireCache != null) ledger.fireCache.set = false;
+                PlaceFireCache();
+            }
             if (Watched) { ArrangeHands(); PuppetsToWork(); }
         }
 
@@ -4238,6 +4246,10 @@ namespace SeaSick.World
         {
             if (b == null) return;
             if (plan.id == BuildPlans.Campfire.id) SpawnCampPug?.Invoke(b);
+            // A fresh fire's store cache (2026-10-03, `Outpost.FireCache.cs`).
+            // A saved camp's waits for the end of `Adopt`, when the whole
+            // saved layout it must keep clear of is standing.
+            if (plan.id == BuildPlans.Campfire.id && !adoptingRows) PlaceFireCache();
             // Gold at level 2, until real art exists (Kevin, 2026-09-26) --
             // see `BuildingLevelLook`. Both raise paths (a fresh building
             // and `Adopt` restoring a save) come through here, and `ledger`
@@ -4942,6 +4954,9 @@ namespace SeaSick.World
             foreach (var w in savedWalls) StandWall(w);
             StandSavedLadders();
             StandSavedRoads();
+            // The fire's store cache, against the whole saved layout
+            // (2026-10-03): its saved spot, or the first clear bearing.
+            PlaceFireCache();
 
             ledger.ceilingPer = KeepsOfEach;
             PushStoreSlots();
@@ -5406,6 +5421,8 @@ namespace SeaSick.World
                 // A building being moved is not refused by the ground it is
                 // standing on (2026-09-30) -- see `MovingBuilt`.
                 if (movingReservation.HasValue && r == movingReservation.Value) continue;
+                // ...nor a fire by its own store cache, which follows it.
+                if (IsMovingFiresCache(r)) continue;
                 float dx = p.x - r.x, dz = p.z - r.z;
                 float need = halfDiag + r.w;
                 if (dx * dx + dz * dz < need * need)

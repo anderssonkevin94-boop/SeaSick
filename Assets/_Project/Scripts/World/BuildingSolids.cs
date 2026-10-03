@@ -45,6 +45,7 @@ namespace SeaSick.World
             {
                 for (int i = 0; i + 3 < f.Length; i += 4)
                     into.Add(new Vector4(f[i], f[i + 1], f[i + 2], f[i + 3]));
+                AddFireCache(b, into);
                 return into.Count;
             }
             Vector2 fp = b.Footprint;
@@ -52,7 +53,29 @@ namespace SeaSick.World
             if (fp.x <= 0f || fp.y <= 0f) return 0;
             into.Add(new Vector4(0f, 0f,
                 Mathf.Max(0.2f, fp.x * 0.5f - FootprintInset), Mathf.Max(0.2f, fp.y * 0.5f - FootprintInset)));
-            return 1;
+            AddFireCache(b, into);
+            return into.Count;
+        }
+
+        /// **The fire cache's groundsheet and tripod (2026-10-03)**, in the
+        /// campfire's frame, ONLY where `Outpost.PlaceFireCache` actually
+        /// stood one (its child is there): one box, so walkers go round the
+        /// goods. The cache may be turned against the fire (it faces the
+        /// fire from wherever it was clear), and a box here is axis-aligned
+        /// in the fire's frame, so it is the turned footprint's bounding box
+        /// -- never bigger than the disc that spot was tested clear with.
+        static void AddFireCache(Building b, List<Vector4> into)
+        {
+            if (b.Id != BuildPlans.Campfire.id) return;
+            var c = b.transform.Find(BuildingFactory.FireCacheChild);
+            if (c == null) return;
+            Vector4 k = BuildingFactory.FireCacheBox;
+            var fire = b.transform;
+            Vector3 centre = fire.InverseTransformPoint(c.TransformPoint(new Vector3(k.x, 0f, k.y)));
+            Vector3 ax = fire.InverseTransformDirection(c.right), az = fire.InverseTransformDirection(c.forward);
+            float hx = Mathf.Abs(ax.x) * k.z + Mathf.Abs(az.x) * k.w;
+            float hz = Mathf.Abs(ax.z) * k.z + Mathf.Abs(az.z) * k.w;
+            into.Add(new Vector4(centre.x, centre.z, hx, hz));
         }
 
         /// Is this baked? (For checks.)

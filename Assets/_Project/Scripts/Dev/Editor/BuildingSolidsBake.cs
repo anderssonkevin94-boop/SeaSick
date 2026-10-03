@@ -60,6 +60,11 @@ namespace SeaSick.Dev
             ("Settlement/quarry", new[] { "Cutting_Bench", "Input_Bay", "Lifting_Frame", "Masonry", "Output_Pallet" }),
             ("Settlement/fishinghut_astra", new[] { "Work_Bench", "Net_Rack", "Output_Crate", "Windbreak", "Gear", "Frame" }),
             ("Settlement/storage_astra", new[] { "Front_Racks", "Platform", "Shelving", "Frame" }),
+            // The level 1 store hut (2026-10-03, `StorageL1Import`): its four
+            // posts, the back canvas wall and the seven holders block; the
+            // deck is walked on and the stall front (x -1.30..1.30, the
+            // `Input_Pickup` lane) stays open. Run this bake after the import.
+            ("Settlement/storage_l1", new[] { "Hut_Posts", "Hut_CanvasWall", "Store_*" }),
             ("Settlement/hut_astra", new[] { "Lower_Walls" }),
             ("Settlement/farm_astra", new[] { "Bed_*_Soil", "Tool_Frame", "Water_Butt", "Seed_Box", "Harvest_Basket" }),
             ("Settlement/campfire_astra", new[] { "Hearth", "Fuel_Cradle", "Cooking_Frame", "Seat" }),

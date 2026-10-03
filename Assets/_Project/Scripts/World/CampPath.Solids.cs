@@ -112,6 +112,10 @@ namespace SeaSick.World
                 // (`BuildingFactory.ShowLevel`) re-reads the boxes and relays.
                 var model = t.Find("Model");
                 sig = sig * 31 + (model != null ? model.GetInstanceID() : 0);
+                // The fire's store cache (2026-10-03): stood, moved or
+                // taken off after the fire itself, and it carries a box.
+                var cache = t.Find(BuildingFactory.FireCacheChild);
+                sig = sig * 31 + (cache != null ? cache.GetInstanceID() : 0);
             }
             if (solidsReady && sig == solidSig) return;
             solidSig = sig;

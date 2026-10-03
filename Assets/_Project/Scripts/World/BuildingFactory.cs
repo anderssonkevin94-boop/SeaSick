@@ -65,7 +65,7 @@ namespace SeaSick.World
             // failure to raise one, and the caller's error message blamed the
             // terrain. **A shape that leaves by a different door has to carry
             // the same things out with it.**
-            if (Dress(root.transform, plan))
+            if (Dress(root.transform, plan, out string wearing))
             {
                 if (plan.beds > 0) NameBeds(root.transform);
                 // **No slab under an authored model (Kevin, 2026-09-24):**
@@ -89,11 +89,16 @@ namespace SeaSick.World
                 // The kit's fire is a ring of stones and nothing else. The
                 // LIGHT is the whole reason a camp reads from the water at
                 // night, so it is added whatever the geometry came from.
+                // (The fire's store cache, 2026-10-03, is NOT put on here:
+                // `Outpost.PlaceFireCache` sites it once the whole camp
+                // stands, clear of everything -- see `PutFireCache`.)
                 if (plan.kind == BuildKind.Fire) Firelight(root.transform);
                 else Lamp(root.transform, plan);
                 var dressed = root.AddComponent<Building>();
                 dressed.Configure(plan);
-                dressed.ModelPrefab = plan.prefab;
+                // The model it really wears: the level 1 store hut's own
+                // when imported, else the plan's (`ModelFor`).
+                dressed.ModelPrefab = wearing;
                 Arm(root, plan);
                 return root;
             }
@@ -101,6 +106,9 @@ namespace SeaSick.World
             if (plan.kind == BuildKind.Fire)
             {
                 Fire(root.transform, plan);
+                // `Dress` did not run on this path: the slot view for the
+                // fire's cache, should `Outpost.PlaceFireCache` put one on.
+                root.AddComponent<StorageSlotView>();
                 root.AddComponent<Building>().Configure(plan);
                 return root;
             }
@@ -598,16 +606,17 @@ namespace SeaSick.World
         /// Quietly false when it does not: a camp that cannot be built because
         /// an art asset moved is a worse failure than a plainer shed, and the
         /// extrusion below is a complete building in its own right.
-        static bool Dress(Transform root, BuildPlan plan)
+        static bool Dress(Transform root, BuildPlan plan, out string wearing)
         {
-            if (string.IsNullOrEmpty(plan.prefab)) return false;
-            var asset = Resources.Load<GameObject>(plan.prefab);
+            wearing = ModelFor(plan);
+            if (string.IsNullOrEmpty(wearing)) return false;
+            var asset = Resources.Load<GameObject>(wearing);
             if (asset == null)
             {
-                if (!warned.Contains(plan.prefab))
+                if (!warned.Contains(wearing))
                 {
-                    warned.Add(plan.prefab);
-                    Debug.LogWarning($"[Camp] no model at Resources/{plan.prefab} -- "
+                    warned.Add(wearing);
+                    Debug.LogWarning($"[Camp] no model at Resources/{wearing} -- "
                         + $"'{plan.label}' is raised out of primitives instead.");
                 }
                 return false;
@@ -634,7 +643,12 @@ namespace SeaSick.World
             // none of them, exactly like `StationStockView` above -- so
             // every kit building carries all four and only the one whose
             // names match ever does anything.
-            root.gameObject.AddComponent<StoreStockView>();
+            //
+            // **Not on the level 1 store hut (2026-10-03):** its containers
+            // replace Astra's racks, and `StorageSlotView` draws them. Its
+            // anchor names never matched `StoreStockView`'s anyway; leaving
+            // it off says so instead of relying on that.
+            if (wearing != StorageL1Prefab) root.gameObject.AddComponent<StoreStockView>();
             // **Storage slots (2026-10-03):** the store hut's and the fire
             // cache's `Stock_<Family>_NN` anchors with `Fill_` steps. Off on
             // any model with none (every kit until the new FBX lands).
@@ -646,6 +660,114 @@ namespace SeaSick.World
         }
 
         static readonly HashSet<string> warned = new HashSet<string>();
+
+        // --- storage slots: the store hut and the fire cache (2026-10-03) ----
+
+        /// **The approved level 1 store hut** (`art-staging/storage-slots-
+        /// preview`, Kevin 2026-10-03): a tarp stall over seven container
+        /// families with EMPTY `Stock_<Family>_NN` anchors that
+        /// `StorageSlotView` fills from the shared fill kit. The wrapper is
+        /// built by `Dev/Editor/StorageL1Import` (same frame as Astra's hut:
+        /// working front +Z, centred, on the ground; 6.46 x 5.02 x 3.70 m
+        /// inside the plan's 6.46 x 5.14 x 3.84), with the FBX's
+        /// `Marker_Pickup` renamed `Input_Pickup` so `CampWorker.StoreSpot`
+        /// sends every store drop-off and runner pickup to the open stall
+        /// front with no code change.
+        public const string StorageL1Prefab = "Settlement/storage_l1";
+
+        /// **The fire cache** (same preview): a pegged 3.2 x 2.3 m groundsheet
+        /// and a tripod, a child of the CAMPFIRE building so its anchors are
+        /// the fire's slots (`StorageSlotView` reads its site off the
+        /// `Building` above it). Built by `StorageL1Import` too; WHERE it
+        /// goes is `Outpost.PlaceFireCache`'s business, not this file's.
+        public const string FireCachePrefab = "Settlement/firecache_l1";
+
+        /// The cache's footprint in its OWN frame (centre x, centre z, half
+        /// x, half z): the groundsheet and tripod, `FireCache.fbx`'s
+        /// structure bounds (Blender x +-1.63, y -1.18..2.19 -> Unity z
+        /// -2.19..+1.18). Its open front, the pickup side, is +Z.
+        public static readonly Vector4 FireCacheBox = new Vector4(0f, -0.505f, 1.63f, 1.685f);
+
+        /// Name of the cache child under the campfire root.
+        public const string FireCacheChild = "FireCache";
+
+        /// Is the cache imported? (Its wrapper loads.)
+        public static bool HasFireCache => Has(FireCachePrefab);
+
+        /// **Stand the cache at a spot `Outpost.PlaceFireCache` chose**
+        /// (world x/z and yaw; the height is settled here off `groundAt`,
+        /// the way a kit building is let down `SinkIntoSlope` of the drop
+        /// between its highest and lowest corner). Replaces any cache the
+        /// fire wore. Colliders stripped like `Dress`'s; the grass under it
+        /// cleared like a building's footprint. Null when not imported.
+        public static Transform PutFireCache(Transform fire, float x, float z, float yaw,
+            System.Func<Vector3, float> groundAt)
+        {
+            if (fire == null) return null;
+            RemoveFireCache(fire);
+            var asset = Has(FireCachePrefab) ? Resources.Load<GameObject>(FireCachePrefab) : null;
+            if (asset == null) return null;
+            var cache = Object.Instantiate(asset, fire);
+            cache.name = FireCacheChild;
+            foreach (var c in cache.GetComponentsInChildren<Collider>(true)) Object.Destroy(c);
+            var rot = Quaternion.Euler(0f, yaw, 0f);
+            Vector3 centre = new Vector3(x, 0f, z) + rot * new Vector3(FireCacheBox.x, 0f, FireCacheBox.y);
+            float y = fire.position.y;
+            if (groundAt != null)
+            {
+                float hi = float.MinValue, lo = float.MaxValue;
+                for (int sx = -1; sx <= 1; sx += 2)
+                    for (int sz = -1; sz <= 1; sz += 2)
+                    {
+                        float g = groundAt(centre + rot * new Vector3(sx * FireCacheBox.z, 0f, sz * FireCacheBox.w));
+                        hi = Mathf.Max(hi, g);
+                        lo = Mathf.Min(lo, g);
+                    }
+                y = hi - (hi - lo) * SinkIntoSlope;
+            }
+            cache.transform.SetPositionAndRotation(new Vector3(x, y, z), rot);
+            SeaSick.Terrain.SceneryGround.ClearFootprintNear(centre, rot,
+                new Vector2(FireCacheBox.z * 2f, FireCacheBox.w * 2f), 0.3f);
+            return cache.transform;
+        }
+
+        /// Take the cache off a fire (out of the hierarchy at once, so this
+        /// frame's searches do not find it).
+        public static void RemoveFireCache(Transform fire)
+        {
+            var old = fire != null ? fire.Find(FireCacheChild) : null;
+            if (old == null) return;
+            old.gameObject.SetActive(false);
+            old.SetParent(null, false);
+            Object.Destroy(old.gameObject);
+        }
+
+        /// **The model a plan wears at level 1**: the store hut's new
+        /// `StorageL1Prefab` when it is imported, else the plan's own prefab.
+        /// The FALLBACK keeps a camp standing if the import has not run (or
+        /// a build ships without it): the old Astra hut and its
+        /// `StoreStockView` racks, exactly as before. Same answer for a
+        /// raise, a load and `ShowLevel`, so a saved store hut simply comes
+        /// back in the new model -- same root, place and yaw
+        /// (buildings-never-move); only the `Model` child differs.
+        public static string ModelFor(BuildPlan plan)
+        {
+            if (plan.id == BuildPlans.Storage.id && Has(StorageL1Prefab)) return StorageL1Prefab;
+            return plan.prefab;
+        }
+
+        static readonly Dictionary<string, bool> hasModel = new Dictionary<string, bool>();
+
+        /// Does `Resources/<path>` load? A yes is remembered for the
+        /// session; a no is asked again (cheap, and an import run in the
+        /// editor mid-session is then picked up on the next raise).
+        static bool Has(string path)
+        {
+            if (hasModel.TryGetValue(path, out bool ok)) return ok;
+            ok = Resources.Load<GameObject>(path) != null;
+            if (ok) hasModel[path] = true;
+            return ok;
+        }
 
         // --- a level's own model (2026-10-01) -------------------------------
 
@@ -670,7 +792,7 @@ namespace SeaSick.World
             var plan = BuildPlans.Named(b.Id);
             var look = BuildingLevelLook.For(b.Id, level);
             bool swapped = false;
-            string want = !string.IsNullOrEmpty(look.prefabOverride) ? look.prefabOverride : plan.prefab;
+            string want = !string.IsNullOrEmpty(look.prefabOverride) ? look.prefabOverride : ModelFor(plan);
             var old = b.transform.Find("Model");
             if (old != null && !string.IsNullOrEmpty(want) && want != b.ModelPrefab)
             {
@@ -721,6 +843,17 @@ namespace SeaSick.World
             }
             BuildingLevelLook.Apply(b.transform, b.Id, level);
             return swapped;
+        }
+
+        /// A fresh `StorageSlotView` on `b` (it finds its anchors once, in
+        /// `Start`): after `Outpost.PlaceFireCache` put on or took off the
+        /// fire's cache. Adds one if the building had none.
+        public static void RenewSlotView(Building b)
+        {
+            if (b == null) return;
+            var had = b.GetComponent<StorageSlotView>();
+            if (had != null) Object.DestroyImmediate(had);
+            b.gameObject.AddComponent<StorageSlotView>();
         }
 
         static void Renew<T>(GameObject root) where T : Component

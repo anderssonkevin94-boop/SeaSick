@@ -217,6 +217,9 @@ namespace SeaSick.World
             {
                 SetCampCentre(p);
                 ledger.SetCentre(p);
+                // Its store cache chooses again round the new spot
+                // (2026-10-03): the saved one is keyed to the old.
+                PlaceFireCache();
             }
 
             // The registry re-reads every row now (its key only counts rows,

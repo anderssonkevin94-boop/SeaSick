@@ -63,6 +63,8 @@ namespace SeaSick.World
                 float margin = Mathf.Min(CampRoads.HalfWidth, CampRoads.TipHalfWidth + fromEnd);
                 var hit = BuildingOn(p, margin);
                 if (hit != null) { why = $"it runs through the {hit.Label}"; return false; }
+                // Nor across the fire's store cache (2026-10-03).
+                if (OnFireCache(p, margin)) { why = "it runs through the fire's store"; return false; }
                 if (BuildingSiteOn(p, margin, out BuildPlan site)) { why = $"it runs through the {site.label} going up there"; return false; }
             }
 
