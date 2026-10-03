@@ -83,7 +83,7 @@ namespace SeaSick.Ship.Modular
                 CoasterRenderBatch.Build(host);
             }
         }
-        /// **Kevin 2026-10-04: the bow lantern on a short beam** off the stem,
+        /// **Kevin 2026-10-04: the bow lantern on a little block** low on the stem,
         /// hanging just under the harpoon's line of fire across its +/-45 deg
         /// arc (art-staging/harpoon-v1: build.py `lantern`, check.py ->
         /// lantern-verification.json). Hides the hull kit's own bow lantern

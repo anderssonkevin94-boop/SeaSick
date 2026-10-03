@@ -184,7 +184,7 @@ namespace SeaSick.Dev
             if (lantern == null) return "no BowLantern on the ship (not imported yet, or a raised bow): the kit's own lantern is up\n";
             var pivot = Find(lantern, "LanternBow_Pivot");
             Vector3 m = mount.InverseTransformPoint(muzzle.position), pv = mount.InverseTransformPoint(pivot.position);
-            var sb = new StringBuilder($"BowLantern: pivot {pv.z - m.z:F2} m ahead of and {m.y - pv.y:F2} m below the muzzle (mount frame; art says 1.55 / 0.835), " +
+            var sb = new StringBuilder($"BowLantern: pivot {pv.z - m.z:F2} m ahead of and {m.y - pv.y:F2} m below the muzzle (mount frame; art says 1.23 / 1.025), " +
                                        $"swing {(pivot.GetComponent<SeaSick.Ship.LanternSwing>() != null ? "on" : "OFF")}, lights on the pivot {pivot.GetComponentsInChildren<Light>().Length}\n");
             var pts = new Vector3[rope.positionCount];
             rope.GetPositions(pts);

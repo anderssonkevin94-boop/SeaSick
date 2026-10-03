@@ -87,16 +87,17 @@ namespace SeaSick.Dev
         {
             { "Line_Attach", B(0f, 0.335f, 0f) },
         };
-        /// BowLantern (art-staging/harpoon-v1/geo.py: PIVOT_U (0, 1.94, 5.50)
-        /// bow-local metres = (0, -2.35, 0.885) in the mount's root frame).
+        /// BowLantern (art-staging/harpoon-v1/geo.py: PIVOT_U (0, 1.75, 5.18)
+        /// bow-local metres = (0, -2.03, 0.695) in the mount's root frame).
         static readonly Dictionary<string, Vector3> LanternMarks = new Dictionary<string, Vector3>
         {
-            { "LanternBow_Pivot", B(0f, -2.35f, 0.885f) },
+            { "LanternBow_Pivot", B(0f, -2.03f, 0.695f) },
         };
-        /// From geo.py: lantern roof +/-0.205 wide and 5.7055 forward, beam
-        /// root 4.72, lantern bottom 1.065 up, root strap top 2.163 (bow-local
-        /// metres; the root is at (0, 1.055, 3.15)).
-        static readonly Bounds LanternBounds = FromBlender(new Vector3(-0.205f, -2.5555f, 0.010f), new Vector3(0.205f, -1.57f, 1.108f));
+        /// build.py's printed bounds (root frame, Blender): lantern roof
+        /// +/-0.205 wide and 5.385 m forward, nose block root 4.60, lantern
+        /// bottom 0.875 m up, root strap top 2.02 m (bow-local metres; the
+        /// root is at (0, 1.055, 3.15)).
+        static readonly Bounds LanternBounds = FromBlender(new Vector3(-0.2051f, -2.2352f, -0.1796f), new Vector3(0.2051f, -1.45f, 0.965f));
         /// The CONTRACT's mesh bounds, converted (min, max).
         static readonly Bounds MountBounds = FromBlender(new Vector3(-0.899f, -0.802f, 0f), new Vector3(0.899f, 1.06f, 1.9f));
         static readonly Bounds BarbBounds = FromBlender(new Vector3(-0.19f, -0.55f, -0.067f), new Vector3(0.19f, 0.405f, 0.067f));
