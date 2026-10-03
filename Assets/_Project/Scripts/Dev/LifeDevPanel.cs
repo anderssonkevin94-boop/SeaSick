@@ -30,7 +30,10 @@ namespace SeaSick.Dev
         static void Install()
         {
             if (!Application.isEditor && !Debug.isDebugBuild) return;
-            if(SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked)return;
+            // No WorldInputBlocked check here (2026-10-03, Kevin: "there is no
+            // life button"): the game boots on the Home card, which blocks
+            // world input, and this only runs once -- so the panel was never
+            // made. OnGUI already hides it while input is blocked.
             if (FindAnyObjectByType<LifeDevPanel>(FindObjectsInactive.Include) != null) return;
             var go = new GameObject("LifeDevPanel");
             go.AddComponent<LifeDevPanel>();
