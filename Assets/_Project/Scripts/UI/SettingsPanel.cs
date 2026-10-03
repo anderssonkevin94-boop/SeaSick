@@ -247,6 +247,20 @@ namespace SeaSick.UI
                       UITheme.Small);
             y += u * 1.6f;
 
+            // The rest of the old floating LIFE panel (Kevin: "move the other
+            // dev options to settings too"), as a page with its own scroll.
+            var life = SeaSick.Dev.LifeDevPanel.Instance;
+            if (life != null)
+            {
+                var lifeRow = new Rect(body.x, y, body.width, rowH);
+                UIBlocker.Block(lifeRow);
+                if (GUI.Button(lifeRow, life.ToolName + "  ▶", UITheme.Button)) DevTools.Open = life;
+                y += rowH + u * 0.15f;
+                GUI.Label(new Rect(body.x + u * 0.3f, y, body.width, u * 1.3f),
+                          "hands, raids, weather, overboard, castaways", UITheme.Small);
+                y += u * 1.6f;
+            }
+
             // Straight in the list rather than behind a tuner, because the
             // thing it fixes only exists in a full-sized sea a long way from
             // home, and reaching it means sailing there -- the A/B has to be

@@ -15,17 +15,21 @@ namespace SeaSick.Dev
     /// (the editor, or a `--dev` phone build) -- `Debug.isDebugBuild` covers
     /// both.
     ///
-    /// Collapsed: a small "LIFE" button on the right edge, ~40% down, stacked
-    /// under FeelLab's FEEL (2026-09-30: both used to sit top-left and
-    /// overlapped the island top bar; the bottom quarter is the thumb bar). Expanded: the
-    /// hands at the camp being watched, each with Down/Kill/Revive, plus
-    /// the last death's name and 3-sentence story.
+    /// **A page in Settings now, not a floating button (2026-10-03, Kevin:
+    /// "move the other dev options to settings too").** The old collapsed
+    /// "LIFE" button on the right edge never showed on his phone. Settings ->
+    /// TUNING -> "Crew, raids & sea events" opens this as a drawer tool
+    /// (`IDevTool`, opened by `SettingsPanel`, never self-opened): the hands
+    /// at the camp being watched, each with Down/Kill/Revive, the last
+    /// death's story, weather, man overboard, recruits and sea life.
     ///
-    /// Modelled on `FeelLab`'s boot/scale shape: a `RuntimeInitializeOnLoadMethod`
-    /// adds itself to every scene, `GUI.matrix` is scaled by DPI so a row is
-    /// thumb-sized on a Retina phone rather than a strip of raw pixels.
-    public class LifeDevPanel : MonoBehaviour
+    /// Boots like `FeelLab`: a `RuntimeInitializeOnLoadMethod` makes one
+    /// for the whole run; `GUI.matrix` is scaled by DPI inside the drawer's
+    /// body so a row is thumb-sized on a Retina phone.
+    public class LifeDevPanel : MonoBehaviour, SeaSick.UI.IDevTool
     {
+        public static LifeDevPanel Instance { get; private set; }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Install()
         {
@@ -33,7 +37,7 @@ namespace SeaSick.Dev
             // No WorldInputBlocked check here (2026-10-03, Kevin: "there is no
             // life button"): the game boots on the Home card, which blocks
             // world input, and this only runs once -- so the panel was never
-            // made. OnGUI already hides it while input is blocked.
+            // made.
             if (FindAnyObjectByType<LifeDevPanel>(FindObjectsInactive.Include) != null) return;
             var go = new GameObject("LifeDevPanel");
             go.AddComponent<LifeDevPanel>();
@@ -41,15 +45,15 @@ namespace SeaSick.Dev
         }
 
         const float RowH = 44f; // Apple's own minimum touch target.
-        /// `Top` is the EXPANDED panel's top offset only. The collapsed LIFE
-        /// button sits on the right edge under FeelLab's FEEL button.
-        const float Top = 10f;
-        bool expanded;
         Vector2 scroll;
         GraveRecord lastDeath;
 
-        void OnEnable() => Lives.Died += OnDied;
-        void OnDisable() => Lives.Died -= OnDied;
+        public string ToolName => "Crew, raids & sea events";
+        public string ToolBlurb => "down / kill / revive hands, raids, weather, overboard, castaways, sea life";
+        public bool ToolActive { get; set; }
+
+        void OnEnable() { Instance = this; Lives.Died += OnDied; }
+        void OnDisable() { if (Instance == this) Instance = null; Lives.Died -= OnDied; }
         void OnDied(GraveRecord g) => lastDeath = g;
 
         Outpost WatchedCamp()
@@ -59,37 +63,27 @@ namespace SeaSick.Dev
             return null;
         }
 
-        void OnGUI()
+        /// Draw into the Settings drawer's body. One scroll view for the
+        /// whole page: the drawer stops above the helm, and the page is
+        /// taller than that on a phone.
+        public void DrawTool(Rect body)
         {
             if (!Application.isEditor && !Debug.isDebugBuild) return;
-            if(SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked)return;
 
             float scale = Mathf.Clamp(Screen.dpi > 0 ? Screen.dpi / 160f : 2f, 1f, 3f);
             var old = GUI.matrix;
-            GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
-            float w = Screen.width / scale;
-            float h = Screen.height / scale;
+            GUI.matrix = old * Matrix4x4.Scale(new Vector3(scale, scale, 1f));
+            var area = new Rect(body.x / scale, body.y / scale, body.width / scale, body.height / scale);
+            GUILayout.BeginArea(area);
+            scroll = GUILayout.BeginScrollView(scroll);
+            DrawContents();
+            GUILayout.EndScrollView();
+            GUILayout.EndArea();
+            GUI.matrix = old;
+        }
 
-            if (!expanded)
-            {
-                // Right edge, stacked under FeelLab's FEEL (same x, 40% down + one row + gap).
-                if (GUI.Button(new Rect(w - 84f - 8f, h * 0.40f + RowH + 8f, 84f, RowH), "LIFE")) expanded = true;
-                GUI.matrix = old;
-                return;
-            }
-
-            // Top half only, same as FeelLab: the bottom stays free for the
-            // helm stick even while this is open.
-            float panelH = Mathf.Min(h * 0.6f, 520f);
-            var panelRect = new Rect(8, Top, Mathf.Min(w - 16, 420f), panelH);
-            GUI.Box(panelRect, "");
-            GUILayout.BeginArea(panelRect);
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Life / Death (dev)");
-            GUILayout.FlexibleSpace();
-            if (GUILayout.Button("X", GUILayout.Width(RowH), GUILayout.Height(RowH))) expanded = false;
-            GUILayout.EndHorizontal();
-
+        void DrawContents()
+        {
             var camp = WatchedCamp();
             if (camp == null || camp.Ledger == null || camp.Ledger.hands == null)
             {
@@ -125,11 +119,9 @@ namespace SeaSick.Dev
                 if (GUILayout.Button("Say a line now", GUILayout.Height(RowH)))
                     VillagerChatter.DebugSayNow(camp);
 
-                scroll = GUILayout.BeginScrollView(scroll);
                 foreach (var hnd in camp.Ledger.hands)
                 {
                     if (hnd == null) continue;
-                    GUILayout.BeginHorizontal();
                     string state = hnd.downed
                         ? (hnd.reached ? "  [DOWN, reached]" : "  [DOWN " + Mathf.CeilToInt(hnd.downedLeft) + "s]")
                         : hnd.recovering ? "  [recovering " + hnd.recoverLeft.ToString("0.00") + "d]"
@@ -139,8 +131,10 @@ namespace SeaSick.Dev
                         : hnd.pouting ? "  [POUT " + Mathf.CeilToInt(hnd.poutLeft) + "s]"
                         : hnd.poutCooldown > 0f ? "  [pout cd " + Mathf.CeilToInt(hnd.poutCooldown) + "s]"
                         : "";
-                    string label = hnd.name + state;
-                    GUILayout.Label(label, GUILayout.Width(220));
+                    // Name on its own line, buttons under it: side by side
+                    // they ran off a phone-wide drawer.
+                    GUILayout.Label(hnd.name + state);
+                    GUILayout.BeginHorizontal();
                     if (!hnd.downed)
                     {
                         if (GUILayout.Button("Down", GUILayout.Height(RowH)))
@@ -172,7 +166,6 @@ namespace SeaSick.Dev
                         hnd.armedDefender = true;
                     GUILayout.EndHorizontal();
                 }
-                GUILayout.EndScrollView();
             }
 
             GUILayout.Space(8);
@@ -195,16 +188,10 @@ namespace SeaSick.Dev
             DrawWeather();
 
             GUILayout.Space(8);
-            DrawKraken();
-
-            GUILayout.Space(8);
             DrawOverboard();
 
             GUILayout.Space(8);
             DrawRecruits();
-
-            GUILayout.EndArea();
-            GUI.matrix = old;
         }
 
         /// **Phase 7 (recruits at sea) dev helpers.** Neither one waits on
@@ -294,20 +281,6 @@ namespace SeaSick.Dev
             GUILayout.EndHorizontal();
         }
 
-        /// **The kraken, build step 1 (2026-10-03):** surface it off a bow
-        /// quarter now, or send it back down, without waiting on the deep-water
-        /// spawning that step 4 brings. Harmless in step 1: no swats yet.
-        void DrawKraken()
-        {
-            GUILayout.Label("Kraken (dev)");
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Summon kraken", GUILayout.Height(RowH)))
-                Banner.Show(Kraken.DevSummon());
-            if (GUILayout.Button("Dismiss kraken", GUILayout.Height(RowH)))
-                Banner.Show(Kraken.DevDismiss());
-            GUILayout.EndHorizontal();
-        }
-
         /// **Phase 5a.** Grip readout for every hand on the currently
         /// loaded ship, plus force-a-fall and drain-grip buttons for
         /// testing the warning/fall without waiting on real weather.
@@ -320,9 +293,9 @@ namespace SeaSick.Dev
             foreach (var c in roster.All)
             {
                 if (c == null || !c.gameObject.activeInHierarchy) continue;
-                GUILayout.BeginHorizontal();
                 GUILayout.Label(c.DisplayName + "  grip " + c.Grip01.ToString("0.00")
-                    + (c.IsAtRail ? " [RAIL]" : ""), GUILayout.Width(220));
+                    + (c.IsAtRail ? " [RAIL]" : ""));
+                GUILayout.BeginHorizontal();
                 if (GUILayout.Button("Drain", GUILayout.Height(RowH)))
                     c.DebugAdjustGrip(-0.5f);
                 if (GUILayout.Button("MOB", GUILayout.Height(RowH)))
