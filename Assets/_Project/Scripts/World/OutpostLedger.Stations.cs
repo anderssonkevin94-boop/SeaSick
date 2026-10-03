@@ -416,11 +416,34 @@ namespace SeaSick.World
         public bool IsLive(StationStock s) =>
             s != null && !s.removed && stations != null && stations.Contains(s);
 
-        /// A station has a worker at it: Work hands on a plan are dealt round
-        /// its instances in hand-list order (`StationOfHand`), so the nth
-        /// instance is manned when more than n hands work that plan.
-        public bool Manned(StationStock s) =>
-            s != null && !s.removed && HandsOn(OutpostOrder.Work, s.planId) > s.ordinal;
+        /// **A station has a worker at it**: some Work hand's `StationOfHand`
+        /// is this row.
+        ///
+        /// 2026-10-03 (review fix B): this used to be "more than `ordinal`
+        /// hands work the plan", which ignored `workPin`. Two sawmills, A
+        /// pinned to copy 0 and B to copy 1; A moved to the farm -> one hand
+        /// left, so copy 0 read manned and copy 1 (where B really stands)
+        /// unmanned: runners never fed B's bay and he waited forever. Now
+        /// the very deal `OrdinalOfHand` + `StationOfHand` make (pins first,
+        /// the unpinned dealt round the copies in hand-list order, then
+        /// `% stations`), walked once here so it stays O(hands) -- the
+        /// runners' ladder asks this per station per input.
+        public bool Manned(StationStock s)
+        {
+            if (s == null || s.removed || hands == null || !IsStation(s.planId)) return false;
+            int copies = CountBuilt(s.planId);
+            int rows = StationCountOfPlan(s.planId);
+            if (copies <= 0 || rows <= 0) return false;
+            int k = 0;                       // unpinned hands dealt so far
+            foreach (var x in hands)
+            {
+                if (x == null || x.order != OutpostOrder.Work || x.target != s.planId) continue;
+                bool pinned = x.workPin > 0 && x.workPin <= copies;
+                int o = pinned ? x.workPin - 1 : (k++ % copies);
+                if (o % rows == s.ordinal) return true;
+            }
+            return false;
+        }
 
         /// **A building came down (Outpost.Demolish).** Takes the plan's one
         /// `built` id and, when `raisedIndex` is a row of it, that `raised`
@@ -1339,9 +1362,13 @@ namespace SeaSick.World
                     if (free <= 0) continue;
                     int room = StoreRoomNet(g.res);
                     if (room <= 0) continue;
+                    // Capped by what he carries, like every other rung
+                    // (2026-10-03, review fix A): a pile bigger than his
+                    // armful is fetched in several trips -- the pickup now
+                    // takes only his load off the row and leaves the rest.
                     var k = new Chore
                     {
-                        res = g.res, n = Mathf.Min(free, room),
+                        res = g.res, n = Mathf.Min(CarryArmful(h, g.res), Mathf.Min(free, room)),
                         from = HaulPlace.Ground, fromStation = i, to = HaulPlace.Store, toStation = -1,
                     };
                     if (Offer(ref c, ref best, k, at, any, new Vector3(g.x, 0f, g.z))) return true;

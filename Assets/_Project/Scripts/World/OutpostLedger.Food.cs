@@ -28,6 +28,24 @@ namespace SeaSick.World
         public float grown;
         /// Seconds of the farmhand's plant/harvest work done on it so far.
         public float work;
+        /// **Units still standing on a part-harvested ripe plot**; 0 = not
+        /// touched yet (the crop's whole `yield`). 2026-10-03 (review fix
+        /// C): a farmhand only lifts what the store has room for and the
+        /// rest stays in the field, ripe, until there is room -- nothing is
+        /// carried that cannot be put down, nothing is lost. Old saves: 0.
+        public int left;
+
+        /// What a harvest of this ripe plot still gives (`left`, or the
+        /// crop's whole yield when untouched).
+        public int RipeUnits
+        {
+            get
+            {
+                if (left > 0) return left;
+                var def = FoodBook.Crop(crop);
+                return def != null ? Mathf.Max(1, def.yield) : 1;
+            }
+        }
 
         public float Grow01 => state == PlotState.Ripe ? 1f
             : state == PlotState.Growing ? Mathf.Clamp01(grown / Mathf.Max(1e-5f, FoodBook.GrowDays(crop))) : 0f;
@@ -424,12 +442,29 @@ namespace SeaSick.World
                     p.grown = 0f;
                     continue;
                 }
+                // **Only what the store can take (2026-10-03, review fix
+                // C).** The whole yield used to go into his arms once the
+                // store had room for ONE: `DepositHaul` put down what fit and
+                // left him standing at the store holding the rest, retrying
+                // every step, his plots untended. Now he lifts `RoomFor` at
+                // most (net of loads already walking in, so two farmhands do
+                // not both count the same room); the rest stays standing on
+                // the plot (`left`), still ripe, until there is room again.
                 string crop = p.crop;
-                var def = FoodBook.Crop(crop);
-                p.state = PlotState.Empty;
-                p.grown = 0f;
-                if (!p.repeat) p.crop = "";
-                int n = def != null ? def.yield : 1;
+                int total = p.RipeUnits;
+                int n = Mathf.Min(total, RoomFor(crop));
+                if (n <= 0) continue;   // room went since NextPlotJob: the plot waits
+                if (n < total)
+                {
+                    p.left = total - n;      // ripe, the rest still in the field
+                }
+                else
+                {
+                    p.left = 0;
+                    p.state = PlotState.Empty;
+                    p.grown = 0f;
+                    if (!p.repeat) p.crop = "";
+                }
                 h.basket = n;
                 CarryBasket(h, crop, hasPost, postAt);
                 if (h.Hauling) return;
@@ -440,16 +475,20 @@ namespace SeaSick.World
         public string FarmStallCause(OutpostHand h)
         {
             int f = Mathf.Max(0, OrdinalOfHand(h));
-            bool any = false, ripeFull = false;
+            bool any = false;
+            string fullOf = null;
             foreach (var p in plots)
             {
                 if (p == null || p.farm != f) continue;
                 if (!string.IsNullOrEmpty(p.crop) || p.state != PlotState.Empty) any = true;
-                if (p.state == PlotState.Ripe && RoomFor(p.crop) <= 0) ripeFull = true;
+                if (fullOf == null && p.state == PlotState.Ripe && RoomFor(p.crop) <= 0) fullOf = p.crop;
             }
             if (!any) return "no crops picked: choose one on the farm sheet";
             if (NextPlotJob(f) != null || h.Hauling) return null;
-            if (ripeFull) return "store is full; the harvest waits";
+            // Name the crop (2026-10-03): which store row is full is the
+            // thing the player can act on (cook it, eat it, raise the store).
+            if (fullOf != null)
+                return $"store is full of {Friendly(fullOf)}; the harvest waits in the field";
             return null;   // waiting on growth is not a stall
         }
     }

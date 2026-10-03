@@ -272,26 +272,48 @@ namespace SeaSick.World
                 }
                 case HaulPlace.Ground:
                 {
-                    // **A dropped load's pickup** (death/rescue phase 2):
-                    // the whole row goes at once -- it was one hand's armful
-                    // to begin with -- and the row is gone from the ground
-                    // once it is taken. Somebody beat him to it (a raid, the
-                    // dev panel) = nothing there any more, same as any other
-                    // source running dry.
-                    if (groundLoads == null || h.haulFromStation < 0 || h.haulFromStation >= groundLoads.Count) { got = 0; break; }
-                    var row = groundLoads[h.haulFromStation];
-                    got = row != null ? Mathf.Min(want, row.count) : 0;
+                    // **A dropped load's pickup** (death/rescue phase 2).
+                    // Somebody beat him to it (a raid, the dev panel) =
+                    // nothing there any more, same as any other source
+                    // running dry.
+                    //
+                    // 2026-10-03 (review fix A): he takes what he planned,
+                    // NOT the whole row. A runner's barrow load off a pile
+                    // bigger than an armful (or a second hand sharing the
+                    // pile through `Claimed`) used to take `got` and then
+                    // delete the row, so the rest of the pile vanished from
+                    // the books. Now `got` comes off the row; the row goes
+                    // only when it is empty.
+                    int gi = h.haulFromStation;
+                    if (groundLoads == null || gi < 0 || gi >= groundLoads.Count) { got = 0; break; }
+                    var row = groundLoads[gi];
+                    // A row that is not his resource is not his pile (a
+                    // stale index): dry, he re-plans -- never one resource
+                    // quietly turning into another.
+                    got = row != null && row.res == res ? Mathf.Min(want, row.count) : 0;
                     if (got > 0)
                     {
-                        groundLoads.RemoveAt(h.haulFromStation);
-                        // Every OTHER in-flight ground trip whose index
-                        // pointed past this row shifts down one, the same
-                        // way `DemolishBuilt` re-numbers stations.
-                        if (hands != null)
-                            foreach (var o in hands)
-                                if (o != null && o != h && o.Hauling && o.haulFrom == HaulPlace.Ground
-                                    && o.haulFromStation > h.haulFromStation)
-                                    o.haulFromStation--;
+                        row.count -= got;
+                        if (row.count <= 0)
+                        {
+                            groundLoads.RemoveAt(gi);
+                            // Every OTHER in-flight ground trip whose index
+                            // pointed past this row shifts down one, the same
+                            // way `DemolishBuilt` re-numbers stations. One
+                            // still walking to THIS row (only possible when
+                            // something else thinned it under the claims)
+                            // must not inherit the next row's index -- it
+                            // would pick up a different pile, even a
+                            // different resource: his source is gone (-1),
+                            // so his pickup comes up empty and he re-plans.
+                            if (hands != null)
+                                foreach (var o in hands)
+                                {
+                                    if (o == null || o == h || !o.Hauling || o.haulFrom != HaulPlace.Ground) continue;
+                                    if (o.haulFromStation > gi) o.haulFromStation--;
+                                    else if (o.haulFromStation == gi) o.haulFromStation = -1;
+                                }
+                        }
                     }
                     break;
                 }

@@ -189,12 +189,63 @@ namespace SeaSick.World
                     break;
                 }
                 if (StartBackhaul(h)) continue;
-                if (StartTransferTrip(h)) continue;
+                // **The ship waits on the benches (2026-10-03, review fix
+                // D).** Transfers used to come before the whole ladder, so a
+                // "transfer all" took every runner for as long as the hold
+                // had cargo and every bench starved. Now, while a manned
+                // station needs a runner NOW (`StationsUrgent`: rung 1a or
+                // 1b), at most ONE runner is on the gangway at a time, and he
+                // never takes two transfer trips in a row -- so a lone
+                // runner alternates: the station's load, then an armful for
+                // the ship, then the station's. No urgent station = every
+                // runner may transfer, as before.
+                bool urgent = StationsUrgent(h);
+                bool mayTransfer = !urgent
+                    || (!transferredLast.Contains(h) && !OtherRunnerOnTransfer(h));
+                if (mayTransfer && StartTransferTrip(h)) { transferredLast.Add(h); continue; }
+                transferredLast.Remove(h);
                 if (FindHaulerChore(h, out var c)) { BeginChore(h, c); continue; }
                 // Nothing to carry: wait at the store.
                 if (StoreAt(out var sAt)) WalkTo(h, sAt, ref budget, WorkFactor(h));
                 break;
             }
+        }
+
+        /// Runners whose last trip was a transfer armful (`RunnerDay`'s
+        /// alternation). Not saved: a reload just starts the alternation
+        /// over.
+        [System.NonSerialized] readonly HashSet<OutpostHand> transferredLast = new HashSet<OutpostHand>();
+
+        /// Another runner is walking a transfer armful (store <-> ship).
+        bool OtherRunnerOnTransfer(OutpostHand h)
+        {
+            if (hands == null) return false;
+            foreach (var o in hands)
+                if (o != null && o != h && IsRunner(o) && o.Hauling && !o.eating
+                    && (o.haulTo == HaulPlace.Ship || o.haulFrom == HaulPlace.Ship))
+                    return true;
+            return false;
+        }
+
+        /// **A manned station needs this runner now** -- the ladder's rung
+        /// 1a (a selected spot's bay short of one batch, net of loads
+        /// walking in, with stock he could bring) or 1b (a rack blocking a
+        /// manned bench that he could take away). Only what HE could do: a
+        /// bay short of something the camp does not have is no reason to
+        /// keep the ship waiting (her cargo may be the very thing).
+        bool StationsUrgent(OutpostHand h)
+        {
+            int ns = stations != null ? stations.Count : 0;
+            if (ns == 0) return false;
+            Vector3 at = HandAt(h);
+            Chore c = default;
+            float best = float.MaxValue;
+            bool found = false;
+            for (int i = 0; i < ns; i++)
+                if (BayChore(h, i, true, at, true, ref c, ref best, ref found)) return true;
+            for (int i = 0; i < ns; i++)
+                if (Manned(stations[i]) && RackBlocking(stations[i]) && RackChore(i, out _, h, true)) return true;
+            return false;
         }
 
         /// **Rule 4, the backhaul**: he just filled this station's bay, so
