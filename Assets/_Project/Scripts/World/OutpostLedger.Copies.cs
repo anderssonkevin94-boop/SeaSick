@@ -184,40 +184,113 @@ namespace SeaSick.World
             return -1;
         }
 
-        /// **Over the cap -> free hands (a save from before the rule, a
-        /// copy demolished under its worker).** The first hand at each copy
-        /// keeps it and is pinned there; the rest go back to the idle
-        /// ladder (`playerIdle` off), anything planned in their arms is
-        /// dropped the ledger's own way -- no building moves, no stock is
-        /// lost. Returns how many were freed.
+        /// **Over the cap: keep the job, move the copy; free a hand only
+        /// when every copy is full, and say so (2026-10-03, villager review
+        /// group 3).** A save from before the rule, a copy demolished under
+        /// its worker, or a pinned hand and a dealt one landing on the same
+        /// copy. This used to idle every extra on the spot, silently, on
+        /// every `Outpost.ArrangeHands` -- including the load -- so a saved
+        /// assignment could vanish with copy 2 of the same building empty
+        /// beside it (Kevin's rule: an assignment is permanent until the
+        /// player changes it).
+        ///
+        /// Now: a hand the player PINNED to a copy (`workPin`) keeps it ahead
+        /// of one only dealt there; every keeper is pinned where he stands;
+        /// an extra goes to another copy of the same building with room (same
+        /// job, `workPin` to it). Only when every copy is full does he go back
+        /// to "no job" (`playerIdle` off, his load dropped the ledger's own
+        /// way -- no building moves, no stock is lost), and the camp keeps a
+        /// saved note of who lost which post (`postsLost`) that the alert
+        /// strip shows until the player taps it (`CampAlerts`). Returns how
+        /// many were freed.
         public int EnforceStationCaps()
         {
+            if (hands == null) return 0;
             int freed = 0;
             var seen = new System.Collections.Generic.Dictionary<string, int>();
             var ords = new int[hands.Count];
             for (int i = 0; i < hands.Count; i++) ords[i] = hands[i] != null ? OrdinalOfHand(hands[i]) : -1;
-            for (int i = 0; i < hands.Count; i++)
+            System.Collections.Generic.List<int> extras = null;
+            // Pass 0 the pinned (the player chose that copy), pass 1 the dealt.
+            for (int pass = 0; pass < 2; pass++)
+                for (int i = 0; i < hands.Count; i++)
+                {
+                    var h = hands[i];
+                    if (h == null || h.order != OutpostOrder.Work || ords[i] < 0) continue;
+                    if (!BuildPlans.HasPosition(h.target)) continue;
+                    int n = CountBuilt(h.target);
+                    bool pinned = h.workPin > 0 && h.workPin <= n;
+                    if (pinned != (pass == 0)) continue;
+                    string key = h.target + "#" + ords[i];
+                    seen.TryGetValue(key, out int k);
+                    if (k < StationCapacity(h.target, ords[i]))
+                    {
+                        seen[key] = k + 1;
+                        h.workPin = ords[i] + 1;      // stays where he stands
+                        continue;
+                    }
+                    (extras ??= new System.Collections.Generic.List<int>()).Add(i);
+                }
+            if (extras == null) return 0;
+            foreach (int i in extras)
             {
                 var h = hands[i];
-                if (h == null || h.order != OutpostOrder.Work || ords[i] < 0) continue;
-                if (!BuildPlans.HasPosition(h.target)) continue;
-                string key = h.target + "#" + ords[i];
-                seen.TryGetValue(key, out int k);
-                if (k < StationCapacity(h.target, ords[i]))
+                int n = CountBuilt(h.target);
+                int to = -1;
+                for (int o = 0; o < n && to < 0; o++)
                 {
-                    seen[key] = k + 1;
-                    h.workPin = ords[i] + 1;      // stays where he stands
+                    seen.TryGetValue(h.target + "#" + o, out int k);
+                    if (k < StationCapacity(h.target, o)) to = o;
+                }
+                if (to >= 0)
+                {
+                    // Same job, the copy with room.
+                    seen.TryGetValue(h.target + "#" + to, out int k);
+                    seen[h.target + "#" + to] = k + 1;
+                    h.workPin = to + 1;
+                    Debug.Log($"[Ledger] {h.name}: moved to copy {to + 1} of {h.target} (copy {ords[i] + 1} already has its worker).");
                     continue;
                 }
+                string lost = h.target;
                 DropCarriedLoadNow(h);
                 h.order = OutpostOrder.Idle;
                 h.target = "";
                 h.workPin = 0;
                 h.playerIdle = false;
                 freed++;
-                Debug.Log($"[Ledger] {h.name}: freed from a full station (one worker per station).");
+                NotePostLost(h.name, lost);
+                Debug.Log($"[Ledger] {h.name}: freed from a full {lost} (one worker per station, every copy full).");
             }
             return freed;
         }
+
+        /// **Who lost a post to the station cap, and which** (2026-10-03):
+        /// the alert strip's "Finch lost the sawmill post" until the
+        /// player taps it (`DismissPostLost`). Saved; an old save reads empty.
+        public System.Collections.Generic.List<PostLost> postsLost = new System.Collections.Generic.List<PostLost>();
+
+        void NotePostLost(string name, string planId)
+        {
+            postsLost ??= new System.Collections.Generic.List<PostLost>();
+            postsLost.RemoveAll(p => p == null || p.name == name);
+            postsLost.Add(new PostLost { name = name, planId = planId });
+            // A short list: the oldest note goes first.
+            while (postsLost.Count > 8) postsLost.RemoveAt(0);
+        }
+
+        /// The player has seen it (tapped the alert), or the hand is gone.
+        public void DismissPostLost(string name)
+        {
+            postsLost?.RemoveAll(p => p == null || p.name == name);
+        }
+    }
+
+    /// One `OutpostLedger.postsLost` note: `name` lost his post at a copy of
+    /// `planId` because every copy already had its worker. JsonUtility-shaped.
+    [System.Serializable]
+    public class PostLost
+    {
+        public string name = "";
+        public string planId = "";
     }
 }

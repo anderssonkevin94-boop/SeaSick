@@ -157,6 +157,26 @@ namespace SeaSick.UI.Sheets
                 }
                 into.Add(new Alert { text = who + " · " + Short(why), tone = Tone.Bad, open = () => new HandSheet(camp, who), fixLabel = "Open" });
             }
+            // **A post the station cap took (2026-10-03,
+            // `OutpostLedger.EnforceStationCaps`)**: never silently -- named
+            // until the player taps it, which opens the hand to re-assign.
+            if (l.postsLost != null)
+                for (int i = 0; i < l.postsLost.Count; i++)
+                {
+                    var p = l.postsLost[i];
+                    var lostHand = p != null ? camp.HandNamed(p.name) : null;
+                    // Gone, or given a post again since: nothing to say.
+                    if (lostHand == null || lostHand.order == OutpostOrder.Work) continue;
+                    string who = p.name;
+                    string place = BuildPlans.Named(p.planId).label;
+                    if (string.IsNullOrEmpty(place)) place = "station";
+                    into.Add(new Alert
+                    {
+                        text = $"{who} lost the {place} post · {OutpostLedger.OneWorkerReason.ToLowerInvariant()}",
+                        tone = Tone.Warn, fixLabel = "Open " + who,
+                        open = () => { l.DismissPostLost(who); return new HandSheet(camp, who); },
+                    });
+                }
             if (idle > 0)
             {
                 string who = firstIdle;

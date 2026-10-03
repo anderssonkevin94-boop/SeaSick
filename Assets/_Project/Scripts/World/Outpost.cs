@@ -1639,7 +1639,9 @@ namespace SeaSick.World
         {
             if (ledger == null) return;
             // One worker per station (2026-10-01): a save from before the
-            // rule, or a copy pulled down under its worker, frees the extras.
+            // rule, or a copy pulled down under its worker. Since 2026-10-03
+            // an extra moves to a copy with room; only with every copy full
+            // is he freed, and the alert strip names him (`postsLost`).
             ledger.EnforceStationCaps();
             WireWalkerGuard();
             var bodies = Parked();
