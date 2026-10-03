@@ -234,9 +234,10 @@ namespace SeaSick.World
             GatherSync.Sync(this);   // stone, ore and spice props go as the seam is worked
             SyncHarvest();
             SyncHunting();
-            // The piles beside the fire are drawn from the stores, so they
-            // want to exist wherever the stores are being looked at.
-            if (HasCamp) { CampPiles.EnsureOn(this); GroundLoadPiles.EnsureOn(this); }
+            // A fallen hand's dropped load is drawn where it lies. (The store
+            // piles beside the fire are retired, 2026-10-03: the store is in
+            // its container slots, `StorageSlotView` on the buildings.)
+            if (HasCamp) GroundLoadPiles.EnsureOn(this);
             // A hut that filled itself while nobody was here has people in it
             // now. Same reason the raise cannot live in the tick: the
             // arithmetic recruits, but only a scene can put a body in.
@@ -1010,7 +1011,6 @@ namespace SeaSick.World
             // And they stand round it, which is the moment the camp stops
             // being a clearing and starts being somewhere people are.
             ArrangeHands();
-            CampPiles.EnsureOn(this);
             // A building standing up is the moment Kevin asked to be kept:
             // *"build buildings, have them tweaked, and see the changes next
             // time I play."*

@@ -384,25 +384,11 @@ public class CampLoadProbe : MonoBehaviour
         // 6. THE PILE BY THE FIRE IS WHAT THE LEDGER HOLDS
         // =====================================================================
 
-        var piles = CampPiles.EnsureOn(camp);
-        if (piles != null) piles.Refresh();
-        // Two frames, not one: `Rebuild` destroys the old stack and builds the
-        // new one in the same call, and `Destroy` is deferred to the end of
-        // the frame — so a `childCount` read too early counts both.
-        yield return null;
-        yield return null;
-
-        var stack = piles != null ? piles.transform.Find("Pile_" + Res.Timber) : null;
-        int drawn = stack != null ? stack.childCount : -1;
-        int haveTimber = l.CountOf(Res.Timber);
-
+        // **Retired 2026-10-03 (storage slots):** the store is no longer
+        // piled by the fire; it lives in the buildings' container slots
+        // (`StorageSlotView`), which need the slot art. No gate until then.
         sb.AppendLine();
-        sb.AppendLine("THE PICTURE AND THE NUMBER:");
-        sb.AppendLine($"  ledger holds {haveTimber} timber; the pile draws {drawn} "
-            + $"(caps at {PileDrawnCap})");
-        Gate("the-pile-by-the-fire-agrees-with-the-ledger",
-            drawn == Mathf.Min(haveTimber, PileDrawnCap),
-            $"{drawn} drawn of {haveTimber} held");
+        sb.AppendLine("THE PICTURE AND THE NUMBER: store piles retired (storage slots)");
 
         // =====================================================================
         // 7. UNDER WAY, NOTHING LOADS

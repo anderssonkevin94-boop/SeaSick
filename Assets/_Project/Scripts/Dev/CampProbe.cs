@@ -582,20 +582,11 @@ public class CampProbe : MonoBehaviour
         // first version of this gate asked for six and got the correct ten.
         outpost.Ledger.Add(Res.Timber, 6);
         int held = outpost.Ledger.CountOf(Res.Timber);
-        var piles = CampPiles.EnsureOn(outpost);
-        piles.Refresh();
-        yield return null;
-
-        var pile = outpost.GetComponentInChildren<CampPiles>(true);
-        Transform stack = pile != null ? pile.transform.Find("Pile_" + Res.Timber) : null;
-        int logsDrawn = stack != null ? stack.childCount : 0;
-        float pileGap = stack != null
-            ? SeaSick.World.Island.FlatDistance(stack.position, outpost.CampCentre) : -1f;
-        sb.AppendLine($"  {held} timber on the ground: {logsDrawn} drawn, "
-            + $"{pileGap:F1} m from the fire");
-        Gate(sb, ref fails, "what-is-gathered-is-piled-by-the-fire",
-            logsDrawn == held && pileGap > Outpost.FireRingRadius && pileGap < 9f,
-            $"{logsDrawn} drawn of {held} held, at {pileGap:F1} m");
+        // **Retired 2026-10-03 (storage slots):** the store is no longer
+        // piled by the fire (`CampPiles` draws no store); it is shown in the
+        // buildings' container slots (`StorageSlotView`), which need the slot
+        // art. No gate until that is imported.
+        sb.AppendLine($"  {held} timber held; store piles by the fire retired (storage slots)");
 
         // --- the three things Kevin found by playing it ----------------------
         //

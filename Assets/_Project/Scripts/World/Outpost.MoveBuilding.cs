@@ -236,8 +236,8 @@ namespace SeaSick.World
             // (the lookout on his deck, a sleeper inside) comes with it.
             ledger.ReaimTrips();
             CampWorker.BuildingMoved(this, b, oldRoot);
-            var piles = GetComponentInChildren<CampPiles>(true);
-            if (piles != null) piles.Relay();
+            // (The store piles that had to be re-laid here are retired,
+            // 2026-10-03: `StorageSlotView` rides on the building itself.)
             if (Watched) { ArrangeHands(); PuppetsToWork(); }
             why = "";
             return true;

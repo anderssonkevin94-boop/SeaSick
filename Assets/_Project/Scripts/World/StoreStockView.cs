@@ -29,7 +29,6 @@ namespace SeaSick.World
         bool discovered;
 
         OutpostLedger ledger;
-        CampPiles piles;
         bool resolved;
         int resolveAttempts;
         int retryWait;
@@ -58,7 +57,6 @@ namespace SeaSick.World
                 retryWait = 0;
                 var outpost = GetComponentInParent<Outpost>();
                 ledger = outpost != null ? outpost.Ledger : null;
-                piles = outpost != null ? outpost.GetComponentInChildren<CampPiles>(true) : null;
                 if (ledger != null) resolved = true;
                 else { if (resolveAttempts < MaxResolveAttempts) resolveAttempts++; return; }
             }
@@ -81,23 +79,22 @@ namespace SeaSick.World
             // inventing a stock that is not there.
         }
 
-        /// What this hut is showing of `res`: the store's count, less what
-        /// `CampPiles` still draws by the fire while the store moves in
-        /// from the ring (the few seconds after the hut is raised) -- so the
-        /// racks fill as the ring empties and no unit is drawn twice.
+        /// What this hut is showing of `res`: the store's count. (Until
+        /// 2026-10-03 less what `CampPiles` still drew by the fire while the
+        /// store moved in; that ring is retired with the storage slots.)
         int Held(string res)
         {
             // Booked-but-not-lifted units are still on the rack
             // (`OutpostLedger.OnStorePile`, 2026-09-24): the stone stays
             // until the builder sent for it takes it down.
-            int n = ledger.OnStorePile(res);
-            return piles != null ? Mathf.Max(0, n - piles.StillByFire(res)) : n;
+            return ledger.OnStorePile(res);
         }
 
-        /// **Does this hut have a rack for `res`?** `CampPiles` draws
-        /// everything else as a stack beside the hut once it stands, so the
-        /// goods this kit cannot show (stone, ore, brick, arrows, a hut
-        /// with no kit at all) are still somewhere to be seen.
+        /// **Does this hut have a rack for `res`?** Until 2026-10-03
+        /// `CampPiles` stacked everything else beside the hut; with the
+        /// storage slots that is retired, and what this OLD kit has no rack
+        /// for is invisible until the slot hut (`StorageSlotView`) replaces
+        /// it. Kept for any caller still asking.
         public bool Shows(string res)
         {
             DiscoverSlots();
