@@ -24,6 +24,8 @@ namespace SeaSick.Dev
     /// `Rope("slack"|"taut"|"strained")`, `Aim(bearing, range)`,
     /// `Shot(path)` (game view + HUD), `Close(path, yaw, dist, height, fov)`
     /// (temp camera, phone portrait, no HUD), `Info()`, `End()`.
+    /// Bow lantern on its beam (Kevin 2026-10-04): `Lantern(dir)` = the line
+    /// out dead ahead over it, three shots + its clearance to the line.
     public class HarpoonLookShot : MonoBehaviour
     {
         static HarpoonLookShot inst;
@@ -43,7 +45,7 @@ namespace SeaSick.Dev
 
         [System.Serializable] class RopeState
         {
-            public float widthM, emissionIntensity, sagFractionOfSpan, pulseHz, pulseMinIntensity, widthJitterM;
+            public float widthM, emissionIntensity, sagFractionOfSpan, pulseHz, pulseMinIntensity, widthJitterM, ambient;
             public string tint, emission;
             public bool restOnWater;
         }
@@ -135,6 +137,51 @@ namespace SeaSick.Dev
             return "wrote " + path;
         }
 
+        /// **The bow lantern on its beam** (CoasterOutfitting hangs
+        /// `Resources/Harpoon/BowLantern` on the low bow): crate dead ahead at
+        /// `rangeM`, taut line, then a starboard side close-up, a high
+        /// close-up from ahead-starboard and the game view (HUD), plus where
+        /// the lantern hangs and how far the line passes from each of its parts.
+        public static string Lantern(string dir, float rangeM = 20f)
+        {
+            if (inst == null) return "not running";
+            inst.bearing = 0f; inst.range = rangeM; inst.state = "taut";
+            inst.LateUpdate();
+            var sb = new StringBuilder(inst.LanternReport());
+            sb.AppendLine(Close(Path.Combine(dir, "lantern_side_deadahead.png"), 90f, 5.5f, 0.3f, 40f, 0.10f));
+            sb.AppendLine(Close(Path.Combine(dir, "lantern_close_high.png"), 150f, 4.0f, 2.2f, 45f, 0.05f));
+            sb.AppendLine(Shot(Path.Combine(dir, "lantern_game_deadahead.png")));
+            return sb.ToString();
+        }
+
+        string LanternReport()
+        {
+            Transform lantern = null;
+            foreach (var t in ship.GetComponentsInChildren<Transform>()) if (t.name == "BowLantern") { lantern = t; break; }
+            if (lantern == null) return "no BowLantern on the ship (not imported yet, or a raised bow): the kit's own lantern is up\n";
+            var pivot = Find(lantern, "LanternBow_Pivot");
+            Vector3 m = mount.InverseTransformPoint(muzzle.position), pv = mount.InverseTransformPoint(pivot.position);
+            var sb = new StringBuilder($"BowLantern: pivot {pv.z - m.z:F2} m ahead of and {m.y - pv.y:F2} m below the muzzle (mount frame; art says 1.55 / 0.835), " +
+                                       $"swing {(pivot.GetComponent<SeaSick.Ship.LanternSwing>() != null ? "on" : "OFF")}, lights on the pivot {pivot.GetComponentsInChildren<Light>().Length}\n");
+            var pts = new Vector3[rope.positionCount];
+            rope.GetPositions(pts);
+            float half = rope.widthMultiplier * 0.5f;
+            sb.Append("line clearance (world AABB, rope radius off):");
+            foreach (var r in lantern.GetComponentsInChildren<MeshRenderer>())
+            {
+                float best = float.MaxValue;
+                var b = r.bounds;
+                for (int i = 0; i + 1 < pts.Length; i++)
+                    for (int k = 0; k <= 40; k++)
+                    {
+                        var q = Vector3.Lerp(pts[i], pts[i + 1], k / 40f);
+                        best = Mathf.Min(best, Vector3.Distance(q, b.ClosestPoint(q)));
+                    }
+                sb.Append($" {r.name} {best - half:F3} m;");
+            }
+            return sb.AppendLine().ToString();
+        }
+
         public static string Info() => inst == null ? "not running" : inst.report + "\nnow: " + inst.Now();
 
         public static string End()
@@ -176,7 +223,7 @@ namespace SeaSick.Dev
             Transform bowHost = null;
             foreach (Transform t in view.transform) if (t.name.StartsWith("bow (")) { bowHost = t; break; }
             if (bowHost == null) return report + "no bow module under " + view.name;
-            foreach (Transform t in bowHost) if (t.GetComponentInChildren<MeshRenderer>() != null && t.name != "Connections") { bowVis = t; break; }
+            foreach (Transform t in bowHost) if (t.GetComponentInChildren<MeshRenderer>() != null && t.name != "Connections" && t.name != "BowLantern") { bowVis = t; break; }
             if (bowVis == null) return report + "no bow visual under " + bowHost.name;
             report.AppendLine($"bow visual {bowHost.name}/{bowVis.name}, lossyScale {bowVis.lossyScale.x:F3}, fwd vs ship {Vector3.Angle(bowVis.forward, ship.forward):F1} deg, up vs ship {Vector3.Angle(bowVis.up, ship.up):F1} deg");
 
@@ -229,6 +276,8 @@ namespace SeaSick.Dev
             rope.numCornerVertices = 0;
             rope.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             rope.receiveShadows = false;
+            // Normals for the toon shader: without them a line sits in its darkest cel band (the dull olive taut).
+            rope.generateLightingData = true;
 
             foreach (var c in FindObjectsByType<SeaSick.CameraRig.ChaseCamera>(FindObjectsSortMode.None))
                 if (c.isActiveAndEnabled) { chase = c.GetComponent<Camera>(); break; }
@@ -378,9 +427,9 @@ namespace SeaSick.Dev
             rope.widthMultiplier = width;
             var tint = Hex(s.tint);
             rope.startColor = rope.endColor = tint;
-            // The toon rope shader has no emission: the strained glow is
-            // approximated with its ambient floor, pulsed at pulseHz.
-            float glow = 0f;
+            // The toon rope shader's only emission is its ambient floor
+            // (rope-look.json `ambient`); the strained glow pulses it at pulseHz.
+            float glow = s.ambient;
             if (s.emissionIntensity > 0f)
             {
                 float k = 0.5f + 0.5f * Mathf.Sin(Time.time * s.pulseHz * 2f * Mathf.PI);

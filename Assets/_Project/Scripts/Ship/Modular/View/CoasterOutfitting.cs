@@ -72,13 +72,59 @@ namespace SeaSick.Ship.Modular
                     var pivot=new GameObject("Open port hinge").transform;pivot.SetParent(host,false);pivot.localPosition=new Vector3(-side*2.465f,floor+(stern?1.115f:1.065f),gunX);
                     r.transform.SetParent(pivot,true);pivot.localRotation=Quaternion.Euler(0,0,-side*110f);
                 }
+                // The bow lantern hangs off a beam ahead of the stem, under the harpoon's line (before the light loop: its Glass gets the light).
+                if(bow&&!raised)BowLantern(host);
                 // Three lanterns maximum on the basic ship; shadowless warm pools are inexpensive on phone.
+                // A hidden (replaced) lantern gets no light; a swinging one carries its light with it.
                 foreach(var r in host.GetComponentsInChildren<MeshRenderer>())
-                    if(r.name.Contains("Lantern")&&r.name.Contains("_Glass"))
-                    {var light=new GameObject("Warm lantern light").AddComponent<Light>();light.transform.SetParent(host,false);light.transform.position=r.bounds.center;light.type=LightType.Point;light.color=new Color(1,.55f,.23f);light.intensity=1.6f;light.range=4;light.shadows=LightShadows.None;light.gameObject.AddComponent<CoasterLantern>();}
+                    if(r.enabled&&r.name.Contains("Lantern")&&r.name.Contains("_Glass"))
+                    {var swing=r.GetComponentInParent<LanternSwing>();var light=new GameObject("Warm lantern light").AddComponent<Light>();light.transform.SetParent(swing!=null?swing.transform:host,false);light.transform.position=r.bounds.center;light.type=LightType.Point;light.color=new Color(1,.55f,.23f);light.intensity=1.6f;light.range=4;light.shadows=LightShadows.None;light.gameObject.AddComponent<CoasterLantern>();}
                 if(stern && raised && !(i+1<hulls.Count && CoasterFamily.Raised(hulls[i+1].moduleId))) CoasterPbrTrial.Apply(host);
                 CoasterRenderBatch.Build(host);
             }
+        }
+        /// **Kevin 2026-10-04: the bow lantern on a short beam** off the stem,
+        /// hanging just under the harpoon's line of fire across its +/-45 deg
+        /// arc (art-staging/harpoon-v1: build.py `lantern`, check.py ->
+        /// lantern-verification.json). Hides the hull kit's own bow lantern
+        /// (its post stood in the line dead ahead) and hangs
+        /// `Resources/Harpoon/BowLantern` in the harpoon mount's frame:
+        /// bow-local (0, 1.055, 3.15) m, identity. Not imported yet: the kit
+        /// lantern stays, so the ship never loses it. Low bow only: a raised
+        /// bow keeps its kit lantern until the harpoon has a raised-bow spot.
+        static GameObject bowLantern;static bool bowLanternLoaded;
+        static readonly Vector3 BowLanternAt=new Vector3(0,1.055f,3.15f);
+        /// The kit lantern's frame on BowLow (kit.json): lowest y, forward-most z.
+        /// Anything else is a bow this beam was not fitted to.
+        static readonly Vector2 KitBowLanternFoot=new Vector2(2.532f,4.854f);
+        static void BowLantern(Transform host)
+        {
+            if(!bowLanternLoaded){bowLantern=Resources.Load<GameObject>("Harpoon/BowLantern");bowLanternLoaded=true;}
+            if(bowLantern==null)return;
+            var old=new List<MeshRenderer>();MeshFilter frame=null;
+            foreach(var r in host.GetComponentsInChildren<MeshRenderer>())
+                if(r.name.StartsWith("Lantern_Bow_")){old.Add(r);if(r.name.StartsWith("Lantern_Bow_Frame"))frame=r.GetComponent<MeshFilter>();}
+            if(frame==null||frame.sharedMesh==null)return;
+            // Host-local metres, vertex-exact through the mesh bounds' corners.
+            var mb=frame.sharedMesh.bounds;float low=float.MaxValue,front=float.MinValue;
+            for(int c=0;c<8;c++)
+            {
+                var p=host.InverseTransformPoint(frame.transform.TransformPoint(mb.center+Vector3.Scale(mb.extents,new Vector3((c&1)==0?-1:1,(c&2)==0?-1:1,(c&4)==0?-1:1))));
+                low=Mathf.Min(low,p.y);front=Mathf.Max(front,p.z);
+            }
+            if(Mathf.Abs(low-KitBowLanternFoot.x)>.05f||Mathf.Abs(front-KitBowLanternFoot.y)>.05f)return;
+            foreach(var r in old)r.enabled=false;
+            var go=Object.Instantiate(bowLantern,host,false);go.name="BowLantern";
+            go.transform.localPosition=BowLanternAt;go.transform.localRotation=Quaternion.identity;go.transform.localScale=Vector3.one;
+            // Painted like the lantern it replaces: hull paint, glowing glass (every slot).
+            foreach(var r in go.GetComponentsInChildren<MeshRenderer>())
+            {
+                var m=r.name.Contains("_Glass")?Glass:Paint;var a=r.sharedMaterials;
+                for(int k=0;k<a.Length;k++)a[k]=m;
+                r.sharedMaterials=a;
+            }
+            foreach(var t in go.GetComponentsInChildren<Transform>())
+                if(t.name=="LanternBow_Pivot"){if(t.GetComponent<LanternSwing>()==null)t.gameObject.AddComponent<LanternSwing>();break;}
         }
         static void End(Transform parent,float z,float top,int outward,bool ladder)
         {
