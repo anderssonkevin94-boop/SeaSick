@@ -1021,8 +1021,16 @@ namespace SeaSick.World
         /// that makes the rest possible -- but it goes through exactly the
         /// same blueprint, so keeping it in the list is what stops it becoming
         /// a special case.
+        ///
+        /// **The Storehouse joins it (2026-10-03).** It was home's building
+        /// (`All`) and no island is home any more, so it could not be built
+        /// anywhere; as runner progression (Kevin: "the more you upgrade it,
+        /// the more / better runners you get") it has to stand on a camp.
+        /// One at fire I-II, two from III (`Techs.Caps`). PLACEHOLDER LOOK:
+        /// no authored model, so `BuildingFactory` raises the primitive hut
+        /// shape at its 8 x 5 m footprint until a tarp storehouse is drawn.
         public static readonly BuildPlan[] AtACamp =
-            { Campfire, Storage, Hut, Farm, FishingHut, Sawmill, Quarry, Fletcher, Kitchen, Mill, Blacksmith, Watchtower, Pier, DryDock };
+            { Campfire, Storage, Storehouse, Hut, Farm, FishingHut, Sawmill, Quarry, Fletcher, Kitchen, Mill, Blacksmith, Watchtower, Pier, DryDock };
 
         /// Look a plan up by the id a ledger row carries. A save restores ids,
         /// not structs, and so does an assignment.
