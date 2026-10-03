@@ -1,0 +1,31 @@
+{
+  "schema": "SeaSick harpoon rope look v1 (phase 0, docs/PLAN-harpoon.md). For a Unity LineRenderer with sag; colours are sRGB hex tints that MULTIPLY the rope tile.",
+  "material": {
+    "name": "SS_Harpoon_Rope",
+    "texture": "Assets/_Project/Art/WallL1/Textures/rope-tile-512.png (same tile as the packed V3_rope-tile-512.png in harpoon-v1.blend; already used by SS_WallL1_Rope / SS_StorageL1_Hemp)",
+    "textureMode": "Tile",
+    "tilesPerMetre": 3.0,
+    "shader": "URP Lit (or the project's rope/hemp shader), base map = rope tile, base colour = tint below, emission on (black unless strained)",
+    "lineRenderer": { "alignment": "View", "numCapVertices": 2, "numCornerVertices": 0, "castShadows": false, "receiveShadows": false, "segments": 20 }
+  },
+  "readability": {
+    "phoneDistanceM": 35,
+    "note": "0.075 m at ~40 m from the phone-high camera is ~4-5 px on a 1080x2340 portrait screen. Keep at least minScreenWidthPx by widening with camera distance.",
+    "minScreenWidthPx": 3
+  },
+  "states": {
+    "slack":    { "widthM": 0.085, "tint": "#B89A72", "emission": "#000000", "emissionIntensity": 0.0, "sagFractionOfSpan": 0.10, "restOnWater": true,
+                  "note": "dull hemp, visible belly; the part below the sea surface is clamped to the surface (rope lies on the water)" },
+    "taut":     { "widthM": 0.075, "tint": "#F2E2C2", "emission": "#000000", "emissionIntensity": 0.0, "sagFractionOfSpan": 0.012,
+                  "note": "bright straw, almost straight" },
+    "strained": { "widthM": 0.070, "tint": "#FF8A4A", "emission": "#FF5A1A", "emissionIntensity": 1.2, "sagFractionOfSpan": 0.0,
+                  "pulseHz": 3.0, "pulseMinIntensity": 0.4, "widthJitterM": 0.006,
+                  "note": "warm glow tint: emission pulses between 0.4 and 1.2 at 3 Hz with a small width jitter (fray/creak); dead straight" }
+  },
+  "blend": "Lerp tint/width/sag by tension: slack (t<=0.3) -> taut (t=0.7) -> strained (t>=0.9). No step changes (the plan's ease rule).",
+  "drumCoil": {
+    "mesh": "HarpoonMount/Swivel/Winch_Drum/Winch_Coil",
+    "ropeRadiusM": 0.045, "turns": 5, "coilRadiusM": 0.15, "material": "SS_Harpoon_Rope", "gameColor": "#FFFFFF",
+    "note": "fat static coils that spin with Winch_Drum (local X); one coil diameter 0.09 m reads as rope at phone size. Spin while reeling, opposite while paying out."
+  }
+}
