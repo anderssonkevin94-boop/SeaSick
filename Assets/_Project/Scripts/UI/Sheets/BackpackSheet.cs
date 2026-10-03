@@ -598,7 +598,9 @@ namespace SeaSick.UI.Sheets
             // One slot for the two lines: "bring her alongside" wins.
             orderLine.style.display = here && !string.IsNullOrEmpty(orderLine.text) ? DisplayStyle.Flex : DisplayStyle.None;
 
-            if (!onShipPage) meta.text = "holds " + l.ceilingPer + " of each";
+            // Island stores are unlimited (Kevin 2026-10-03, infinite
+            // stacking): no ceiling to quote, the containers are the picture.
+            if (!onShipPage) meta.text = "kept in sacks, racks and bays";
             else if (v == null) meta.text = "";
             else
             {
@@ -709,7 +711,8 @@ namespace SeaSick.UI.Sheets
             int have = onShip ? ShipCount(l, res) : IslandCount(l, res);
             t.count.text = MidnightLandHud.CompactCount(have);
             t.root.EnableInClassList("pack-tile--dim", have <= 0);
-            t.root.EnableInClassList("pack-tile--full", !onShip && have >= l.ceilingPer);
+            // Island stores never fill (2026-10-03, infinite stacking).
+            t.root.EnableInClassList("pack-tile--full", false);
 
             // Coming here: the order the other side is sending plus armfuls
             // already walking this way. Leaving: this side's standing order.
