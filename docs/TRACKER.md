@@ -16,6 +16,7 @@ Sessions end every report with a **"loose ends:"** line. The orchestrator copies
 
 | Feature | State | Waiting on | Owner |
 |---|---|---|---|
+| **URGENT BUG: cargo (iron ore, stone) vanishes when docking home** (Kevin, phone 74116cd7), plus his worry about a "new store hut looking thing" next to his old store huts | investigating (opus) | root cause → fix → save repair? | Villager |
 | Harpoon phase 0: art (bow mount, barb, rope look, 🪝 + marker mock) | in progress; Blender scripts being written in art-staging/harpoon-v1 | Blender window from sailing, then shots → Kevin's approval | Villager |
 | Harpoon harpooner crew role (IHarpoonCrewSource on the gun-shift map) | queued after phase 0 shots; seam agreed (HarpoonCrew / IHarpoonCrewSource / BowPost) | phase 0 | Villager |
 | Farm-sheet bugs: half-picked field reports full yield; crop change relabels ripe harvest | Kevin: FIX (2026-10-04) | after harpooner role | Villager |
