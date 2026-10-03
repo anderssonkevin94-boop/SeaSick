@@ -21,6 +21,8 @@ Sessions end every report with a **"loose ends:"** line. The orchestrator copies
 | Farm-sheet bugs: half-picked field reports full yield; crop change relabels ripe harvest | Kevin: FIX (2026-10-04) | after harpooner role | Villager |
 | Harpoon phase 1: hook & reel salvage, markers, 90° arc, snap + 5 s reload, captain-fallback crew seam | in progress | session | Sailing |
 
+| App icon (Kevin's ship-at-sunset art) | committed bc7fd04a, set as the default icon | the next phone build | Orchestrator |
+
 ## On the phone, awaiting Kevin's verdict (build 74116cd7)
 
 | Feature | Checklist lives in | Owner |
