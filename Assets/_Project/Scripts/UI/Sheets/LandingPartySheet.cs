@@ -18,28 +18,36 @@ namespace SeaSick.UI.Sheets
     /// `.st` + Hand.uss + Lookout.uss), hugging its content on the phone so
     /// the island stays visible above it (`SheetHost.HugsContent`).
     ///
-    /// * **header** -- landing glyph · "Landing party" · pill "35%
-    ///   explored" · under it "Island_3 · 4 aboard" (Gather: "hold 23/34")
-    ///   on its own line (2026-09-30: beside the pill it read "Anchored …")
-    ///   (`IslandFog.Revealed01`) · ☰ (the pause menu, since the IMGUI
-    ///   Menu/Ledger chips stand down off a fresh island) · ✕;
+    /// * **header** -- landing glyph · "Landing party" · under it
+    ///   "Island_3 · 4 aboard" (Gather: "hold 23/34") on its own line
+    ///   (2026-09-30: beside the pill it read "Anchored …") · ☰ (the pause
+    ///   menu, since the IMGUI Menu/Ledger chips stand down off a fresh
+    ///   island) · ✕. (The "35% explored" pill went with the fog of war,
+    ///   2026-10-03.)
     /// * **three order cards** -- Explore · Gather · Hunt;
-    /// * **Explore** -- FOUND SO FAR chips (`IslandFog.FoundResources`,
-    ///   `FoundHerds`, `FoundIslandFinds`), one line of what happens, WHO
-    ///   GOES portraits ("spear" / "bow · 8" / "unarmed" / "at the helm");
-    /// * **Gather** -- every found kind as a 4-wide icon tile, HOW MUCH
-    ///   "5 / 10 / All N" (N = what the hold and the reachable sources
+    /// * **Explore** -- ON THIS ISLAND chips (`IslandInventory`), one line
+    ///   of what happens, WHO GOES portraits ("spear" / "bow · 8" /
+    ///   "unarmed" / "at the helm");
+    /// * **Gather** -- every kind on the island as a 4-wide icon tile, HOW
+    ///   MUCH "5 / 10 / All N" (N = what the hold and the reachable sources
     ///   allow), WHO GOES name pills;
-    /// * **Hunt** -- the found herds as tiles, WHO GOES portraits (only the
-    ///   armed can be picked);
+    /// * **Hunt** -- the island's herds as tiles, WHO GOES portraits (only
+    ///   the armed can be picked);
     /// * **thumb row** -- ONE primary that says exactly what happens ("Send
     ///   Bo and Ma to explore", "Send 2 to gather 10 ore", "Send Pip to hunt
-    ///   goats"), or the fix: a button when there is one ("Explore first"),
-    ///   plain text when there is not ("Nobody is armed ..."). Never a
-    ///   disabled primary.
+    ///   goats"), or plain text when it cannot ("Nobody is armed ...").
+    ///   Never a disabled primary.
+    ///
+    /// **No fog (Kevin, 2026-10-03: "remove the fog of war").** 2026-09-30 to
+    /// 2026-10-03 the tiles listed only what a party had FOUND (stood on
+    /// ground explorers had opened) and an empty Gather/Hunt offered an
+    /// "Explore first" button. Every island is fully visible now: the tiles
+    /// are everything on the island, the "Explore first" buttons are plain
+    /// text, and the sheet opens on Gather (Explore no longer yields
+    /// anything -- kept pending Kevin's call, GDD decision log 2026-10-03).
     ///
     /// While a party is ashore the page is its progress (what they are
-    /// doing, a bar, what has been found so far) and "Call them back". The
+    /// doing, a bar) and "Call them back". The
     /// result of the last trip (`GatherParty.LastReport`) shows in a card at
     /// the top of the page for a few seconds after they are back.
     ///
@@ -65,10 +73,10 @@ namespace SeaSick.UI.Sheets
             && !Sheets.SuppressLegacy;
 
         public enum Tab3 { Explore, Gather, Hunt }
-        static Tab3 lastOrder = Tab3.Explore;
+        static Tab3 lastOrder = Tab3.Gather;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        static void ResetForPlay() => lastOrder = Tab3.Explore;
+        static void ResetForPlay() => lastOrder = Tab3.Gather;
 
         readonly AnchorController anchor;
         readonly GatherParty party;
@@ -123,7 +131,6 @@ namespace SeaSick.UI.Sheets
             && (anchor.CurrentState == AnchorController.State.Anchored
                 || anchor.CurrentState == AnchorController.State.Ashore);
 
-        IslandFog Fog => IslandFog.For(island);
         bool PartyOut => party != null && party.Out && party.Island == island;
 
         // --- header -----------------------------------------------------------
@@ -174,9 +181,7 @@ namespace SeaSick.UI.Sheets
             else
                 tail = $"{GatherParty.Company(anchor).Count} aboard";
             head.SetSub($"{island.name} · {tail}");
-            var fog = Fog;
-            int pct = fog != null ? Mathf.RoundToInt(fog.Revealed01 * 100f) : 100;
-            head.SetPill($"{pct}% explored", pct >= 100 ? StationPage.PillGood : StationPage.PillWait);
+            head.SetPill(null, StationPage.PillGood);   // no "% explored" since the fog went (2026-10-03)
         }
 
         // --- the page -----------------------------------------------------------
@@ -212,19 +217,15 @@ namespace SeaSick.UI.Sheets
             var sb = new StringBuilder(128);
             sb.Append(order).Append('|').Append(PartyOut ? (party.Recalling ? "R" : "O") : "-").Append('|');
             sb.Append(GatherParty.ReportFresh ? GatherParty.LastReport : "").Append('|');
-            var fog = Fog;
-            if (fog != null)
-            {
-                found.Clear();
-                fog.FoundResources(found);
-                foreach (var kv in found) sb.Append(kv.Key).Append(kv.Value).Append(',');
-                herds.Clear();
-                fog.FoundHerds(herds);
-                sb.Append(herds.Count).Append(',');
-                finds.Clear();
-                fog.FoundIslandFinds(finds);
-                sb.Append(finds.Count).Append('|');
-            }
+            found.Clear();
+            IslandInventory.Resources(island, found);
+            foreach (var kv in found) sb.Append(kv.Key).Append(kv.Value).Append(',');
+            herds.Clear();
+            IslandInventory.Herds(island, herds);
+            sb.Append(herds.Count).Append(',');
+            finds.Clear();
+            IslandInventory.Finds(island, finds);
+            sb.Append(finds.Count).Append('|');
             if (!PartyOut)
             {
                 foreach (var c in GatherParty.Company(anchor))
@@ -325,10 +326,10 @@ namespace SeaSick.UI.Sheets
 
         void BuildExplore()
         {
-            CardKit.Eye(col, "FOUND SO FAR");
+            CardKit.Eye(col, "ON THIS ISLAND");
             FoundChips(col);
             var why = StationPage.Text(
-                $"The party walks into the fog for about {Mathf.RoundToInt(GatherParty.ExploreSeconds / 60f)} minutes and reports what they find. Something could bite; armed hands are safer.",
+                $"The party walks inland for about {Mathf.RoundToInt(GatherParty.ExploreSeconds / 60f)} minutes and comes back. Something could bite; armed hands are safer.",
                 "hs-now-s");
             why.style.whiteSpace = WhiteSpace.Normal;
             why.style.marginTop = 6f;
@@ -338,9 +339,6 @@ namespace SeaSick.UI.Sheets
             var who = PickedInOrder();
             if (!CanSendAtAll(out string fix)) { Thumb(null, fix); return; }
             if (who.Count == 0) { Thumb(null, "Tap who goes."); return; }
-            var fog = Fog;
-            if (fog != null && fog.Revealed01 >= 0.999f && order == Tab3.Explore)
-                note = "The whole island is already seen.";
             Thumb($"Send {Names(who)} to explore", note, () =>
             {
                 if (party.SendExplore(who, out string why2)) Sheets.Close();
@@ -348,7 +346,8 @@ namespace SeaSick.UI.Sheets
             });
         }
 
-        /// Resources, herds and island finds seen so far, as small chips.
+        /// The island's resources, herds and finds, as small chips (only
+        /// those on explored ground until the fog went, 2026-10-03).
         void FoundChips(VisualElement into)
         {
             var row = new VisualElement { pickingMode = PickingMode.Ignore };
@@ -372,7 +371,7 @@ namespace SeaSick.UI.Sheets
             }
             if (n == 0)
             {
-                var none = StationPage.Text("Nothing yet. The fog hides the rest of the island.", "hs-now-s");
+                var none = StationPage.Text("Nothing to gather or hunt here.", "hs-now-s");
                 none.style.whiteSpace = WhiteSpace.Normal;
                 row.Add(none);
             }
@@ -403,8 +402,8 @@ namespace SeaSick.UI.Sheets
         void BuildGather()
         {
             survey = GatherParty.Survey(island, anchor.PartyLanding(), party);
-            // Every kind found on the island (the fog's list), plus anything
-            // in reach the fog has not counted -- any number of kinds.
+            // Every kind on the island (`IslandInventory`), plus anything in
+            // reach it does not count -- any number of kinds.
             var kinds = new List<string>();
             foreach (var kv in found) if (kv.Value > 0 && Res.IsGatherable(kv.Key) && !kinds.Contains(kv.Key)) kinds.Add(kv.Key);
             foreach (var o in survey) if (!kinds.Contains(o.resource)) kinds.Add(o.resource);
@@ -415,10 +414,10 @@ namespace SeaSick.UI.Sheets
                 if (gatherRes == null && kinds.Count > 0) gatherRes = kinds[0];
             }
 
-            CardKit.Eye(col, "WHAT", "found on this island");
+            CardKit.Eye(col, "WHAT", "on this island");
             if (kinds.Count == 0)
             {
-                var none = StationPage.Text("Nothing found yet.", "hs-now-s");
+                var none = StationPage.Text("Nothing to gather here.", "hs-now-s");
                 col.Add(none);
             }
             var grid = CardKit.Grid(col);
@@ -472,12 +471,11 @@ namespace SeaSick.UI.Sheets
 
             var who = PickedInOrder();
             if (!CanSendAtAll(out string fix)) { Thumb(null, fix); return; }
-            if (kinds.Count == 0) { Thumb("Explore first", "Nothing found yet.", () => Tap(() => { order = Tab3.Explore; lastOrder = order; })); return; }
+            if (kinds.Count == 0) { Thumb(null, "Nothing to gather on this island."); return; }
             if (room <= 0) { Thumb(null, "The hold is full. Unload it at a camp."); return; }
             if (gatherRes == null || InReach(gatherRes) <= 0)
             {
-                Thumb("Explore first", $"No {Lower(gatherRes)} within reach of the landing yet.",
-                    () => Tap(() => { order = Tab3.Explore; lastOrder = order; }));
+                Thumb(null, $"No {Lower(gatherRes)} within reach of the landing.");
                 return;
             }
             if (who.Count == 0) { Thumb(null, "Tap who goes."); return; }
@@ -511,14 +509,14 @@ namespace SeaSick.UI.Sheets
             if (herd == Animal.Kind.Boar && boar == 0) herd = null;
             if (herd == null) herd = goats > 0 ? Animal.Kind.Goat : boar > 0 ? Animal.Kind.Boar : (Animal.Kind?)null;
 
-            CardKit.Eye(col, "WHAT", "herds found");
+            CardKit.Eye(col, "WHAT", "herds on this island");
             var grid = CardKit.Grid(col);
             int i = 0;
             if (goats > 0) HerdTile(grid, Animal.Kind.Goat, goats, i++);
             if (boar > 0) HerdTile(grid, Animal.Kind.Boar, boar, i++);
             if (i == 0)
             {
-                var none = StationPage.Text("No herds found yet.", "hs-now-s");
+                var none = StationPage.Text("No herds on this island.", "hs-now-s");
                 col.Add(none);
             }
 
@@ -530,7 +528,7 @@ namespace SeaSick.UI.Sheets
             foreach (var kv in dealt) if (kv.Value != null && kv.Key.Available) { anyArmed = true; break; }
 
             if (!CanSendAtAll(out string fix)) { Thumb(null, fix); return; }
-            if (herd == null) { Thumb("Explore first", "No herds found yet.", () => Tap(() => { order = Tab3.Explore; lastOrder = order; })); return; }
+            if (herd == null) { Thumb(null, "No herds on this island."); return; }
             if (!anyArmed) { Thumb(null, "Nobody is armed. Take a spear or a bow and arrows aboard at a camp."); return; }
             if (party.Room <= 0) { Thumb(null, "The hold is full. Unload it at a camp."); return; }
             if (hunters.Count == 0) { Thumb(null, "Tap an armed hand to hunt."); return; }
@@ -687,11 +685,8 @@ namespace SeaSick.UI.Sheets
             progress.S.style.whiteSpace = WhiteSpace.Normal;
             bar = new CardKit.Bar(col);
             bar.Root.style.marginTop = 8f;
-            if (party.Mode != GatherParty.Order.Gather)
-            {
-                CardKit.Eye(col, "FOUND SO FAR");
-                FoundChips(col);
-            }
+            // (A FOUND SO FAR chip row stood here for explore and hunt
+            // trips until the fog went, 2026-10-03: nothing new is found.)
             FillProgress();
             acts = CardKit.Acts(root);
             if (party.Recalling)
@@ -717,7 +712,7 @@ namespace SeaSick.UI.Sheets
                     int left = Mathf.CeilToInt(Mathf.Max(0f, GatherParty.ExploreSeconds - party.Elapsed));
                     t = party.Recalling ? "Coming back" : left > 0 ? $"Exploring · {left / 60}:{left % 60:00} left" : "Walking back";
                     s = party.HurtName != null ? $"{party.HurtName} is hurt; they are bringing him home"
-                        : $"{who} {(party.Hands.Count == 1 ? "is" : "are")} in the fog";
+                        : $"{who} {(party.Hands.Count == 1 ? "is" : "are")} exploring";
                     t01 = party.Explore01;
                     break;
                 }

@@ -8,8 +8,9 @@ using UnityEngine.UIElements;
 
 namespace SeaSick.UI.Sheets
 {
-    /// **The landing party's result toast (2026-09-30).** "Found a cache ·
-    /// 100% explored" when the party is back aboard, in the Next card's
+    /// **The landing party's result toast (2026-09-30).** "6 timber aboard"
+    /// (2026-10-03: no more "Found a cache · 100% explored" -- the fog of war
+    /// is gone) when the party is back aboard, in the Next card's
     /// house style (`next-card`: the dark slate card, the ice rim, a small
     /// caps label over a bold line), high and centred under the chart
     /// (`HudLayout.ToastRow`'s 22 % line), across the thumb lane's width.

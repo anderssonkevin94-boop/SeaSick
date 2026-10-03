@@ -90,13 +90,15 @@ namespace SeaSick.Save
         /// reasoning as `seen`: an old save has taken nothing yet.
         public List<FindTakenSave> takenFinds = new List<FindTakenSave>();
 
-        /// **What the landing parties have explored** (`SeaSick.World.IslandFog`,
-        /// Kevin 2026-09-30): one row per unsettled island with any revealed
-        /// cell, the grid's geometry and its bits as base64. Added after
-        /// version 1 shipped, deliberately NOT a version bump, same reasoning
-        /// as `takenFinds`: an old save has explored nothing, so every island
-        /// without a camp loads fogged, and a camp island is clear anyway.
-        public List<IslandFogSave> fog = new List<IslandFogSave>();
+        // **`fog` is gone (Kevin, 2026-10-03: "remove the fog of war").**
+        // Saves from 2026-09-30 to 2026-10-03 carry a `"fog": [...]` array
+        // (one row per unsettled island: grid geometry + revealed bits as
+        // base64). The field is deleted outright rather than kept obsolete:
+        // `JsonUtility.FromJson` silently skips JSON keys the class does not
+        // declare -- no exception, no log -- so those saves load clean and
+        // the next save simply stops writing it. NOT a version bump (it
+        // would refuse every save Kevin has). Do not reuse the name `fog`
+        // for a different shape: an old save's rows would land in it.
 
         /// **The ship's wake**, as three parallel lists — the same shape
         /// `OutpostLedger.Absence` uses, and for the same reason:

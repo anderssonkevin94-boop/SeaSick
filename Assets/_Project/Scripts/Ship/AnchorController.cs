@@ -998,10 +998,6 @@ namespace SeaSick.Ship
                 var here = Outpost.Of(isle);
                 if (here != null) { here.CatchUp(); here.ShowHands(true); }
             }
-            // **Fog (2026-09-30):** the strip of shore she lies off is seen
-            // from the deck; the rest of a fresh island waits for a landing
-            // party to walk it (`IslandFog`, `GatherParty` Explore).
-            if (isle != null) IslandFog.For(isle)?.RevealShoreNear(transform.position);
             motor.Anchored = true;
             timer = dropTime;
             CurrentState = timer > 0f ? State.Dropping : State.Anchored;

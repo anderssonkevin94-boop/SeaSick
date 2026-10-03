@@ -12,13 +12,19 @@ namespace SeaSick.Ship
     /// off an island with no camp, the ship sends chosen hands ashore on ONE
     /// of three orders (`Order`), picked on `UI.Sheets.LandingPartySheet`:
     ///
-    /// * **Explore** -- the party walks into the fog for `ExploreSeconds`
-    ///   of walking, each hand along his own fanned bearing, every stop a
-    ///   walkable straight line (`LineWalkable`) that leads into the most
-    ///   unrevealed ground (`IslandFog.IsRevealed`). Every hand ashore, on
-    ///   any order, reveals `RevealRadius` round himself
-    ///   (`IslandFog.RevealAround`). They come home the way they went (a
-    ///   breadcrumb trail per hand), never in a straight line over a cliff.
+    /// * **Explore** -- the party walks inland for `ExploreSeconds` of
+    ///   walking, each hand along his own fanned bearing, every stop a
+    ///   walkable straight line (`LineWalkable`), spread from the others'.
+    ///   They come home the way they went (a breadcrumb trail per hand),
+    ///   never in a straight line over a cliff. **2026-10-03, Kevin: "remove
+    ///   the fog of war."** Until then each stop led into the most
+    ///   unrevealed ground and every hand ashore opened the fog round
+    ///   himself (`IslandFog.RevealAround`); revealing was Explore's whole
+    ///   yield (it found resources, herds and finds only in the sense that
+    ///   they stood on newly open ground -- nothing is spawned or unlocked
+    ///   by exploring). With the island fully visible, Explore is now a walk
+    ///   with the boar risk below and no reward: KEPT pending Kevin's call
+    ///   (see GDD decision log 2026-10-03).
     ///   **Mild risk:** the first time an explorer comes within
     ///   `BoarDangerMetres` of a live boar it is rolled once --
     ///   `HurtChanceUnarmed` for a party with no weapon among them,
@@ -27,8 +33,9 @@ namespace SeaSick.Ship
     ///   off station for `HurtRestSeconds` (`CrewAgent.ApplyRescueAftermath`,
     ///   the ship's twin of the drag-to-hut recovery), logged `Downed`.
     /// * **Gather** -- the 2026-09-27 trip, unchanged in its dials and its
-    ///   booking (below), now limited to sources on REVEALED ground.
-    /// * **Hunt** -- each armed hunter stalks the nearest revealed beast of
+    ///   booking (below). (2026-09-30 to 2026-10-03 it was limited to
+    ///   sources on revealed ground; with the fog gone, any source in reach.)
+    /// * **Hunt** -- each armed hunter stalks the nearest beast of
     ///   the chosen kind (`Animal.Hunted`, so it does not bolt), jabs or
     ///   shoots it from `SpearReach`/`BowReach`, shoulders the carcass
     ///   (`HunterProps`) and carries `Res.MeatPerAnimal` Meat plus
@@ -43,7 +50,7 @@ namespace SeaSick.Ship
     /// arrows, dealt to the chosen hands first in crew order.
     ///
     /// **The report.** When the last hand is aboard, `LastReport` says what
-    /// they brought or found ("Found ore and a cairn · 6 timber aboard") and
+    /// they brought ("6 timber aboard", "2 goats · 6 meat aboard") and
     /// a toast shows it for 4.5 s (`PartyReportToast`, 2026-09-30), or the
     /// sheet's "now" card for `ReportSeconds` while it is open.
     ///
@@ -111,17 +118,13 @@ namespace SeaSick.Ship
         // --- the landing party's dials (2026-09-30, PROVISIONAL, unplayed) --
         /// Seconds of walking an explore trip lasts before it turns home.
         public const float ExploreSeconds = 120f;
-        /// Metres of fog a hand ashore clears round himself.
-        public const float RevealRadius = 25f;
         /// How far one explore stop is from the last, metres.
         public const float ExploreStep = 22f;
-        /// **An explore trip ends early (2026-09-30)** once no land under
-        /// cloud is left within this many metres of the landing, or nothing
-        /// new has opened for `ExploreStaleSeconds`: a small island was open
-        /// in 15 s and the party walked on for the whole two minutes. Stops
-        /// are never chosen past it either.
+        /// Explore stops are never chosen farther than this from the
+        /// landing, metres. (2026-09-30 a trip also ended early once no fog
+        /// was left in this reach; the fog went 2026-10-03, so a trip now
+        /// runs its `ExploreSeconds`.)
         public const float ExploreReach = 180f;
-        public const float ExploreStaleSeconds = 15f;
         /// A live boar this close to an explorer is an encounter (rolled once).
         public const float BoarDangerMetres = 18f;
         /// Chance an encounter hurts somebody: nobody in the party armed / armed.
@@ -239,16 +242,11 @@ namespace SeaSick.Ship
         }
 
         readonly Dictionary<CrewAgent, Job> jobs = new Dictionary<CrewAgent, Job>();
-        float startedAt, nextReveal, nextDanger, nextDoneLook, lastRevealed, lastNewAt;
+        float startedAt, nextDanger, nextDoneLook;
         readonly HashSet<Animal> metBoars = new HashSet<Animal>();
         FaunaLod fauna;
         string wardedOffBy;
         string hurtCause;
-
-        // found-before snapshot, for the report
-        readonly Dictionary<string, int> foundBefore = new Dictionary<string, int>();
-        readonly HashSet<Animal.Kind> herdsBefore = new HashSet<Animal.Kind>();
-        int findsBefore;
 
         Job JobOf(CrewAgent who) => who != null && jobs.TryGetValue(who, out var j) ? j : null;
 
@@ -361,8 +359,8 @@ namespace SeaSick.Ship
         }
 
         /// What this island offers a party from `from`: every gatherable raw
-        /// good with at least one reachable source on revealed ground, and
-        /// how much.
+        /// good with at least one reachable source, and how much (on revealed
+        /// ground only until the fog went, 2026-10-03).
         public static List<Option> Survey(Island isle, Vector3 from, GatherParty party)
         {
             var result = new List<Option>();
@@ -420,7 +418,8 @@ namespace SeaSick.Ship
             return true;
         }
 
-        /// Explore: `who` walk into the fog for `ExploreSeconds`.
+        /// Explore: `who` walk inland for `ExploreSeconds` (no reward since
+        /// the fog went, 2026-10-03 -- see the class notes).
         public bool SendExplore(List<CrewAgent> who, out string why)
         {
             if (!Ready(who, out why)) return false;
@@ -441,7 +440,7 @@ namespace SeaSick.Ship
             foreach (var c in who) if (deal.TryGetValue(c, out var w) && w != null) armed.Add(c);
             if (armed.Count == 0) { why = "nobody is armed"; return false; }
             FindFauna();
-            if (NearestBeast(kind, landing, null) == null) { why = $"no {HerdWord(kind, 2)} found yet"; return false; }
+            if (NearestBeast(kind, landing, null) == null) { why = $"no {HerdWord(kind, 2)} on this island"; return false; }
             HuntKind = kind;
             Resource = Res.Meat;
             Target = 0;
@@ -484,14 +483,10 @@ namespace SeaSick.Ship
             Recalling = false;
             Out = true;
             startedAt = Time.time;
-            nextReveal = 0f;
             nextDanger = Time.time + 1f;
             nextDoneLook = Time.time + 1f;
-            lastRevealed = -1f;
-            lastNewAt = Time.time;
             metBoars.Clear();
             FindFauna();
-            Snapshot();
 
             hands.Clear();
             jobs.Clear();
@@ -795,25 +790,15 @@ namespace SeaSick.Ship
                 if (RaidersNear()) Recall("raiders! running for the ship");
             }
 
-            // Everybody ashore clears the fog round himself.
-            if (Time.time >= nextReveal)
-            {
-                nextReveal = Time.time + 0.3f;
-                var fog = IslandFog.For(island);
-                if (fog != null)
-                    foreach (var h in hands)
-                        if (h != null && h.Party == this && h.IsAshore) fog.RevealAround(h.transform.position, RevealRadius);
-            }
-
             if (Mode == Order.Explore && !Recalling && Time.time >= nextDanger)
             {
                 nextDanger = Time.time + 0.5f;
                 LookForTrouble();
             }
 
-            // The trip ends when the time is up or there is nothing left in
-            // reach to find -- whichever comes first -- and everyone turns
-            // for the landing at once (2026-09-30).
+            // The trip ends when the time is up and everyone turns for the
+            // landing at once (2026-09-30; the fog-left-in-reach ending went
+            // with the fog, 2026-10-03).
             if (Mode == Order.Explore && !Recalling && Time.time >= nextDoneLook)
             {
                 nextDoneLook = Time.time + 1f;
@@ -918,50 +903,16 @@ namespace SeaSick.Ship
 
         // --- the report ---------------------------------------------------
 
-        void Snapshot()
-        {
-            foundBefore.Clear();
-            herdsBefore.Clear();
-            findsBefore = 0;
-            var fog = IslandFog.For(island);
-            if (fog == null) return;
-            fog.FoundResources(foundBefore);
-            var herds = new List<Animal>();
-            fog.FoundHerds(herds);
-            foreach (var a in herds) if (a != null) herdsBefore.Add(a.kind);
-            var finds = new List<IslandFind>();
-            fog.FoundIslandFinds(finds);
-            findsBefore = finds.Count;
-        }
-
-        /// "Found ore and a cairn · 6 timber aboard" / "2 goats · 6 meat and
-        /// 2 hide aboard" / "Bo was hurt by a boar -- resting aboard".
+        /// "6 timber aboard" / "2 goats · 6 meat and 2 hide aboard" / "Bo was
+        /// hurt by a boar -- resting aboard"; an explore trip "Nothing new found".
         void Report()
         {
             var parts = new List<string>();
-            var fog = IslandFog.For(island);
-            var news = new List<string>();
-            if (fog != null)
-            {
-                var now = new Dictionary<string, int>();
-                fog.FoundResources(now);
-                foreach (var kv in now)
-                    if (kv.Value > 0 && (!foundBefore.TryGetValue(kv.Key, out int was) || was <= 0))
-                        news.Add(World.Economy.ResDefs.Label(kv.Key).ToLowerInvariant());
-                var herds = new List<Animal>();
-                fog.FoundHerds(herds);
-                var kinds = new HashSet<Animal.Kind>();
-                foreach (var a in herds) if (a != null) kinds.Add(a.kind);
-                foreach (var k in kinds) if (!herdsBefore.Contains(k)) news.Add(HerdWord(k, 2));
-                var finds = new List<IslandFind>();
-                fog.FoundIslandFinds(finds);
-                for (int i = findsBefore; i < finds.Count; i++)
-                    if (finds[i] != null)
-                        news.Add(finds[i].Kind == IslandFind.FindKind.Cairn ? "a cairn" : "a cache");
-            }
-            if (news.Count > 0) parts.Add("Found " + JoinAnd(news));
-            else if (Mode == Order.Explore) parts.Add("Nothing new found");
-
+            // 2026-09-30 to 2026-10-03 the report led with what the trip had
+            // newly FOUND (resources, herds, finds on ground it opened). The
+            // fog is gone and everything is known up front, so there is no
+            // news to report; an explore trip says so plainly.
+            if (Mode == Order.Explore) parts.Add("Nothing new found");
             if (Mode == Order.Gather && DeliveredUnits > 0)
                 parts.Add($"{DeliveredUnits} {World.Economy.ResDefs.Label(Resource).ToLowerInvariant()} aboard");
             if (Mode == Order.Hunt)
@@ -970,20 +921,12 @@ namespace SeaSick.Ship
                     ? $"{Kills} {HerdWord(HuntKind, Kills)} · {MeatAboard} meat" + (HideAboard > 0 ? $" and {HideAboard} hide" : "") + " aboard"
                     : "No kill");
             }
-            if (Mode == Order.Explore && fog != null)
-                parts.Add($"{Mathf.RoundToInt(fog.Revealed01 * 100f)}% explored");
             if (HurtName != null) parts.Add($"{HurtName} was hurt by {hurtCause}, resting aboard");
             else if (wardedOffBy != null) parts.Add($"{wardedOffBy} drove off a boar");
             else if (StopReason.StartsWith("raiders")) parts.Add("ran from raiders");
 
             LastReport = string.Join(" · ", parts);
             LastReportAt = Time.unscaledTime;
-        }
-
-        static string JoinAnd(List<string> items)
-        {
-            if (items.Count == 1) return items[0];
-            return string.Join(", ", items.GetRange(0, items.Count - 1)) + " and " + items[items.Count - 1];
         }
 
         /// True while the last report is fresh enough to toast.
@@ -1024,16 +967,16 @@ namespace SeaSick.Ship
 
         // --- explore --------------------------------------------------------
 
-        /// **The next stop into the fog.** Sixteen bearings round his last
+        /// **The next explore stop.** Sixteen bearings round his last
         /// heading at a full and a short step; a stop must be dry land and a
-        /// walkable straight line from where he stands. Scored by the fog it
-        /// looks into (five samples, 10 m apart), then by keeping on the way
-        /// he was going, less crowding the other hands' stops.
+        /// walkable straight line from where he stands. Scored by keeping on
+        /// the way he was going, less crowding the other hands' stops. (Until
+        /// 2026-10-03 also by the fog it looked into and a pull toward the
+        /// nearest cloud; both went with the fog.)
         bool NextExploreStop(CrewAgent who, Job j, out Vector3 at)
         {
             at = default;
             var h = Island.TerrainHeight;
-            var fog = IslandFog.For(island);
             Vector3 from = who.transform.position;
             if (j.heading.sqrMagnitude < 0.01f)
             {
@@ -1043,15 +986,6 @@ namespace SeaSick.Ship
                 int i = hands.IndexOf(who), n = hands.Count;
                 float fan = n > 1 ? Mathf.Lerp(-55f, 55f, i / (float)(n - 1)) : 0f;
                 j.heading = Quaternion.Euler(0f, fan, 0f) * inland.normalized;
-            }
-
-            // The nearest cloud in reach pulls a little, so a hand in open
-            // ground walks toward what is left rather than about at random.
-            Vector3 lure = Vector3.zero;
-            if (fog != null && fog.NearestFoggedLand(from, ExploreReach, 0.6f, out Vector3 near))
-            {
-                lure = near - from; lure.y = 0f;
-                lure = lure.sqrMagnitude > 1f ? lure.normalized : Vector3.zero;
             }
 
             float bestScore = float.MinValue;
@@ -1072,8 +1006,7 @@ namespace SeaSick.Ship
                     Vector3 off = p - landing; off.y = 0f;
                     if (off.sqrMagnitude > ExploreReach * ExploreReach) continue;
                     if (!LineWalkable(from, p)) continue;
-                    float score = Mathf.Cos(ang * Mathf.Deg2Rad) * 2f + Vector3.Dot(dir, lure) * 1.5f;
-                    if (fog != null) score += Unrevealed(fog, p) * 3f;
+                    float score = Mathf.Cos(ang * Mathf.Deg2Rad) * 2f;
                     foreach (var kv in jobs)
                     {
                         if (kv.Key == who || kv.Value.trail.Count == 0) continue;
@@ -1092,31 +1025,11 @@ namespace SeaSick.Ship
             return true;
         }
 
-        static int Unrevealed(IslandFog fog, Vector3 p)
-        {
-            int n = 0;
-            if (!fog.IsRevealed(p)) n++;
-            if (!fog.IsRevealed(p + new Vector3(10f, 0f, 0f))) n++;
-            if (!fog.IsRevealed(p + new Vector3(-10f, 0f, 0f))) n++;
-            if (!fog.IsRevealed(p + new Vector3(0f, 0f, 10f))) n++;
-            if (!fog.IsRevealed(p + new Vector3(0f, 0f, -10f))) n++;
-            return n;
-        }
-
-        /// Why the explore trip is over, or null while there is fog in reach
-        /// and the party is still opening it.
-        string ExploreDone()
-        {
-            if (Elapsed >= ExploreSeconds) return "time to turn back";
-            var fog = IslandFog.For(island);
-            if (fog == null || !fog.Fogged) return "the whole island is explored";
-            float r = fog.Revealed01;
-            if (r > lastRevealed + 0.0001f) { lastRevealed = r; lastNewAt = Time.time; }
-            if (!fog.NearestFoggedLand(landing, ExploreReach, 0.6f, out _))
-                return "nothing left to explore in reach";
-            if (Time.time - lastNewAt > ExploreStaleSeconds) return "nothing new in reach";
-            return null;
-        }
+        /// Why the explore trip is over, or null while it runs. Only the
+        /// clock since 2026-10-03 (the fog-based endings -- "the whole island
+        /// is explored", "nothing left / nothing new in reach" -- went with
+        /// the fog).
+        string ExploreDone() => Elapsed >= ExploreSeconds ? "time to turn back" : null;
 
         /// **The next step home (2026-09-30).** Straight to the landing when
         /// that line is walkable (false: `CrewAgent` then walks the plank);
@@ -1161,17 +1074,16 @@ namespace SeaSick.Ship
                 if (f != null && f.Island == island) { fauna = f; break; }
         }
 
-        /// The nearest live, unclaimed beast of `kind` on revealed ground.
+        /// The nearest live, unclaimed beast of `kind` (any on the island
+        /// since the fog went, 2026-10-03).
         Animal NearestBeast(Animal.Kind kind, Vector3 from, CrewAgent who)
         {
             if (fauna == null) return null;
-            var fog = IslandFog.For(island);
             Animal best = null;
             float bestSq = float.MaxValue;
             foreach (var a in fauna.Animals)
             {
                 if (a == null || a.Dead || a.Hunted || a.kind != kind) continue;
-                if (fog != null && !fog.IsRevealed(a.transform.position)) continue;
                 float sq = (a.transform.position - from).sqrMagnitude;
                 if (sq < bestSq) { bestSq = sq; best = a; }
             }
@@ -1216,17 +1128,15 @@ namespace SeaSick.Ship
         }
 
         /// Free to work: on this island (or one of the party's own rock
-        /// nodes), standing, a raw good, and on REVEALED ground (2026-09-30:
-        /// a party works only what has been seen).
+        /// nodes), standing, and a raw good. (2026-09-30 to 2026-10-03 also
+        /// only on revealed ground; the fog of war is gone.)
         static bool Usable(ResourceNode n, Island isle, GatherParty party)
         {
             if (n == null || n.Harvested || !n.isActiveAndEnabled) return false;
             if (!Res.IsGatherable(n.Resource)) return false;
             if (TakenByName(n, isle)) return false;
             bool ours = n.Home == isle || (party != null && party.partyRocks.Contains(n));
-            if (!ours) return false;
-            var fog = IslandFog.For(isle);
-            return fog == null || fog.IsRevealed(n.transform.position);
+            return ours;
         }
 
         /// Booked gone by an earlier party (`OutpostLedger.GroundTaken`).

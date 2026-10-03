@@ -332,7 +332,6 @@ namespace SeaSick.Save
             // have not.
             d.seen = Discovery.Capture();
             d.takenFinds = IslandFind.Capture();
-            d.fog = IslandFog.Capture();
             UI.Sheets.ChartData.CaptureTrack(d.trackX, d.trackZ, d.trackAt);
             return d;
         }
@@ -366,7 +365,6 @@ namespace SeaSick.Save
                 // add a drawing.
                 if (d.seen == null) d.seen = new List<SeenSave>();
                 if (d.takenFinds == null) d.takenFinds = new List<FindTakenSave>();
-                if (d.fog == null) d.fog = new List<IslandFogSave>();
                 if (d.ship.modular == null) d.ship.modular = "";
                 if (d.ship.dryDock == null) d.ship.dryDock = "";
                 if (d.slotDisplayName == null) d.slotDisplayName = "";
@@ -457,7 +455,8 @@ namespace SeaSick.Save
             // has to come after the scrub and not before it.
             Discovery.Apply(data.seen);
             IslandFind.Apply(data.takenFinds);   // the world is built by now; remove finds already taken
-            IslandFog.Apply(data.fog);           // explored ground (2026-09-30); none in an old save
+            // (The fog of war's `IslandFog.Apply(data.fog)` stood here until
+            // 2026-10-03; an old save's `fog` rows are now skipped by JsonUtility.)
             UI.Sheets.ChartData.RestoreTrack(data.trackX, data.trackZ, data.trackAt);
 
             // 2. The ship. `Apply` is the free path every probe uses; the

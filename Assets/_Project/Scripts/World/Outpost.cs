@@ -3509,6 +3509,18 @@ namespace SeaSick.World
             return null;
         }
 
+        /// **Settled: a camp, or any standing building (or home).** Moved
+        /// here from `IslandFog.Settled` when the fog of war went (Kevin,
+        /// 2026-10-03); the question outlived the fog -- the sea HUD's place
+        /// line shows only off a camp-less island. Null reads settled.
+        public static bool IsSettled(Island isle)
+        {
+            if (isle == null) return true;
+            if (isle.IsHome) return true;
+            var o = Of(isle);
+            return o != null && (o.HasCamp || (o.Built != null && o.Built.Count > 0));
+        }
+
         // --- siting ---------------------------------------------------------
 
         /// Attach an outpost to ground that has already been surveyed. This is

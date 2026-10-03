@@ -471,7 +471,7 @@ namespace SeaSick.UI.Sheets
                     p.strokeColor = SheetTheme.Ink;
                     p.lineWidth = 1.2f;
                     p.Stroke();
-                    PaintFog(p, isle.island, pts);
+                    PaintFinds(p, isle.island);
                 }
                 else
                 {
@@ -496,64 +496,33 @@ namespace SeaSick.UI.Sheets
             }
         }
 
-        // --- fog on landed islands (2026-09-30) ---
+        // --- finds and herds on landed camp-less islands (2026-09-30; fog gone 2026-10-03) ---
 
-        static readonly Color FogCloud = new Color(0.95f, 0.96f, 0.975f, 0.78f);
-        static readonly List<SeaSick.World.IslandFind> fogFinds = new List<SeaSick.World.IslandFind>();
-        static readonly List<SeaSick.World.Animal> fogHerds = new List<SeaSick.World.Animal>();
+        static readonly List<SeaSick.World.IslandFind> chartFinds = new List<SeaSick.World.IslandFind>();
+        static readonly List<SeaSick.World.Animal> chartHerds = new List<SeaSick.World.Animal>();
 
-        /// **The chart shows the fog too** (Kevin, 2026-09-30, mockup "7 ·
-        /// Landing party: Explore (fog)"). A landed island with no camp is
-        /// clouded wherever the landing party has not been: its still-shut
-        /// land as round-capped cloud bands (`IslandFog.ChartRuns`, cached
-        /// per fog change), over the island's own fill. An island whose fog
-        /// has not been built yet is clouded whole. What the party has found
-        /// may show here, and ONLY here (no icons over world objects): finds
-        /// as small ember diamonds, animals as small dark dots.
-        void PaintFog(Painter2D p, SeaSick.World.Island island, Vector2[] outline)
+        /// **What a landing party would find, on the chart only** (no icons
+        /// over world objects): a landed island with no camp shows its
+        /// uncollected finds as small ember diamonds and its animals as small
+        /// dark dots. 2026-09-30 this was `PaintFog`: cloud bands over the
+        /// land a party had not walked (`IslandFog.ChartRuns`) and markers
+        /// only for what stood on walked ground. Kevin, 2026-10-03: "remove
+        /// the fog of war" -- the cloud is gone and the markers are no longer
+        /// gated: every find and animal on the island (`IslandInventory`).
+        void PaintFinds(Painter2D p, SeaSick.World.Island island)
         {
-            if (island == null || SeaSick.World.IslandFog.Settled(island)) return;
-            var fog = SeaSick.World.IslandFog.Existing(island);
-            if (fog == null)
-            {
-                p.fillColor = FogCloud;
-                p.BeginPath();
-                p.MoveTo(outline[0]);
-                for (int k = 1; k < outline.Length; k++) p.LineTo(outline[k]);
-                p.ClosePath();
-                p.Fill();
-                return;
-            }
-            if (!fog.Fogged) return;
-
-            float m = SeaR / Mathf.Max(1f, shownRange);
-            var runs = fog.ChartRuns();
-            if (runs.Count > 0)
-            {
-                p.strokeColor = FogCloud;
-                p.lineCap = LineCap.Round;
-                p.lineWidth = Mathf.Max(2f, SeaSick.World.IslandFog.ChartBlock * m * 1.15f);
-                p.BeginPath();
-                for (int i = 0; i < runs.Count; i++)
-                {
-                    var r = runs[i];
-                    p.MoveTo(World(new Vector2(r.x, r.z)));
-                    p.LineTo(World(new Vector2(r.y, r.z)));
-                }
-                p.Stroke();
-                p.lineCap = LineCap.Butt;
-            }
+            if (island == null || SeaSick.World.Outpost.IsSettled(island)) return;
 
             // Found things, on the chart only.
-            fogFinds.Clear();
-            fog.FoundIslandFinds(fogFinds);
-            if (fogFinds.Count > 0)
+            chartFinds.Clear();
+            SeaSick.World.IslandInventory.Finds(island, chartFinds);
+            if (chartFinds.Count > 0)
             {
                 p.fillColor = SheetTheme.Ember;
                 p.BeginPath();
-                for (int i = 0; i < fogFinds.Count; i++)
+                for (int i = 0; i < chartFinds.Count; i++)
                 {
-                    var f = fogFinds[i];
+                    var f = chartFinds[i];
                     if (f == null) continue;
                     var at = World(new Vector2(f.Position.x, f.Position.z));
                     p.MoveTo(new Vector2(at.x, at.y - 3.5f));
@@ -564,15 +533,15 @@ namespace SeaSick.UI.Sheets
                 }
                 p.Fill();
             }
-            fogHerds.Clear();
-            fog.FoundHerds(fogHerds);
-            if (fogHerds.Count > 0)
+            chartHerds.Clear();
+            SeaSick.World.IslandInventory.Herds(island, chartHerds);
+            if (chartHerds.Count > 0)
             {
                 p.fillColor = SheetTheme.Ink;
                 p.BeginPath();
-                for (int i = 0; i < fogHerds.Count; i++)
+                for (int i = 0; i < chartHerds.Count; i++)
                 {
-                    var a = fogHerds[i];
+                    var a = chartHerds[i];
                     if (a == null) continue;
                     var pos = a.transform.position;
                     var at = World(new Vector2(pos.x, pos.z));
