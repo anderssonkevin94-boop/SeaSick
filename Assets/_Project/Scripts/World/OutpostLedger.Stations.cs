@@ -132,6 +132,13 @@ namespace SeaSick.World
         /// ~0.93 m/s at the 1.5x cadence; it was 2.6 while the feet skated) -- the body and the
         /// books must agree on how long a leg takes.
         public static readonly float WalkMetresPerSecond = VillagerGaits.Books;
+        /// **This hand's walking speed in the books** (2026-10-03, Kevin: "make
+        /// sure that the runners are a lot faster than the normal villager"):
+        /// a runner jogs behind his barrow, loaded or empty, at
+        /// `VillagerGaits.Barrow` (his body's own `CruiseSpeed`, so a watched
+        /// and an unwatched camp keep the same pace); everybody else at
+        /// `WalkMetresPerSecond`.
+        public static float WalkSpeedOf(OutpostHand h) => IsRunner(h) ? VillagerGaits.Barrow : WalkMetresPerSecond;
         /// Straight line to walked path. **Unused by the books since
         /// 2026-09-27** (legs are measured on `CampPath` through `router`,
         /// or walked straight); kept for old callers.

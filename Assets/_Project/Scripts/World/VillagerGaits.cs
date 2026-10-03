@@ -56,6 +56,17 @@ namespace SeaSick.World
         public static float Cruise(float clip) => Mathf.Min(clip * Cadence, Mathf.Max(RunCap, clip));
         public static float Carry => Cruise(CarryClip);
 
+        /// **A runner behind his wheelbarrow** (2026-10-03, Kevin: "make sure
+        /// that the runners are a lot faster than the normal villager and
+        /// that they always use their wheelbarrow"): the `Run` clip's legs at
+        /// this playback rate (feet planted at rate 1), arms on the grips
+        /// (`VillagerActing.ApplyBarrowGrip`). Loaded and empty alike, so the
+        /// books need one number (`OutpostLedger.WalkSpeedOf`). 1.0 = 2.04 m/s,
+        /// 2.7x `Books` (0.75) and 3.9x a carrier (0.53); x1.3 on a road is
+        /// rate 1.3, inside `RateMax`.
+        public static float BarrowRate = 1f;
+        public static float Barrow => RunClip * BarrowRate;
+
         /// **The books' walking speed** (`OutpostLedger.WalkMetresPerSecond`):
         /// a trip is out brisk and back carrying, so the harmonic mean of
         /// the two -- what a round trip really averages.

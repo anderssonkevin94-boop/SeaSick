@@ -90,9 +90,20 @@ namespace SeaSick.World
 
         /// **Pushing the runner's wheelbarrow** (`RunnerBarrow`, 2026-10-02):
         /// the load rides in the barrow, so no carry prop is drawn in his
-        /// arms (or picked up / set down by the PickUp/SetDown clips), and
-        /// while `BarrowArms` is also set an otherwise free body walks the
-        /// `Carry` clip (arms forward on the grips) at its own walk's speed.
+        /// arms (or picked up / set down by the PickUp/SetDown clips).
+        ///
+        /// **Runners jog (2026-10-03, Kevin: "make sure that the runners are
+        /// a lot faster than the normal villager and that they always use
+        /// their wheelbarrow").** A body with the barrow and nothing else in
+        /// his arms (`Current` None or Carry, `PushGait`) moves on the `Run`
+        /// clip's LEGS at `VillagerGaits.Barrow` (2.04 m/s, rate 1: feet
+        /// planted), loaded or empty, whatever his mood -- the books pay him
+        /// the same (`OutpostLedger.WalkSpeedOf`). While `BarrowArms` is set
+        /// (the barrow tipped up and rolling) his ARMS are held on the grips:
+        /// the `Carry` clip's arm pose, sampled once per rig and laid over the
+        /// run after the Animator (`ApplyBarrowGrip`; the controller has one
+        /// layer and no mask, so this is code, not an Animator layer).
+        /// Standing, the barrow is parked on its legs and his arms are free.
         public bool Barrow
         {
             get => barrow;
@@ -157,10 +168,25 @@ namespace SeaSick.World
         bool HasCommand => Time.frameCount - cmdFrame <= 1;
         float GroundSpeed => HasCommand ? cmdSpeed : Vector3.ProjectOnPlane(velocity, transform.up).magnitude;
 
-        /// The state his walk shows right now (Carry/HuntWalk when that clip
-        /// owns the body, else the `WalkGait` walk).
+        /// **Jogging behind the barrow** (2026-10-03): the barrow is his and
+        /// his hands are on it (nothing but a load in it), on a rig with the
+        /// `Run` state. See `Barrow`.
+        public bool PushGait
+        {
+            get
+            {
+                if (!barrow || (Current != Mode.None && Current != Mode.Carry)) return false;
+                Bind();
+                return hasRun;
+            }
+        }
+
+        /// The state his walk shows right now (Run behind a barrow,
+        /// Carry/HuntWalk when that clip owns the body, else the `WalkGait`
+        /// walk).
         int GaitState()
         {
+            if (PushGait) return RunId;
             Mode m = Resolve(Current);
             if (m == Mode.Carry && UsesClip(Mode.Carry)) return CarryId;
             if (m == Mode.HuntWalk && UsesClip(Mode.HuntWalk)) return HuntWalkId;
@@ -172,8 +198,10 @@ namespace SeaSick.World
         }
 
         /// **How fast this body walks right now**, m/s: the gait it shows,
-        /// at the speed that keeps its feet planted (`GaitCruise`).
-        public float CruiseSpeed() => GaitCruise(GaitState());
+        /// at the speed that keeps its feet planted (`GaitCruise`); a runner
+        /// behind his barrow at `VillagerGaits.Barrow` (the Run clip at rate
+        /// `BarrowRate`, not the 3.0 m/s sprint `Cruise(RunClip)` gives).
+        public float CruiseSpeed() => PushGait ? VillagerGaits.Barrow : GaitCruise(GaitState());
 
         /// Idle or the `WalkGait` walk, at the rate his speed asks for.
         void DriveGait()
@@ -184,7 +212,8 @@ namespace SeaSick.World
             bool moving = HasCommand ? (walking ? v > 0.02f : v > 0.05f)
                 : (walking ? v > 0.18f : v > 0.3f);
             int want = IdleId;
-            if (moving)
+            if (moving && PushGait) want = RunId;   // behind the barrow (2026-10-03)
+            else if (moving)
             {
                 want = WalkGait == Gait.Errand ? WalkBriskId : WalkGait == Gait.Tired ? WalkTiredId
                     : WalkGait == Gait.Run ? RunId : WalkGait == Gait.Scared ? RunScaredId : WalkId;
@@ -353,7 +382,13 @@ namespace SeaSick.World
             // straight away and the props ride the bones. A clip mode on a
             // rig without the state shows its old code pose (`CodePose`).
             Mode want = Resolve(Current);
-            if (barrow && BarrowArms && want == Mode.None && UsesClip(Mode.Carry)) want = Mode.Carry;
+            // **Behind the barrow (2026-10-03):** the locomotion's Run, never
+            // the Carry clip (0.35 m/s: a shuffle at any honest rate) -- the
+            // arms go on the grips in `ApplyBarrowGrip` below, and standing
+            // by the parked barrow they are free. A rig with no Run state
+            // keeps the old Carry-clip push.
+            if (PushGait) want = Mode.None;
+            else if (barrow && BarrowArms && want == Mode.None && UsesClip(Mode.Carry)) want = Mode.Carry;
             if (UsesClip(want) || UsesClip(shown))
             {
                 if (shown != want || shownLoad != load || shownLoadCount != loadCount)
@@ -370,6 +405,7 @@ namespace SeaSick.World
             PlayClip(UsesClip(shown) ? shown : Mode.None);
             if (!UsesClip(shown)) DriveGait();
             else locoPlaying = 0;
+            ApplyBarrowGrip(dt, !UsesClip(shown) && PushGait && BarrowArms);
             if (UsesClip(shown))
             {
                 PlaceClipProps();
@@ -430,6 +466,141 @@ namespace SeaSick.World
             if (weight <= 0.0001f && !HasTool(shown)) { PlaceDish(); return; }
             Pose(weight);
             PlaceDish();
+        }
+
+        // --- hands on the barrow's grips (2026-10-03) -------------------------
+        //
+        // Kevin 2026-10-03: "make sure that the runners are a lot faster than
+        // the normal villager and that they always use their wheelbarrow."
+        // The only clip with his fists on the grips is `Carry` (0.35 m/s: a
+        // runner on it is a shuffle), the only fast legs are `Run`'s, and the
+        // controller is one layer with no avatar mask. So the legs run and,
+        // after the Animator has written the run, the six arm bones (upper
+        // arm, forearm, hand, each side; the v15 rig has no clavicle) are
+        // turned to the local rotations they have in `Carry` -- the same
+        // fists-forward hold the barrow was measured against (BarrowShot).
+        // Local rotations ride the run's chest, so the fists bob with his
+        // stride and `RunnerBarrow` follows them (`BarrowFists`).
+
+        /// The `Carry` arm pose per controller: upper arm, forearm, hand of
+        /// `armL`, then of `armR`. Shared by every body on that controller.
+        static readonly Dictionary<RuntimeAnimatorController, Quaternion[]> gripPoses
+            = new Dictionary<RuntimeAnimatorController, Quaternion[]>();
+        static readonly HashSet<RuntimeAnimatorController> gripSampleTried = new HashSet<RuntimeAnimatorController>();
+        Transform foreL, foreR;      // the forearms (the hand bone's parent), when the rig has them
+        float gripW;                 // 0..1 blend of the grip pose over the run
+        /// Seconds to put the hands on the grips (and take them off).
+        public static float GripEaseSeconds = 0.2f;
+
+        Transform[] armChain;
+        /// Built once in `Bind` (no per-frame array).
+        Transform[] ArmChain => armChain ?? (armChain = new[] { armL, foreL, handL, armR, foreR, handR });
+
+        /// **The grip pose**, sampled once per controller off its `Carry`
+        /// clip (`Crew_Carry`): every bone saved, the clip sampled onto the
+        /// rig, the six arm rotations read, every bone put back -- the
+        /// Animator writes the live pose again next frame anyway. Null when
+        /// it cannot be had yet (`LearnGripFromLiveCarry` then takes it off
+        /// the first body seen playing `Carry`).
+        Quaternion[] GripPose()
+        {
+            if (anim == null) return null;
+            var ctrl = anim.runtimeAnimatorController;
+            if (ctrl == null) return null;
+            if (gripPoses.TryGetValue(ctrl, out var pose)) return pose;
+            if (!gripSampleTried.Add(ctrl)) return null;
+            var chain = ArmChain;
+            if (chain[0] == null || chain[3] == null) return null;
+            AnimationClip carry = null;
+            foreach (var c in ctrl.animationClips)
+                if (c != null && (c.name == "Crew_Carry" || c.name == "Carry" || c.name.EndsWith("|Crew_Carry")))
+                { carry = c; break; }
+            if (carry == null)
+            {
+                Debug.LogWarning("[VillagerActing] no Crew_Carry clip on " + ctrl.name + ": barrow grips learnt from the first carrier seen");
+                return null;
+            }
+            var root = anim.gameObject;
+            var all = root.GetComponentsInChildren<Transform>(true);
+            var lp = new Vector3[all.Length];
+            var lr = new Quaternion[all.Length];
+            var ls = new Vector3[all.Length];
+            for (int i = 0; i < all.Length; i++) { lp[i] = all[i].localPosition; lr[i] = all[i].localRotation; ls[i] = all[i].localScale; }
+            pose = new Quaternion[chain.Length];
+            var before = new Quaternion[chain.Length];
+            for (int i = 0; i < chain.Length; i++) before[i] = chain[i] != null ? chain[i].localRotation : Quaternion.identity;
+            bool moved = false;
+            try
+            {
+                carry.SampleAnimation(root, 0f);
+                for (int i = 0; i < chain.Length; i++)
+                {
+                    pose[i] = chain[i] != null ? chain[i].localRotation : Quaternion.identity;
+                    if (chain[i] != null && Quaternion.Angle(pose[i], before[i]) > 0.5f) moved = true;
+                }
+            }
+            finally
+            {
+                for (int i = 0; i < all.Length; i++)
+                {
+                    if (all[i] == null) continue;
+                    all[i].localPosition = lp[i]; all[i].localRotation = lr[i]; all[i].localScale = ls[i];
+                }
+            }
+            // A sample that moved nothing (the pose already WAS the carry, or
+            // the sample did not take) is not trusted: learn it live instead.
+            if (!moved) return null;
+            gripPoses[ctrl] = pose;
+            return pose;
+        }
+
+        /// The fallback: a body playing `Carry` fully (no cross-fade) hands
+        /// its arm pose to every body on its controller.
+        void LearnGripFromLiveCarry()
+        {
+            if (anim == null || anim.IsInTransition(0)) return;
+            var ctrl = anim.runtimeAnimatorController;
+            if (ctrl == null || gripPoses.ContainsKey(ctrl)) return;
+            if (modeClock < ClipFadeSeconds + 0.05f) return;
+            if (anim.GetCurrentAnimatorStateInfo(0).shortNameHash != CarryId) return;
+            var chain = ArmChain;
+            if (chain[0] == null || chain[3] == null) return;
+            var pose = new Quaternion[chain.Length];
+            for (int i = 0; i < chain.Length; i++) pose[i] = chain[i] != null ? chain[i].localRotation : Quaternion.identity;
+            gripPoses[ctrl] = pose;
+        }
+
+        /// Hands on the grips over the run, eased; `on` = pushing the barrow
+        /// with the Run legs. Recorded like every bend (`Record`), so a bone
+        /// the run does not key goes back to the clip next frame.
+        void ApplyBarrowGrip(float dt, bool on)
+        {
+            gripW = Mathf.MoveTowards(gripW, on ? 1f : 0f, dt / Mathf.Max(0.01f, GripEaseSeconds));
+            if (gripW <= 0.0001f) return;
+            var pose = GripPose();
+            if (pose == null) return;
+            var chain = ArmChain;
+            float k = Mathf.SmoothStep(0f, 1f, gripW);
+            for (int i = 0; i < chain.Length; i++)
+            {
+                var b = chain[i];
+                if (b == null) continue;
+                Quaternion before = b.localRotation;
+                b.localRotation = Quaternion.Slerp(before, pose[i], k);
+                Record(b, before);
+            }
+        }
+
+        /// **Where his fists are on the grips**, world space (`RunnerBarrow`
+        /// lays the grips there). False unless the grip pose is (mostly) on.
+        public bool BarrowFists(out Vector3 mid)
+        {
+            mid = Vector3.zero;
+            if (gripW < 0.5f || handL == null || handR == null) return false;
+            var ctrl = anim != null ? anim.runtimeAnimatorController : null;
+            if (ctrl == null || !gripPoses.ContainsKey(ctrl)) return false;
+            mid = FistsMid();
+            return true;
         }
 
         // --- the level 2 sawmill's crank (2026-10-01) ------------------------
@@ -565,7 +736,10 @@ namespace SeaSick.World
                     if (p.nameHash == WalkRateId && p.type == AnimatorControllerParameterType.Float) hasWalkRate = true;
                 }
                 hasLocomotion = anim.HasState(0, IdleId) && anim.HasState(0, WalkId);
+                hasRun = hasLocomotion && anim.HasState(0, RunId);
             }
+            foreL = handL != null && handL.parent != armL ? handL.parent : null;
+            foreR = handR != null && handR.parent != armR ? handR.parent : null;
         }
 
         // --- authored clips (v15 deckhand, 2026-10-01) -------------------------
@@ -613,6 +787,7 @@ namespace SeaSick.World
         public static readonly Vector3 CarrySocketLocal = new Vector3(0f, 0.00105134305f, 0.0025f);
 
         Animator anim;
+        bool hasRun;
         Transform spine;
         readonly int[] clipHash = new int[ModeCount];
         int playing;                 // the clip state cross-faded to, 0 = locomotion
@@ -651,7 +826,10 @@ namespace SeaSick.World
                 // carrier standing still stands still.
                 float v = GroundSpeed;
                 if (shown == Mode.Carry)
+                {
                     anim.SetFloat(ClipRateId, v < 0.03f ? 0f : GaitRate(CarryId, v));
+                    LearnGripFromLiveCarry();
+                }
                 else if (shown == Mode.HuntWalk)
                     anim.SetFloat(ClipRateId, v < 0.03f ? 0.5f : GaitRate(HuntWalkId, v));
             }
