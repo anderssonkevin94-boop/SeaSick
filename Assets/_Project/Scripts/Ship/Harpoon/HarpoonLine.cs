@@ -16,6 +16,9 @@ namespace SeaSick.Ship.Harpoon
     public class HarpoonLine : MonoBehaviour
     {
         const int Points = 16;
+        /// m a slack line's belly stays above the low (surface) end, so the
+        /// swell doesn't swallow it.
+        const float SlackLift = 0.35f;
         const float WhipSeconds = 0.55f;
 
         LineRenderer lr;
@@ -150,8 +153,10 @@ namespace SeaSick.Ship.Harpoon
             float hang = chord * 0.035f * (1f - Mathf.SmoothStep(0f, HarpoonTuning.strainBand, t));
             // A very slack line lies along the water instead of diving under
             // it: the low end is at the surface, so the drop is capped to keep
-            // the middle there.
-            float waterCap = (from.y + to.y) * 0.5f - Mathf.Min(from.y, to.y) + 0.2f;
+            // the middle a hand above it (at the surface itself the swell
+            // swallowed it), and every point is floored there below.
+            float low = Mathf.Min(from.y, to.y);
+            float waterCap = Mathf.Max(0f, (from.y + to.y) * 0.5f - low - SlackLift);
             float sag = Mathf.Min(slackDrop + hang, Mathf.Min(chord * 0.35f, waterCap));
 
             bool strained = t >= HarpoonTuning.strainBand;
@@ -163,7 +168,8 @@ namespace SeaSick.Ship.Harpoon
             {
                 float u = i / (float)(Points - 1);
                 Vector3 p = Vector3.Lerp(from, to, u);
-                p.y -= sag * 4f * u * (1f - u);
+                float bow = 4f * u * (1f - u);
+                p.y = Mathf.Max(p.y - sag * bow, low + SlackLift * bow);
                 if (flutter > 0f)
                     p += side * (flutter * Mathf.Sin(u * Mathf.PI) * Mathf.Sin(Time.time * 47f + u * 9f));
                 pts[i] = p;
