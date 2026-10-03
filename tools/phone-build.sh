@@ -19,7 +19,7 @@ tools/build-ios.sh --dev > Builds/build-ios.out 2>&1; echo "build-ios exit $?"
 grep -E "Build Finished|result=" Builds/ios-build.log | tail -2
 grep -q "Build Finished, Result: Success" Builds/ios-build.log || { echo "UNITY BUILD FAILED"; exit 1; }
 echo "== xcodebuild $(date +%T)"
-xcodebuild -project Builds/iOS/Unity-iPhone.xcodeproj -scheme Unity-iPhone -configuration ReleaseForRunning -destination id=$U -allowProvisioningUpdates -derivedDataPath Builds/DerivedData -quiet build > Builds/xcodebuild.log 2>&1
+xcodebuild -project Builds/iOS/Unity-iPhone.xcodeproj -scheme Unity-iPhone -configuration ReleaseForRunning -destination id=$U -allowProvisioningUpdates -derivedDataPath Builds/DerivedData DEVELOPMENT_TEAM=Q8925883PP CODE_SIGN_STYLE=Automatic -quiet build > Builds/xcodebuild.log 2>&1
 X=$?; echo "xcodebuild exit $X $(date +%T)"; [ $X -ne 0 ] && { grep -E "error:" Builds/xcodebuild.log | head -5; exit 1; }
 find "$APP/Data/Managed/Metadata/global-metadata.dat" -mmin -20 | grep -q . || { echo "APP NOT FRESH"; exit 1; }
 xcrun devicectl device install app --device $U "$APP" > Builds/install.log 2>&1 || { echo "INSTALL FAILED"; tail -5 Builds/install.log; exit 1; }
