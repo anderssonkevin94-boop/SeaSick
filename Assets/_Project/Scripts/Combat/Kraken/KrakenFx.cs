@@ -17,17 +17,7 @@ namespace SeaSick.Combat
     /// `StormSpray` uses, which `Resources/Shaders/Keepalive` keeps in a build.
     public static class KrakenFx
     {
-        static Material sprayMat, foamMat;
-
-        static Material SprayMat()
-        {
-            if (sprayMat != null) return sprayMat;
-            sprayMat = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
-            sprayMat.SetColor("_BaseColor", new Color(0.97f, 0.99f, 1f, 1f));
-            sprayMat.SetTexture("_BaseMap", FoamTexture.SoftPuff());
-            MakeTransparent(sprayMat, 3010);
-            return sprayMat;
-        }
+        static Material foamMat;
 
         static Material FoamMat()
         {
@@ -38,6 +28,8 @@ namespace SeaSick.Combat
             MakeTransparent(foamMat, 3005);
             return foamMat;
         }
+
+        internal static Material FoamMaterial() => FoamMat();
 
         static void MakeTransparent(Material m, int queue)
         {
@@ -50,39 +42,96 @@ namespace SeaSick.Combat
             m.renderQueue = queue;
         }
 
-        /// The breach: a column of spray thrown up round the head and a ring
-        /// of foam spreading out on the water from `radius`. Fire-and-forget,
-        /// destroys itself.
+        // ------------------------------------------------------- splash look
+        // Kevin on the step-1 captures (2026-10-03): the breach spray "reads
+        // as soft white smudges, like drops on a camera lens". Three causes,
+        // three fixes: the puff texture is all soft edge (now a HARD-edged
+        // droplet and a hard-edged ragged sheet, both made here), the drops
+        // were metres across (now 0.15-0.5 m streaks stretched along their
+        // own velocity, under real gravity), and nothing capped a particle's
+        // size on screen, so the few that flew past the lens filled it (now
+        // `maxParticleSize`, a fraction of the viewport).
+        static Material dropMat, sheetMat;
+        static Texture2D dropTex, sheetTex;
+
+        /// A round drop with a 1.5 px edge: stretched along its velocity it
+        /// is a crisp streak, not a blur.
+        static Texture2D DropTex()
+        {
+            if (dropTex != null) return dropTex;
+            const int n = 32;
+            dropTex = new Texture2D(n, n, TextureFormat.RGBA32, true) { name = "KrakenDrop", wrapMode = TextureWrapMode.Clamp };
+            var px = new Color32[n * n];
+            float c = (n - 1) * 0.5f, r = n * 0.42f;
+            for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                float d = Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c));
+                float a = Mathf.Clamp01((r - d) / 1.5f);
+                // A faint bright core, the rest flat white: water catching light.
+                float core = 1f - 0.12f * Mathf.Clamp01(d / r);
+                byte v = (byte)(255f * core);
+                px[y * n + x] = new Color32(v, v, 255, (byte)(255f * a));
+            }
+            dropTex.SetPixels32(px);
+            dropTex.Apply(true, true);
+            return dropTex;
+        }
+
+        /// A ragged sheet of white water: a blob whose rim wanders with a few
+        /// sines, a 2 px hard edge and a slightly thinner middle -- a torn
+        /// curtain of spray at the waterline, readable at 100 m.
+        static Texture2D SheetTex()
+        {
+            if (sheetTex != null) return sheetTex;
+            const int n = 64;
+            sheetTex = new Texture2D(n, n, TextureFormat.RGBA32, true) { name = "KrakenSheet", wrapMode = TextureWrapMode.Clamp };
+            var px = new Color32[n * n];
+            float c = (n - 1) * 0.5f;
+            for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                float dx = x - c, dy = y - c;
+                float d = Mathf.Sqrt(dx * dx + dy * dy);
+                float ang = Mathf.Atan2(dy, dx);
+                float rim = n * (0.36f + 0.05f * Mathf.Sin(ang * 3f + 0.7f)
+                                       + 0.035f * Mathf.Sin(ang * 7f + 2.1f)
+                                       + 0.02f * Mathf.Sin(ang * 13f));
+                float a = Mathf.Clamp01((rim - d) / 2f);
+                float body = Mathf.Lerp(0.72f, 1f, Mathf.Clamp01(d / rim));   // thinner middle
+                px[y * n + x] = new Color32(250, 252, 255, (byte)(255f * a * body));
+            }
+            sheetTex.SetPixels32(px);
+            sheetTex.Apply(true, true);
+            return sheetTex;
+        }
+
+        static Material DropMat()
+        {
+            if (dropMat != null) return dropMat;
+            dropMat = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
+            dropMat.SetColor("_BaseColor", new Color(0.95f, 0.98f, 1f, 1f));
+            dropMat.SetTexture("_BaseMap", DropTex());
+            MakeTransparent(dropMat, 3012);
+            return dropMat;
+        }
+
+        static Material SheetMat()
+        {
+            if (sheetMat != null) return sheetMat;
+            sheetMat = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
+            sheetMat.SetColor("_BaseColor", new Color(0.96f, 0.98f, 1f, 1f));
+            sheetMat.SetTexture("_BaseMap", SheetTex());
+            MakeTransparent(sheetMat, 3011);
+            return sheetMat;
+        }
+
+        /// The breach: a crown of streaked drops and torn white sheets thrown
+        /// up round the head, and a ring of foam spreading out on the water
+        /// from `radius`. Fire-and-forget, destroys itself.
         public static void Breach(Vector3 waterPoint, float radius)
         {
-            var go = new GameObject("KrakenBreach");
-            go.transform.position = waterPoint;
-
-            // Spray: thrown up and out from a wide disc, falling back. Small,
-            // fast and streaked along their own velocity -- big soft puffs
-            // read as a cloud sitting on the sea, not water thrown off it.
-            var spray = NewSystem(go.transform, "Spray", SprayMat(), 420);
-            var main = spray.main;
-            main.startLifetime = new ParticleSystem.MinMaxCurve(1.2f, 2.2f);
-            main.startSpeed = new ParticleSystem.MinMaxCurve(14f, 30f);
-            main.startSize = new ParticleSystem.MinMaxCurve(0.9f, 2.6f);
-            main.gravityModifier = 1.6f;
-            var sr = spray.GetComponent<ParticleSystemRenderer>();
-            sr.renderMode = ParticleSystemRenderMode.Stretch;
-            sr.velocityScale = 0.06f;
-            sr.lengthScale = 1.2f;
-            var shape = spray.shape;
-            shape.enabled = true;
-            shape.shapeType = ParticleSystemShapeType.Cone;
-            shape.angle = 24f;
-            shape.radius = radius * 0.45f;
-            spray.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);
-            FadeOut(spray, 0.9f);
-            var grow = spray.sizeOverLifetime;
-            grow.enabled = true;
-            grow.size = new ParticleSystem.MinMaxCurve(1f,
-                new AnimationCurve(new Keyframe(0f, 0.6f), new Keyframe(1f, 1.4f)));
-            spray.Emit(380);
+            var go = Splash(waterPoint, radius, 1.6f, "KrakenBreach");
 
             // Foam ring: flat puffs on the water, rolling outward and fading.
             var ring = NewSystem(go.transform, "FoamRing", FoamMat(), 120);
@@ -109,8 +158,69 @@ namespace SeaSick.Combat
             drag.limit = 0.5f;
             drag.dampen = 0.04f;
             ring.Emit(100);
+        }
+
+        /// A slam or a breach hitting the water: a crown of hard-edged drops
+        /// streaked along their velocity, thrown up and out from a ring of
+        /// `radius` and falling back under real gravity, plus a few big torn
+        /// sheets of white water standing up at the waterline. `power` 1 = an
+        /// arm slam; the breach uses more. Every particle is size-capped on
+        /// screen so one passing the lens never fills it. Destroys itself.
+        public static GameObject Splash(Vector3 waterPoint, float radius, float power, string name = "KrakenSplash")
+        {
+            var go = new GameObject(name);
+            go.transform.position = waterPoint;
+            float sp = Mathf.Sqrt(Mathf.Max(0.1f, power));
+
+            // Drops: fast, small, streaked.
+            var drops = NewSystem(go.transform, "Drops", DropMat(), 700);
+            var main = drops.main;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(1.1f, 2.1f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(9f * sp, 22f * sp);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.15f, 0.5f);
+            main.gravityModifier = 1f;
+            var dr = drops.GetComponent<ParticleSystemRenderer>();
+            dr.renderMode = ParticleSystemRenderMode.Stretch;
+            dr.velocityScale = 0.09f;
+            dr.lengthScale = 1f;
+            dr.maxParticleSize = 0.015f;
+            var shape = drops.shape;
+            shape.enabled = true;
+            shape.shapeType = ParticleSystemShapeType.Cone;
+            shape.angle = 28f;
+            shape.radius = radius * 0.55f;
+            shape.radiusThickness = 0.35f;   // from the rim: a crown, not a column
+            drops.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);
+            Fade(drops, 1f, 0.05f, 0.75f);
+            drops.Emit(Mathf.RoundToInt(Mathf.Clamp(260f * power, 60f, 680f)));
+
+            // Sheets: a few big torn curtains standing up at the waterline.
+            var sheets = NewSystem(go.transform, "Sheets", SheetMat(), 40);
+            var sm = sheets.main;
+            sm.startLifetime = new ParticleSystem.MinMaxCurve(0.8f, 1.3f);
+            sm.startSpeed = new ParticleSystem.MinMaxCurve(5f * sp, 10f * sp);
+            sm.startSize = new ParticleSystem.MinMaxCurve(radius * 0.35f, radius * 0.7f);
+            sm.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+            sm.gravityModifier = 0.8f;
+            var shr = sheets.GetComponent<ParticleSystemRenderer>();
+            shr.renderMode = ParticleSystemRenderMode.Billboard;
+            shr.maxParticleSize = 0.09f;
+            var sshape = sheets.shape;
+            sshape.enabled = true;
+            sshape.shapeType = ParticleSystemShapeType.Cone;
+            sshape.angle = 18f;
+            sshape.radius = radius * 0.6f;
+            sshape.radiusThickness = 0.2f;
+            sheets.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);
+            Fade(sheets, 0.95f, 0.04f, 0.55f);
+            var grow = sheets.sizeOverLifetime;
+            grow.enabled = true;
+            grow.size = new ParticleSystem.MinMaxCurve(1f,
+                new AnimationCurve(new Keyframe(0f, 0.6f), new Keyframe(0.4f, 1f), new Keyframe(1f, 1.25f)));
+            sheets.Emit(Mathf.RoundToInt(Mathf.Clamp(9f * power, 5f, 22f)));
 
             Object.Destroy(go, 8f);
+            return go;
         }
 
         /// A world-space foam emitter the kraken feeds by hand with
@@ -167,6 +277,20 @@ namespace SeaSick.Combat
             r.receiveShadows = false;
             ps.Play();
             return ps;
+        }
+
+        /// Alpha in fast to `peak`, held, out by the end; `holdUntil` is where
+        /// the fade-out starts (0..1 of the life).
+        static void Fade(ParticleSystem ps, float peak, float inAt, float holdUntil)
+        {
+            var col = ps.colorOverLifetime;
+            col.enabled = true;
+            var g = new Gradient();
+            g.SetKeys(
+                new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(peak, inAt),
+                        new GradientAlphaKey(peak, holdUntil), new GradientAlphaKey(0f, 1f) });
+            col.color = g;
         }
 
         static void FadeOut(ParticleSystem ps, float peakAlpha)

@@ -53,6 +53,13 @@ namespace SeaSick.Combat
         readonly Pose[] overridePose = new Pose[ArmCount];
         readonly float[] overrideWeight = new float[ArmCount];
         readonly float[] armLife = new float[ArmCount];
+        // The swat's aim (step 2): a world point the arm's last joint reaches
+        // for by CCD on top of everything above, by `aimWeight`, plus a hook
+        // curled into the last bones.
+        readonly Vector3[] aimTarget = new Vector3[ArmCount];
+        readonly float[] aimWeight = new float[ArmCount];
+        readonly float[] aimHook = new float[ArmCount];
+        readonly Quaternion[] poseScratch = new Quaternion[BonesPerArm];
 
         float raise01;
         bool ready;
@@ -84,6 +91,32 @@ namespace SeaSick.Combat
 
         public void ClearArmPose(int armIndex) => SetArmPose(armIndex, Pose.Surfaced, 0f);
 
+        /// Reach this arm's last joint for `worldTarget` by `weight` (0..1, 0
+        /// hands it back), with `hookDeg` of extra curl spread over its last
+        /// four bones (positive = toward the suckers: a coil over a target).
+        /// Solved every LateUpdate by CCD inside the rig's curl budget, so an
+        /// out-of-reach target leaves the arm stretched toward it, never torn.
+        public void SetArmAim(int armIndex, Vector3 worldTarget, float weight, float hookDeg = 0f)
+        {
+            if (armIndex < 0 || armIndex >= ArmCount) return;
+            aimTarget[armIndex] = worldTarget;
+            aimWeight[armIndex] = Mathf.Clamp01(weight);
+            aimHook[armIndex] = hookDeg;
+        }
+
+        public void ClearArmAim(int armIndex) => SetArmAim(armIndex, Vector3.zero, 0f);
+
+        /// The tip of an arm, world: its last joint plus most of a bone length
+        /// on along the line from the joint before. Read after LateUpdate for
+        /// this frame's pose.
+        public Vector3 ArmTipPosition(int armIndex)
+        {
+            if (!ready || armIndex < 0 || armIndex >= ArmCount) return transform.position;
+            Vector3 last = arm[armIndex * BonesPerArm + BonesPerArm - 1].position;
+            Vector3 prev = arm[armIndex * BonesPerArm + BonesPerArm - 2].position;
+            return last + (last - prev) * 0.8f;
+        }
+
         /// How much of the travelling wave this arm wears, 0..1 (default 1).
         public void SetArmLife(int armIndex, float weight)
         {
@@ -100,6 +133,7 @@ namespace SeaSick.Combat
                 armPhase[a] = a * 2.39996f + Random.Range(-0.6f, 0.6f);
                 armLife[a] = 1f;
                 overridePose[a] = Pose.Surfaced;
+                aimWeight[a] = 0f;
             }
             Bind();
         }
@@ -220,6 +254,48 @@ namespace SeaSick.Combat
 
                     arm[i].localRotation = pose * Quaternion.Euler(curl, 0f, sway);
                 }
+                if (aimWeight[a] > 0.001f) SolveAim(a);
+            }
+        }
+
+        /// CCD from the second-to-last joint back to the root, reaching the
+        /// last joint for the aim target, then blended over the posed arm by
+        /// the aim weight. Each bone stays inside the curl budget measured
+        /// from the rig's rest (the root inside 70 % of it: its junction with
+        /// the mantle is where the rig notes measured the worst stretch).
+        void SolveAim(int a)
+        {
+            int b0 = a * BonesPerArm;
+            for (int j = 0; j < BonesPerArm; j++) poseScratch[j] = arm[b0 + j].localRotation;
+            Vector3 target = aimTarget[a];
+            Transform end = arm[b0 + BonesPerArm - 1];
+            for (int it = 0; it < 8; it++)
+            {
+                for (int j = BonesPerArm - 2; j >= 0; j--)
+                {
+                    Transform bone = arm[b0 + j];
+                    Vector3 bp = bone.position;
+                    Vector3 toEnd = end.position - bp, toTarget = target - bp;
+                    if (toEnd.sqrMagnitude < 1e-4f || toTarget.sqrMagnitude < 1e-4f) continue;
+                    Quaternion turn = Quaternion.FromToRotation(toEnd, toTarget);
+                    turn = Quaternion.RotateTowards(Quaternion.identity, turn, 30f);
+                    bone.rotation = turn * bone.rotation;
+                    float budget = j == 0 ? curlBudgetDeg * 0.7f : curlBudgetDeg;
+                    Quaternion rest = armRest[b0 + j];
+                    float ang = Quaternion.Angle(rest, bone.localRotation);
+                    if (ang > budget)
+                        bone.localRotation = Quaternion.Slerp(rest, bone.localRotation, budget / ang);
+                }
+                if ((end.position - target).sqrMagnitude < 0.25f) break;
+            }
+            float w = aimWeight[a];
+            float hook = aimHook[a];
+            for (int j = 0; j < BonesPerArm; j++)
+            {
+                Quaternion q = Quaternion.Slerp(poseScratch[j], arm[b0 + j].localRotation, w);
+                if (j >= BonesPerArm - 4 && hook != 0f)
+                    q *= Quaternion.Euler(hook * w * 0.25f, 0f, 0f);
+                arm[b0 + j].localRotation = q;
             }
         }
 

@@ -5,17 +5,24 @@ using UnityEngine;
 
 namespace SeaSick.Combat
 {
-    /// **The kraken, build step 1: it surfaces, and that is all it does**
-    /// (GDD §6 "The Kraken (deep-water monster)").
+    /// How a kraken encounter ended (`Kraken.Ended`). Step 2 only ever
+    /// reports `Dismissed`; step 3 adds the fight's two real endings.
+    public enum KrakenOutcome { DrivenOff, Escaped, Dismissed }
+
+    /// **The kraken's lifecycle** (GDD §6 "The Kraken (deep-water monster)").
+    /// Step 1 surfaces it; step 2's attack lives in `KrakenSwat` (the swat)
+    /// and `KrakenTell` (the foam ring), which this class owns and stops.
     ///
     /// Rising -> Surfaced -> Sinking -> destroyed. It comes up from
     /// `KrakenTuning.sinkDepth` below its surfaced height with the arms still
     /// tucked, throws a breach splash and a foam ring the moment the head
     /// breaks the water, raises the arms into Kevin's approved P1 as it
     /// settles, then idles riding the swell and turning slowly to face the
-    /// ship while `KrakenArms` keeps every arm moving. After
-    /// `surfacedSeconds` (or `Dismiss`) it reverses and is destroyed once
-    /// under. No hit volumes, no swats, no damage: steps 2-4.
+    /// ship while `KrakenArms` keeps every arm moving and `KrakenSwat`
+    /// attacks inside its reach. A DEV summon sinks on its own after
+    /// `surfacedSeconds`; a real encounter has no timer -- it ends by escape
+    /// or drive-off (step 3) through `Retreat`. Once under it raises `Ended`
+    /// exactly once and is destroyed.
     ///
     /// **Transient.** Spawned at runtime from `Resources/Creatures/Octopus`,
     /// registered with nothing the save walks, so it is never written and a
@@ -50,8 +57,29 @@ namespace SeaSick.Combat
 
         public static Kraken Active { get; private set; }
 
+        /// Raised exactly once per kraken, when it has finished sinking (the
+        /// frame before it is destroyed), with how the encounter ended.
+        public static event System.Action<Kraken, KrakenOutcome> Ended;
+
         public Phase State { get; private set; }
         public KrakenArms Arms => arms;
+        public KrakenSwat Swat => swat;
+        /// 0..1. Always 1 until step 3 gives it health.
+        public float Health01 { get; private set; } = 1f;
+        /// True from the moment it starts going back down.
+        public bool Retreating => State == Phase.Sinking;
+        /// Summoned from the dev panel / eval: sinks on its own after
+        /// `surfacedSeconds`. A real encounter never times out.
+        public bool DevSummoned { get; private set; }
+        /// Seconds since it finished surfacing (0 before).
+        public float SurfacedFor => State == Phase.Surfaced ? phaseT : 0f;
+        /// The sea height it is riding, for the swat's rings and splashes.
+        public float WaterY => waterY;
+        public Transform Ship => ship;
+
+        KrakenOutcome outcome = KrakenOutcome.Dismissed;
+        bool endedRaised;
+        KrakenSwat swat;
 
         KrakenArms arms;
         Transform ship;
@@ -82,7 +110,21 @@ namespace SeaSick.Combat
 
         /// Surface one near the ship, off a random bow quarter, facing her.
         /// Replaces nothing: if one is already up, that one is returned.
-        public static Kraken Summon(Vector3 nearShipPos, Vector3 shipForward)
+        public static Kraken Summon(Vector3 nearShipPos, Vector3 shipForward, bool devSummon = false)
+        {
+            if (Active != null) return Active;
+            Vector3 fwd = new Vector3(shipForward.x, 0f, shipForward.z);
+            fwd = fwd.sqrMagnitude < 1e-4f ? Vector3.forward : fwd.normalized;
+            float side = Random.value < 0.5f ? -1f : 1f;
+            Vector3 dir = Quaternion.Euler(0f, side * Random.Range(MinBowAngle, MaxBowAngle), 0f) * fwd;
+            Vector3 at = nearShipPos + dir * KrakenTuning.spawnDistance;
+            return SummonAt(at, nearShipPos, devSummon);
+        }
+
+        /// Surface one with its body at `surfacePos` (y ignored), facing
+        /// `facePos`. The spawner's entry point (step 4 picks the spot).
+        /// If one is already up, that one is returned and nothing moves.
+        public static Kraken SummonAt(Vector3 surfacePos, Vector3 facePos, bool devSummon = false)
         {
             if (Active != null) return Active;
 
@@ -93,19 +135,16 @@ namespace SeaSick.Combat
                 return null;
             }
 
-            Vector3 fwd = new Vector3(shipForward.x, 0f, shipForward.z);
-            fwd = fwd.sqrMagnitude < 1e-4f ? Vector3.forward : fwd.normalized;
-            float side = Random.value < 0.5f ? -1f : 1f;
-            Vector3 dir = Quaternion.Euler(0f, side * Random.Range(MinBowAngle, MaxBowAngle), 0f) * fwd;
-            Vector3 at = nearShipPos + dir * KrakenTuning.spawnDistance;
+            Vector3 at = surfacePos;
             at.y = -KrakenTuning.sinkDepth + KrakenTuning.waterlineOffset;
-
-            Vector3 toShip = nearShipPos - at;
-            toShip.y = 0f;
-            var go = Instantiate(prefab, at, Quaternion.LookRotation(toShip.normalized, Vector3.up));
+            Vector3 toFace = facePos - at;
+            toFace.y = 0f;
+            if (toFace.sqrMagnitude < 1e-4f) toFace = Vector3.forward;
+            var go = Instantiate(prefab, at, Quaternion.LookRotation(toFace.normalized, Vector3.up));
             go.name = "Kraken";
             var k = go.GetComponent<Kraken>();
             if (k == null) k = go.AddComponent<Kraken>();
+            k.DevSummoned = devSummon;
             return k;
         }
 
@@ -116,7 +155,7 @@ namespace SeaSick.Combat
             if (Active != null) return "The kraken is already up.";
             var motor = FindAnyObjectByType<ShipMotor>();
             if (motor == null) return "No ship to summon it to.";
-            var k = Summon(motor.transform.position, motor.transform.forward);
+            var k = Summon(motor.transform.position, motor.transform.forward, devSummon: true);
             return k != null ? "Something huge rises..." : "Kraken prefab missing.";
         }
 
@@ -128,9 +167,16 @@ namespace SeaSick.Combat
         }
 
         /// Send it back down now, from wherever it is in its rise.
-        public void Dismiss()
+        public void Dismiss() => Retreat(KrakenOutcome.Dismissed);
+
+        /// Send it down with how the encounter ended (`Ended` reports it).
+        /// The first call wins; a second while it is already sinking is
+        /// ignored. Any swat in flight is called off.
+        public void Retreat(KrakenOutcome how)
         {
             if (State == Phase.Sinking) return;
+            outcome = how;
+            if (swat != null) swat.CancelAll();
             // Sink from the current height and arm raise, not from a jump to
             // fully surfaced: a dismiss mid-rise reverses smoothly.
             float raised = arms != null ? arms.Raise01 : 1f;
@@ -151,6 +197,8 @@ namespace SeaSick.Combat
             State = Phase.Rising;
             depth = -KrakenTuning.sinkDepth;
             skirt = KrakenFx.FoamSkirt(transform);
+            swat = GetComponent<KrakenSwat>();
+            if (swat == null) swat = gameObject.AddComponent<KrakenSwat>();
         }
 
         void OnEnable() => EnsureProbe();
@@ -189,7 +237,14 @@ namespace SeaSick.Combat
             {
                 case Phase.Rising: TickRise(); break;
                 case Phase.Surfaced: TickSurfaced(dt); break;
-                case Phase.Sinking: if (TickSink()) { Destroy(gameObject); return; } break;
+                case Phase.Sinking:
+                    if (TickSink())
+                    {
+                        RaiseEnded();
+                        Destroy(gameObject);
+                        return;
+                    }
+                    break;
             }
 
             // Bob on top of the swell the probe already follows: a slow,
@@ -207,6 +262,16 @@ namespace SeaSick.Combat
 
             if (State != Phase.Sinking || depth > -HeadBreaksAt) MarkWater(dt);
             FrameCamera();
+        }
+
+        void RaiseEnded()
+        {
+            if (endedRaised) return;
+            endedRaised = true;
+            ReleaseCamera();
+            if (Active == this) Active = null;
+            try { Ended?.Invoke(this, outcome); }
+            catch (System.Exception e) { Debug.LogException(e); }
         }
 
         void FindShip()
@@ -268,7 +333,8 @@ namespace SeaSick.Combat
         {
             depth = 0f;
             if (arms != null) arms.Raise01 = 1f;
-            if (phaseT >= KrakenTuning.surfacedSeconds) Dismiss();
+            // Dev summons only: a real encounter ends by escape or drive-off.
+            if (DevSummoned && phaseT >= KrakenTuning.surfacedSeconds) Dismiss();
         }
 
         /// True once it is all the way under.
@@ -457,6 +523,60 @@ namespace SeaSick.Combat
             ourPoi = WaterPoint();
             chaseCam.SeaFocus = ourPoi;
             ownsPoi = true;
+
+            // What has to fit: everything of it above the water, measured
+            // off the bones this frame (a raised windup arm included), and
+            // the HUD's top bar as the ceiling when it is up.
+            MeasureAboveWater(out float height, out float radius);
+            chaseCam.SeaFocusHeight = height;
+            chaseCam.SeaFocusRadius = radius;
+            chaseCam.SeaFocusShip01 = KrakenTuning.camShip01;
+            float top01 = KrakenTuning.camTop01;
+            var bar = SeaSick.UI.Sheets.SeaHud.TopRect;
+            if (bar.height > 1f && Screen.height > 0)
+                top01 = Mathf.Min(top01, 1f - bar.yMax / Screen.height - 0.025f);
+            chaseCam.SeaFocusTop01 = top01;
+            chaseCam.SeaFocusElevDeg = KrakenTuning.camElevDeg;
+            chaseCam.SeaFocusSwingDeg = KrakenTuning.camSwingDeg;
+            chaseCam.SeaFocusMaxBack = KrakenTuning.camMaxBack;
+        }
+
+        /// Height of its highest point over the sea and the horizontal
+        /// half-span of everything above the sea, metres, each with a small
+        /// margin. Off the 70 arm bones (a bone is a joint, so the arm's own
+        /// thickness is the margin) and the mantle's measured dome (16 m over
+        /// the root in P1 at scale 49).
+        void MeasureAboveWater(out float height, out float radius)
+        {
+            Vector3 c = transform.position;
+            float top = c.y + 16f * transform.lossyScale.y / 49f;
+            float r2 = 14f * 14f;
+            if (arms != null && arms.Ready)
+            {
+                for (int a = 0; a < KrakenArms.ArmCount; a++)
+                for (int j = 1; j < KrakenArms.BonesPerArm; j++)
+                {
+                    float y = arms.ArmBone(a, j).position.y;
+                    if (y > top) top = y;
+                }
+                // The width that must fit is the RAISED crown: arms lying
+                // low along the water (the front pair, a slam in the water)
+                // may run off the sides of a portrait frame; fitting them too
+                // backed the lens off until the beast was a third of the
+                // screen (first step-2 captures).
+                float raisedOver = waterY + (top - waterY) * 0.35f;
+                for (int a = 0; a < KrakenArms.ArmCount; a++)
+                for (int j = 1; j < KrakenArms.BonesPerArm; j++)
+                {
+                    Vector3 p = arms.ArmBone(a, j).position;
+                    if (p.y < raisedOver) continue;
+                    float dx = p.x - c.x, dz = p.z - c.z;
+                    float d2 = dx * dx + dz * dz;
+                    if (d2 > r2) r2 = d2;
+                }
+            }
+            height = Mathf.Max(0f, top - waterY) + 3f;
+            radius = Mathf.Sqrt(r2) + 3f;
         }
 
         void ReleaseCamera()

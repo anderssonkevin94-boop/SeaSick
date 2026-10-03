@@ -286,6 +286,51 @@ namespace SeaSick.CameraRig
         /// a portrait screen) is not used for this. Null = nothing.
         public Vector3? SeaFocus { get; set; }
 
+        /// **How the SeaFocus shot is composed** (2026-10-03, kraken step 1
+        /// fix). Kevin's captures: the lock framing (aim on the midpoint)
+        /// put the tallest arms behind the top bar and left the lower half
+        /// of the phone empty sea. With `SeaFocus` alone (no `LockTarget`)
+        /// the camera now sits on the ship's far side from the focus,
+        /// looking over her at it (swing capped at `SeaFocusSwingDeg` off
+        /// her bow so the stick never inverts), and solves the seat
+        /// distance and pitch so she sits at `SeaFocusShip01` of the screen
+        /// height and the thing's full height (`SeaFocusHeight` metres over
+        /// the focus point) and width (`SeaFocusRadius`) fit under
+        /// `SeaFocusTop01`. Viewport fractions from the bottom. The owner of
+        /// `SeaFocus` writes these every frame; nothing here reads them
+        /// while `SeaFocus` is null, so the plain chase is untouched.
+        public float SeaFocusHeight { get; set; }
+        public float SeaFocusRadius { get; set; }
+        public float SeaFocusShip01 { get; set; } = 0.28f;
+        public float SeaFocusTop01 { get; set; } = 0.84f;
+        /// The seat's elevation seen from the ship, degrees.
+        public float SeaFocusElevDeg { get; set; } = 24f;
+        public float SeaFocusSwingDeg { get; set; } = 65f;
+        public float SeaFocusMaxBack { get; set; } = 140f;
+        /// 0..1, how far into the SeaFocus composition the rig is.
+        public float SeaFocusLevel => seaLevel;
+
+        float seaLevel, seaLevelVel;
+        Vector3 lastSeaPos;
+        bool haveSeaPos;
+
+        // ---- shake (2026-10-03, the kraken's slams) ----
+        float shake;
+        float shakeSeed;
+        Quaternion appliedShake = Quaternion.identity;
+
+        /// A short camera shake, `amount` ~ 0..1 (1 = a hard slam). Adds to
+        /// what is left of the last one and decays in ~0.5 s. A position
+        /// jitter applied after the framing and a small rotation jitter that
+        /// is taken off again next frame (like the juice roll), so neither
+        /// ever feeds the filters.
+        public void Shake(float amount)
+        {
+            if (amount <= 0f) return;
+            shake = Mathf.Min(1.5f, shake + amount);
+            if (shakeSeed == 0f) shakeSeed = Random.Range(1f, 100f);
+        }
+
         bool HasLockAim => LockTarget != null || SeaFocus.HasValue;
         Vector3 LockAimPos => LockTarget != null ? LockTarget.position : SeaFocus.GetValueOrDefault();
 
@@ -1324,6 +1369,32 @@ namespace SeaSick.CameraRig
                               + Vector3.up * (bLookH * frameK + seaY);
             }
 
+            // --- the SeaFocus composition, over the chase/lock shot ----------
+            // Only when SeaFocus is set and nothing outranks it (a real lock,
+            // the shore party). With SeaFocus null and the level home, this
+            // whole block is skipped and the frame is exactly what it was.
+            {
+                bool seaOnly = SeaFocus.HasValue && LockTarget == null
+                    && !PointOfInterest.HasValue && !SailOverride.HasValue;
+                if (seaOnly) { lastSeaPos = SeaFocus.Value; haveSeaPos = true; }
+                if (seaOnly || seaLevel > 0f)
+                {
+                    seaLevel = SeaSick.Ship.JuiceTuning.Spring(seaLevel, seaOnly ? 1f : 0f,
+                        ref seaLevelVel, Mathf.Max(0.05f, SeaSick.Ship.JuiceTuning.camLockSeconds * 1.6f), dt);
+                    if (seaLevel < 0.001f && !seaOnly) { seaLevel = 0f; seaLevelVel = 0f; }
+                    seaLevel = Mathf.Clamp01(seaLevel);
+                }
+                if (seaLevel > 0f && haveSeaPos)
+                {
+                    float aspect = cam != null ? Mathf.Max(0.2f, cam.aspect) : PortraitAspect;
+                    ComposeSeaFocus(shipFlat, target.forward, lastSeaPos, sailLens, aspect,
+                        out Vector3 seaSeat, out Vector3 seaLook);
+                    desired = Vector3.Lerp(desired, seaSeat, seaLevel);
+                    lookPoint = Vector3.Lerp(lookPoint, seaLook + Vector3.up * seaY, seaLevel);
+                }
+                else if (!seaOnly && seaLevel <= 0f) haveSeaPos = false;
+            }
+
             // --- the island overview, blended over whatever was framed ----
             var shot = OverviewOverride ?? Overview;
             float wantOverview = shot.HasValue ? 1f : 0f;
@@ -1626,7 +1697,8 @@ namespace SeaSick.CameraRig
             Quaternion desiredRot = Quaternion.LookRotation(lookPoint - transform.position, Vector3.up);
             // Last frame's juice roll comes off first, so the rotation filter
             // runs on the un-rolled pose and the roll never accumulates.
-            Quaternion unrolled = transform.rotation * Quaternion.Euler(0f, 0f, -appliedRoll);
+            Quaternion unrolled = transform.rotation * Quaternion.Inverse(appliedShake)
+                                  * Quaternion.Euler(0f, 0f, -appliedRoll);
             // The rotation's leftover is carried the same way as the position's.
             Quaternion framed;
             if (direct)
@@ -1739,10 +1811,116 @@ namespace SeaSick.CameraRig
             }
             appliedRoll = sailingYard != null && sailingYard.IsCoaster ? 0f : juiceRoll * atSea;
             transform.rotation = framed * Quaternion.Euler(0f, 0f, appliedRoll);
+            ApplyShake(dt);
 
             OverviewDirect = direct && directOffset == Vector3.zero
                              && Quaternion.Angle(directTurn, Quaternion.identity) < 0.01f;
             wasDirect = direct;
+        }
+
+        /// The shake on top of the finished pose. Position: added after the
+        /// framing and recomputed from `rigPos` next frame, so it never feeds
+        /// back. Rotation: remembered and taken off next frame before the
+        /// rotation filter reads the pose (see `unrolled`).
+        void ApplyShake(float dt)
+        {
+            if (shake <= 0.001f)
+            {
+                shake = 0f;
+                appliedShake = Quaternion.identity;
+                return;
+            }
+            float t = Time.time * 23f + shakeSeed;
+            float nx = Mathf.PerlinNoise(t, 0.1f) * 2f - 1f;
+            float ny = Mathf.PerlinNoise(0.3f, t) * 2f - 1f;
+            float nz = Mathf.PerlinNoise(t * 0.7f, 5.1f) * 2f - 1f;
+            float k = shake * shake;
+            transform.position += (transform.right * nx + transform.up * ny) * (0.55f * k);
+            appliedShake = Quaternion.Euler(ny * 1.1f * k, nx * 1.1f * k, nz * 1.6f * k);
+            transform.rotation *= appliedShake;
+            if (dt > 0f) shake *= Mathf.Exp(-5.5f * dt);
+        }
+
+        /// The SeaFocus shot: seat and look point (sea at y 0, no heave).
+        /// See `SeaFocusHeight`. Exact pinhole arithmetic in the vertical
+        /// plane of the view, at the camera's own lens and aspect.
+        void ComposeSeaFocus(Vector3 shipFlat, Vector3 shipForward, Vector3 focus,
+            float vfov, float aspect, out Vector3 seat, out Vector3 look)
+        {
+            Vector3 fwd = new Vector3(shipForward.x, 0f, shipForward.z);
+            fwd = fwd.sqrMagnitude < 1e-4f ? Vector3.forward : fwd.normalized;
+            Vector3 k = new Vector3(focus.x, 0f, focus.z);
+            Vector3 toK = k - shipFlat;
+            float bowAz = Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg;
+            float kAz = toK.sqrMagnitude > 1f ? Mathf.Atan2(toK.x, toK.z) * Mathf.Rad2Deg : bowAz;
+            float swing = Mathf.Clamp(SeaFocusSwingDeg, 0f, 170f);
+            float az = bowAz + Mathf.Clamp(Mathf.DeltaAngle(bowAz, kAz), -swing, swing);
+            Vector3 view = new Vector3(Mathf.Sin(az * Mathf.Deg2Rad), 0f, Mathf.Cos(az * Mathf.Deg2Rad));
+            Vector3 right = Vector3.Cross(Vector3.up, view);
+
+            float tanV = Mathf.Tan(Mathf.Clamp(vfov, 10f, 120f) * 0.5f * Mathf.Deg2Rad);
+            float tanH = tanV * aspect;
+            float fK = Vector3.Dot(toK, view);
+            float xK = Vector3.Dot(toK, right);
+            float hull = motor != null ? motor.HullLength : framingLoa;
+            float deck = 2f;
+            float shipY = Mathf.Clamp(SeaFocusShip01, 0.1f, 0.6f);
+            float topY = Mathf.Clamp(SeaFocusTop01, shipY + 0.15f, 0.98f);
+            float aShip = Mathf.Atan((2f * shipY - 1f) * tanV);       // angle above the axis
+            float aTop = Mathf.Atan((2f * topY - 1f) * tanV);
+            float gap = aTop - aShip;
+            float tanE = Mathf.Tan(Mathf.Clamp(SeaFocusElevDeg, 5f, 60f) * Mathf.Deg2Rad);
+            float height = Mathf.Max(0f, SeaFocusHeight);
+            float radius = Mathf.Max(0f, SeaFocusRadius);
+
+            // Closest seat that still shows her whole (a hull length and a
+            // half of ground in front of the lens) ...
+            float minBack = Mathf.Max(18f, hull * 1.6f);
+            float maxBack = Mathf.Max(minBack, SeaFocusMaxBack);
+            // ... the width: the focus's half-width (plus where it sits off
+            // the view line) inside 95 % of the half-frame at its depth.
+            float fitW = (Mathf.Abs(xK) + radius) / Mathf.Max(0.05f, tanH * 0.95f) - fK;
+            // ... the height: the angle from her deck to its top must fit the
+            // gap between the two screen lines. That angle shrinks as the
+            // seat backs off, so bisect for the nearest seat that fits.
+            float fitH = minBack;
+            if (height > 0f && fK > 1f)
+            {
+                float lo = minBack, hi = maxBack;
+                if (VerticalGap(hi, fK, height, deck, tanE) > gap) fitH = hi;
+                else if (VerticalGap(lo, fK, height, deck, tanE) > gap)
+                {
+                    for (int i = 0; i < 18; i++)
+                    {
+                        float mid = 0.5f * (lo + hi);
+                        if (VerticalGap(mid, fK, height, deck, tanE) > gap) lo = mid; else hi = mid;
+                    }
+                    fitH = hi;
+                }
+            }
+            float d = Mathf.Clamp(Mathf.Max(minBack, fitW, fitH), minBack, maxBack);
+            float h = deck + d * tanE;
+            // Pitch so her deck lands on `shipY`.
+            float aDeck = Mathf.Atan2(deck - h, d);                    // elevation of her deck
+            float pitchUp = aDeck - aShip;                            // axis elevation, radians
+            // Turn the aim toward the focus by half its bearing, held so she
+            // stays inside the frame.
+            float halfW = Mathf.Atan(tanH);
+            float hullHalf = Mathf.Atan2(0.5f * hull, d);
+            float bearing = Mathf.Atan2(xK, Mathf.Max(1f, d + fK)) * 0.5f;
+            float aimYaw = Mathf.Clamp(bearing, -Mathf.Max(0f, halfW - hullHalf - 0.03f),
+                Mathf.Max(0f, halfW - hullHalf - 0.03f));
+            seat = shipFlat - view * d + Vector3.up * h;
+            Vector3 dir = Quaternion.AngleAxis(aimYaw * Mathf.Rad2Deg, Vector3.up) * view;
+            look = seat + (dir * Mathf.Cos(pitchUp) + Vector3.up * Mathf.Sin(pitchUp)) * (d + 10f);
+        }
+
+        /// Angle from her deck to the focus's top, seen from a seat `d` behind
+        /// her at elevation `tanE`.
+        static float VerticalGap(float d, float fK, float height, float deck, float tanE)
+        {
+            float h = deck + d * tanE;
+            return Mathf.Atan2(height - h, d + fK) - Mathf.Atan2(deck - h, d);
         }
     }
 }
