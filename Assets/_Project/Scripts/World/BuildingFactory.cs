@@ -635,6 +635,10 @@ namespace SeaSick.World
             // every kit building carries all four and only the one whose
             // names match ever does anything.
             root.gameObject.AddComponent<StoreStockView>();
+            // **Storage slots (2026-10-03):** the store hut's and the fire
+            // cache's `Stock_<Family>_NN` anchors with `Fill_` steps. Off on
+            // any model with none (every kit until the new FBX lands).
+            root.gameObject.AddComponent<StorageSlotView>();
             root.gameObject.AddComponent<FarmBedView>();
             root.gameObject.AddComponent<CampfireStateView>();
             root.gameObject.AddComponent<ShelterStateView>();
@@ -700,6 +704,7 @@ namespace SeaSick.World
                     var root = b.gameObject;
                     Renew<StationStockView>(root);
                     Renew<StoreStockView>(root);
+                    Renew<StorageSlotView>(root);
                     Renew<FarmBedView>(root);
                     Renew<CampfireStateView>(root);
                     Renew<ShelterStateView>(root);
