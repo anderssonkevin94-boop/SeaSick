@@ -10,7 +10,8 @@ namespace SeaSick.UI.Sheets
     /// **The Camp sheet, 2026-09-30 (island UI restructure, phase 4).** The
     /// one camp hub. It REPLACES the bottom ledger drawer (`LedgerDrawer`),
     /// the camp overview (`CampOverviewSheet`) and the alert overflow: the
-    /// thumb bar's **Camp** button, the alert strip's "+N" chip, the Next
+    /// thumb bar's **Camp** button, the Problems list's Camp button (the
+    /// strip's "+N" chip until 2026-10-03, now "N problems"), the Next
     /// card's pinned goal and every sheet header's ☰ open it. A tall sheet,
     /// "Camp" + "Island 5 · Campfire I · 5 hands", top to bottom:
     /// <list type="number">

@@ -185,7 +185,8 @@ namespace SeaSick.UI.Sheets
             alerts.Place(left, right, topY + BarHeight + 6f);
             // The top chrome: the bar, plus the strip while it
             // has a chip up (an empty strip must not eat world taps).
-            float chrome = BarHeight + (AlertStrip.Showing ? 6f + AlertStrip.Height : 0f);
+            // Measured (2026-10-03): a wrapped chip is taller than one row.
+            float chrome = BarHeight + (AlertStrip.Showing ? 6f + AlertStrip.ShownHeight : 0f);
             ResourcesRect = new Rect(safe.xMin + 8f / scale, Screen.height - safe.yMax + 8f / scale,
                 safe.width - 16f / scale, chrome / scale);
             // No bottom nav: a zero-height line at the foot of the safe area,

@@ -393,7 +393,8 @@ namespace SeaSick.UI.Sheets
         /// keeps the island visible above a half-height card.
         public static bool HugsContent(ISheet s) =>
             s != null && !HudLayout.Wide
-            && ((MidnightLandHud.Active && BuildingSheetFocus.IsBuilding(s)) || s is LandingPartySheet || s is GraveSheet);
+            && ((MidnightLandHud.Active && BuildingSheetFocus.IsBuilding(s)) || s is LandingPartySheet || s is GraveSheet
+                || s is ProblemsSheet);
 
         /// The hugging frame's ceiling: its top edge sits at most this
         /// fraction of the safe height above the safe bottom, header included.

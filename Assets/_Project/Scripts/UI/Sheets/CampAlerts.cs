@@ -155,8 +155,58 @@ namespace SeaSick.UI.Sheets
                         continue;
                     }
                 }
+                // **Station first (2026-10-03, group 4, the Problems list):**
+                // "Sawmill · needs logs (Yara)" -- the building is what is
+                // stuck, and its sheet (stock, inputs, his row) is where
+                // the player looks; the tap opens it and the camera frames
+                // the building (`BuildingSheetFocus`).
+                var stuckAt = l.StationOfHand(h);
+                var stuckPost = stuckAt != null ? camp.WorkplaceOf(h) : null;
+                if (stuckPost != null)
+                {
+                    into.Add(new Alert
+                    {
+                        text = StationName(l, stuckAt) + " · " + Short(why) + " (" + who + ")",
+                        tone = Tone.Bad, fixLabel = "Open " + StationName(l, stuckAt),
+                        open = () => Sheets.TryCreateFor(stuckPost) ?? new StationSheet(camp, stuckPost),
+                    });
+                    continue;
+                }
                 into.Add(new Alert { text = who + " · " + Short(why), tone = Tone.Bad, open = () => new HandSheet(camp, who), fixLabel = "Open" });
             }
+            // **The station problems (2026-10-03, villager review group 4:
+            // one place that says what is stuck).** A station with a recipe
+            // chosen and nobody on it ("Kitchen · no cook"), and a bench that
+            // has waited on the runners past `RunnerSlowQuanta` ("Sawmill ·
+            // waiting on the runners for logs" -- the fix is more runners,
+            // at the store hut). Read from the ledger; nothing decided here.
+            if (l.stations != null)
+                for (int i = 0; i < l.stations.Count; i++)
+                {
+                    var st = l.stations[i];
+                    if (st == null || st.removed) continue;
+                    var b = BuildingOf(camp, st);
+                    if (b == null) continue;
+                    if (!l.Manned(st))
+                    {
+                        if (!st.HasOrder || PostLostAt(l, camp, st.planId)) continue;
+                        var plan = BuildPlans.Named(st.planId);
+                        string noOne = string.IsNullOrEmpty(plan.position) ? "no worker" : "no " + plan.position;
+                        into.Add(new Alert
+                        {
+                            text = StationName(l, st) + " · " + noOne, tone = Tone.Warn, fixLabel = "Assign",
+                            open = () => Sheets.TryCreateFor(b) ?? new StationSheet(camp, b),
+                        });
+                        continue;
+                    }
+                    string slow = l.RunnersSlowFor(st);
+                    if (slow == null) continue;
+                    into.Add(new Alert
+                    {
+                        text = StationName(l, st) + " · waiting on the runners for " + ResDefs.Label(slow).ToLowerInvariant(),
+                        tone = Tone.Warn, fixLabel = "Runners", open = () => StoreHut(camp),
+                    });
+                }
             // **A post the station cap took (2026-10-03,
             // `OutpostLedger.EnforceStationCaps`)**: never silently -- named
             // until the player taps it, which opens the hand to re-assign.
@@ -273,6 +323,51 @@ namespace SeaSick.UI.Sheets
         }
 
         static readonly List<string> fullPiles = new List<string>(4);
+
+        /// "Sawmill", or "Sawmill 2" when the camp has more than one.
+        internal static string StationName(OutpostLedger l, StationStock s)
+        {
+            string label = BuildPlans.Named(s.planId).label;
+            if (string.IsNullOrEmpty(label)) label = "station";
+            label = char.ToUpperInvariant(label[0]) + label.Substring(1);
+            return l != null && l.CountBuilt(s.planId) > 1 ? label + " " + (s.ordinal + 1) : label;
+        }
+
+        /// The building a station row stands for: the `ordinal`-th built
+        /// one of its plan (the deal `Outpost.WorkplaceOf` makes).
+        internal static Building BuildingOf(Outpost camp, StationStock s)
+        {
+            if (camp == null || s == null) return null;
+            int k = 0;
+            foreach (var b in camp.Built)
+                if (b != null && b.Id == s.planId && k++ == s.ordinal) return b;
+            return null;
+        }
+
+        /// A live "X lost the sawmill post" line for this plan already says
+        /// the station is unmanned.
+        static bool PostLostAt(OutpostLedger l, Outpost camp, string planId)
+        {
+            if (l.postsLost == null) return false;
+            foreach (var p in l.postsLost)
+            {
+                if (p == null || p.planId != planId) continue;
+                var hand = camp.HandNamed(p.name);
+                if (hand != null && hand.order != OutpostOrder.Work) return true;
+            }
+            return false;
+        }
+
+        /// The store hut's own sheet (its Runners tab), else the build list
+        /// on the store hut.
+        internal static ISheet StoreHut(Outpost camp)
+        {
+            if (camp != null)
+                foreach (var b in camp.Built)
+                    if (b != null && b.Id == BuildPlans.Storage.id)
+                        return Sheets.TryCreateFor(b) ?? new StationSheet(camp, b);
+            return BuildList(camp, BuildPlans.Storage.id);
+        }
 
         /// The body's "walled off — no way round, needs a gate"
         /// (`CampWorker`), which the walled-off camp chip covers.

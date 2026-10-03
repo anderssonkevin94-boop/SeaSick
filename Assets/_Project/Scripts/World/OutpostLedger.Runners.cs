@@ -386,6 +386,17 @@ namespace SeaSick.World
         /// the runners cannot keep up. Tunable.
         public const int RunnerSlowQuanta = 15;
 
+        /// **What a bench has waited on the runners for too long, or null**
+        /// (2026-10-03, group 4, the camp's Problems list): runners are on,
+        /// the bench has stood idle `RunnerSlowQuanta` with something a
+        /// runner could bring or take (`benchWait`), and this is it.
+        public string RunnersSlowFor(StationStock s)
+        {
+            if (!RunnersOn || s == null || stations == null || BenchWaitQuanta(s) < RunnerSlowQuanta) return null;
+            int si = stations.IndexOf(s);
+            return si < 0 ? null : RunnerWaitItem(s, si);
+        }
+
         // --- the bench waiting on a runner ---------------------------------------
 
         /// Quanta each station's bench has stood idle with something a

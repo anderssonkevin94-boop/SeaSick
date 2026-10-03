@@ -19,6 +19,15 @@ namespace SeaSick.UI.Sheets
     /// nothing is said twice. Chips are built once and re-texted on the
     /// 0.25 s tick (DEV-TOOLS: a rebuilt element loses the tap it was in
     /// the middle of).
+    ///
+    /// **"N problems" since 2026-10-03 (villager review group 4).** The
+    /// "+N" chip became the camp's Problems chip: with two or more alerts
+    /// it reads "3 problems" (the count is ALL of them, the one beside it
+    /// included) and opens `ProblemsSheet` -- a short list that hugs its
+    /// rows, each tap going straight to the station or hand concerned --
+    /// instead of the tall Camp sheet. Hidden when nothing is stuck. The
+    /// strip's real height is measured (`ShownHeight`): a wrapped chip or
+    /// a chip pushed to a second line still keeps world taps off it.
     public sealed class AlertStrip
     {
         public const int MaxChips = 1;
@@ -31,8 +40,14 @@ namespace SeaSick.UI.Sheets
         /// cover the strip only then).
         public static bool Showing { get; private set; }
 
+        /// **The strip's laid-out height, panel units (2026-10-03)**:
+        /// `Height` until the row has been laid out, then what it really
+        /// takes -- a wrapped alert chip, or the Problems chip wrapped onto
+        /// a second line, is taller than one row.
+        public static float ShownHeight { get; private set; } = Height;
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        static void Reset() { ShowsRaid = Showing = false; }
+        static void Reset() { ShowsRaid = Showing = false; ShownHeight = Height; }
 
         readonly VisualElement row;
         readonly Button[] chips = new Button[MaxChips];
@@ -64,20 +79,20 @@ namespace SeaSick.UI.Sheets
                 row.Add(chip);
                 chips[i] = chip;
             }
-            // "+N": the rest, in the Camp ledger.
-            more = new Button(OpenCamp);
+            // "N problems": every alert, in the Problems list.
+            more = new Button(OpenProblems);
             more.AddToClassList("ledger-chip");
             more.AddToClassList("ledger-chip--more");
-            more.tooltip = "More that needs you: open Camp";
+            more.tooltip = "Everything that is stuck: open Problems";
             more.style.display = DisplayStyle.None;
             row.Add(more);
         }
 
-        /// "+N": the Camp sheet, where every alert is listed with its fix.
-        static void OpenCamp()
+        /// "N problems": the Problems list, every alert with its fix.
+        static void OpenProblems()
         {
             var camp = MidnightLandHud.Camp;
-            if (camp != null && camp.Ledger != null) Sheets.Open(new CampSheet(camp));
+            if (camp != null && camp.Ledger != null) Sheets.Open(new ProblemsSheet(camp));
         }
 
         void Tap(int index)
@@ -91,6 +106,7 @@ namespace SeaSick.UI.Sheets
         {
             row.style.display = DisplayStyle.None;
             ShowsRaid = Showing = false;
+            ShownHeight = Height;
         }
 
         /// Position every frame (cheap), content on `refresh`.
@@ -100,6 +116,8 @@ namespace SeaSick.UI.Sheets
             row.style.left = left;
             row.style.right = right;
             row.style.top = top;
+            float h = row.resolvedStyle.height;
+            ShownHeight = float.IsNaN(h) || h < Height ? Height : h;
         }
 
         public void Refresh(Outpost camp)
@@ -135,15 +153,18 @@ namespace SeaSick.UI.Sheets
                 }
                 chip.style.display = DisplayStyle.Flex;
             }
-            int rest = alerts.Count - n;
-            if (rest != moreShown)
+            // The Problems chip counts every alert (the Next card's and the
+            // chip beside it too: the list shows them all), from two up --
+            // one alone is the chip itself, one tap from its fix.
+            int total = LastCount >= 2 ? LastCount : 0;
+            if (total != moreShown)
             {
-                moreShown = rest;
-                if (rest > 0) more.text = "+" + rest;
-                more.style.display = rest > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+                moreShown = total;
+                if (total > 0) more.text = total + " problems";
+                more.style.display = total > 0 ? DisplayStyle.Flex : DisplayStyle.None;
             }
             ShowsRaid = raid;
-            Showing = n > 0;
+            Showing = n > 0 || total > 0;
         }
     }
 }
