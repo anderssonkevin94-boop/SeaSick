@@ -3127,6 +3127,9 @@ namespace SeaSick.World
             CountRunners();
             AgeStallSkips();
             EnsureStations();
+            // The runners' aging clock (2026-10-03, group 4): when each bay
+            // went short and each rack got goods, for `FindHaulerChore`.
+            AgeHaulRequests();
             // She cast off: store -> ship armfuls go home; done orders go.
             SettleTransfers();
             // After hours: the trip in hand is finished, no new one starts.

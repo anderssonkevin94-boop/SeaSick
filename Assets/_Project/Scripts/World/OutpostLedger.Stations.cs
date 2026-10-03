@@ -1339,6 +1339,16 @@ namespace SeaSick.World
         /// Loads are the carrier's (`CarryArmful`: a runner's barrow)
         /// capped only by what finishes the job, empties the source or
         /// fills the destination. Allocation-free; O(chores) per call.
+        ///
+        /// **Aging within a rung (2026-10-03, villager review group 4):**
+        /// rungs 1a, 1b, 3 and 4 no longer go purely nearest-first -- the
+        /// request that has waited the most whole `AgeStepQuanta` wins
+        /// (`OfferAged`; a bay's wait from `BayAge`, a rack's from
+        /// `RackAge`), and only equal waits fall back to the nearest
+        /// pickup. Two sawmills with one runner: the near one, refilled
+        /// over and over, can no longer keep the far one's bay empty all
+        /// day. Rung 2 was already oldest-first (the site queue's order);
+        /// 0 and 5 stay nearest-first (nothing waits on them).
         bool FindHaulerChore(out Chore c) => FindHaulerChore(null, out c);
 
         bool FindHaulerChore(OutpostHand h, out Chore c)
@@ -1348,6 +1358,7 @@ namespace SeaSick.World
             bool any = h == null;
             Vector3 at = any ? Vector3.zero : HandAt(h);
             float best = float.MaxValue;
+            int bestAge = -1;
             bool found = false;
 
             int ns = stations != null ? stations.Count : 0;
@@ -1356,7 +1367,7 @@ namespace SeaSick.World
             // of its next batch -- an idle bench -- beats even a dropped
             // load, which a full store can leave lying by the dozen.
             for (int i = 0; i < ns; i++)
-                if (BayChore(h, i, true, at, any, ref c, ref best, ref found) && any) return true;
+                if (BayChore(h, i, true, at, any, ref c, ref best, ref bestAge, ref found) && any) return true;
             if (found) return true;
 
             // 0. A dropped load home.
@@ -1383,11 +1394,12 @@ namespace SeaSick.World
                 }
             if (found) return true;
 
-            // 1b. A rack blocking its bench.
+            // 1b. A rack blocking its bench (the longest-held rack first).
+            best = float.MaxValue; bestAge = -1;
             for (int i = 0; i < ns; i++)
             {
                 if (!RackBlocking(stations[i]) || !RackChore(i, out var k, h, true)) continue;
-                if (Offer(ref c, ref best, k, at, any, StationAtOr(i, at))) return true;
+                if (OfferAged(ref c, ref best, ref bestAge, k, at, any, StationAtOr(i, at), RackAge(stations[i]))) return true;
                 found = true;
             }
             if (found) return true;
@@ -1396,15 +1408,17 @@ namespace SeaSick.World
             if (runner && SiteChore(h, out var sc)) { c = sc; return true; }
 
             // 3. Pre-stock bays while the bench works.
+            best = float.MaxValue; bestAge = -1;
             for (int i = 0; i < ns; i++)
-                if (BayChore(h, i, false, at, any, ref c, ref best, ref found) && any) return true;
+                if (BayChore(h, i, false, at, any, ref c, ref best, ref bestAge, ref found) && any) return true;
             if (found) return true;
 
             // 4. Racks holding a full load (or the day's last hour).
+            best = float.MaxValue; bestAge = -1;
             for (int i = 0; i < ns; i++)
             {
                 if (!RackChore(i, out var k, h, false)) continue;
-                if (Offer(ref c, ref best, k, at, any, StationAtOr(i, at))) return true;
+                if (OfferAged(ref c, ref best, ref bestAge, k, at, any, StationAtOr(i, at), RackAge(stations[i]))) return true;
                 found = true;
             }
             if (found) return true;
@@ -1447,6 +1461,19 @@ namespace SeaSick.World
             return false;
         }
 
+        /// **`Offer` with aging (2026-10-03, group 4)**: the longer-waiting
+        /// request (`age`, whole `AgeStepQuanta`) wins outright; equal ages
+        /// keep the nearer pickup. `bestAge` starts at -1 per rung.
+        static bool OfferAged(ref Chore c, ref float best, ref int bestAge, Chore k, Vector3 at, bool any,
+            Vector3 pickup, int age)
+        {
+            if (any) { c = k; return true; }
+            float dx = pickup.x - at.x, dz = pickup.z - at.z;
+            float d = dx * dx + dz * dz;
+            if (age > bestAge || (age == bestAge && d < best)) { bestAge = age; best = d; c = k; }
+            return false;
+        }
+
         Vector3 StationAtOr(int i, Vector3 fallback) => StationPlace(i, out var p) ? p : fallback;
 
         /// **A bay chore at station `i`** (rungs 1 and 3). `urgent`: a
@@ -1458,7 +1485,7 @@ namespace SeaSick.World
         /// and its rack not jammed. Offers into `c`/`best` like `Offer`;
         /// true when something was offered (with `any`, the first one).
         bool BayChore(OutpostHand h, int i, bool urgent, Vector3 at, bool any,
-            ref Chore c, ref float best, ref bool found)
+            ref Chore c, ref float best, ref int bestAge, ref bool found)
         {
             var s = stations[i];
             if (s == null || !Manned(s)) return false;
@@ -1480,7 +1507,13 @@ namespace SeaSick.World
                     if (space <= 0) continue;
                     int armful = CarryArmful(h, line.res);
                     int load = Mathf.Min(armful, space);
+                    // **Part loads for a short bay (verified 2026-10-03,
+                    // group 4):** urgent asks only 1, so a store or a rack
+                    // holding less than a barrow still feeds an idle bench
+                    // (the barrow shows the fewer items: `LoadCount` is the
+                    // trip's count). Pre-stocking keeps the full-load rule.
                     int need = urgent ? 1 : PrestockLoad(s, armful);
+                    int age = BayAge(s, line.res, urgent);
                     // From the store...
                     int inStore = StoreFree(line.res);
                     if (inStore > 0 && Mathf.Min(load, inStore) >= need)
@@ -1492,7 +1525,7 @@ namespace SeaSick.World
                             to = HaulPlace.Station, toStation = i,
                         };
                         found = offered = true;
-                        if (Offer(ref c, ref best, k, at, any, storeAt)) return true;
+                        if (OfferAged(ref c, ref best, ref bestAge, k, at, any, storeAt, age)) return true;
                     }
                     // ...or straight off another station's rack.
                     for (int j = 0; j < stations.Count; j++)
@@ -1508,7 +1541,7 @@ namespace SeaSick.World
                             to = HaulPlace.Station, toStation = i,
                         };
                         found = offered = true;
-                        if (Offer(ref c, ref best, k, at, any, StationAtOr(j, at))) return true;
+                        if (OfferAged(ref c, ref best, ref bestAge, k, at, any, StationAtOr(j, at), age)) return true;
                     }
                 }
             }
@@ -1619,24 +1652,47 @@ namespace SeaSick.World
 
         /// Where `n` of `res` off station `i`'s rack goes: a manned bay
         /// (not `i`'s) whose order takes it and that has room for all `n`;
-        /// else the oldest site short of it, if it takes all `n`; else the
-        /// store, `n` clamped to its room. False = nowhere.
+        /// else a manned bay SHORT of one batch, with as much as it has room
+        /// for (a part load that fills it); else the oldest site short of
+        /// it, if it takes all `n`; else the store, `n` clamped to its room.
+        /// False = nowhere.
+        ///
+        /// **The short bay's part load (2026-10-03, villager review group
+        /// 4, "rack straight to bay"):** a full rack load used to skip any
+        /// bay without room for ALL of it and go to the store, so a bay one
+        /// batch short waited for a second trip out of the store. Now the
+        /// runner tips what that bay can take straight into it and the rest
+        /// stays on the rack (the full-load rule allows a load that "fills
+        /// the destination"). Only for a bay short of a batch (`BayShortFor`):
+        /// a bay that is merely pre-stocking keeps the full-load rule.
         bool RackDest(int i, string res, ref int n, out HaulPlace to, out int toStation, out PendingBuild site)
         {
             to = HaulPlace.Store;
             toStation = -1;
             site = null;
+            int partAt = -1, partSpace = 0;
             if (stations != null)
                 for (int j = 0; j < stations.Count; j++)
                 {
                     var d = stations[j];
                     if (j == i || d == null || !Manned(d) || !SpotsWant(d, res) || RackJam(d) != null) continue;
                     int space = d.InputCap - d.BayCount(res) - InFlightTo(HaulPlace.Station, j, res);
-                    if (space < n) continue;
+                    if (space < n)
+                    {
+                        if (space > partSpace && partAt < 0 && BayShortFor(d, j, res)) { partAt = j; partSpace = space; }
+                        continue;
+                    }
                     to = HaulPlace.Station;
                     toStation = j;
                     return true;
                 }
+            if (partAt >= 0)
+            {
+                n = partSpace;
+                to = HaulPlace.Station;
+                toStation = partAt;
+                return true;
+            }
             if (sites != null && (res == Res.Timber || res == Res.Stone || res == Res.Brick))
                 foreach (var p in sites)
                 {
@@ -1653,6 +1709,24 @@ namespace SeaSick.World
             if (room <= 0) return false;
             n = Mathf.Min(n, room);
             return true;
+        }
+
+        /// **A selected, unlocked spot of station `j` is short of one batch
+        /// of `res`** (bay + loads walking in): rung 1a's urgent test, for
+        /// `RackDest`'s part load.
+        bool BayShortFor(StationStock d, int j, string res)
+        {
+            d.EnsureSpotRows();
+            int have = d.BayCount(res) + InFlightTo(HaulPlace.Station, j, res);
+            foreach (var sp in d.spots)
+            {
+                var r = sp != null && sp.Selected ? sp.Recipe : null;
+                if (r == null || LockOf(d, r) != null) continue;
+                if (r.tool != null && HeldOf(r.tool) <= 0f) continue;
+                foreach (var line in r.takes)
+                    if (line.n > 0 && line.res == res && have < line.n) return true;
+            }
+            return false;
         }
 
         void BeginChore(OutpostHand h, Chore c)

@@ -243,9 +243,10 @@ namespace SeaSick.World
             Vector3 at = HandAt(h);
             Chore c = default;
             float best = float.MaxValue;
+            int bestAge = -1;
             bool found = false;
             for (int i = 0; i < ns; i++)
-                if (BayChore(h, i, true, at, true, ref c, ref best, ref found)) return true;
+                if (BayChore(h, i, true, at, true, ref c, ref best, ref bestAge, ref found)) return true;
             for (int i = 0; i < ns; i++)
                 if (Manned(stations[i]) && RackBlocking(stations[i]) && RackChore(i, out _, h, true)) return true;
             return false;
@@ -263,6 +264,127 @@ namespace SeaSick.World
             BeginChore(h, c);
             return true;
         }
+
+        // --- aging: the longest-waiting request first ---------------------------
+
+        /// **Quanta of waiting that lift a request one step up its rung
+        /// (2026-10-03, Kevin's villager review, group 4: "the longer a
+        /// blueprint or bay waits, the higher it climbs in the runners'
+        /// list, so nothing starves forever").** Within one rung of
+        /// `FindHaulerChore` the chore whose request has waited the most
+        /// whole `AgeStepQuanta` wins; equal steps fall back to the nearest
+        /// pickup, as before. 5 quanta = 0.1 work-day (~18 s of a 180 s
+        /// work day): two bays that went short together still go nearest
+        /// first, but the far sawmill whose bay has stood short while the
+        /// near one was refilled three times now beats it. Coarse on
+        /// purpose: an exact "oldest first" would send a barrow across the
+        /// island for a 0.001-day difference. The rung order itself is
+        /// untouched (an idle bench before a dropped load before a blocking
+        /// rack ... before pre-stocking). Tunable.
+        public const int AgeStepQuanta = 5;
+
+        /// Steps taken by this ledger since it was loaded: the aging clock.
+        /// Not saved (nor are the "since" marks below): a reload starts every
+        /// request at zero wait, which only means one round of nearest-first.
+        [System.NonSerialized] int haulStepNo;
+
+        /// The step a bay row (station, resource) went SHORT of one batch of
+        /// a selected recipe (rung 1a's test, net of loads walking in).
+        [System.NonSerialized] readonly Dictionary<(StationStock, string), int> bayShortSince =
+            new Dictionary<(StationStock, string), int>();
+        /// The step a bay row last had room to pre-stock (rung 3).
+        [System.NonSerialized] readonly Dictionary<(StationStock, string), int> bayRoomSince =
+            new Dictionary<(StationStock, string), int>();
+        /// The step a station's rack last went from empty to holding
+        /// something (rungs 1b and 4).
+        [System.NonSerialized] readonly Dictionary<StationStock, int> rackSince =
+            new Dictionary<StationStock, int>();
+        /// Reused by `AgeHaulRequests` to drop stale marks (allocation-free).
+        [System.NonSerialized] readonly List<(StationStock, string)> staleBays = new List<(StationStock, string)>(8);
+        [System.NonSerialized] readonly List<StationStock> staleRacks = new List<StationStock>(4);
+        /// Marks touched this step, so the stale ones can be dropped.
+        [System.NonSerialized] readonly HashSet<(StationStock, string)> seenShort = new HashSet<(StationStock, string)>();
+        [System.NonSerialized] readonly HashSet<(StationStock, string)> seenRoom = new HashSet<(StationStock, string)>();
+
+        /// **Once a `Step`**: advance the aging clock and mark when every
+        /// manned bay row went short / got room and every rack got goods;
+        /// a request that is met loses its mark, so the next time it starts
+        /// at zero. O(stations x spots x inputs), allocation-free after the
+        /// first steps (the dictionaries keep their buckets).
+        void AgeHaulRequests()
+        {
+            haulStepNo++;
+            seenShort.Clear();
+            seenRoom.Clear();
+            int ns = stations != null ? stations.Count : 0;
+            for (int i = 0; i < ns; i++)
+            {
+                var s = stations[i];
+                if (s == null) continue;
+                if (s.RackTotal > 0) { if (!rackSince.ContainsKey(s)) rackSince[s] = haulStepNo; }
+                else rackSince.Remove(s);
+                if (!Manned(s)) continue;
+                s.EnsureSpotRows();
+                foreach (var sp in s.spots)
+                {
+                    var r = sp != null && sp.Selected ? sp.Recipe : null;
+                    if (r == null) continue;
+                    foreach (var line in r.takes)
+                    {
+                        if (line.n <= 0) continue;
+                        var key = (s, line.res);
+                        int have = s.BayCount(line.res) + InFlightTo(HaulPlace.Station, i, line.res);
+                        if (have < line.n)
+                        {
+                            seenShort.Add(key);
+                            if (!bayShortSince.ContainsKey(key)) bayShortSince[key] = haulStepNo;
+                        }
+                        if (have < s.InputCap)
+                        {
+                            seenRoom.Add(key);
+                            if (!bayRoomSince.ContainsKey(key)) bayRoomSince[key] = haulStepNo;
+                        }
+                    }
+                }
+            }
+            DropStale(bayShortSince, seenShort);
+            DropStale(bayRoomSince, seenRoom);
+            staleRacks.Clear();
+            foreach (var kv in rackSince)
+                if (kv.Key == null || kv.Key.removed || stations == null || !stations.Contains(kv.Key)) staleRacks.Add(kv.Key);
+            foreach (var k in staleRacks) rackSince.Remove(k);
+        }
+
+        void DropStale(Dictionary<(StationStock, string), int> marks, HashSet<(StationStock, string)> seen)
+        {
+            staleBays.Clear();
+            foreach (var kv in marks) if (!seen.Contains(kv.Key)) staleBays.Add(kv.Key);
+            foreach (var k in staleBays) marks.Remove(k);
+        }
+
+        /// Whole `AgeStepQuanta` this bay row has waited (0 = unmarked).
+        int BayAge(StationStock s, string res, bool urgent)
+        {
+            var marks = urgent ? bayShortSince : bayRoomSince;
+            return marks.TryGetValue((s, res), out int since) ? (haulStepNo - since) / AgeStepQuanta : 0;
+        }
+
+        /// Whole `AgeStepQuanta` this station's rack has held goods.
+        int RackAge(StationStock s) =>
+            s != null && rackSince.TryGetValue(s, out int since) ? (haulStepNo - since) / AgeStepQuanta : 0;
+
+        /// **How long a bench has stood waiting on the barrows**, in quanta
+        /// (`benchWait`, ticked by its worker): the Problems list names a
+        /// station past `RunnerSlowQuanta` ("Sawmill · waiting on the
+        /// runners for logs"), whose fix is more runners.
+        public int BenchWaitQuanta(StationStock s) =>
+            s != null && benchWait.TryGetValue(s, out int n) ? n : 0;
+
+        /// Quanta a bench may wait on the runners before the camp's Problems
+        /// list names it (2026-10-03, group 4): 15 = 0.3 work-day, ~54 s of
+        /// a 180 s work day. A barrow on its way is normal; this long means
+        /// the runners cannot keep up. Tunable.
+        public const int RunnerSlowQuanta = 15;
 
         // --- the bench waiting on a runner ---------------------------------------
 
