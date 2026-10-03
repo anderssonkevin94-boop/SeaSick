@@ -458,7 +458,8 @@ namespace SeaSick.Dev
             {
                 // slack / taut / strained through the game's own bands (HarpoonTuning: taut 0.25, strain 0.7).
                 float ten = state == "slack" ? 0.1f : state == "taut" ? 0.5f : 0.9f;
-                realLine.Draw(muzzle.position, lineAttach.position, ten, state == "slack" ? 1.2f : 0f);
+                var g = SeaSick.Ship.Harpoon.HarpoonGun.Player;   // the stem fairlead, exactly as the gun passes it
+                realLine.Draw(muzzle.position, lineAttach.position, ten, state == "slack" ? 1.2f : 0f, g != null ? g.StemTopWorld : (Vector3?)null);
                 var lr = realLine.GetComponent<LineRenderer>();
                 if (lr != null)
                 {
