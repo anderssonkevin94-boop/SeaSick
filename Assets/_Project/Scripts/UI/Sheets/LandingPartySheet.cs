@@ -225,6 +225,8 @@ namespace SeaSick.UI.Sheets
             herds.Clear();
             IslandInventory.Herds(island, herds);
             sb.Append(herds.Count).Append(',');
+            // A survey's deferred walk tests finishing moves the figures.
+            if (party != null) sb.Append(party.SurveyStamp);
             sb.Append('|');
             if (!PartyOut)
             {
@@ -351,7 +353,6 @@ namespace SeaSick.UI.Sheets
             {
                 string r = kinds[i];
                 int reach = InReach(r);
-                found.TryGetValue(r, out int seen);
                 var b = new Button(() => Tap(() => gatherRes = r)) { text = "" };
                 b.AddToClassList("hs-tile");
                 if (r == gatherRes) b.AddToClassList("hs-tile--on");
@@ -366,15 +367,23 @@ namespace SeaSick.UI.Sheets
                 var ico = StationPage.Icon(r, "hs-tile-ico");
                 ico.style.marginRight = 0f;
                 b.Add(ico);
-                var n = StationPage.Text(World.Economy.ResDefs.Label(r), "hs-tile-n");
+                var n = StationPage.Text(GatherParty.Word(r), "hs-tile-n");
                 n.style.fontSize = 12f;
+                n.style.whiteSpace = WhiteSpace.Normal;          // never cut (2026-10-02 rule)
+                n.style.unityTextAlign = TextAnchor.MiddleCenter;
                 b.Add(n);
                 // 2026-10-03 (Kevin: the party reaches the whole island,
                 // far = longer trip): "far" used to mean "past the 80 m
                 // cap"; now a tile the hands cannot walk to at all reads
                 // "cut off", and one whose nearest source is past
                 // `GatherParty.FarMetres` shows its trip time.
-                b.Add(StationPage.Text(reach > 0 ? Mathf.Max(seen, reach).ToString() : "cut off", "hs-tile-s"));
+                // **The figure is what the party can carry off (2026-10-03)**:
+                // the survey's reachable units over the whole island
+                // (`GatherParty.Survey`), the same number "All N" offers and
+                // a Fill-the-hold trip delivers. It was `max(island count,
+                // stood nodes)`, which promised trees and rocks the party
+                // never stood and could not fetch.
+                b.Add(StationPage.Text(reach > 0 ? reach.ToString() : "cut off", "hs-tile-s"));
                 var opt = OptionOf(r);
                 if (reach > 0 && opt.nearestMetres > GatherParty.FarMetres)
                 {
@@ -444,7 +453,7 @@ namespace SeaSick.UI.Sheets
         }
 
         static string Lower(string res) =>
-            string.IsNullOrEmpty(res) ? "that" : World.Economy.ResDefs.Label(res).ToLowerInvariant();
+            string.IsNullOrEmpty(res) ? "that" : GatherParty.Word(res);
 
         // --- hunt --------------------------------------------------------------------
 

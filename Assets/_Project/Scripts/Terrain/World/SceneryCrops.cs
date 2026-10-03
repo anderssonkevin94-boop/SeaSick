@@ -43,6 +43,13 @@ namespace SeaSick.Terrain
             public bool harvested;
             public double regrowAtDay;               // game day this bed stands again if left alone
             public GameObject instance;              // runtime-planted bed, or null
+            /// Picked by a landing party and booked BY NAME in the island's
+            /// ledger (`OutpostLedger.takenBeds`, 2026-10-03). Out of the
+            /// field's units (`TotalUnits`, `StandingUnits`) so the camp's
+            /// count-based Food never includes it, and `Regrow` refuses it:
+            /// only `ReleaseHeld` (the ledger entry's regrow day passing,
+            /// `GroundTaken.Apply`) stands it back up.
+            public bool held;
         }
 
         /// How much of a mat is left standing after it is cut.
@@ -89,12 +96,17 @@ namespace SeaSick.Terrain
         /// Every bed's yield, picked or not: the field's capacity, which is
         /// what the ledger's ceiling should be. `StandingUnits` is what is
         /// there to take right now.
+        ///
+        /// A bed a landing party picked (`Bed.held`) is in neither: the party
+        /// booked its yield out of the ledger's Food (standing and ceiling
+        /// together, `OutpostLedger.BookBedTake`), so leaving it out here is
+        /// what keeps `Outpost.ReconcileCrops`'s ceiling equal to the books.
         public float TotalUnits
         {
             get
             {
                 float u = 0f;
-                for (int i = 0; i < beds.Count; i++) u += YieldOf(i);
+                for (int i = 0; i < beds.Count; i++) if (!beds[i].held) u += YieldOf(i);
                 return u;
             }
         }
@@ -105,9 +117,35 @@ namespace SeaSick.Terrain
             {
                 float u = 0f;
                 for (int i = 0; i < beds.Count; i++)
-                    if (!beds[i].harvested) u += YieldOf(i);
+                    if (!beds[i].harvested && !beds[i].held) u += YieldOf(i);
                 return u;
             }
+        }
+
+        /// Picked by a landing party and still booked by name (see `Bed.held`).
+        public bool IsHeld(int i) => i >= 0 && i < beds.Count && beds[i].held;
+
+        /// **A landing party picked bed `i` (2026-10-03).** Squashed like any
+        /// harvest (a bush goes bare-twig, `BerryPickedScale`) and held: no
+        /// camp regrow stands it up until `ReleaseHeld`. Idempotent.
+        public void HoldPicked(int i)
+        {
+            if (i < 0 || i >= beds.Count) return;
+            Harvest(i);
+            var b = beds[i];
+            b.held = true;
+            beds[i] = b;
+        }
+
+        /// The ledger's regrow day for a party-picked bed passed: it is the
+        /// field's again, and stands back up. Idempotent.
+        public void ReleaseHeld(int i)
+        {
+            if (i < 0 || i >= beds.Count || !beds[i].held) return;
+            var b = beds[i];
+            b.held = false;
+            beds[i] = b;
+            Regrow(i);
         }
 
         /// Wire the welded index. `cells` is the SAME list the wood was
@@ -210,6 +248,10 @@ namespace SeaSick.Terrain
         public void Regrow(int i)
         {
             if (i < 0 || i >= beds.Count || !beds[i].harvested) return;
+            // A party's picked bush is the ledger's by name until its day
+            // comes (`ReleaseHeld`); `Outpost.SyncHarvest` regrowing the back
+            // of its order must not stand it up.
+            if (beds[i].held) return;
             var b = beds[i];
             if (b.instance != null)
             {

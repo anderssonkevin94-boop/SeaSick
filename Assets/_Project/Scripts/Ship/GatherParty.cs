@@ -105,6 +105,21 @@ namespace SeaSick.Ship
     /// later starts from the reduced stock and never sees those sources.
     /// A party hunt takes one animal off the ledger's `Game` stock the same
     /// way, when the island has a ledger.
+    ///
+    /// **Berries, and counts that match (Kevin, 2026-10-03: a massive island
+    /// read 79 timber and 169 stone and no food; "All N" could not deliver
+    /// N).** Wild berry bushes (`Terrain.SceneryCrops`, `BedKind.Berry`) are
+    /// a Food source like a tree or a rock: one Food a bush
+    /// (`IslandInventory.BerryUnitsPerBush`), a party-only node stood on it
+    /// (`ResourceNode.ConfigureBed`), picked in `OtherSecondsPerUnit`, the
+    /// bush stripped bare in the mesh and booked by name with the day it
+    /// regrows (`OutpostLedger.BookBedTake`, twenty days, the camp field's
+    /// own `Res.RegrowPerDay(Food)`). Every source the party can take is ONE
+    /// list (`IslandInventory.Sources`): the tile, "All N" and the nodes
+    /// stood all read it, with one walk answer per source (`srcWalk`). The
+    /// nodes standing are a per-kind budget (`MaxTreeNodes`, `MaxRockNodes`,
+    /// `MaxBedNodes`) topped up nearest-by-walk as they are used
+    /// (`StandMore`), never a cap on what the trip can bring.
     public class GatherParty : MonoBehaviour
     {
         // --- Kevin's playtest dials (GDD, trips) --------------------------
@@ -118,13 +133,29 @@ namespace SeaSick.Ship
         /// a party used to go no further (2026-10-03: now it goes anywhere
         /// it can walk).
         public const float FarMetres = 80f;
-        /// Radius trees are stood up round the landing for a party -- the
-        /// whole island (`SceneryWood.Populate` still stands the 48 nearest).
-        const float WholeIsland = 2000f;
-        /// Most units one hand carries in one trip.
+        /// Most units one hand carries in one trip, for the sheet's trip
+        /// estimate. A source is always carried off whole (`ArmfulAt`): the
+        /// biggest rock or deposit is 8 by default, and a bigger tuned one
+        /// is not broken for less than it is booked at.
         public const int MaxArmful = 8;
-        /// Most loose rocks stood as party sources at once.
+        /// **Most party nodes standing at once, per kind (2026-10-03).** A
+        /// budget for GameObjects, never a cap on the total: as they are used
+        /// up `StandMore` stands the next nearest (by walk) from what is left
+        /// on the island (`IslandInventory.Sources`), so "All N" delivers N.
+        public const int MaxTreeNodes = 48;
         public const int MaxRockNodes = 60;
+        public const int MaxBedNodes = 48;
+        /// Fewer free nodes of the good than the party's hands plus this,
+        /// and `NextSource` stands more.
+        const int RefillSlack = 3;
+        /// Milliseconds of straight-line walk tests (`LineWalkable`, the
+        /// expensive part: a terrain-height sample every 1.5 m) a survey may
+        /// spend at once, and a frame while some are still to do. Sources
+        /// the walk-grid flood reaches cost an array read and are never
+        /// budgeted; only those it misses (off the grid, or no grid) need a
+        /// line.
+        const float SurveyBudgetMs = 8f;
+        const float FrameBudgetMs = 1.5f;
         /// Raiders this close to any hand and the party runs.
         public const float RaidAlarmMetres = 30f;
         /// Sample spacing of the walkable-line test, metres.
@@ -170,7 +201,15 @@ namespace SeaSick.Ship
         Gangway gangway;
 
         readonly List<CrewAgent> hands = new List<CrewAgent>();
-        readonly List<ResourceNode> partyRocks = new List<ResourceNode>();
+        /// Nodes this party stood (trees, loose rocks, berry bushes), by
+        /// `IslandInventory.Source.Key`, and the same set for `Usable`.
+        readonly Dictionary<int, ResourceNode> stood = new Dictionary<int, ResourceNode>();
+        readonly HashSet<ResourceNode> partyOwn = new HashSet<ResourceNode>();
+        /// Everything on the island the party could take, as last read
+        /// (`RefreshSources`).
+        readonly List<IslandInventory.Source> sources = new List<IslandInventory.Source>(256);
+        /// The goods `StandMore` found nothing more of (reset by a survey).
+        readonly HashSet<string> dry = new HashSet<string>();
         Island island;
         Vector3 landing;
         float nextRaidLook;
@@ -352,27 +391,38 @@ namespace SeaSick.Ship
             }
         }
 
-        /// What this island offers a party from `from`: every gatherable raw
-        /// good with at least one reachable source, and how much (on revealed
-        /// ground only until the fog went, 2026-10-03).
+        /// **What this island offers a party from `from`** (2026-10-03: the
+        /// whole island, in the units the tile shows). Every gatherable raw
+        /// good with at least one source a hand can walk to, and how much:
+        /// the sum over `IslandInventory.Sources` -- every tree, loose rock,
+        /// berry bush and kit node still standing, not just the nodes stood
+        /// so far -- of those whose walk from the landing is known good. So
+        /// the tile's figure and "All N" are exactly what the party can carry
+        /// off. Walks are cached per landing; on a survey that runs out of
+        /// its `SurveyBudgetMs` the rest are worked through a frame at a time
+        /// and `SurveyStamp` moves when they are done.
         public static List<Option> Survey(Island isle, Vector3 from, GatherParty party)
         {
             var result = new List<Option>();
             if (isle == null) return result;
-            if (party != null) party.StandSources(isle, from);
             var by = new Dictionary<string, Option>();
-            foreach (var n in ResourceNode.All)
+            if (party != null)
             {
-                if (!Usable(n, isle, party)) continue;
-                float metres;
-                if (party != null) { var w = party.WalkOf(n); if (!w.ok) continue; metres = w.metres; }
-                else if (!InReachRaw(n, from, out metres)) continue;
-                bool first = !by.TryGetValue(n.Resource, out var o);
-                o.resource = n.Resource;
-                o.sources++;
-                o.units += UnitsIn(n);
-                o.nearestMetres = first ? metres : Mathf.Min(o.nearestMetres, metres);
-                by[n.Resource] = o;
+                party.StandSources(isle, from);
+                foreach (var src in party.sources)
+                {
+                    if (!party.SourceWalk(src, out float metres)) continue;
+                    Tally(by, src.resource, src.units, metres);
+                }
+            }
+            else
+            {
+                // No party to cache walks: the live nodes only, straight lines.
+                foreach (var n in ResourceNode.All)
+                {
+                    if (!Usable(n, isle, null) || !InReachRaw(n, from, out float metres)) continue;
+                    Tally(by, n.Resource, IslandInventory.UnitsOf(n), metres);
+                }
             }
             foreach (var r in Order_)
                 if (by.TryGetValue(r, out var o)) result.Add(o);
@@ -380,6 +430,26 @@ namespace SeaSick.Ship
                 if (System.Array.IndexOf(Order_, kv.Key) < 0) result.Add(kv.Value);
             return result;
         }
+
+        static void Tally(Dictionary<string, Option> by, string res, int units, float metres)
+        {
+            bool first = !by.TryGetValue(res, out var o);
+            o.resource = res;
+            o.sources++;
+            o.units += units;
+            o.nearestMetres = first ? metres : Mathf.Min(o.nearestMetres, metres);
+            by[res] = o;
+        }
+
+        /// Moves when a survey's deferred walk tests finish (the sheet
+        /// rebuilds on it, so its figures settle).
+        public int SurveyStamp { get; private set; }
+
+        /// The party's word for a good: "berries" for the Food it forages
+        /// (GDD: "hands told to gather Food forage wild berries"), else the
+        /// good's own label.
+        public static string Word(string res) =>
+            res == Res.Food ? "berries" : World.Economy.ResDefs.Label(res).ToLowerInvariant();
 
         static readonly string[] Order_ = { Res.Stone, Res.Timber, Res.Ore, Res.Spice, Res.Food };
 
@@ -407,7 +477,9 @@ namespace SeaSick.Ship
             if (string.IsNullOrEmpty(res) || !Res.IsGatherable(res)) { why = "pick what to fetch"; return false; }
             if (Room <= 0) { why = "the hold is full"; return false; }
             StandSources(island, landing);
-            if (!HasSource(res)) { why = $"no {res.ToLowerInvariant()} the hands can walk to"; return false; }
+            EvaluateWalks(float.PositiveInfinity);   // the trip needs every answer
+            if (!HasSource(res)) { why = $"no {Word(res)} the hands can walk to"; return false; }
+            StandMore(res);
 
             Resource = res;
             Target = amount <= 0 ? FillHold : amount;
@@ -529,21 +601,12 @@ namespace SeaSick.Ship
             // Shortest WALK from the landing (2026-10-03): every trip starts
             // at the ship, and on the whole island a source close as the
             // crow flies can be a long way round.
-            ResourceNode best = null, bestFits = null;
-            float bestSq = float.MaxValue, fitsSq = float.MaxValue;
-            int room = Room - InHand;
-            foreach (var n in ResourceNode.All)
-            {
-                if (!Usable(n, island, this) || n.Resource != Resource || n.Claim.Held) continue;
-                var w = WalkOf(n);
-                if (!w.ok) continue;
-                float sq = w.metres;
-                if (sq < bestSq) { bestSq = sq; best = n; }
-                // Prefer a source whose whole yield fits what the hold
-                // still takes, so a rock is never broken for half of it.
-                if (UnitsIn(n) <= room && sq < fitsSq) { fitsSq = sq; bestFits = n; }
-            }
-            var pick = bestFits != null ? bestFits : best;
+            // **Re-stand as the pool runs down (2026-10-03).** The nodes
+            // stood are a budget (`MaxTreeNodes` ...), not the island: with
+            // fewer free ones than hands + `RefillSlack`, the next nearest of
+            // what is left are stood. Per trip, never per frame.
+            int free = FreeNodes(out var pick);
+            if (free < hands.Count + RefillSlack && StandMore(Resource) > 0) FreeNodes(out pick);
             if (pick == null)
             {
                 // Nothing left for this hand. The party stops once no one
@@ -552,6 +615,29 @@ namespace SeaSick.Ship
                 return null;
             }
             return pick.TryClaim(who) ? pick : null;
+        }
+
+        /// Free (unclaimed, reachable) nodes of the party's good, and in
+        /// `pick` the one to take: shortest WALK from the landing, preferring
+        /// one whose whole yield fits what the hold still takes, so a rock is
+        /// never broken for half of it.
+        int FreeNodes(out ResourceNode pick)
+        {
+            ResourceNode best = null, bestFits = null;
+            float bestSq = float.MaxValue, fitsSq = float.MaxValue;
+            int room = Room - InHand, free = 0;
+            foreach (var n in ResourceNode.All)
+            {
+                if (!Usable(n, island, this) || n.Resource != Resource || n.Claim.Held) continue;
+                var w = WalkOf(n);
+                if (!w.ok) continue;
+                free++;
+                float sq = w.metres;
+                if (sq < bestSq) { bestSq = sq; best = n; }
+                if (IslandInventory.UnitsOf(n) <= room && sq < fitsSq) { fitsSq = sq; bestFits = n; }
+            }
+            pick = bestFits != null ? bestFits : best;
+            return free;
         }
 
         /// **The next place a hunter walks to**, or false (go
@@ -632,9 +718,11 @@ namespace SeaSick.Ship
         /// hold still takes and `MaxArmful`.
         public int ArmfulAt(ResourceNode n)
         {
-            int units = UnitsIn(n);
+            // The whole source (2026-10-03): it is booked whole, so the
+            // armful is too -- what the tile counted is what comes aboard.
+            int units = IslandInventory.UnitsOf(n);
             int room = Mathf.Max(1, Room - InHand);
-            return Mathf.Clamp(Mathf.Min(units, room), 1, MaxArmful);
+            return Mathf.Max(1, Mathf.Min(units, room));
         }
 
         public float WorkSeconds(string res, int units)
@@ -655,7 +743,20 @@ namespace SeaSick.Ship
             var o = Outpost.Of(island);
             if (o != null && o.Ledger != null && n != null)
             {
-                o.Ledger.BookGroundTake(n, UnitsIn(n));
+                if (n.BedIndex >= 0)
+                {
+                    // A berry bush (2026-10-03): booked by name with the day
+                    // it stands again, its yield out of the Food stock, and
+                    // held stripped out of the field's units until then.
+                    var crops = Terrain.SceneryCrops.On(island);
+                    float yield = crops != null ? crops.YieldOf(n.BedIndex) : 0f;
+                    float regrow = Res.RegrowPerDay(Res.Food);
+                    float day = (float)(TimeOfDay.Seconds / TimeOfDay.WorkDaySeconds)
+                              + (regrow > 0f ? 1f / regrow : 1e9f);
+                    o.Ledger.BookBedTake(n.BedIndex, yield, day);
+                    if (crops != null) crops.HoldPicked(n.BedIndex);
+                }
+                else o.Ledger.BookGroundTake(n, IslandInventory.UnitsOf(n));
                 BookedSources++;
             }
             else Debug.LogWarning($"GatherParty: no ledger on {(island != null ? island.name : "?")} -- this take will not persist");
@@ -740,6 +841,9 @@ namespace SeaSick.Ship
 
         void Update()
         {
+            // A survey's walk tests left over: a little a frame, then the
+            // sheet's figures settle (`SurveyStamp`).
+            if (walksPending) EvaluateWalks(FrameBudgetMs);
             if (!Out) return;
 
             // She left, or the island went away under us: nobody can be
@@ -797,7 +901,7 @@ namespace SeaSick.Ship
             Recalling = false;
             hands.Clear();
             jobs.Clear();
-            ClearRocks();
+            ClearStood();
             Debug.Log($"GatherParty: back aboard ({Mode}) -- {DeliveredUnits} {Resource} in {Trips} trips, "
                 + $"{SourcesTaken} sources taken, {Kills} kills ({LastStop})");
         }
@@ -813,7 +917,7 @@ namespace SeaSick.Ship
             // newly FOUND (resources, herds, finds on ground it opened). The
             // fog and the Explore order are gone, so there is no news line.
             if (Mode == Order.Gather && DeliveredUnits > 0)
-                parts.Add($"{DeliveredUnits} {World.Economy.ResDefs.Label(Resource).ToLowerInvariant()} aboard");
+                parts.Add($"{DeliveredUnits} {Word(Resource)} aboard");
             if (Mode == Order.Hunt)
             {
                 parts.Add(Kills > 0
@@ -921,8 +1025,8 @@ namespace SeaSick.Ship
 
         bool HasSource(string res)
         {
-            foreach (var n in ResourceNode.All)
-                if (Usable(n, island, this) && n.Resource == res && WalkOf(n).ok) return true;
+            foreach (var src in sources)
+                if (src.resource == res && SourceWalk(src, out _)) return true;
             return false;
         }
 
@@ -934,7 +1038,7 @@ namespace SeaSick.Ship
             if (n == null || n.Harvested || !n.isActiveAndEnabled) return false;
             if (!Res.IsGatherable(n.Resource)) return false;
             if (TakenByName(n, isle)) return false;
-            bool ours = n.Home == isle || (party != null && party.partyRocks.Contains(n));
+            bool ours = n.Home == isle || (party != null && party.partyOwn.Contains(n));
             return ours;
         }
 
@@ -945,15 +1049,6 @@ namespace SeaSick.Ship
             return o != null && o.Ledger != null && o.Ledger.Taken(n);
         }
 
-        static int UnitsIn(ResourceNode n)
-        {
-            if (n == null) return 0;
-            if (n.Deposit != null) return Mathf.Max(1, n.Deposit.Units);
-            // One tree is one log (GDD 2026-08-18); a kit prop of ore or
-            // spice is one prop's worth (`GatherSync`).
-            return n.Resource == Res.Timber ? 1 : n.UnitsPerProp;
-        }
-
         /// **How a hand gets from the landing to a source (2026-10-03).**
         /// `ok` false: he cannot. `metres`: the walk one way. `routed`: over
         /// the walk grid's corners (`RouteTo`) rather than a straight line.
@@ -962,33 +1057,119 @@ namespace SeaSick.Ship
         /// Per node, for the party's life at this landing (cleared when the
         /// landing or the island changes, `StandSources`).
         readonly Dictionary<ResourceNode, Walk> reachCache = new Dictionary<ResourceNode, Walk>();
+        /// Per scenery source (`IslandInventory.Source.Key`): the ONE answer
+        /// for a tree, rock or bush whether or not a node stands on it, so
+        /// the survey's count and the nodes' walks can never disagree.
+        readonly Dictionary<int, Walk> srcWalk = new Dictionary<int, Walk>();
+        bool walksPending;
         CampPath walkMap;
         bool floodTried, floodOk;
 
+        /// The island's walk grid flooded from the landing, once per landing.
+        bool Flood()
+        {
+            if (!floodTried)
+            {
+                floodTried = true;
+                var o = Outpost.Of(island);
+                walkMap = o != null && o.Sited ? CampPath.For(o) : null;
+                floodOk = walkMap != null && walkMap.FloodFrom(landing);
+            }
+            return floodOk;
+        }
+
+        /// The scenery source a node stands on, or -1 (a kit node).
+        static int KeyOf(ResourceNode n)
+        {
+            if (n.TreeIndex >= 0) return SrcKey(IslandInventory.Kind.Tree, n.TreeIndex);
+            if (n.BedIndex >= 0) return SrcKey(IslandInventory.Kind.Bed, n.BedIndex);
+            var d = n.Deposit;
+            if (d != null && d.IsScenery) return SrcKey(IslandInventory.Kind.Rock, d.SceneryIndex);
+            return -1;
+        }
+
+        static int SrcKey(IslandInventory.Kind k, int i)
+            => new IslandInventory.Source { kind = k, index = i }.Key;
+
         /// The walk from the landing to `n`, cached. See the class notes:
         /// straight line first, then the flood over the island's walk grid.
+        /// A node on a scenery source agrees with that source's survey
+        /// answer (`srcWalk`): unreachable there is unreachable here.
         public Walk WalkOf(ResourceNode n)
         {
             if (n == null) return default;
             if (reachCache.TryGetValue(n, out var w)) return w;
+            int key = KeyOf(n);
+            Walk table = default;
+            bool known = key >= 0 && srcWalk.TryGetValue(key, out table);
+            if (known && !table.ok) { reachCache[n] = table; return table; }
             w = default;
             if (InReachRaw(n, landing, out float straight)) { w.ok = true; w.metres = straight; }
-            else
+            else if (Flood() && walkMap.FloodReach(n.transform.position, n.StandOff + 0.6f, out float m))
             {
-                if (!floodTried)
-                {
-                    floodTried = true;
-                    var o = Outpost.Of(island);
-                    walkMap = o != null && o.Sited ? CampPath.For(o) : null;
-                    floodOk = walkMap != null && walkMap.FloodFrom(landing);
-                }
-                if (floodOk && walkMap.FloodReach(n.transform.position, n.StandOff + 0.6f, out float m))
+                w.ok = true; w.routed = true; w.metres = m;
+            }
+            if (!w.ok && known) w = table;      // same tests, so only by a hair; the survey's word stands
+            if (key >= 0 && !known) srcWalk[key] = w;
+            reachCache[n] = w;
+            return w;
+        }
+
+        /// Can a hand walk to `src` from the landing, and how far? A kit node
+        /// by its own walk (`WalkOf`); a scenery source by its cached answer,
+        /// false while it is still to be tested (`EvaluateWalks`).
+        bool SourceWalk(in IslandInventory.Source src, out float metres)
+        {
+            metres = 0f;
+            if (src.kind == IslandInventory.Kind.Node)
+            {
+                var w = WalkOf(src.node);
+                metres = w.metres;
+                return w.ok;
+            }
+            if (!srcWalk.TryGetValue(src.Key, out var t) || !t.ok) return false;
+            metres = t.metres;
+            return true;
+        }
+
+        /// **Answer the walk for every scenery source not yet tested.** The
+        /// same two tests as `WalkOf` (a straight walkable line OR the walk
+        /// grid's flood, same stand-off), in the cheap order: the flood
+        /// first, an array read per source and never budgeted (all 1 800 a
+        /// big island's scrub can hold are well under a millisecond), then a
+        /// straight line for those the flood missed, until `budgetMs` is
+        /// spent. Whatever is left waits for the next call (`walksPending`;
+        /// `Update` carries on a little a frame). A flood answer keeps the
+        /// flood's metres; the node stood on it later still walks a straight
+        /// line when it has one (`WalkOf`).
+        void EvaluateWalks(float budgetMs)
+        {
+            if (island == null) { walksPending = false; return; }
+            bool was = walksPending;
+            walksPending = false;
+            long ticks = budgetMs >= float.MaxValue ? long.MaxValue
+                       : (long)(budgetMs * System.Diagnostics.Stopwatch.Frequency / 1000.0);
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            bool flood = Flood();
+            for (int k = 0; k < sources.Count; k++)
+            {
+                var src = sources[k];
+                if (src.kind == IslandInventory.Kind.Node) continue;
+                int key = src.Key;
+                if (srcWalk.ContainsKey(key)) continue;
+                Walk w = default;
+                if (flood && walkMap.FloodReach(src.at, src.standOff + 0.6f, out float m))
                 {
                     w.ok = true; w.routed = true; w.metres = m;
                 }
+                else
+                {
+                    if (System.Diagnostics.Stopwatch.GetTimestamp() - t0 > ticks) { walksPending = true; continue; }
+                    if (InReachRaw(src.at, src.standOff, landing, out float straight)) { w.ok = true; w.metres = straight; }
+                }
+                srcWalk[key] = w;
             }
-            reachCache[n] = w;
-            return w;
+            if (was && !walksPending) SurveyStamp++;
         }
 
         /// The way from the landing to `n` as points to walk in order, the
@@ -1021,10 +1202,12 @@ namespace SeaSick.Ship
         /// A walkable straight line from `from` to where a hand stands to
         /// work `n` (no distance cap since 2026-10-03), and its length.
         static bool InReachRaw(ResourceNode n, Vector3 from, out float metres)
+            => InReachRaw(n.transform.position, n.StandOff, from, out metres);
+
+        static bool InReachRaw(Vector3 p, float standOff, Vector3 from, out float metres)
         {
-            Vector3 p = n.transform.position;
             Vector3 d = p - from; d.y = 0f;
-            float stop = Mathf.Max(1.9f, n.StandOff + 0.6f);
+            float stop = Mathf.Max(1.9f, standOff + 0.6f);
             float len = d.magnitude;
             metres = len;
             if (len <= stop) return true;
@@ -1058,62 +1241,152 @@ namespace SeaSick.Ship
             return true;
         }
 
-        /// Timber: materialise tree nodes round the landing (as the shore
-        /// party does). Stone: when no camp stood nodes on the island's loose
-        /// rocks, stand party-only nodes on the ones a hand can walk to --
-        /// `Home` null, so the camp systems (`GatherSync`, `CampWorker`)
-        /// never see them. Both nearest the landing first and capped (48
-        /// trees, `MaxRockNodes` rocks), but no longer within 80 m: the
-        /// whole island (2026-10-03).
+        /// **Read the island and its walks for a party landing at `from`.**
+        /// The landing moved or the island changed: every walk is stale. Then
+        /// the party's picked bushes that have regrown come back
+        /// (`GroundTaken.ApplyBeds`), the island's sources are read afresh
+        /// (`IslandInventory.Sources`) and their walks answered as far as
+        /// `SurveyBudgetMs` goes. Stands nothing: nodes are stood for the
+        /// good actually sent for (`StandMore`). Until 2026-10-03 this stood
+        /// the 48 nearest trees and 60 nearest rocks and the survey counted
+        /// only those, so "All N" was capped by them.
         void StandSources(Island isle, Vector3 from)
         {
             if (isle == null) return;
-            if (island != isle) { ClearRocks(); ForgetWalks(); }
+            // Own markers, not `island`/`landing`: `Ready` sets those first.
+            if (cacheIsland != isle) { ClearStood(); ForgetWalks(); cacheIsland = isle; }
             island = isle;
-            if ((from - landing).sqrMagnitude > 4f) ForgetWalks();
+            if ((from - cacheLanding).sqrMagnitude > 4f) ForgetWalks();
+            cacheLanding = from;
             landing = from;
-
-            var wood = isle.GetComponentInChildren<Terrain.SceneryWood>();
-            if (wood != null) wood.Populate(from, WholeIsland);
-
-            if (partyRocks.Count > 0) return;
-            var rocks = Terrain.SceneryRocks.On(isle);
-            if (rocks == null || rocks.Materialized) return;   // a camp's nodes stand there
-            var picks = new List<(float d2, int i)>();
-            var h = Island.TerrainHeight;
-            var books = Outpost.Of(isle) != null ? Outpost.Of(isle).Ledger : null;
-            for (int i = 0; i < rocks.Count; i++)
-            {
-                if (rocks.IsHidden(i)) continue;
-                if (books != null && books.RockTaken(i)) continue;
-                var r = rocks.RockAt(i);
-                Vector3 d = r.at - from; d.y = 0f;
-                if (h != null && h(r.at.x, r.at.z) < 0.5f) continue;   // surf and wet sand stay scenery
-                picks.Add((d.sqrMagnitude, i));
-            }
-            picks.Sort((x, y) => x.d2 != y.d2 ? x.d2.CompareTo(y.d2) : x.i.CompareTo(y.i));
-            foreach (var (_, i) in picks)
-            {
-                if (partyRocks.Count >= MaxRockNodes) break;
-                var r = rocks.RockAt(i);
-                var go = new GameObject("PartyRock_" + i);
-                go.transform.SetParent(rocks.transform, false);
-                go.transform.position = r.at;
-                var node = go.AddComponent<ResourceNode>();
-                node.Configure(Res.Stone, null, 4);
-                if (StoneDeposit.DressScenery(node, rocks, i) == null) { Destroy(go); continue; }
-                if (!WalkOf(node).ok) { Destroy(go); continue; }
-                partyRocks.Add(node);
-            }
+            dry.Clear();
+            GroundTaken.ApplyBeds(Outpost.Of(isle));
+            RefreshSources();
+            EvaluateWalks(SurveyBudgetMs);
         }
 
-        /// Take the party's own rock nodes away. A rock already worked stays
-        /// hidden (the deposit hid it and nothing shows it again).
-        void ClearRocks()
+        Island cacheIsland;
+        Vector3 cacheLanding = new Vector3(float.NaN, 0f, 0f);
+
+        void RefreshSources()
         {
-            foreach (var n in partyRocks) if (n != null) Destroy(n.gameObject);
-            partyRocks.Clear();
-            ForgetWalks();
+            sources.Clear();
+            IslandInventory.Sources(island, sources);
+        }
+
+        static readonly List<(float m, int k)> standPicks = new List<(float, int)>();
+
+        /// **Stand more nodes of `res`, nearest by walk first, up to its
+        /// per-kind budget** (`MaxTreeNodes`, `MaxRockNodes`, `MaxBedNodes`),
+        /// from what is left on the island. Returns how many it stood.
+        /// Cost: one read of the island's sources (O(trees + rocks + bushes),
+        /// a terrain-height sample per loose rock) and a sort of the
+        /// reachable ones -- per refill, which comes once per (budget - hands
+        /// - slack) sources taken, never per frame. A good with nothing left
+        /// to stand is `dry` until the next survey.
+        int StandMore(string res)
+        {
+            if (island == null || string.IsNullOrEmpty(res) || dry.Contains(res)) return 0;
+            int cap = res == Res.Timber ? MaxTreeNodes : res == Res.Stone ? MaxRockNodes
+                    : res == Res.Food ? MaxBedNodes : 0;
+            if (cap == 0) { dry.Add(res); return 0; }   // kit nodes stand already
+
+            // Spent ones out of the books: a harvested node is taken (felled,
+            // hidden, booked), so it never comes back as a candidate.
+            pruneKeys.Clear();
+            int have = 0;
+            foreach (var kv in stood)
+            {
+                var n = kv.Value;
+                if (n == null || n.Harvested) { pruneKeys.Add(kv.Key); continue; }
+                if (n.Resource == res) have++;
+            }
+            foreach (int k in pruneKeys) { if (stood.TryGetValue(k, out var n)) partyOwn.Remove(n); stood.Remove(k); }
+            if (have >= cap) return 0;
+
+            RefreshSources();
+            EvaluateWalks(SurveyBudgetMs);
+            standPicks.Clear();
+            for (int k = 0; k < sources.Count; k++)
+            {
+                var src = sources[k];
+                if (src.resource != res || src.kind == IslandInventory.Kind.Node) continue;
+                if (stood.ContainsKey(src.Key)) continue;
+                if (!SourceWalk(src, out float metres)) continue;
+                standPicks.Add((metres, k));
+            }
+            if (standPicks.Count == 0)
+            {
+                if (!walksPending) dry.Add(res);
+                return 0;
+            }
+            standPicks.Sort((a, b) => a.m != b.m ? a.m.CompareTo(b.m) : a.k.CompareTo(b.k));
+
+            var wood = res == Res.Timber ? island.GetComponentInChildren<Terrain.SceneryWood>() : null;
+            var rocks = res == Res.Stone ? Terrain.SceneryRocks.On(island) : null;
+            var crops = res == Res.Food ? Terrain.SceneryCrops.On(island) : null;
+            int made = 0;
+            for (int p = 0; p < standPicks.Count && have < cap; p++)
+            {
+                var src = sources[standPicks[p].k];
+                var node = StandOne(src, wood, rocks, crops);
+                if (node == null) continue;
+                stood[src.Key] = node;
+                partyOwn.Add(node);
+                have++;
+                made++;
+            }
+            return made;
+        }
+
+        static readonly List<int> pruneKeys = new List<int>();
+
+        /// One node on one scenery source: a tree's own (`SceneryWood.Stand`,
+        /// `Home` the island), a party-only rock (a scenery deposit, `Home`
+        /// null so the camp systems -- `GatherSync`, `CampWorker` -- never
+        /// see it), or a party-only berry bush (`ResourceNode.ConfigureBed`).
+        ResourceNode StandOne(in IslandInventory.Source src, Terrain.SceneryWood wood,
+            Terrain.SceneryRocks rocks, Terrain.SceneryCrops crops)
+        {
+            switch (src.kind)
+            {
+                case IslandInventory.Kind.Tree:
+                    return wood != null ? wood.Stand(src.index) : null;
+                case IslandInventory.Kind.Rock:
+                {
+                    if (rocks == null) return null;
+                    var go = new GameObject("PartyRock_" + src.index);
+                    go.transform.SetParent(rocks.transform, false);
+                    go.transform.position = src.at;
+                    var node = go.AddComponent<ResourceNode>();
+                    node.Configure(Res.Stone, null, 4);
+                    if (StoneDeposit.DressScenery(node, rocks, src.index) == null) { Destroy(go); return null; }
+                    return node;
+                }
+                case IslandInventory.Kind.Bed:
+                {
+                    if (crops == null) return null;
+                    var go = new GameObject("PartyBed_" + src.index);
+                    go.transform.SetParent(crops.transform, false);
+                    go.transform.position = src.at;
+                    var node = go.AddComponent<ResourceNode>();
+                    node.ConfigureBed(crops, src.index);
+                    return node;
+                }
+            }
+            return null;
+        }
+
+        /// Take the party's own rock and bush nodes away (a tree's node is
+        /// the wood's, and stays as it always did). A source already worked
+        /// stays hidden or stripped: its deposit, or the ledger, says so.
+        void ClearStood()
+        {
+            foreach (var n in partyOwn)
+                if (n != null && n.TreeIndex < 0) Destroy(n.gameObject);
+            partyOwn.Clear();
+            stood.Clear();
+            dry.Clear();
         }
 
         /// The landing moved or the island changed: every cached walk and
@@ -1121,6 +1394,8 @@ namespace SeaSick.Ship
         void ForgetWalks()
         {
             reachCache.Clear();
+            srcWalk.Clear();
+            walksPending = false;
             floodTried = false;
             floodOk = false;
             walkMap = null;

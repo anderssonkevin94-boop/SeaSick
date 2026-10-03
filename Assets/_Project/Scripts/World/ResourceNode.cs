@@ -139,6 +139,29 @@ namespace SeaSick.World
             treeIndex = index;
         }
 
+        // --- berry bushes in the baked scenery mesh (2026-10-03) ----------
+
+        Terrain.SceneryCrops crops;
+        int bedIndex = -1;
+
+        /// The scenery berry bed this node stands on, or -1.
+        public int BedIndex => crops != null ? bedIndex : -1;
+
+        /// **A landing party's node on a wild berry bush** (`SceneryCrops`,
+        /// `BedKind.Berry`). Like a scenery tree it draws nothing of its own:
+        /// a transform, a claim and a hit count. `Home` stays null (the
+        /// party's own, like its rock nodes), so no camp system sees it.
+        /// Harvesting it strips the bush in the mesh (`SceneryCrops.Harvest`;
+        /// the party's `Cut` holds it for the ledger first).
+        public void ConfigureBed(Terrain.SceneryCrops c, int index)
+        {
+            resource = Res.Food;
+            Home = null;
+            hitsToHarvest = 2;
+            crops = c;
+            bedIndex = index;
+        }
+
         public bool TryClaim(Object owner)
         {
             if (Harvested || Claim.Held) return false;
@@ -193,6 +216,14 @@ namespace SeaSick.World
                 Destroy(gameObject);
                 return;
             }
+            // A picked bush is stripped in the mesh (the party has already
+            // held it for the ledger, `GatherParty.Cut`).
+            if (crops != null && bedIndex >= 0)
+            {
+                crops.Harvest(bedIndex);
+                Destroy(gameObject);
+                return;
+            }
             gameObject.SetActive(false);
         }
 
@@ -208,6 +239,7 @@ namespace SeaSick.World
             Claim = default;
             if (deposit != null) { ShowDeposit(); return; }
             if (wood != null) return;     // the tree is felled in the mesh by `GroundTaken`
+            if (crops != null) return;    // the bush is stripped in the mesh by `GroundTaken`
             if (renderers == null) renderers = GetComponentsInChildren<Renderer>(true);
             foreach (var r in renderers) if (r != null) r.enabled = false;
             if (colliders == null) colliders = GetComponentsInChildren<Collider>(true);
@@ -219,7 +251,7 @@ namespace SeaSick.World
             // A scenery node draws nothing of its own, so there is no shake
             // to animate -- the strike reads on the crew, not on the tree.
             // Nor does a baked scenery rock (`StoneDeposit.IsScenery`).
-            if (wood != null || (deposit != null && deposit.IsScenery)) return;
+            if (wood != null || crops != null || (deposit != null && deposit.IsScenery)) return;
             if (Time.time > shakeUntil)
             {
                 if (shakeStrength > 0f)

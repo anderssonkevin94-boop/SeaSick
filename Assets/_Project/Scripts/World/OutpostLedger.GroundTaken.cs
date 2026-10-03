@@ -32,6 +32,18 @@ namespace SeaSick.World
     /// name, camp takes by count over what is left, and neither can hide
     /// what the other took or show what either took.
     ///
+    /// **Berry bushes (2026-10-03).** `takenBeds` holds the indices into
+    /// the island's crop index (`Terrain.SceneryCrops`) a party picked, and
+    /// `takenBedDay` the game day (`TimeOfDay.Seconds / WorkDaySeconds`) each
+    /// stands again: unlike a tree or a rock a bush regrows, on the same
+    /// clock as the camp's field (`Res.RegrowPerDay(Food)`, twenty days).
+    /// The same one rule: picking one takes its yield (`SceneryCrops.YieldOf`,
+    /// 0.5 for a bush) out of the Food stock's standing AND ceiling
+    /// (`BookBedTake`), and the bed is `held` out of the field's units, so
+    /// `Outpost.ReconcileCrops` and `SyncHarvest` count over what is left;
+    /// the day passing gives both back (`ExpireBeds`, from
+    /// `GroundTaken.Apply`).
+    ///
     /// Saved with the ledger (`SaveGame` keeps a camp-less ledger that has
     /// any). Empty in an old save -- `JsonUtility` leaves a field its JSON
     /// does not mention at its constructed value -- so an old save loads
@@ -42,22 +54,26 @@ namespace SeaSick.World
         public List<int> takenTrees = new List<int>();
         public List<int> takenPropX = new List<int>();
         public List<int> takenPropZ = new List<int>();
+        public List<int> takenBeds = new List<int>();
+        public List<float> takenBedDay = new List<float>();
 
-        [System.NonSerialized] HashSet<int> rockSet, treeSet;
+        [System.NonSerialized] HashSet<int> rockSet, treeSet, bedSet;
         [System.NonSerialized] HashSet<long> propSet;
 
         /// Anything taken by name on this island.
         public bool HasGroundTaken =>
             (takenRocks != null && takenRocks.Count > 0)
             || (takenTrees != null && takenTrees.Count > 0)
-            || (takenPropX != null && takenPropX.Count > 0);
+            || (takenPropX != null && takenPropX.Count > 0)
+            || (takenBeds != null && takenBeds.Count > 0);
 
         /// Entries in the named set, all kinds. Bumps whenever one is added,
         /// so a cached order can tell it is stale.
         public int GroundTakenCount =>
             (takenRocks != null ? takenRocks.Count : 0)
             + (takenTrees != null ? takenTrees.Count : 0)
-            + (takenPropX != null ? takenPropX.Count : 0);
+            + (takenPropX != null ? takenPropX.Count : 0)
+            + (takenBeds != null ? takenBeds.Count : 0);
 
         void EnsureTakenSets()
         {
@@ -65,7 +81,11 @@ namespace SeaSick.World
             if (takenTrees == null) takenTrees = new List<int>();
             if (takenPropX == null) takenPropX = new List<int>();
             if (takenPropZ == null) takenPropZ = new List<int>();
+            if (takenBeds == null) takenBeds = new List<int>();
+            if (takenBedDay == null) takenBedDay = new List<float>();
+            while (takenBedDay.Count < takenBeds.Count) takenBedDay.Add(0f);   // a hand-edited save: due now
             if (rockSet == null || rockSet.Count != takenRocks.Count) rockSet = new HashSet<int>(takenRocks);
+            if (bedSet == null || bedSet.Count != takenBeds.Count) bedSet = new HashSet<int>(takenBeds);
             if (treeSet == null || treeSet.Count != takenTrees.Count) treeSet = new HashSet<int>(takenTrees);
             int props = Mathf.Min(takenPropX.Count, takenPropZ.Count);
             if (propSet == null || propSet.Count != props)
@@ -80,6 +100,7 @@ namespace SeaSick.World
 
         public bool RockTaken(int i) { EnsureTakenSets(); return rockSet.Contains(i); }
         public bool TreeTaken(int i) { EnsureTakenSets(); return treeSet.Contains(i); }
+        public bool BedTaken(int i) { EnsureTakenSets(); return bedSet.Contains(i); }
         public bool PropTaken(Vector3 at) { EnsureTakenSets(); return propSet.Contains(PropKey(Dm(at.x), Dm(at.z))); }
 
         /// Is this source one the named set took? By rock index, tree index,
@@ -90,7 +111,49 @@ namespace SeaSick.World
             var d = n.Deposit;
             if (d != null && d.IsScenery) return RockTaken(d.SceneryIndex);
             if (n.TreeIndex >= 0) return TreeTaken(n.TreeIndex);
+            if (n.BedIndex >= 0) return BedTaken(n.BedIndex);
             return PropTaken(n.SpawnPos);
+        }
+
+        /// **Book one berry bush picked by name** (`takenBeds`), standing
+        /// again on game day `regrowDay`, and take its `yield` out of the
+        /// Food stock's standing and ceiling together (see the class note).
+        /// Idempotent per bed. Returns the units debited.
+        public float BookBedTake(int bed, float yield, float regrowDay)
+        {
+            if (bed < 0) return 0f;
+            EnsureTakenSets();
+            if (bedSet.Contains(bed)) return 0f;
+            takenBeds.Add(bed); takenBedDay.Add(regrowDay); bedSet.Add(bed);
+            var s = Stock(Res.Food);
+            if (s == null || yield <= 0f) return 0f;
+            float take = Mathf.Min(yield, Mathf.Max(0f, s.standing));
+            s.standing -= take;
+            s.standingMax = Mathf.Max(s.standing, s.standingMax - yield);
+            return take;
+        }
+
+        /// The picked bushes whose regrow day has come (`today` in game
+        /// days): out of the named set, into `into`, and their `yieldOf`
+        /// given back to the Food stock's ceiling and standing. Returns how
+        /// many came back.
+        public int ExpireBeds(double today, System.Func<int, float> yieldOf, List<int> into)
+        {
+            if (takenBeds == null || takenBeds.Count == 0) return 0;
+            EnsureTakenSets();
+            var s = Stock(Res.Food);
+            int n = 0;
+            for (int k = takenBeds.Count - 1; k >= 0; k--)
+            {
+                if (today < takenBedDay[k]) continue;
+                int bed = takenBeds[k];
+                takenBeds.RemoveAt(k); takenBedDay.RemoveAt(k); bedSet.Remove(bed);
+                into?.Add(bed);
+                n++;
+                float y = yieldOf != null ? yieldOf(bed) : 0f;
+                if (s != null && y > 0f) { s.standingMax += y; s.standing = Mathf.Min(s.standingMax, s.standing + y); }
+            }
+            return n;
         }
 
         /// **Book one source out of the ground by name** and take its units
@@ -100,7 +163,7 @@ namespace SeaSick.World
         /// source.
         public float BookGroundTake(ResourceNode n, int units)
         {
-            if (n == null) return 0f;
+            if (n == null || n.BedIndex >= 0) return 0f;   // a bush books through `BookBedTake`
             EnsureTakenSets();
             if (Taken(n)) return 0f;
             var d = n.Deposit;

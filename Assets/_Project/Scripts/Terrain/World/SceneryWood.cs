@@ -248,6 +248,25 @@ namespace SeaSick.Terrain
             return made;
         }
 
+        /// **Stand a harvest node on tree `i`** (2026-10-03), or return the
+        /// one already standing there; null for a felled or unknown tree.
+        /// The landing party picks WHICH trees itself (reachable, nearest by
+        /// walk, `Ship.GatherParty`) and keeps its own count of how many it
+        /// has standing, so `Populate`'s nearest-48 can no longer cap what
+        /// "All N" delivers. Same node `Populate` makes.
+        public ResourceNode Stand(int i)
+        {
+            if (trees == null || island == null || i < 0 || i >= trees.Length || trees[i].felled) return null;
+            if (live.TryGetValue(i, out var had) && had != null) return had;
+            var go = trees[i].instance != null ? trees[i].instance : new GameObject("Tree_" + i);
+            go.transform.SetParent(transform, true);
+            go.transform.position = trees[i].baseAt;
+            var node = go.AddComponent<ResourceNode>();
+            node.ConfigureScenery(island, this, i);
+            live[i] = node;
+            return node;
+        }
+
         /// Fell everything standing inside a circle, and say how many came
         /// down.
         ///

@@ -515,13 +515,15 @@ namespace SeaSick.Terrain
             // outcrop below: `Configure`'s amount is the kind's, unchanged.
             int kindAmount = props.Count;
 
-            // **A small ore outcrop on some islands nearer than the ore
-            // ring, 2026-09-30.** Kevin: *"implement the ore into the game,
-            // so one can make iron."* Ore was an island KIND only, unlocked
-            // from 0.55 of the discovery radius (1650 m), so on every island
-            // inside that ring the Gather menu had no ore and the forge's
-            // iron recipe (2 ore a bar) could never run. See `WantsOreOutcrop`.
-            if (kind.name != World.Res.Ore && WantsOreOutcrop(island))
+            // **An ore outcrop on most islands nearer than the ore ring,
+            // 2026-09-30; guaranteed on a large island, 2026-10-03.** Kevin:
+            // *"implement the ore into the game, so one can make iron."* Ore
+            // was an island KIND only, unlocked from 0.55 of the discovery
+            // radius (1650 m), so on every island inside that ring the Gather
+            // menu had no ore and the forge's iron recipe (2 ore a bar) could
+            // never run. Then, finding a massive island with timber and stone
+            // and no iron: a large island always has one. See `WantsOreOutcrop`.
+            if (kind.name != World.Res.Ore && WantsOreOutcrop(island, meanR, out bool guaranteed))
             {
                 // Its own seeded stream (from the island's position), and the
                 // build's stream put back after: an outcrop draws nothing
@@ -530,12 +532,19 @@ namespace SeaSick.Terrain
                 var stream = Random.state;
                 Random.InitState(unchecked((int)(IslandFind.HashCentre(island.transform.position) ^ 0x0eeu)));
                 var ore = BuildProps(root.transform, island, World.Res.Ore, meanR, OreOutcropNodes);
+                // A guaranteed island may not come up empty: widen the search
+                // (same stream, so the answer is still one answer), then
+                // settle for any dry ground at all. The rest fail quietly.
+                for (int level = 1; guaranteed && ore.Count == 0 && level <= 2; level++)
+                    ore = BuildProps(root.transform, island, World.Res.Ore, meanR, OreOutcropNodes, level);
                 Random.state = stream;
                 if (ore.Count > 0)
                 {
                     props.AddRange(ore);
                     island.MarkOreOutcrop();
                 }
+                else if (guaranteed)
+                    Debug.LogWarning($"TerrainWorldPopulator: {island.name} is guaranteed an ore outcrop but no ground took one (meanR {meanR:F0} m)");
             }
 
             island.RegisterProps(props);
@@ -549,21 +558,78 @@ namespace SeaSick.Terrain
         /// an island whose KIND is Ore is still the place to load a hold.
         public const int OreOutcropNodes = 5;
 
+        /// Mean shoreline radius, metres, from which an island is LARGE: it
+        /// always carries an ore outcrop. 100 m is the top of the 60-110 m
+        /// "settlement" band the 2026-09-29 resize aimed at (`GDD` decisions
+        /// log), so it is the point where an island stops being a camp and
+        /// starts being a landmark -- roughly the largest third of the islands
+        /// that get resources at all (shelter-only is < 60 m). Measure the
+        /// real share with `OreReport()`.
+        public const float LargeIslandRadius = 100f;
+
+        public static bool IsLarge(float meanRadius) => meanRadius >= LargeIslandRadius;
+
         /// The first island built (nearest the start point) that is big
         /// enough for a camp: it always has an outcrop, so a new world has
         /// ore in its first hours. Reset at the start of every build.
         bool oreGuaranteeSpent;
 
         /// **Which islands carry an ore outcrop.** No `Random`: the nearest
-        /// camp-sized island always does, and a third of the others do, by
-        /// a hash of the island's centre (the same hash a find's kind is
-        /// rolled from, from another byte) -- so the same world has the same
+        /// resource island always does, every large island
+        /// (`LargeIslandRadius`) does, and one in two of the others do, by a
+        /// hash of the island's centre (the same hash a find's kind is rolled
+        /// from, from another byte) -- so the same world has the same
         /// outcrops on every load, and a save's camps find their ore where it
-        /// was.
-        bool WantsOreOutcrop(Island island)
+        /// was. `guaranteed` (first or large) is the case that must not come
+        /// up empty: the caller widens the search for it.
+        bool WantsOreOutcrop(Island island, float meanR, out bool guaranteed)
         {
-            if (!oreGuaranteeSpent) { oreGuaranteeSpent = true; return true; }
-            return ((IslandFind.HashCentre(island.transform.position) >> 8) % 3u) == 0u;
+            bool first = !oreGuaranteeSpent;
+            oreGuaranteeSpent = true;
+            guaranteed = first || IsLarge(meanR);
+            if (guaranteed) return true;
+            // One in two, and a SUPERSET of the old one in three (`% 3 == 0`):
+            // residues {0, 3} of 6 were the old outcrops, {1} is the new half.
+            // A plain `% 2` would take ore away from a third of the islands a
+            // save already found it on -- a camp could lose its seam on load.
+            uint h = (IslandFind.HashCentre(island.transform.position) >> 8) % 6u;
+            return h == 0u || h == 3u || h == 1u;
+        }
+
+        /// Which islands have an outcrop, for an eval after the world is up:
+        /// `SeaSick.Terrain.TerrainWorldPopulator.OreReport()`. One line an
+        /// island (mean radius, large or not, kind, outcrop, ore rocks
+        /// standing) and the totals. Shelter-only islands (no resources) are
+        /// counted apart, since the rule never reaches them.
+        public static string OreReport()
+        {
+            var sb = new System.Text.StringBuilder();
+            int shelter = 0, eligible = 0, large = 0, largeWith = 0, with = 0, oreKind = 0, small = 0, smallWith = 0;
+            var all = new List<Island>(Island.All);
+            all.Sort((x, y) => y.Radius.CompareTo(x.Radius));
+            foreach (var isle in all)
+            {
+                if (isle == null) continue;
+                bool isShelter = isle.ResourceName == "—";
+                bool isLarge = IsLarge(isle.Radius);
+                int rocks = 0;
+                foreach (var n in ResourceNode.All)
+                    if (n != null && n.Home == isle && n.Resource == World.Res.Ore) rocks++;
+                bool outcrop = isle.HasOreOutcrop;
+                sb.AppendLine($"{isle.name,-12} meanR {isle.Radius,6:F1}  {(isShelter ? "shelter" : isLarge ? "LARGE  " : "       ")}  kind {isle.ResourceName,-7}  outcrop {(outcrop ? "yes" : "no ")}  oreRocks {rocks}");
+                if (isShelter) { shelter++; continue; }
+                if (isle.ResourceName == World.Res.Ore) { oreKind++; continue; }
+                eligible++;
+                if (outcrop) with++;
+                if (isLarge) { large++; if (outcrop) largeWith++; }
+                else { small++; if (outcrop) smallWith++; }
+            }
+            sb.AppendLine($"islands {all.Count}: shelter-only {shelter}, Ore-kind {oreKind}, eligible {eligible} " +
+                          $"(large >= {LargeIslandRadius:F0} m: {large}, with outcrop {largeWith}; others {small}, with outcrop {smallWith}); " +
+                          $"outcrops on {with}/{eligible} eligible" +
+                          (eligible > 0 ? $", large share {100f * large / eligible:F0}%" : "") +
+                          (largeWith < large ? "  ** a LARGE island has NO outcrop **" : ""));
+            return sb.ToString();
         }
 
         /// Re-bake one island's scenery against the CURRENT settings, for the
@@ -705,32 +771,68 @@ namespace SeaSick.Terrain
 
         /// `want` overrides the density count, for the handful of boulders
         /// every island gets on top of its own kind.
+        ///
+        /// `fallback` is for a prop that MUST stand (the guaranteed ore
+        /// outcrop): 0 is the normal scatter; 1 searches wider (out to 95 %
+        /// of the shoreline, from 5 % of the mean radius, three times the
+        /// attempts, slope to 1.4, half a metre above the waterline); 2 walks
+        /// a ring scan over any dry ground, whatever the slope. Both draw from
+        /// the stream the caller seeded, so the answer stays one answer.
         List<GameObject> BuildProps(Transform parent, Island island, string kind, float meanR,
-                                    int want = 0)
+                                    int want = 0, int fallback = 0)
         {
             var list = new List<GameObject>();
             int count = want > 0 ? want
                 : Mathf.Clamp(Mathf.RoundToInt(meanR * world.propsPerRadius), 5, 26);
-            for (int i = 0, attempts = 0; i < count && attempts < count * 12; attempts++)
+            float minAbove = fallback >= 2 ? 0.3f : fallback == 1 ? 0.5f : 1.5f;
+            float maxSlope = fallback == 1 ? 1.4f : 0.8f;
+            float nearFrac = fallback == 1 ? 0.05f : 0.12f, farFrac = fallback == 1 ? 0.95f : 0.82f;
+            int maxAttempts = count * (fallback == 1 ? 36 : 12);
+
+            // Level 2: a deterministic ring scan, nearest-the-middle first,
+            // no slope test. Any dry ground will do.
+            if (fallback >= 2)
+            {
+                float offset = Random.Range(0f, Mathf.PI * 2f);
+                for (int ring = 0; ring < 9 && list.Count < count; ring++)
+                    for (int k = 0; k < 24 && list.Count < count; k++)
+                    {
+                        float ang = offset + k * (Mathf.PI * 2f / 24f) + ring * 0.3f;
+                        float dist = island.RadiusAt(ang) * (0.15f + 0.1f * ring);
+                        Vector3 p = island.SurfacePoint(ang, dist);
+                        if (p.y < terrain.seaLevel + minAbove) continue;
+                        list.Add(MakeProp(parent, island, kind, p, list.Count));
+                    }
+                return list;
+            }
+
+            for (int i = 0, attempts = 0; i < count && attempts < maxAttempts; attempts++)
             {
                 float ang = Random.Range(0f, Mathf.PI * 2f);
-                float dist = Random.Range(meanR * 0.12f, island.RadiusAt(ang) * 0.82f);
+                float dist = Random.Range(meanR * nearFrac, island.RadiusAt(ang) * farFrac);
                 Vector3 p = island.SurfacePoint(ang, dist);
-                if (p.y < terrain.seaLevel + 1.5f) continue;
+                if (p.y < terrain.seaLevel + minAbove) continue;
                 float slope = Mathf.Abs(Height(p.x + 2f, p.z) - Height(p.x - 2f, p.z)) / 4f;
-                if (slope > 0.8f) continue;
-                var prop = IslandPropFactory.Make(kind);
-                prop.transform.SetParent(parent, true);
-                prop.transform.position = p;
-                prop.transform.rotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
-                prop.transform.localScale *= Random.Range(0.85f, 1.3f);
-                IslandNatureProfile.For(island.transform.position)?.DressResource(prop,kind,i);
-                var node = prop.AddComponent<ResourceNode>();
-                node.Configure(kind, island, kind == "Stone" || kind == "Ore" ? 4 : 3);
-                list.Add(prop);
+                if (slope > maxSlope) continue;
+                list.Add(MakeProp(parent, island, kind, p, i));
                 i++;
             }
             return list;
+        }
+
+        /// One resource prop standing at `p`: the factory's mesh, a random
+        /// turn and size, the island's nature dressing, and its node.
+        GameObject MakeProp(Transform parent, Island island, string kind, Vector3 p, int index)
+        {
+            var prop = IslandPropFactory.Make(kind);
+            prop.transform.SetParent(parent, true);
+            prop.transform.position = p;
+            prop.transform.rotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
+            prop.transform.localScale *= Random.Range(0.85f, 1.3f);
+            IslandNatureProfile.For(island.transform.position)?.DressResource(prop, kind, index);
+            var node = prop.AddComponent<ResourceNode>();
+            node.Configure(kind, island, kind == "Stone" || kind == "Ore" ? 4 : 3);
+            return prop;
         }
 
         void BuildMonsters(Vector3 home)

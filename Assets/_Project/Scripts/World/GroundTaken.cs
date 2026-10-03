@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace SeaSick.World
@@ -30,6 +31,8 @@ namespace SeaSick.World
             var isle = o.Island;
             if (isle == null) return;
 
+            ApplyBeds(o);
+
             var rocks = Terrain.SceneryRocks.On(isle);
             if (rocks != null && l.takenRocks != null)
                 foreach (int i in l.takenRocks)
@@ -47,6 +50,39 @@ namespace SeaSick.World
                 if (n == null || n.Harvested) continue;
                 if (n.Home != isle && !UnderIsland(n, isle)) continue;
                 if (l.Taken(n)) n.MarkTaken();
+            }
+        }
+
+        static readonly List<int> regrown = new List<int>();
+
+        /// **The party's picked berry bushes (2026-10-03).** Those whose
+        /// regrow day has come leave the named set and stand again (their
+        /// yield back in the Food stock, `OutpostLedger.ExpireBeds`); the
+        /// rest are drawn stripped and held out of the field's units
+        /// (`SceneryCrops.HoldPicked`), which a fresh bake after a load
+        /// needs. Idempotent; a few lookups when nothing changed. Also called
+        /// by `Ship.GatherParty` on its survey, since a camp-less island's
+        /// `CatchUp` may not have run since the load.
+        public static void ApplyBeds(Outpost o)
+        {
+            if (o == null || o.Ledger == null || o.Island == null) return;
+            var l = o.Ledger;
+            if (l.takenBeds == null || l.takenBeds.Count == 0) return;
+            var crops = Terrain.SceneryCrops.On(o.Island);
+            if (crops == null) return;
+            regrown.Clear();
+            double today = TimeOfDay.Seconds / TimeOfDay.WorkDaySeconds;
+            bool due = false;
+            for (int k = 0; l.takenBedDay != null && k < l.takenBedDay.Count && !due; k++) due = today >= l.takenBedDay[k];
+            if (due)
+            {
+                l.ExpireBeds(today, crops.YieldOf, regrown);
+                for (int k = 0; k < regrown.Count; k++) crops.ReleaseHeld(regrown[k]);
+            }
+            for (int k = 0; k < l.takenBeds.Count; k++)
+            {
+                int i = l.takenBeds[k];
+                if (i >= 0 && i < crops.BedCount && !crops.IsHeld(i)) crops.HoldPicked(i);
             }
         }
 
