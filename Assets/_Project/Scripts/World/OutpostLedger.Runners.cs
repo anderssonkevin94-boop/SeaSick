@@ -91,11 +91,15 @@ namespace SeaSick.World
             return n;
         }
 
-        /// **Hands truly idle**: up and not busy (downed, pouting,
+        /// **Hands with "No job"**: up and not busy (downed, pouting,
         /// rescuing, the raid), not runners, carrying nothing, with no job
-        /// -- no order, the player's own Idle (his reserve counts: they are
-        /// idle too), a builder with no plot to work, a gatherer told
-        /// nothing.
+        /// -- no order, or a gatherer told nothing. **Not the player's
+        /// reserve, not a builder waiting (2026-10-03, villager review group
+        /// 3):** the reserve is the player's own choice (the chip nagged him
+        /// to undo it), and a builder with no plot is held up for a material
+        /// -- "Builder — waiting for stone", whose fix is the material
+        /// ("Builders short of stone"), not a new job. Same set as the
+        /// status word `NoJobWord`.
         public int IdleCount()
         {
             int n = 0;
@@ -129,8 +133,7 @@ namespace SeaSick.World
             if (h == null || h.Busy || h.downed || IsRunner(h) || h.Hauling) return false;
             switch (h.order)
             {
-                case OutpostOrder.Idle: return true;
-                case OutpostOrder.Build: return BuildSiteFor(h) == null;
+                case OutpostOrder.Idle: return !Reserve(h);
                 case OutpostOrder.Gather: return string.IsNullOrEmpty(h.target);
                 default: return false;
             }

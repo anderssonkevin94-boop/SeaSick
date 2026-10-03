@@ -11,8 +11,9 @@ namespace SeaSick.World
     ///
     /// For the UI:
     /// - `StatusWord(h)`   -- one or two words: "Building", "Hauling",
-    ///   "Gathering", "Hunting", "Working", "Reserve", "Idle" (was "No
-    ///   work" until 2026-10-02), "Stuck", "Sleeping", "Supper", "Evening",
+    ///   "Gathering", "Hunting", "Working", "Reserve", "No job",
+    ///   "Builder — waiting for stone" (prefix `BuilderWaitPrefix`), "Stuck",
+    ///   "Sleeping", "Supper", "Evening",
     ///   "Downed", "Fighting", "Hiding", "Rescuing", "Pouting"; and since the
     ///   runners (2026-10-02, OutpostLedger.Runners.cs) "Runner, waiting",
     ///   "Running 6 boards to Sawmill" (prefix "Running ") and, for a
@@ -22,7 +23,18 @@ namespace SeaSick.World
     ///   of timber", "! No stone" ...), "" when there is nothing to add.
     /// - `Tally()`         -- `CampTally`: how many hands fall in each of
     ///   building / hauling / working / gathering / reserve / noWork /
-    ///   stuck / downed / runners. Sleep and evening count by the job underneath.
+    ///   builderWaiting / stuck / downed / runners. Sleep and evening count
+    ///   by the job underneath.
+    ///
+    /// **"Idle" is gone as a word (2026-10-03, villager review group 3).**
+    /// It meant three different things -- the player's reserve, a hand
+    /// with nothing to do, and a builder held up for a material -- so the
+    /// player could not tell a choice from a problem. Now: "Reserve" (the
+    /// player stood him down, `Reserve`), "No job" (no order, or a gather
+    /// order with nothing picked, and the idle ladder has nothing for him)
+    /// and "Builder — waiting for stone" (a builder with no plot to work
+    /// while a site still lacks a material, `BuilderWaitRes`). Only "No
+    /// job" counts as idle (`IdleCount`, the idle chip, the alert).
     /// - `UnmannedStations()` / `StationUnmanned(s)` -- stations with an
     ///   order standing (or queued) and no Work hand on them.
     /// - `FreeHandFor(planId)` -- the best hand with no job to put there
@@ -134,12 +146,13 @@ namespace SeaSick.World
             // **Runners (2026-10-02)**: "Running 6 boards to Sawmill", or
             // waiting at the store -- never idle.
             if (IsRunner(h)) return h.Hauling && !h.eating ? RunWords(h) : "Runner, waiting";
-            // "No work" became "Idle" (2026-10-02, the runners' UI): a hand
-            // with nothing to do rests at the fire.
+            // "No work" became "Idle" (2026-10-02, the runners' UI) and
+            // "Idle" became "No job" / "Builder — waiting for X" (2026-10-03,
+            // see the class doc): a hand with nothing to do rests at the fire.
             switch (h.order)
             {
                 case OutpostOrder.Gather:
-                    if (string.IsNullOrEmpty(h.target)) return "Idle";
+                    if (string.IsNullOrEmpty(h.target)) return NoJobWord;
                     return h.target == Res.Game ? "Hunting" : "Gathering";
                 case OutpostOrder.Work:
                     // **No recipe chosen (2026-10-02 play check):** Edda
@@ -151,10 +164,72 @@ namespace SeaSick.World
                     return WaitingForRunner(h) ? "Waiting for a runner" : "Working";
                 case OutpostOrder.Build:
                     if (BuildSiteFor(h) != null) return "Building";
-                    return h.Hauling ? "Hauling" : "Idle";
+                    if (h.Hauling) return "Hauling";
+                    return BuilderWaitPrefix + BuilderWaitWhat(h);
                 default:
-                    return h.Hauling ? "Hauling" : "Idle";
+                    return h.Hauling ? "Hauling" : NoJobWord;
             }
+        }
+
+        /// **What the word reads while he sleeps or sups**: the tally's view
+        /// (`Word` with `routine` false), for a readout that sorts hands by
+        /// their job rather than by the hour (`CampReadouts.KindOf`).
+        public string JobWord(OutpostHand h) => Word(h, false);
+
+        /// "No job": no order (not the player's reserve), or a gather order
+        /// with nothing picked -- and nothing in his arms (2026-10-03).
+        public const string NoJobWord = "No job";
+
+        /// "Builder — waiting for stone" (2026-10-03): `Word`'s prefix for a
+        /// builder with no plot to work and nothing in his arms.
+        public const string BuilderWaitPrefix = "Builder — waiting for ";
+
+        public static bool IsBuilderWait(string word) =>
+            word != null && word.StartsWith(BuilderWaitPrefix, System.StringComparison.Ordinal);
+
+        /// **The material a builder with no plot is held up for** (2026-10-03),
+        /// or null: the first of timber / stone / brick still owed to a site,
+        /// his own last plot first, then the queue oldest first -- whether
+        /// nobody can supply it (`SiteShortfall`) or it is in somebody
+        /// else's arms on the way. Null while every unfinished site has all
+        /// its materials in (he waits for a plot with room in its crew).
+        public string BuilderWaitRes(OutpostHand h)
+        {
+            if (h == null || h.order != OutpostOrder.Build || sites == null) return null;
+            lastSite.TryGetValue(h, out var mine);
+            for (int si = -1; si < sites.Count; si++)
+            {
+                var s = si < 0 ? mine : sites[si];
+                if (si >= 0 && s == mine) continue;
+                if (s == null || s.Complete || s.Stocked || !sites.Contains(s)) continue;
+                for (int k = 0; k < 3; k++)
+                {
+                    string res = k == 0 ? Res.Timber : k == 1 ? Res.Stone : Res.Brick;
+                    if (RemainingOf(s, res) > 0) return res;
+                }
+            }
+            return null;
+        }
+
+        /// "stone", "timber", "brick" -- or "a plot" while every site has its
+        /// materials and its full crew (`EconomyTuning.CrewCap`).
+        string BuilderWaitWhat(OutpostHand h)
+        {
+            string res = BuilderWaitRes(h);
+            return res != null ? Friendly(res) : "a plot";
+        }
+
+        /// **Why a waiting builder waits**, for his reason line: nothing can
+        /// supply the material (`SiteShortfall`'s sentence), or it is on its
+        /// way in somebody's arms, or every plot has its crew.
+        string BuilderWaitReason(OutpostHand h)
+        {
+            string res = BuilderWaitRes(h);
+            if (res == null) return "every site has its materials and its full crew";
+            string none = SiteShortfall();
+            if (!string.IsNullOrEmpty(none)) return none;
+            if (InFlightTo(HaulPlace.Site, -1, res) > 0) return $"{Friendly(res)} on its way to the site";
+            return $"waiting for {Friendly(res)} to reach the site";
         }
 
         /// **The longer why**, "" when the word says it all: the body's
@@ -207,6 +282,8 @@ namespace SeaSick.World
             }
             string why = StallReason(h);
             if (!string.IsNullOrEmpty(why)) return why;
+            if (h.order == OutpostOrder.Build && !h.Hauling && !h.TopUpTrip && BuildSiteFor(h) == null)
+                return BuilderWaitReason(h);
             if (h.order == OutpostOrder.Build)
             {
                 var site = BuildSiteFor(h);
@@ -249,6 +326,8 @@ namespace SeaSick.World
         public struct CampTally
         {
             public int building, hauling, working, gathering, reserve, noWork, stuck, downed;
+            /// Builders with no plot, held up for a material (2026-10-03).
+            public int builderWaiting;
             /// Runners, running or waiting at the store (2026-10-02).
             public int runners;
         }
@@ -272,7 +351,7 @@ namespace SeaSick.World
                     case "Gathering":
                     case "Hunting": t.gathering++; break;
                     case "Reserve": t.reserve++; break;
-                    case "Idle":
+                    case NoJobWord:
                     // A bench with no recipe chosen makes nothing (2026-10-02).
                     case "Idle at the bench": t.noWork++; break;
                     case "Stuck": t.stuck++; break;
@@ -280,6 +359,7 @@ namespace SeaSick.World
                     case "Runner, waiting": t.runners++; break;
                     default:
                         if (w.StartsWith("Running ", System.StringComparison.Ordinal)) t.runners++;
+                        else if (IsBuilderWait(w)) t.builderWaiting++;
                         break;
                 }
             }

@@ -88,7 +88,7 @@ namespace SeaSick.UI.Sheets
 
         public VisualElement BuildActions()
         {
-            assignBtn = SheetKit.Btn("Assign idle", AssignIdle, primary: true);
+            assignBtn = SheetKit.Btn("Assign free hands", AssignIdle, primary: true);
             assignBtn.style.height = 48f;
             assignRow = SheetKit.Actions(assignBtn);
             assignRow.style.display = DisplayStyle.None;
@@ -126,7 +126,9 @@ namespace SeaSick.UI.Sheets
             if (n != assignShown)
             {
                 assignShown = n;
-                assignBtn.text = n > 0 ? $"Assign {n} idle" : "Assign idle";
+                // "free", not "idle" (2026-10-03): the hands it moves are
+                // those with no job AND builders with no plot (`IsFree`).
+                assignBtn.text = n == 1 ? "Assign 1 free hand" : n > 0 ? $"Assign {n} free hands" : "Assign free hands";
             }
             var d = n > 0 ? DisplayStyle.Flex : DisplayStyle.None;
             assignRow.style.display = d;
@@ -315,7 +317,7 @@ namespace SeaSick.UI.Sheets
                 return string.IsNullOrEmpty(h.downedCause) ? "down" : "down · " + h.downedCause;
             }
             if (OutpostLedger.Reserve(h)) { warn = true; stuck = true; return "held in reserve"; }
-            if (h.order == OutpostOrder.Idle) { warn = true; stuck = true; return "waiting for orders"; }
+            if (h.order == OutpostOrder.Idle) { warn = true; stuck = true; return "no job"; }
             if (!h.walkingIn)
             {
                 if (h.order == OutpostOrder.Gather && h.target == Res.Game && l.HunterBlocker() != null)
@@ -328,6 +330,10 @@ namespace SeaSick.UI.Sheets
                     string why = l.StallReason(h);
                     if (!string.IsNullOrEmpty(why)) { stuck = true; return CampAlerts.Short(why); }
                 }
+                // **A builder held up for a material (2026-10-03)**: "waiting
+                // for stone" -- amber, his job is fine; the material is the fix.
+                string word = l.JobWord(h);
+                if (OutpostLedger.IsBuilderWait(word)) { warn = true; return "waiting for " + word.Substring(OutpostLedger.BuilderWaitPrefix.Length); }
             }
             // Busy with something that is not his job (pouting, rescuing, a
             // raid): worth a word, not a problem.
@@ -359,7 +365,8 @@ namespace SeaSick.UI.Sheets
                 infos.Add(new Info { h = h, kind = kind, status = status, warn = warn, stuck = stuck });
                 if (stuck) stuckN++;
                 if (h.MoodWord.Length > 0) unhappyN++;
-                if (kind == CampReadouts.HandKind.Unassigned) idle++;
+                // "No job" only (2026-10-03): the player's reserve is his choice.
+                if (kind == CampReadouts.HandKind.Unassigned && !OutpostLedger.Reserve(h)) idle++;
             }
 
             int total = CampReadouts.Total(l);
@@ -368,7 +375,7 @@ namespace SeaSick.UI.Sheets
             ReadoutUi.SetText(small, total == 0 ? "nobody lives here yet"
                 : working == total ? "working · everyone is at work" : "working");
             if (subtitle != null)
-                ReadoutUi.SetText(subtitle, $"{n} / {beds} beds · {warm} warm" + (idle > 0 ? $" · {idle} idle" : ""));
+                ReadoutUi.SetText(subtitle, $"{n} / {beds} beds · {warm} warm" + (idle > 0 ? $" · {idle} with no job" : ""));
 
             FillCampOrders(l);
             SetChip(0, $"All {n}");

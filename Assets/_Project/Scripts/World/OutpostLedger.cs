@@ -558,7 +558,9 @@ namespace SeaSick.World
                     case OutpostOrder.Work:
                         string post = BuildPlans.PositionAt(target);
                         return string.IsNullOrEmpty(post) ? "working" : post;
-                    default: return "idle";
+                    // "Idle" meant two things (2026-10-03): the player's
+                    // reserve, or nothing to do.
+                    default: return playerIdle ? "in reserve" : "no job";
                 }
             }
         }

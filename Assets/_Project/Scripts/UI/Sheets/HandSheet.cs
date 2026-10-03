@@ -233,7 +233,8 @@ namespace SeaSick.UI.Sheets
                     return site == null ? "Builder · nothing sited" : "Builder · " + SiteName(site);
                 }
                 default:
-                    return "No job · by the fire";
+                    // The player's reserve is not "no job" (2026-10-03).
+                    return OutpostLedger.Reserve(h) ? "Reserve · by the fire" : "No job · by the fire";
             }
         }
 
@@ -244,12 +245,17 @@ namespace SeaSick.UI.Sheets
         /// (`OutpostLedger.EnlistFree` puts every free hand on the sites).
         static (string, int) Pill(OutpostLedger l, OutpostHand h)
         {
-            if (h.order == OutpostOrder.Idle) return ("waiting", StationPage.PillWait);
+            // "reserve" / "no job" (2026-10-03, was "waiting" for both).
+            if (h.order == OutpostOrder.Idle)
+                return (OutpostLedger.Reserve(h) ? "reserve" : "no job", StationPage.PillWait);
             if (h.walkingIn) return ("walking up", StationPage.PillWait);
             if (StuckReason(l, h) != null) return ("stuck", StationPage.PillBad);
             if (l.RunnerWaiting(h)) return ("on call", StationPage.PillGood);
             string why = l.StallReason(h);
             if (why != null) return ("slow", StationPage.PillWait);
+            // A builder with no plot, held up for a material (2026-10-03).
+            if (h.order == OutpostOrder.Build && !h.Hauling && !h.TopUpTrip && l.BuildSiteFor(h) == null)
+                return ("waiting", StationPage.PillWait);
             if (h.order == OutpostOrder.Build) return ("helping build", StationPage.PillGood);
             return ("working", StationPage.PillGood);
         }
@@ -544,7 +550,11 @@ namespace SeaSick.UI.Sheets
                 case OutpostOrder.Build:
                 {
                     var site = l.BuildSiteFor(h) ?? l.Focus;
-                    return site == null ? "Nothing sited to build" : "Building the " + SiteName(site).ToLowerInvariant();
+                    if (site == null) return "Nothing sited to build";
+                    // "Builder — waiting for stone" (2026-10-03).
+                    string w = l.JobWord(h);
+                    if (OutpostLedger.IsBuilderWait(w)) return w;
+                    return "Building the " + SiteName(site).ToLowerInvariant();
                 }
                 case OutpostOrder.Idle:
                     return "Standing by the fire";

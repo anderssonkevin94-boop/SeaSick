@@ -400,10 +400,14 @@ namespace SeaSick.UI.Sheets
         }
 
         /// The first hand with nothing to do, or null. What "post a lookout"
-        /// and "add a hand" both reach for.
+        /// and "add a hand" both reach for. **"No job" before the player's
+        /// reserve (2026-10-03)**: a hand he stood down is only taken when
+        /// nobody else is free -- it is still the player's own tap.
         public static OutpostHand FirstIdle(OutpostLedger l)
         {
             if (l == null) return null;
+            foreach (var h in l.hands)
+                if (h != null && h.order == OutpostOrder.Idle && !OutpostLedger.Reserve(h)) return h;
             foreach (var h in l.hands)
                 if (h != null && h.order == OutpostOrder.Idle) return h;
             return null;

@@ -395,13 +395,14 @@ namespace SeaSick.UI.Sheets
             Show(t.pill, on);
         }
 
-        /// The job in a word or two: "idle", "timber", "hunting", "sawyer",
+        /// The job in a word or two: "no job", "reserve", "timber", "hunting", "sawyer",
         /// "building".
         public static string JobWord(OutpostHand h)
         {
             switch (h.order)
             {
-                case OutpostOrder.Idle: return "idle";
+                // The player's reserve is not "no job" (2026-10-03).
+                case OutpostOrder.Idle: return OutpostLedger.Reserve(h) ? "reserve" : "no job";
                 case OutpostOrder.Build: return "building";
                 case OutpostOrder.Gather:
                     if (h.target == Res.Game) return "hunting";

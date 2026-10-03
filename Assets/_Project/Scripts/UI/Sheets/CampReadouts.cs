@@ -120,7 +120,7 @@ namespace SeaSick.UI.Sheets
             why = "";
             if (l == null || h == null) return HandKind.Busy;
             string w = l.StatusWord(h);
-            if (w == "Sleeping" || w == "Evening" || w == "Supper") w = UnderWord(l, h);
+            if (w == "Sleeping" || w == "Evening" || w == "Supper") w = l.JobWord(h);
             switch (w)
             {
                 case "Downed":
@@ -133,11 +133,11 @@ namespace SeaSick.UI.Sheets
                 case "Reserve":
                     why = "held in reserve";
                     return HandKind.Unassigned;
-                case "Idle":
-                case "No work":
-                    why = h.order == OutpostOrder.Build ? "builder · nothing to build"
-                        : h.order == OutpostOrder.Gather ? "gatherer · nothing picked"
-                        : "no job";
+                // **"No job" (2026-10-03, was "Idle")**: nothing to do and
+                // nothing the idle ladder can give him. The player's reserve
+                // and a waiting builder have words of their own.
+                case OutpostLedger.NoJobWord:
+                    why = h.order == OutpostOrder.Gather ? "gatherer · nothing picked" : "no job";
                     return HandKind.Unassigned;
                 case "Building":
                 case "Hauling":
@@ -154,8 +154,8 @@ namespace SeaSick.UI.Sheets
                 // **Runners (2026-10-02).** A runner's words ("Runner,
                 // waiting", "Running 6 boards to Sawmill") are working --
                 // waiting on call is his job; "Waiting for a runner" is a
-                // station worker held up for want of one, and "Idle" is the
-                // ledger's word for a hand with no job.
+                // station worker held up for want of one, and "No job" is the
+                // ledger's word for a hand with nothing to do.
                 case "Waiting for a runner":
                     why = JobOf(l, h) + " · waiting for a runner";
                     return HandKind.HeldUp;
@@ -165,6 +165,15 @@ namespace SeaSick.UI.Sheets
                     why = JobOf(l, h) + " · " + l.StatusReason(h);
                     return HandKind.HeldUp;
                 default:
+                    // "Builder — waiting for stone" (2026-10-03): on his job,
+                    // held up for a material -- the reason names the fix.
+                    if (OutpostLedger.IsBuilderWait(w))
+                    {
+                        why = w.ToLowerInvariant();
+                        string because = l.StatusReason(h);
+                        if (!string.IsNullOrEmpty(because)) why += " · " + because;
+                        return HandKind.HeldUp;
+                    }
                     if (OutpostLedger.IsRunner(h) && (w.StartsWith("Runner") || w.StartsWith("Running")))
                     {
                         why = JobOf(l, h);
@@ -174,27 +183,6 @@ namespace SeaSick.UI.Sheets
                     // something that is not his job, and not the tally's.
                     why = h.Doing;
                     return HandKind.Busy;
-            }
-        }
-
-        /// `OutpostLedger.Word`'s tail (after the raid/downed/stuck states,
-        /// which `StatusWord` already answered before any "Sleeping").
-        static string UnderWord(OutpostLedger l, OutpostHand h)
-        {
-            if (OutpostLedger.Reserve(h)) return h.Hauling ? "Hauling" : "Reserve";
-            if (h.TopUpTrip) return "Gathering";
-            switch (h.order)
-            {
-                case OutpostOrder.Gather:
-                    if (string.IsNullOrEmpty(h.target)) return "Idle";
-                    return h.target == Res.Game ? "Hunting" : "Gathering";
-                case OutpostOrder.Work:
-                    return l.BenchUnordered(h) ? "Idle at the bench" : "Working";
-                case OutpostOrder.Build:
-                    if (l.BuildSiteFor(h) != null) return "Building";
-                    return h.Hauling ? "Hauling" : "Idle";
-                default:
-                    return h.Hauling ? "Hauling" : "Idle";
             }
         }
 
@@ -225,7 +213,8 @@ namespace SeaSick.UI.Sheets
                     if (h.target == Res.Game) return "hunting";
                     return string.IsNullOrEmpty(h.target) ? "gathering" : "gathering " + h.target.ToLowerInvariant();
                 default:
-                    return h.Hauling ? "hauling" : "no job";
+                    if (h.Hauling) return "hauling";
+                    return OutpostLedger.Reserve(h) ? "in reserve" : "no job";
             }
         }
 

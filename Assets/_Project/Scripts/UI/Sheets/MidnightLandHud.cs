@@ -86,7 +86,7 @@ namespace SeaSick.UI.Sheets
             idleChip = new Button(NextIdle);
             idleChip.AddToClassList("land-resource");
             idleChip.AddToClassList("land-resource--tap");
-            idleChip.tooltip = "Hands with nothing to do: tap to go to the next one";
+            idleChip.tooltip = "Hands with no job: tap to go to the next one";
             idleChip.style.flexGrow = 0f;
             idleChip.style.flexShrink = 0f;
             idleChip.style.minWidth = 72f;
@@ -218,7 +218,9 @@ namespace SeaSick.UI.Sheets
 
             int idleN = ledger != null ? ledger.IdleCount() : 0;
             idleChip.style.display = idleN > 0 ? DisplayStyle.Flex : DisplayStyle.None;
-            if (idleN > 0) idle.text = idleN + " idle"; else lastIdle = null;
+            // "2 no job" (2026-10-03): `IdleCount` is the "No job" set only --
+            // not the player's reserve, not a builder waiting for a material.
+            if (idleN > 0) idle.text = idleN + " no job"; else lastIdle = null;
 
             float days = ledger != null ? CampReadouts.FoodDays(ledger) : -1f;
             food.text = ledger == null || total == 0 ? "--"

@@ -121,7 +121,13 @@ namespace SeaSick.UI.Sheets
             foreach (var h in l.hands)
             {
                 if (h == null || IsWalledOff(h)) continue;
-                if (h.order == OutpostOrder.Idle) { idle++; if (firstIdle == null) firstIdle = h.name; continue; }
+                // **"No job" only (2026-10-03):** the player's reserve is his
+                // own choice and not a problem to nag about.
+                if (h.order == OutpostOrder.Idle)
+                {
+                    if (!OutpostLedger.Reserve(h)) { idle++; if (firstIdle == null) firstIdle = h.name; }
+                    continue;
+                }
                 if (h.walkingIn) continue;
                 if (h.order == OutpostOrder.Gather && h.target == Res.Game && l.HunterBlocker() != null)
                 {
@@ -156,7 +162,7 @@ namespace SeaSick.UI.Sheets
                 string who = firstIdle;
                 into.Add(new Alert
                 {
-                    text = idle == 1 ? who + " · idle" : $"{idle} hands idle",
+                    text = idle == 1 ? who + " · no job" : $"{idle} hands with no job",
                     tone = Tone.Warn,
                     fixLabel = idle == 1 ? "Assign " + who : "Assign",
                     open = () => idle == 1 ? new HandSheet(camp, who) : People(camp, WorkersSheet.Filter.Stuck),

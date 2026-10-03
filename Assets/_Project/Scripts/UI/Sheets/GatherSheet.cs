@@ -111,7 +111,7 @@ namespace SeaSick.UI.Sheets
             col.Add(onSection);
 
             // --- send an idle hand, pinned at the bottom --------------------
-            sendBtn = new Button(SendIdle) { text = "Send an idle villager" };
+            sendBtn = new Button(SendIdle) { text = "Send a free villager" };
             sendBtn.AddToClassList("st-btn");
             sendBtn.style.minHeight = StationSheet.TouchPx;
             root.Add(SheetKit.Actions(sendBtn));
@@ -156,7 +156,7 @@ namespace SeaSick.UI.Sheets
             bool locked = huntBlocked || workedOut || huntedOut;
             var idle = SheetBits.FirstIdle(l);
             sendBtn.SetEnabled(!locked && idle != null);
-            sendBtn.text = idle == null ? "Nobody idle to send" : locked ? "Blocked" : "Send an idle villager";
+            sendBtn.text = idle == null ? "Nobody free to send" : locked ? "Blocked" : "Send a free villager";
         }
 
         void FillOn(OutpostLedger l)
