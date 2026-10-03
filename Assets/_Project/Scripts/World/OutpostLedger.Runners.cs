@@ -183,7 +183,11 @@ namespace SeaSick.World
                     // sets it down by the store instead -- a dropped load,
                     // physical and visible, that the ladder's dropped-load
                     // rung brings in once there is room -- and runs on.
-                    if (WaitingAtStore(h) && h.haulTo == HaulPlace.Store && !h.eating && h.haulPicked)
+                    // Dormant since 2026-10-03 (Kevin, infinite stacking):
+                    // the island store takes every load, so this only fires
+                    // on bare ground with no store at all.
+                    if (WaitingAtStore(h) && h.haulTo == HaulPlace.Store && !h.eating && h.haulPicked
+                        && RoomFor(h.haulRes) <= 0)
                     {
                         AddGroundLoad(h.haulRes, h.haulCount, HandAt(h));
                         ClearHaul(h);
@@ -567,8 +571,14 @@ namespace SeaSick.World
         /// pile is at the ceiling, or anybody standing at the store with a
         /// load it has no room for. The fix for every one of them is more
         /// store (a store hut, or raising one).
+        ///
+        /// **Always null since 2026-10-03** (Kevin: "remove storage limits.
+        /// infinite stacking is allowed"): nothing is ever held up by a full
+        /// island store, so there is no chip to raise. Body kept for the day
+        /// a cap returns.
         public string StoreFullFor(OutpostHand h)
         {
+            if (!IslandStoreCapped) return null;
             if (h == null || h.downed || h.walkingIn) return null;
             if (h.Hauling && h.haulTo == HaulPlace.Store && WaitingAtStore(h)) return h.haulRes;
             if (h.order == OutpostOrder.Gather && GatherBlocked(h))

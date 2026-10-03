@@ -1059,44 +1059,63 @@ namespace SeaSick.World
         /// What is left in the ground, per resource. Seeded from the survey.
         public List<OutpostStock> stocks = new List<OutpostStock>();
 
-        /// **What this place can keep OF EACH THING -- now only the fallback
+        /// **What this place used to keep OF EACH THING -- no longer a cap
         /// (2026-10-03).** A campfire watched over ten of anything; a
-        /// storehouse raised it. This ceiling is the whole reason the loop
-        /// does not become an idle game: hands fill it and stop, so the only
-        /// way to get more out of an island is to invest in it.
+        /// storehouse raised it, and hands filled it and stopped.
         ///
-        /// **Storage slots replaced it** (Kevin approved the storage-slot
-        /// containers preview, 2026-10-03): a live camp's capacity is
-        /// `storeSlots` (`CapacityOf`). `Outpost` still pushes the old number
-        /// here (saved, read by the probes), and a ledger with no slot layout
-        /// pushed -- the self-tests, which set this to 1000 to take the
-        /// ceiling out of the question -- keeps the old uniform rule.
+        /// **Kevin, 2026-10-03: "remove storage limits. infinite stacking is
+        /// allowed."** An ISLAND store never refuses goods now (the ship's
+        /// hold keeps its own limits -- "the ship will not have infinite
+        /// storage"). What survives of this number is only "does this place
+        /// keep anything at all" (`KeepsAnything`): bare ground with no fire
+        /// keeps nothing (Kevin 2026-09-22), and the self-tests that build a
+        /// bare ledger set it > 0. `Outpost` still pushes it (saved, probes).
         public int ceilingPer = CampfireCeiling;
 
         /// **The store's container slots, per `StoreFamily`** (2026-10-03),
-        /// or null = no layout (fall back to `ceilingPer`). NOT saved: it is
-        /// what stands, pushed by `Outpost.PushStoreSlots` before every tick,
-        /// exactly like `ceilingPer` was -- one definition, the buildings.
+        /// or null = no layout. VISUAL ONLY since Kevin's infinite stacking
+        /// (2026-10-03): the containers fill at their bundle sizes and stay
+        /// shown full while the true count keeps rising. NOT saved: what
+        /// stands, pushed by `Outpost.PushStoreSlots` before every tick.
         [System.NonSerialized] public int[] storeSlots;
 
         /// Slots of family `f` this camp has (0 with no layout).
         public int SlotsOf(StoreFamily f) =>
             storeSlots != null && (int)f < storeSlots.Length ? storeSlots[(int)f] : 0;
 
-        /// **Units of `res` the STORE could hold in all** (2026-10-03): the
-        /// slots of its family that the OTHER resources of that family do not
-        /// occupy, times `res`'s bundle. A slot holds one resource; an empty
-        /// one can be claimed by any resource of the family and frees when
-        /// emptied. "Occupy" counts the store AND every load already walking
-        /// there (a haul reserves its room at pickup), whole bundles, a part
-        /// bundle being a whole slot. `res`'s own units are NOT subtracted --
-        /// that is `RoomFor`. Order-free, so whichever slot the view draws a
-        /// resource in, the arithmetic is the same.
-        ///
-        /// **Over capacity (Kevin DECIDED 2026-10-03):** an old save can hold
-        /// more than this. Nothing is ever deleted; `RoomFor` is simply 0
-        /// until the count falls back under it.
-        public int CapacityOf(string res)
+        /// **Room an island store has: unlimited** (Kevin 2026-10-03,
+        /// infinite stacking). Big enough never to bind, small enough that
+        /// sums of it cannot overflow an int.
+        public const int Unlimited = 1 << 24;
+
+        /// **False since 2026-10-03** (Kevin: "remove storage limits.
+        /// infinite stacking is allowed"). The switch the retired "store
+        /// full" chip and stall words test, kept so their bodies need not be
+        /// deleted; a static field, not a const, so no unreachable-code noise.
+        public static readonly bool IslandStoreCapped = false;
+
+        /// **Does this place keep anything at all?** A fire, a store hut, a
+        /// storehouse (any slot), or -- for a bare ledger with no layout,
+        /// the self-tests -- a positive `ceilingPer`. Bare ground keeps
+        /// nothing; that is "no store", not a capacity cap.
+        public bool KeepsAnything
+        {
+            get
+            {
+                if (storeSlots == null) return ceilingPer > 0;
+                for (int f = 0; f < storeSlots.Length; f++) if (storeSlots[f] > 0) return true;
+                return false;
+            }
+        }
+
+        /// **Units of `res` the containers can SHOW** (2026-10-03, visual
+        /// only -- nothing is refused past it): the slots of its family that
+        /// the OTHER resources of that family do not occupy, times `res`'s
+        /// bundle. "Occupy" counts the store and every load already walking
+        /// there, whole bundles, a part bundle being a whole slot. Order-free,
+        /// so whichever slot the view draws a resource in, the sum is the
+        /// same. With no layout, `ceilingPer`.
+        public int SlotCapacityOf(string res)
         {
             if (storeSlots == null) return ceilingPer;
             var f = StorageSlots.FamilyOf(res);
@@ -1114,14 +1133,16 @@ namespace SeaSick.World
             return Mathf.Max(0, free) * StorageSlots.BundleOf(res);
         }
 
-        /// **"N / this" for a sheet** (2026-10-03): the most of `res` the store
-        /// could show right now -- `CapacityOf`, or the count itself when an
-        /// old save holds more than its slots (never "34 / 30" read as a
-        /// bug; it reads "34 / 34", full). Replaces every `ceilingPer` a
-        /// sheet printed.
-        public int KeepsUpTo(string res) => Mathf.Max(StoreCountOf(res), CapacityOf(res));
+        /// **Room left in the VISIBLE slots for `res`** (net of loads walking
+        /// in). Not a gate on deliveries -- only the idle hands' store top-up
+        /// reads it (Kevin 2026-10-03, option b: an idle hand tops the store
+        /// up until that family's visible slots are full, then rests;
+        /// assigned gatherers, hunters, farmers and runners go on without
+        /// limit).
+        public int SlotRoomFor(string res) =>
+            Mathf.Max(0, SlotCapacityOf(res) - StoreCountOf(res) - InFlightTo(HaulPlace.Store, -1, res));
 
-        /// Cheap pre-check for `CapacityOf`'s inner loop: is anybody carrying
+        /// Cheap pre-check for `SlotCapacityOf`'s inner loop: is anybody carrying
         /// anything to the store at all? Saves a walk over the hands for
         /// every empty family member.
         bool AnyInFlightToStore()
@@ -1175,15 +1196,14 @@ namespace SeaSick.World
             return (s != null ? s.whole : 0) + StationSpendableOf(resource);
         }
 
-        /// Room left in the STORE for this resource, in whole units, net of
-        /// loads already walking there (a haul reserves its room at pickup).
-        /// The ceiling is the store's; station stock does not use it up.
-        ///
-        /// **Per resource from the slots since 2026-10-03** (`CapacityOf`):
-        /// room in its own part-filled slot plus every free slot of its
-        /// family. Never negative -- an over-capacity old save reads 0.
-        public int RoomFor(string resource) =>
-            Mathf.Max(0, CapacityOf(resource) - StoreCountOf(resource) - InFlightTo(HaulPlace.Store, -1, resource));
+        /// Room left in the STORE for this resource. **Unlimited since
+        /// 2026-10-03** (Kevin: "remove storage limits. infinite stacking is
+        /// allowed") wherever the camp keeps anything (`KeepsAnything`); 0 on
+        /// bare ground. Every old "store full" gate that reads it -- a
+        /// gatherer resting, a hunter stopping, a farmer's part harvest, a
+        /// runner's refused load, a rack jam, a transfer stall -- is dormant
+        /// with it. The ship's hold is NOT this and keeps its limits.
+        public int RoomFor(string resource) => KeepsAnything ? Unlimited : 0;
 
         /// Whole and part together -- what a tool check or a recipe's "have"
         /// arithmetic wants, since a saw blade at 0.95 is still a saw blade.
@@ -1195,8 +1215,8 @@ namespace SeaSick.World
             return (s != null ? s.whole + s.part : 0f) + StationHeldOf(resource);
         }
 
-        /// Put whole units in, refusing what will not fit. Returns what was
-        /// taken.
+        /// Put whole units in (everything, since infinite stacking; nothing
+        /// on bare ground). Returns what was taken.
         public int Add(string resource, int n)
         {
             if (n <= 0) return 0;
@@ -3367,7 +3387,9 @@ namespace SeaSick.World
                 if (tool != null && HeldOf(tool) <= 0f) continue;
 
                 var made = Store(makes, true);
-                // Room net of what is already in his basket.
+                // Room net of what is already in his basket -- unlimited since
+                // 2026-10-03 (infinite stacking), so the part-basket carry
+                // below only fires on a full armful now.
                 float room = StoreRoomF(makes) - h.basket;
                 if (room <= 0f) { CarryBasket(h, makes, hasPost, postAt); continue; }
 
@@ -3511,15 +3533,13 @@ namespace SeaSick.World
             }
         }
 
-        /// How full this resource's pile is, for anything drawing a gauge.
-        /// Against `CapacityOf` (2026-10-03): the room this resource could
-        /// still claim, so a sack's worth of potato with the other sacks free
-        /// reads low, and the same potato with every other sack taken reads
-        /// full. An over-capacity pile reads 1.
+        /// How full this resource's VISIBLE slots are, for a gauge
+        /// (2026-10-03: visual only; the store itself is unlimited). Past
+        /// the slots it reads 1, the containers shown full.
         public float Fill01(string resource)
         {
             int n = StoreCountOf(resource);
-            int cap = CapacityOf(resource);
+            int cap = SlotCapacityOf(resource);
             if (cap <= 0) return n > 0 ? 1f : 0f;
             return Mathf.Clamp01(n / (float)cap);
         }
@@ -3966,12 +3986,11 @@ namespace SeaSick.World
             // (OutpostLedger.FoodDraft.cs): it starts under `FedDays`, fills
             // the Farm, then the Kitchen, then hunts or forages as the
             // fallback, and it ends -- for every hand it drafted at once --
-            // at `FoodSafeDays`, or once fed (`FedDays`) with nothing its
-            // posts make left room in the store (`FoodPostsCanBank`;
-            // 2026-10-02 play check: a capped store can hold under
-            // `FoodSafeDays` for good, and Pip stayed on "food emergency"
-            // beside a full store).
-            if (have >= day * FoodSafeDays || (have >= day * FedDays && !FoodPostsCanBank()))
+            // at `FoodSafeDays`. (The second end, "fed with no room left for
+            // what its posts make", went with the store cap on 2026-10-03:
+            // Kevin's infinite stacking means a capped store can no longer
+            // hold under `FoodSafeDays` for good. The 6-day end stays.)
+            if (have >= day * FoodSafeDays)
             {
                 EndFoodDraft();
                 return;

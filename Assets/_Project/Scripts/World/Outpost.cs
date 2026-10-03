@@ -3439,16 +3439,14 @@ namespace SeaSick.World
 
         /// **The store's container slots, per `StoreFamily` (2026-10-03).**
         ///
-        /// Kevin approved the storage-slot containers preview: capacity =
-        /// visible slots x bundle size (`StorageSlots`). Summed over what
-        /// STANDS, each building at its own level, the same walk
-        /// `KeepsOfEach` makes -- the fire cache, every store hut (level 2 =
-        /// `StorageSlots.HutLevel2ExtraSlotsPerFamily` more of each), every
-        /// storehouse -- plus the fire cache early for a camp somebody is
-        /// actively building (`KeepsOfEach`'s landed-rations exception).
-        /// `openCapacity` is 0 on every island since 2026-09-22 and is not
-        /// expressed in slots. `Techs.StoreBonus` is no longer read for
-        /// capacity: the level's extra is slots now.
+        /// Kevin approved the storage-slot containers preview; the same day
+        /// he lifted the store cap ("infinite stacking"), so these slots are
+        /// VISUAL ONLY (`StorageSlots`) -- plus the idle top-up's stop.
+        /// Summed over what STANDS, the same walk `KeepsOfEach` makes -- the
+        /// fire cache, every store hut, every storehouse (a level adds no
+        /// slots, Kevin 2026-10-03) -- plus the fire cache early for a camp
+        /// somebody is actively building (`KeepsOfEach`'s landed-rations
+        /// exception). `openCapacity` is 0 on every island since 2026-09-22.
         public void StoreSlotsNow(int[] into)
         {
             if (into == null) return;

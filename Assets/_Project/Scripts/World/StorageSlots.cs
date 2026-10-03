@@ -24,22 +24,31 @@ namespace SeaSick.World
         Count = 7,
     }
 
-    /// **The one table of where a camp's store can put things, 2026-10-03.**
+    /// **The one table of where a camp's store SHOWS things, 2026-10-03.**
     ///
-    /// Plain data, read by the ledger's capacity arithmetic
-    /// (`OutpostLedger.CapacityOf` / `RoomFor`), by `Outpost` when it adds up
+    /// **Visual only (Kevin, 2026-10-03: "remove storage limits. infinite
+    /// stacking is allowed").** The slots no longer cap anything: they fill
+    /// at their bundle sizes and, once every slot of a family is full, stay
+    /// shown full while the true count keeps rising (the sheets show the
+    /// real number). The one thing that still reads them as a limit is an
+    /// IDLE hand's store top-up, which stops once the family's visible slots
+    /// are full (Kevin's option b, `OutpostLedger.SlotRoomFor`).
+    ///
+    /// Plain data, read by the ledger's visual arithmetic
+    /// (`OutpostLedger.SlotCapacityOf` / `Fill01`), by `Outpost` when it adds up
     /// what stands (`Outpost.StoreSlotsNow`), and by `StorageSlotView` when it
     /// shows which slot holds what. Nothing here is saved: the slot layout is
     /// what is BUILT, pushed into the ledger before every tick exactly as the
     /// old `ceilingPer` was, and which slot holds which resource is DERIVED
     /// from the ledger's counts (`Allocate`), so the two can never disagree.
     ///
-    /// **Replaces the uniform ceiling.** Until 2026-10-03 a camp kept
+    /// **Replaced the uniform ceiling.** Until 2026-10-03 a camp kept
     /// `ceilingPer` of EACH resource (fire 10 + store hut 20 + L2 10), and
     /// `CampPiles` stacked whatever the hut had no rack for on the grass
     /// beside it. Kevin, 2026-10-02: *"this issue of resources just stacking
     /// somewhere in the proximity of the structures is not okay"* -- then
-    /// "capacity = visible slots, no stockyard". Full = full.
+    /// "capacity = visible slots, no stockyard"; and on 2026-10-03 he lifted
+    /// the cap altogether. No ground piles still holds.
     public static class StorageSlots
     {
         public const int FamilyCount = (int)StoreFamily.Count;
@@ -62,19 +71,15 @@ namespace SeaSick.World
 
         /// **Storehouse (the big one)**: no art, no SPEC layout yet. It kept
         /// 40 of each (twice the hut's 20), so it is given twice the hut's
-        /// slots until its own containers are designed. PROVISIONAL -- for
-        /// Kevin to confirm (2026-10-03).
+        /// slots until its own containers are designed. PROVISIONAL, and
+        /// visual only since infinite stacking (2026-10-03).
         static readonly int[] Storehouse = { 8, 6, 6, 12, 12, 8, 8 };
 
-        /// **Store hut level 2 = extra slots, in CODE only (Kevin DECIDED
-        /// 2026-10-03):** keep the current L2 model, no new L2 art; the level
-        /// adds this many slots to EVERY family. Replaces the old flat
-        /// `storeBonus` of +10 of each (`Techs` Storage L2 row, now unread).
-        public const int HutLevel2ExtraSlotsPerFamily = 1;
-
-        /// The storehouse's level 2 (was +20 of each, twice the hut's +10):
-        /// twice the hut's extra. PROVISIONAL, same as `Storehouse`.
-        public const int StorehouseLevel2ExtraSlotsPerFamily = 2;
+        // **No level-2 slots (Kevin DECIDED 2026-10-03):** with infinite
+        // stacking a store hut's level 2 is about its runners (4 instead of
+        // 2), not room; the earlier "+1 slot a family" was dropped the same
+        // day, and the storehouse's L2 extra went with it. A level never
+        // changes a site's slots. (`Techs.StoreBonus` is unread for storage.)
 
         /// **Add the slots one standing building gives** to `into` (length
         /// `FamilyCount`). Anything that is not a store adds nothing.
@@ -82,13 +87,11 @@ namespace SeaSick.World
         {
             if (into == null || string.IsNullOrEmpty(planId)) return;
             int[] baseRow = null;
-            int perLevel = 0;
-            if (planId == BuildPlans.Storage.id) { baseRow = HutL1; perLevel = HutLevel2ExtraSlotsPerFamily; }
-            else if (planId == BuildPlans.Storehouse.id) { baseRow = Storehouse; perLevel = StorehouseLevel2ExtraSlotsPerFamily; }
+            if (planId == BuildPlans.Storage.id) baseRow = HutL1;
+            else if (planId == BuildPlans.Storehouse.id) baseRow = Storehouse;
             else if (planId == BuildPlans.Campfire.id) baseRow = FireCache;
             if (baseRow == null) return;
-            int extra = perLevel * Mathf.Max(0, level - 1);
-            for (int f = 0; f < FamilyCount; f++) into[f] += baseRow[f] + extra;
+            for (int f = 0; f < FamilyCount; f++) into[f] += baseRow[f];
         }
 
         /// The fire cache's row on its own: what a camp somebody is actively
@@ -149,16 +152,17 @@ namespace SeaSick.World
             (Res.Fish,         StoreFamily.Hang,   4),
             (Res.Meat,         StoreFamily.Hang,   4),
             (Res.Hide,         StoreFamily.Hang,   4),
-            // Dish shelf: 4 bowls a tray; ship's biscuit (`Meals`) too.
-            (Res.BakedPotato,  StoreFamily.Dishes, 4),
-            (Res.GrilledFish,  StoreFamily.Dishes, 4),
-            (Res.GrilledMeat,  StoreFamily.Dishes, 4),
-            (Res.RoastCarrots, StoreFamily.Dishes, 4),
-            (Res.Bread,        StoreFamily.Dishes, 4),
-            (Res.VegStew,      StoreFamily.Dishes, 4),
-            (Res.FishPie,      StoreFamily.Dishes, 4),
-            (Res.HuntersStew,  StoreFamily.Dishes, 4),
-            (Res.Meals,        StoreFamily.Dishes, 4),
+            // Dish shelf: **12 a tray, ship's biscuit too** (Kevin 2026-10-03;
+            // the SPEC's 4 bowls is superseded).
+            (Res.BakedPotato,  StoreFamily.Dishes, DishBundle),
+            (Res.GrilledFish,  StoreFamily.Dishes, DishBundle),
+            (Res.GrilledMeat,  StoreFamily.Dishes, DishBundle),
+            (Res.RoastCarrots, StoreFamily.Dishes, DishBundle),
+            (Res.Bread,        StoreFamily.Dishes, DishBundle),
+            (Res.VegStew,      StoreFamily.Dishes, DishBundle),
+            (Res.FishPie,      StoreFamily.Dishes, DishBundle),
+            (Res.HuntersStew,  StoreFamily.Dishes, DishBundle),
+            (Res.Meals,        StoreFamily.Dishes, DishBundle),
             // Gear rack: per-item counts (SPEC). Iron is ingots on the rack.
             (Res.Arrows,       StoreFamily.Gear,   12),
             (Res.Spear,        StoreFamily.Gear,   4),
@@ -171,6 +175,10 @@ namespace SeaSick.World
 
         /// Units in one sack (Kevin DECIDED 2026-10-03).
         public const int SackBundle = 12;
+
+        /// Units on one dish tray, ship's biscuit included (Kevin DECIDED
+        /// 2026-10-03).
+        public const int DishBundle = 12;
 
         /// Bundle for an id the table does not know (gear rack fallback).
         const int UnknownBundle = 4;
@@ -276,12 +284,9 @@ namespace SeaSick.World
         /// resource's LAST slot). `count(res)` is what to place (the view
         /// passes `OnStorePile`). Returns slots used (<= `slots`).
         ///
-        /// **Over capacity (Kevin DECIDED 2026-10-03):** a save written under
-        /// the old per-resource ceiling may hold more than its slots fit.
-        /// NOTHING is deleted: the ledger keeps every unit; here the slots
-        /// simply all show full and what does not fit is not drawn, and
-        /// `OutpostLedger.RoomFor` accepts nothing more of the family until
-        /// it falls back under capacity.
+        /// **Past the slots (infinite stacking, Kevin 2026-10-03):** the store
+        /// keeps any count; here the slots simply all show full and what
+        /// does not fit is not drawn. Nothing is refused or deleted.
         ///
         /// A slot's resource can change when an EARLIER resource of the
         /// family grows a slot (the sacks shuffle along by one). Accepted for

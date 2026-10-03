@@ -375,8 +375,8 @@ namespace SeaSick.World
             {
                 if (s == null || s.whole <= 0 || string.IsNullOrEmpty(s.resource)) continue;
                 if (summarySb.Length > 0) summarySb.Append("   ·   ");
-                summarySb.Append(Lower(s.resource)).Append(' ').Append(s.whole)
-                         .Append(" / ").Append(l.KeepsUpTo(s.resource));
+                // True count only: no ceiling since 2026-10-03 (infinite stacking).
+                summarySb.Append(Lower(s.resource)).Append(' ').Append(s.whole);
             }
             if (summarySb.Length == 0) summarySb.Append("nothing gathered yet");
             summaryText = summarySb.ToString();

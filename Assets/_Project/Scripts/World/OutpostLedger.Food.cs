@@ -402,7 +402,7 @@ namespace SeaSick.World
             foreach (var p in plots)
             {
                 if (p == null || p.farm != farm) continue;
-                if (p.state == PlotState.Ripe && RoomFor(p.crop) > 0) return p;
+                if (p.state == PlotState.Ripe && KeepsAnything) return p;   // no store cap (2026-10-03)
                 if (plant == null && p.state == PlotState.Empty && !string.IsNullOrEmpty(p.crop)
                     && CropUnlocked(p, p.crop, out _)) plant = p;
             }
@@ -442,29 +442,17 @@ namespace SeaSick.World
                     p.grown = 0f;
                     continue;
                 }
-                // **Only what the store can take (2026-10-03, review fix
-                // C).** The whole yield used to go into his arms once the
-                // store had room for ONE: `DepositHaul` put down what fit and
-                // left him standing at the store holding the rest, retrying
-                // every step, his plots untended. Now he lifts `RoomFor` at
-                // most (net of loads already walking in, so two farmhands do
-                // not both count the same room); the rest stays standing on
-                // the plot (`left`), still ripe, until there is room again.
+                // **The whole yield (2026-10-03, Kevin: infinite stacking).**
+                // Review fix C had him lift only what the store had room for,
+                // leaving the rest ripe on the plot (`left`); the island store
+                // never fills now, so he harvests all of it and `left` stays 0.
                 string crop = p.crop;
-                int total = p.RipeUnits;
-                int n = Mathf.Min(total, RoomFor(crop));
-                if (n <= 0) continue;   // room went since NextPlotJob: the plot waits
-                if (n < total)
-                {
-                    p.left = total - n;      // ripe, the rest still in the field
-                }
-                else
-                {
-                    p.left = 0;
-                    p.state = PlotState.Empty;
-                    p.grown = 0f;
-                    if (!p.repeat) p.crop = "";
-                }
+                int n = p.RipeUnits;
+                if (n <= 0) continue;
+                p.left = 0;
+                p.state = PlotState.Empty;
+                p.grown = 0f;
+                if (!p.repeat) p.crop = "";
                 h.basket = n;
                 CarryBasket(h, crop, hasPost, postAt);
                 if (h.Hauling) return;
@@ -481,7 +469,8 @@ namespace SeaSick.World
             {
                 if (p == null || p.farm != f) continue;
                 if (!string.IsNullOrEmpty(p.crop) || p.state != PlotState.Empty) any = true;
-                if (fullOf == null && p.state == PlotState.Ripe && RoomFor(p.crop) <= 0) fullOf = p.crop;
+                // Dormant since 2026-10-03 (no store cap): only bare ground.
+                if (fullOf == null && p.state == PlotState.Ripe && !KeepsAnything) fullOf = p.crop;
             }
             if (!any) return "no crops picked: choose one on the farm sheet";
             if (NextPlotJob(f) != null || h.Hauling) return null;

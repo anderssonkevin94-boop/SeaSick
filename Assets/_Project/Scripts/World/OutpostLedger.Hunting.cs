@@ -25,16 +25,11 @@ namespace SeaSick.World
     /// claim, a spear, and room for meat or hide.
     public partial class OutpostLedger
     {
-        /// True when neither the meat nor any drop of a carcass has room --
-        /// the one "store full" that stops a hunter. Whole units, net of
-        /// loads walking to the store, like every other trip's room.
-        bool HuntStoreFull()
-        {
-            if (RoomFor(Res.Meat) > 0) return false;
-            foreach (var drop in Economy.Techs.HuntDrops)
-                if (drop.n > 0 && RoomFor(drop.res) > 0) return false;
-            return true;
-        }
+        /// Was the one "store full" that stopped a hunter. **Never true
+        /// since 2026-10-03** (Kevin: "remove storage limits. infinite
+        /// stacking is allowed"): a hunter hunts on without limit; only a
+        /// camp with no store at all (bare ground) has nowhere to land meat.
+        bool HuntStoreFull() => !KeepsAnything;
 
         /// **Game-days of one hunt trip -- a DISPLAY estimate only**: walk
         /// out, the jab, walk back. Nothing books through it.
@@ -169,6 +164,8 @@ namespace SeaSick.World
         {
             if (h.huntKilled)
             {
+                // Since 2026-10-03 (infinite stacking) `RoomFor` is unlimited,
+                // so all of it lands and the spill below is always 0.
                 Vector3 spill = StoreAt(out var storeAt) ? storeAt : HandAt(h);
                 int meatAll = Mathf.RoundToInt(Res.MeatPerAnimal);
                 int meat = Mathf.Clamp(RoomFor(Res.Meat), 0, meatAll);

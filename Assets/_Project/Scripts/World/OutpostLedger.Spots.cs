@@ -120,7 +120,9 @@ namespace SeaSick.World
         /// of" that. Shared rack: one spot's output can jam another's.
         string RackJam(StationStock st)
         {
-            if (st == null || st.RackRoom > 0) return null;
+            // Never jams on the store since 2026-10-03 (infinite stacking):
+            // with a store at all, a full rack has somewhere to go.
+            if (st == null || st.RackRoom > 0 || KeepsAnything) return null;
             string jam = null;
             int most = 0;
             if (st.rack != null)

@@ -271,26 +271,26 @@ namespace SeaSick.UI.Sheets
             return Mathf.Max(0, living - l.HousingCapacity);
         }
 
-        /// **"Store full" (2026-09-30)**: a pile sits at the store's ceiling
-        /// (its container slots since 2026-10-03, `OutpostLedger.CapacityOf`;
-        /// was `ceilingPer`, the same of EACH thing) AND a hand is trying
-        /// to add to it -- gathering it, a station whose rack can go nowhere, a load waiting at the store
+        /// **"Store full" (2026-09-30; RETIRED 2026-10-03, infinite stacking
+        /// -- always false, see the first line of the body)**: a pile sat at
+        /// the store's ceiling (`ceilingPer`, the same of EACH thing) AND a
+        /// hand was trying to add to it -- gathering it, a station whose
+        /// rack can go nowhere, a load waiting at the store
         /// (`OutpostLedger.StoreFullFor`). A full pile nobody is feeding is
         /// a saving, not a problem, so it is not an alert. Since 2026-10-02
         /// the chip names the piles AND the fix, whole (it wraps, never
         /// cut): "Store full of boards · build or upgrade a store hut". The
-        /// fix is a store hut (Build): its own containers at once (a log
-        /// cradle, stone crib, sacks, ...), where raising an existing one
-        /// needs fire II and gives one more slot of each family.
+        /// fix was a store hut (Build).
         /// `stops`: somebody's work has stopped on it (not only a
         /// gatherer's pile topped out).
         internal static bool StoreFullText(OutpostLedger l, out string text, out bool stops)
         {
             text = null;
             stops = false;
-            // Slots (2026-10-03): no store slots and no fallback ceiling =
-            // nowhere to keep anything, which is not a "full" store.
-            if (l == null || (l.storeSlots == null && l.ceilingPer <= 0)) return false;
+            // **Retired 2026-10-03** (Kevin: infinite stacking): the island
+            // store is never full, so there is no "Store full" line here or
+            // in the Problems list. Body kept for the day a cap returns.
+            if (l == null || !OutpostLedger.IslandStoreCapped) return false;
             var piles = fullPiles;
             piles.Clear();
             foreach (var h in l.hands)

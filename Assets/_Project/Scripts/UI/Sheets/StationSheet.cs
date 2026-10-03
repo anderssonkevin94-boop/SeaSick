@@ -1168,14 +1168,12 @@ namespace SeaSick.UI.Sheets
             }
             else
             {
-                // A selected spot pauses when its output has nowhere to go
-                // ("store full of X", `OutpostLedger.SpotPause`): the store's
-                // room for what it makes -- its container slots since
-                // 2026-10-03 (`KeepsUpTo`), no longer one ceiling of each.
-                int ceil = Mathf.Max(1, l.KeepsUpTo(r.makes));
-                if (r.takes.Length == 0) text = $"Runs until {ceil} are in the store.";
-                else if (r.takes.Length == 1) text = $"Runs until {RunsOut(ResDefs.Label(r.takes[0].res))} or {ceil} are in the store.";
-                else text = $"Runs until an input runs out or {ceil} are in the store.";
+                // **No "or N are in the store" any more** (Kevin 2026-10-03,
+                // infinite stacking): the island store never fills, so a
+                // spot runs until stopped or an input runs out.
+                if (r.takes.Length == 0) text = "Runs until you stop it.";
+                else if (r.takes.Length == 1) text = $"Runs until {RunsOut(ResDefs.Label(r.takes[0].res))} or you stop it.";
+                else text = "Runs until an input runs out or you stop it.";
                 tone = 3;
             }
             SetText(detailLine, text);
@@ -1484,8 +1482,8 @@ namespace SeaSick.UI.Sheets
                 while (j >= 0 && l.StoreCountOf(held[j]) < c) { held[j + 1] = held[j]; j--; }
                 held[j + 1] = r;
             }
-            // Per resource since storage slots (2026-10-03): what its family's
-            // slots leave it (`KeepsUpTo`), not one ceiling of each kind.
+            // True counts only (Kevin 2026-10-03, infinite stacking): no
+            // "/ ceiling", no full state; the bar is the visible slots' fill.
             for (int i = 0; i < storeTiles.Length; i++)
             {
                 var t = storeTiles[i];
@@ -1495,14 +1493,12 @@ namespace SeaSick.UI.Sheets
                 if (!show) continue;
                 string res = held[i];
                 int have = l.StoreCountOf(res);
-                int ceil = Mathf.Max(1, l.KeepsUpTo(res));
                 StationPage.SetIcon(t.icon, res);
                 t.res = res;
-                string text = ItemIconSet.Get(res) == null ? $"{ResDefs.Label(res)} {have}" : $"{have}/{ceil}";
+                string text = ItemIconSet.Get(res) == null ? $"{ResDefs.Label(res)} {have}" : have.ToString();
                 if (t.count.text != text) t.count.text = text;
-                t.fill.style.width = Length.Percent(Mathf.Clamp01(have / (float)ceil) * 100f);
-                bool full = have >= ceil;
-                t.root.EnableInClassList("st-store-tile--full", full);
+                t.fill.style.width = Length.Percent(l.Fill01(res) * 100f);
+                t.root.EnableInClassList("st-store-tile--full", false);
             }
             string holds = held.Count == 0 ? "The store is empty" : "Kept in sacks, racks and bays";
             if (storeHolds.text != holds) storeHolds.text = holds;

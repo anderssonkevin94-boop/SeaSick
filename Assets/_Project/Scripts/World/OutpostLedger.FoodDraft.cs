@@ -97,9 +97,10 @@ namespace SeaSick.World
 
         /// **Could a forage trip start right now** -- `StartGatherTrip`'s
         /// own arithmetic for `Res.Food`: something standing nobody is
-        /// already walking to pick, and room in the store for it.
+        /// already walking to pick, and a store to take it (never full since
+        /// 2026-10-03, infinite stacking).
         bool ForageCanStart() =>
-            Res.IsGatherable(Res.Food) && FieldFree(Res.Food) >= 1 && RoomFor(Res.Food) >= 1;
+            Res.IsGatherable(Res.Food) && FieldFree(Res.Food) >= 1 && KeepsAnything;
 
         // --- the posts: farm and kitchen (2026-10-02) ---------------------------
         //
@@ -125,35 +126,8 @@ namespace SeaSick.World
         public bool FoodShort =>
             hands != null && hands.Count > 0 && FoodFill() < hands.Count * EatPerHandPerDay * FedDays;
 
-        /// **Can the emergency's posts still bank food** -- a crop on one of
-        /// its farms, or a dish selected at one of its kitchens, with room
-        /// left in the store. False = they would only fill a full store, so
-        /// once fed (`FedDays`) the emergency ends even short of
-        /// `FoodSafeDays`, which a capped store may never hold.
-        bool FoodPostsCanBank()
-        {
-            if (hands == null) return false;
-            foreach (var h in hands)
-            {
-                if (h == null || !h.autoStation || !FoodStationOrder(h)) continue;
-                int k = Mathf.Max(0, OrdinalOfHand(h));
-                if (h.target == BuildPlans.Farm.id)
-                {
-                    if (plots != null)
-                        foreach (var p in plots)
-                            if (p != null && p.farm == k && !string.IsNullOrEmpty(p.crop) && RoomFor(p.crop) > 0) return true;
-                    continue;
-                }
-                var st = StationAt(StationIndex(BuildPlans.Kitchen.id, k));
-                if (st == null) continue;
-                foreach (var sp in st.Spots)
-                {
-                    var r = sp != null && sp.Selected ? sp.Recipe : null;
-                    if (r != null && FoodBook.IsDish(r.makes) && RoomFor(r.makes) > 0) return true;
-                }
-            }
-            return false;
-        }
+        // (`FoodPostsCanBank`, the "fed with no room left" end, was removed
+        // 2026-10-03 with the island store's cap -- Kevin: infinite stacking.)
 
         /// On the Farm or at the Kitchen (the posts the emergency fills).
         static bool FoodStationOrder(OutpostHand h) =>

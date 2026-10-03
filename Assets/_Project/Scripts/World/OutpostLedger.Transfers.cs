@@ -176,6 +176,10 @@ namespace SeaSick.World
             if (o == null || o.left <= 0) return null;
             if (!ShipHere) return StallAway;
             if (toShip && ShipRoomNet() <= 0) return StallHoldFull;
+            // ISLAND side only, and dormant since 2026-10-03 (infinite
+            // stacking: the island never refuses goods off the ship). The
+            // ship's hold keeps its own limits ("the ship will not have
+            // infinite storage", Kevin 2026-10-03).
             if (!toShip && RoomFor(res) <= 0) return StallStoreFull;
             if (CarryingTransfer(res, toShip) <= 0 && !AnyFreeHand()) return StallNoHands;
             return null;

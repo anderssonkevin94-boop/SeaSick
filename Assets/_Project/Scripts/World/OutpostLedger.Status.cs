@@ -89,7 +89,12 @@ namespace SeaSick.World
                 var pile = Store(res);
                 int have = (pile != null ? pile.whole : 0) + InFlightTo(HaulPlace.Store, -1, res);
                 if (have >= target) continue;
-                int n = Mathf.Min(Res.Armful(res), Mathf.Min(target - have, RoomFor(res)));
+                // **Kevin 2026-10-03, option (b):** with no store cap an idle
+                // hand would top up for ever, so he stops once the family's
+                // VISIBLE slots (fire cache + store huts) are full of it and
+                // rests. Only this idle errand; assigned gatherers, hunters,
+                // farmers and runners go on without limit.
+                int n = Mathf.Min(Res.Armful(res), Mathf.Min(target - have, SlotRoomFor(res)));
                 n = Mathf.Min(n, TopUpFieldFree(res));
                 if (n <= 0) continue;
                 if (have < bestHave) { best = res; bestHave = have; bestN = n; }

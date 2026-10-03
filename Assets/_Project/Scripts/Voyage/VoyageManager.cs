@@ -448,7 +448,12 @@ namespace SeaSick.Voyage
             // home is the same place under a different name and now keeps the
             // same way. It is also what makes carrying a second thing home
             // worth the passage instead of a competitor for the first's slots.
-            int cap = StoreCapacity;
+            // **No island cap since 2026-10-03** (Kevin: "remove storage
+            // limits. infinite stacking is allowed"): home is an ISLAND store,
+            // so it banks the whole hold and nothing is lost on the sand. Only
+            // this landing side changed -- the ship's own hold limits are
+            // untouched ("the ship will not have infinite storage"). The
+            // spoil bookkeeping stays and now always reads 0.
             var spoil = new StringBuilder();
             var landed = new List<string>();
             completedSpoiled = 0;
@@ -459,7 +464,7 @@ namespace SeaSick.Voyage
                 // pile — so a beach full of timber costs the timber nothing
                 // it was not already going to lose, and costs the boards
                 // nothing at all.
-                int take = Mathf.Min(got, Mathf.Max(0, cap - Banked(res)));
+                int take = got;
                 int lost = got - take;
 
                 if (lost > 0)

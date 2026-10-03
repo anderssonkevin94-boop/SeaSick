@@ -873,8 +873,10 @@ namespace SeaSick.World
             var st = Store(res);
             int whole = st != null ? st.whole : 0;
             float part = st != null ? st.part : 0f;
-            // The slots' capacity (2026-10-03), not the old uniform ceiling.
-            return (CapacityOf(res) - whole - InFlightTo(HaulPlace.Store, -1, res)) - part;
+            // Unlimited since 2026-10-03 (Kevin, infinite stacking) wherever
+            // the camp keeps anything; the old ceiling arithmetic is gone, so
+            // the 9 + 0.99999 float trap above cannot bite any more either.
+            return KeepsAnything ? Unlimited : 0f;
         }
 
         /// Put the load down where it was going (the store if that station
@@ -929,10 +931,11 @@ namespace SeaSick.World
             }
 
             var st = Store(h.haulRes, true);
-            // What the slots still take (2026-10-03): `CapacityOf` already
-            // nets out the other resources of the family and their loads
-            // walking in, and leaves this load's own reservation out.
-            int put = force ? h.haulCount : Mathf.Clamp(CapacityOf(h.haulRes) - st.whole, 0, h.haulCount);
+            // **All of it** (Kevin 2026-10-03, infinite stacking): the island
+            // store never refuses a load, so a store-bound armful is never
+            // left in a hand's arms or set down beside the store for lack
+            // of room. Bare ground (no fire) still keeps nothing.
+            int put = force || KeepsAnything ? h.haulCount : 0;
             st.whole += put;
             h.haulCount -= put;
             if (put > 0 && h.haulFrom == HaulPlace.Field && h.haulTo == HaulPlace.Store)
@@ -1905,10 +1908,12 @@ namespace SeaSick.World
         {
             if (h == null || h.order != OutpostOrder.Gather || string.IsNullOrEmpty(h.target)) return false;
             // A carcass is meat and hide: full only when neither fits (2026-09-26).
+            // **Never blocked by a full store since 2026-10-03** (Kevin,
+            // infinite stacking): an assigned gatherer or hunter goes on
+            // without limit and never rests at the store. Only bare ground
+            // (no store at all) still blocks.
             if (h.target == Res.Game) return !h.HuntTrip && HuntStoreFull();
-            if (h.Hauling && h.haulFrom == HaulPlace.Field && h.haulTo == HaulPlace.Store
-                && !WaitingAtStore(h)) return false;
-            return RoomFor(h.target) <= 0;
+            return !KeepsAnything;
         }
 
         /// **A gatherer who works by trips** (everyone on a Gather order;
