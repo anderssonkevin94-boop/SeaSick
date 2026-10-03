@@ -39,7 +39,7 @@ Sessions end every report with a **"loose ends:"** line. The orchestrator copies
 
 ## Known loose ends (each needs a fix or Kevin's "park it")
 
-- Harpoon: the rope clips the bow lantern post when firing dead ahead. Kevin is choosing (a) move the lantern to a side post, or (b) a roller at the bow tip.
+- Harpoon: lantern DECIDED (Kevin 2026-10-04): it hangs from a short beam over the bow, just below the harpoon gun, lighting the way forward. In the phase 0 art (villager); closes when Kevin approves the shots.
 
 - Cannon shift: nothing on screen shows the 3 s wait. Untested: switching the locked side mid-walk, and the ~6 s walk on a big hull.
 - Landing: false "Sheer cliff" off bays and headlands; islets under 3000 m² have no landing.
