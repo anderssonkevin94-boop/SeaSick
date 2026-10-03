@@ -14,7 +14,7 @@ namespace SeaSick.Dev
     /// this file never creates and does not reference by type -- only by
     /// name, through reflection, so it compiles and runs whether none, some
     /// or all three of them exist in the project yet:
-    ///   SeaSick.Ship.HelmTuning, SeaSick.Ship.HandlingTuning,
+    ///   SeaSick.Ship.SailControlTuning, SeaSick.Ship.HelmTuning, SeaSick.Ship.HandlingTuning,
     ///   SeaSick.Ship.JuiceTuning
     ///
     /// Modelled on PerfHUD's rules: dev/editor gated, and its label strings
@@ -61,6 +61,7 @@ namespace SeaSick.Dev
 
         static readonly string[] TypeFullNames =
         {
+            "SeaSick.Ship.SailControlTuning",
             "SeaSick.Ship.HelmTuning",
             "SeaSick.Ship.HandlingTuning",
             "SeaSick.Ship.JuiceTuning",
@@ -148,15 +149,25 @@ namespace SeaSick.Dev
             {"KrakenTuning.escapeSeconds",     (1f, 15f)},
             {"KrakenTuning.maxFightSeconds",   (0f, 900f)},
 
-            {"HelmTuning.rudderPerRim",        (0.3f, 1.5f)},
-            {"HelmTuning.rudderCurve",         (0.5f, 3f)},
-            {"HelmTuning.rudderMoveSpeed",     (1f, 12f)},
-            {"HelmTuning.rudderReturnPerSec",  (0.5f, 15f)}, // 2026-10-02: default 8
-            {"HelmTuning.throttleDeadZone",    (0f, 0.3f)},
+            // 2026-10-03 DREDGE sea stick (SailControlTuning), ranges from its docs
+            {"SailControlTuning.zoneTopFrac",            (0.3f, 0.8f)},
+            {"SailControlTuning.ringRadiusFrac",         (0.08f, 0.25f)},
+            {"SailControlTuning.deadZone",               (0f, 0.3f)},
+            {"SailControlTuning.liftGraceSeconds",       (0f, 0.3f)},
+            {"SailControlTuning.liftGraceRadius",        (0.3f, 2f)},
+            {"SailControlTuning.turnCurve",              (0.5f, 3f)},
+            {"SailControlTuning.throttleCurve",          (0.5f, 3f)},
+            {"SailControlTuning.reverseCap",             (0.1f, 1f)},
+            {"SailControlTuning.rudderSlewPerSec",       (1f, 20f)},
+            {"SailControlTuning.keyRampSeconds",         (0f, 1f)},
+            {"SailControlTuning.boostIdleSeconds",       (0.5f, 5f)},
+            {"SailControlTuning.boostStopSpeed",         (0f, 3f)},
+            {"SailControlTuning.steerTowardThrottle",    (0.1f, 1f)},
+            {"SailControlTuning.steerTowardSlowThrottle",(0.05f, 1f)},
+            {"SailControlTuning.steerTowardSlowHulls",   (0.5f, 6f)},
             {"HelmTuning.holdGain",            (0.1f, 2f)},
             {"HelmTuning.holdMaxDegPerSec",    (0.5f, 10f)},
             {"HelmTuning.holdCaptureDegPerSec",(0.2f, 5f)},
-            {"HelmTuning.throttleArcAllowance", (0f, 1.5f)},
 
             {"HandlingTuning.yawTauBuild",          (0.1f, 1.5f)},
             {"HandlingTuning.yawTauRelease",        (0.1f, 2f)},
