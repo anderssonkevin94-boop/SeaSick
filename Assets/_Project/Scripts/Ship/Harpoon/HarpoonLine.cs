@@ -146,42 +146,121 @@ namespace SeaSick.Ship.Harpoon
             if (lr != null) lr.enabled = false;
         }
 
+        /// m either side of the line the stem cap still counts as in its way
+        /// (full effect inside Full, none beyond None, eased between).
+        const float StemSideFull = 0.2f, StemSideNone = 0.55f;
+        /// m of lift over which the routed shape takes over from the plain curve.
+        const float StemBlend = 0.05f;
+
+        readonly Vector3[] routed = new Vector3[Points];
+
+        /// Sag of the curve a→b: a parabola whose drop gives the extra length
+        /// (s ≈ 8d²/3L), plus a little hang under any tension short of
+        /// strain. A very slack line lies along the water instead of diving
+        /// under it: the low end is at the surface, so the drop is capped to
+        /// keep the middle a hand above it (at the surface itself the swell
+        /// swallowed it).
+        static float SagFor(Vector3 a, Vector3 b, float t, float slackMetres, out float low)
+        {
+            float chord = Vector3.Distance(a, b);
+            float slackDrop = Mathf.Sqrt(Mathf.Max(0f, slackMetres) * chord * 3f / 8f);
+            float hang = chord * 0.035f * (1f - Mathf.SmoothStep(0f, HarpoonTuning.strainBand, t));
+            low = Mathf.Min(a.y, b.y);
+            float waterCap = Mathf.Max(0f, (a.y + b.y) * 0.5f - low - SlackLift);
+            return Mathf.Min(slackDrop + hang, Mathf.Min(chord * 0.35f, waterCap));
+        }
+
+        /// Height of the sag curve a→b at fraction `u` along it (every point
+        /// is floored a hand above the low end).
+        static float CurveY(Vector3 a, Vector3 b, float sag, float low, float u)
+        {
+            float bow = 4f * u * (1f - u);
+            return Mathf.Max(Mathf.Lerp(a.y, b.y, u) - sag * bow, low + SlackLift * bow);
+        }
+
+        /// Writes the sag curve a→b into `dst[first .. first+count-1]`.
+        static void FillCurve(Vector3[] dst, int first, int count, Vector3 a, Vector3 b, float sag, float low)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                float u = i / (float)(count - 1);
+                Vector3 p = Vector3.Lerp(a, b, u);
+                p.y = CurveY(a, b, sag, low, u);
+                dst[first + i] = p;
+            }
+        }
+
         /// **The line this frame.** `slackMetres` is how much longer the line
         /// is than the chord (0 = straight); `tension01` drives the band look.
-        public void Draw(Vector3 from, Vector3 to, float tension01, float slackMetres)
+        /// `fairlead` is the top of the hull's bow stem cap: when the line's
+        /// run from the muzzle would pass through or under it, the line runs
+        /// straight from the muzzle to the fairlead and sags on from there.
+        public void Draw(Vector3 from, Vector3 to, float tension01, float slackMetres, Vector3? fairlead = null)
         {
             whipT = -1f;
             float t = Mathf.Clamp01(tension01);
-            float chord = Vector3.Distance(from, to);
-            // Sag: a parabola whose drop gives the extra length (s ≈ 8d²/3L),
-            // plus a little hang under any tension short of strain.
-            float slackDrop = Mathf.Sqrt(Mathf.Max(0f, slackMetres) * chord * 3f / 8f);
-            float hang = chord * 0.035f * (1f - Mathf.SmoothStep(0f, HarpoonTuning.strainBand, t));
-            // A very slack line lies along the water instead of diving under
-            // it: the low end is at the surface, so the drop is capped to keep
-            // the middle a hand above it (at the surface itself the swell
-            // swallowed it), and every point is floored there below.
-            float low = Mathf.Min(from.y, to.y);
-            float waterCap = Mathf.Max(0f, (from.y + to.y) * 0.5f - low - SlackLift);
-            float sag = Mathf.Min(slackDrop + hang, Mathf.Min(chord * 0.35f, waterCap));
+            float sag = SagFor(from, to, t, slackMetres, out float low);
 
             bool strained = t >= HarpoonTuning.strainBand;
             float flutter = strained ? 0.04f * Mathf.InverseLerp(HarpoonTuning.strainBand, 1f, t) : 0f;
             Vector3 side = Vector3.Cross(to - from, Vector3.up);
             side = side.sqrMagnitude > 1e-6f ? side.normalized : Vector3.right;
 
-            for (int i = 0; i < Points; i++)
-            {
-                float u = i / (float)(Points - 1);
-                Vector3 p = Vector3.Lerp(from, to, u);
-                float bow = 4f * u * (1f - u);
-                p.y = Mathf.Max(p.y - sag * bow, low + SlackLift * bow);
-                if (flutter > 0f)
-                    p += side * (flutter * Mathf.Sin(u * Mathf.PI) * Mathf.Sin(Time.time * 47f + u * 9f));
-                pts[i] = p;
-            }
+            FillCurve(pts, 0, Points, from, to, sag, low);
+            if (fairlead.HasValue) RouteOverFairlead(from, to, t, slackMetres, sag, low, fairlead.Value);
+
+            if (flutter > 0f)
+                for (int i = 0; i < Points; i++)
+                {
+                    float u = i / (float)(Points - 1);
+                    pts[i] += side * (flutter * Mathf.Sin(u * Mathf.PI) * Mathf.Sin(Time.time * 47f + u * 9f));
+                }
             Apply(t);
             if (strained) Creak(t);
+        }
+
+        /// Where the plain curve (already in `pts`) would pass below the
+        /// fairlead, lift it onto the fairlead: a straight run muzzle →
+        /// fairlead, then the usual sag from there to the target. The lift is
+        /// the shortfall at the fairlead's distance along the line, weighted
+        /// to nothing as the fairlead falls off the muzzle-target span or to
+        /// the side of it, and the routed shape is blended in over the first
+        /// few centimetres of lift, so the line never pops between shapes.
+        void RouteOverFairlead(Vector3 from, Vector3 to, float t, float slackMetres,
+            float sag, float low, Vector3 fairlead)
+        {
+            Vector3 flat = to - from;
+            flat.y = 0f;
+            float span = flat.magnitude;
+            if (span < 0.5f) return;
+            Vector3 dir = flat / span;
+            Vector3 v = fairlead - from;
+            v.y = 0f;
+            float along = Vector3.Dot(v, dir);
+            float lateral = Mathf.Abs(dir.x * v.z - dir.z * v.x);
+            float w = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0f, 0.15f, along))
+                * Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0f, 0.6f, span - along))
+                * (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(StemSideFull, StemSideNone, lateral)));
+            if (w <= 0f) return;
+
+            float u = along / span;
+            float ropeY = CurveY(from, to, sag, low, u);
+            float lift = Mathf.Max(0f, fairlead.y - ropeY) * w;
+            float k = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0f, StemBlend, lift));
+            if (k <= 0f) return;
+
+            // The routed knot sits on the plain line's own track, raised.
+            Vector3 knot = Vector3.Lerp(from, to, u);
+            knot.y = ropeY + lift;
+            float len1 = Vector3.Distance(from, knot);
+            float len2 = Vector3.Distance(knot, to);
+            int n1 = Mathf.Clamp(Mathf.RoundToInt((Points - 1) * len1 / Mathf.Max(0.01f, len1 + len2)), 1, Points - 2);
+            for (int i = 0; i <= n1; i++)
+                routed[i] = Vector3.Lerp(from, knot, i / (float)n1);
+            float sag2 = SagFor(knot, to, t, slackMetres, out float low2);
+            FillCurve(routed, n1, Points - n1, knot, to, sag2, low2);
+            for (int i = 0; i < Points; i++)
+                pts[i] = Vector3.Lerp(pts[i], routed[i], k);
         }
 
         /// **Snap or cut**: the free end recoils to the muzzle, thrashing.

@@ -117,6 +117,43 @@ namespace SeaSick.Ship.Harpoon
             return new Vector3(0f, FallbackDeckY, len * 0.5f - StemSetBack);
         }
 
+        /// **The top of the bow stem cap in ship-local space**, ahead of the
+        /// fitting: the rope's fairlead. A modular hull gives its bow module's
+        /// forward-most, highest point on the centreline (module bounds, the
+        /// same module and units `BowModuleMountU` is measured in); the stock
+        /// steamer gives its forward-most station at the deck line. False when
+        /// the hull has neither, and the gun falls back to a point ahead of
+        /// the muzzle.
+        public static bool StemTop(Transform ship, out Vector3 local)
+        {
+            var view = ModularView(ship);
+            var bow = view != null && view.Current != null
+                ? view.Current.Find(SeaSick.Ship.Modular.ShipAssembler.StdKeyBow) : null;
+            if (bow != null && bow.boundsMaxU.x > BowModuleMountU.x)
+            {
+                var tipU = new Vector3(bow.boundsMaxU.x, 0f, Mathf.Max(bow.boundsMaxU.z, BowModuleMountU.z));
+                Vector3 inView = bow.positionM + bow.rotation
+                    * SeaSick.Ship.Modular.ModularScale.AuthoringToGame(tipU, view.Current.metresPerUnit);
+                local = ship.InverseTransformPoint(view.transform.TransformPoint(inView));
+                return true;
+            }
+
+            var steamer = ship.GetComponent<SeaSick.Steamer.SteamerShip>();
+            var data = steamer != null ? steamer.Data : null;
+            if (data != null && data.StationCount > 0)
+            {
+                int best = 0;
+                for (int i = 1; i < data.StationCount; i++)
+                    if (data.stations[i].z > data.stations[best].z) best = i;
+                var s = data.stations[best];
+                local = new Vector3(0f, s.deckY, s.z);
+                return true;
+            }
+
+            local = Vector3.zero;
+            return false;
+        }
+
         /// The fitting is about this wide: a station narrower than twice this
         /// at the deck is the very tip, with no deck to bolt it to.
         const float MinDeckHalfBreadth = 0.35f;

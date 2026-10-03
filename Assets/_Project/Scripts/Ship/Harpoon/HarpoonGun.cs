@@ -71,6 +71,8 @@ namespace SeaSick.Ship.Harpoon
         ShipMotor motor;
         SeaSick.Voyage.VoyageManager voyage;
         Transform mount, swivel, muzzle, drum, stand;
+        Vector3 stemLocal;
+        bool hasStem;
         Transform barb, barbAttach;
         HarpoonLine line;
         SeaSick.Steamer.SteamerShip steamer;
@@ -113,6 +115,28 @@ namespace SeaSick.Ship.Harpoon
 
         Vector3 MuzzlePos => muzzle != null ? muzzle.position : transform.position;
 
+        /// m the rope clears the stem cap by.
+        const float StemClearance = 0.12f;
+        /// No hull data: the fairlead stands this far ahead of the muzzle,
+        /// 0.3 m below it.
+        const float FallbackStemAhead = 1.2f;
+        const float FallbackStemDrop = 0.3f;
+
+        /// **The rope's fairlead**: the top of the hull's bow stem cap plus a
+        /// hand of clearance, in world space (refreshed with the fitting on
+        /// every refit). Without hull data, a point ahead of the muzzle.
+        public Vector3 StemTopWorld
+        {
+            get
+            {
+                if (hasStem) return transform.TransformPoint(stemLocal) + Vector3.up * StemClearance;
+                Vector3 fwd = transform.forward;
+                fwd.y = 0f;
+                fwd = fwd.sqrMagnitude > 1e-6f ? fwd.normalized : Vector3.forward;
+                return MuzzlePos + fwd * FallbackStemAhead + Vector3.down * FallbackStemDrop;
+            }
+        }
+
         void Awake()
         {
             motor = GetComponent<ShipMotor>();
@@ -153,6 +177,7 @@ namespace SeaSick.Ship.Harpoon
             mount = HarpoonMount.BuildMount(transform).transform;
             mount.localPosition = HarpoonMount.BowStem(transform);
             mount.localRotation = Quaternion.identity;
+            hasStem = HarpoonMount.StemTop(transform, out stemLocal);
             swivel = HarpoonMount.Find(mount, "Swivel") ?? mount;
             muzzle = HarpoonMount.Find(mount, "Barb_Muzzle") ?? swivel;
             drum = HarpoonMount.Find(mount, "Winch_Drum");
@@ -376,7 +401,7 @@ namespace SeaSick.Ship.Harpoon
             Vector3 ahead = BarbAt(Mathf.Min(1f, s + 0.02f)) - p;
             barb.position = p;
             if (ahead.sqrMagnitude > 1e-6f) barb.rotation = Quaternion.LookRotation(ahead);
-            line.Draw(MuzzlePos, barbAttach.position, 0f, 0.1f);
+            line.Draw(MuzzlePos, barbAttach.position, 0f, 0.1f, StemTopWorld);
             if (s < 1f) return;
 
             bool bite = Valid(hooked)
@@ -435,7 +460,7 @@ namespace SeaSick.Ship.Harpoon
             barb.position = p;
             if (dir.sqrMagnitude > 1e-4f) barb.rotation = Quaternion.LookRotation(-dir);
             reelVel = FlatDistance(returnFrom, MuzzlePos) / secs;
-            line.Draw(MuzzlePos, barbAttach.position, 0.05f, 0.3f * (1f - s));
+            line.Draw(MuzzlePos, barbAttach.position, 0.05f, 0.3f * (1f - s), StemTopWorld);
             if (s < 1f) return;
             barb.gameObject.SetActive(false);
             line.Hide();
@@ -558,7 +583,7 @@ namespace SeaSick.Ship.Harpoon
             barb.position = hooked.HookPoint;
             Vector3 dir = MuzzlePos - barb.position;
             if (dir.sqrMagnitude > 1e-4f) barb.rotation = Quaternion.LookRotation(-dir);
-            line.Draw(MuzzlePos, barbAttach.position, Tension01, slack);
+            line.Draw(MuzzlePos, barbAttach.position, Tension01, slack, StemTopWorld);
         }
 
         /// Kinematic: put it there, and park its own haul anchor on the same
