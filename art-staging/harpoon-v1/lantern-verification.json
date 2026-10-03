@@ -1,0 +1,129 @@
+{
+ "errors": [],
+ "roots": [
+  "BowLantern"
+ ],
+ "pivot_root_frame": [
+  0.0,
+  -2.03,
+  0.695
+ ],
+ "meshes": {
+  "BowLantern_Beam": {
+   "tris": 48,
+   "materials": [
+    "SS_Harpoon_Timber",
+    "SS_Harpoon_Rope",
+    "SS_Harpoon_Iron"
+   ],
+   "colour_attrs": [
+    "GameColor"
+   ],
+   "zero_area_faces": 0,
+   "islands": 4,
+   "inward_islands": 0
+  },
+  "Lantern_Bow_Frame": {
+   "tris": 352,
+   "materials": [
+    "SS_Harpoon_Timber",
+    "SS_Harpoon_Rope",
+    "SS_Harpoon_Iron"
+   ],
+   "colour_attrs": [
+    "GameColor"
+   ],
+   "zero_area_faces": 0,
+   "islands": 8,
+   "inward_islands": 0
+  },
+  "Lantern_Bow_Glass": {
+   "tris": 44,
+   "materials": [
+    "SS_Harpoon_Timber",
+    "SS_Harpoon_Rope",
+    "SS_Harpoon_Iron"
+   ],
+   "colour_attrs": [
+    "GameColor"
+   ],
+   "zero_area_faces": 0,
+   "islands": 1,
+   "inward_islands": 0
+  },
+  "LanternBow_Chain": {
+   "tris": 72,
+   "materials": [
+    "SS_Harpoon_Timber",
+    "SS_Harpoon_Rope",
+    "SS_Harpoon_Iron"
+   ],
+   "colour_attrs": [
+    "GameColor"
+   ],
+   "zero_area_faces": 0,
+   "islands": 2,
+   "inward_islands": 0
+  }
+ },
+ "tris": 516,
+ "lantern_ahead_of_hull_front_m": 0.165,
+ "lantern_top_below_muzzle_m": 1.015,
+ "beam_top_below_muzzle_m": 0.755,
+ "glass_centre_above_sea_m": 0.95,
+ "beam_root_end_behind_stem_face_m": [
+  0.111,
+  0.111,
+  0.224,
+  0.224
+ ],
+ "beam_sticks_out_of_stem_m": 0.481,
+ "swing_contacts": {
+  "10 deg": [],
+  "20 deg": [],
+  "34 deg": []
+ },
+ "rope_radius_m": 0.0375,
+ "rope_sags_tested": [
+  0.0,
+  0.012,
+  0.035
+ ],
+ "line_clearance_m": {
+  "beam": [
+   0.205,
+   "-3 deg 10 m +0.0 sag 0.035"
+  ],
+  "lantern+chain 0 deg swing": [
+   0.468,
+   "0 deg 10 m +0.0 sag 0.035"
+  ],
+  "lantern+chain 10 deg swing": [
+   0.465,
+   "0 deg 10 m +0.0 sag 0.035"
+  ],
+  "lantern+chain 20 deg swing": [
+   0.462,
+   "0 deg 10 m +0.0 sag 0.035"
+  ],
+  "lantern+chain 34 deg swing": [
+   0.459,
+   "0 deg 10 m +0.0 sag 0.035"
+  ]
+ },
+ "hull_blocks_line_at_sea_level_without_old_lantern": [
+  "-1@10m",
+  "-2@10m",
+  "-3@10m",
+  "-4@10m",
+  "-5@10m",
+  "-6@10m",
+  "0@10m",
+  "1@10m",
+  "2@10m",
+  "3@10m",
+  "4@10m",
+  "5@10m",
+  "6@10m"
+ ]
+}

@@ -1,0 +1,238 @@
+{
+ "errors": [],
+ "HarpoonMount.fbx": {
+  "roots": [
+   "HarpoonMount"
+  ],
+  "Swivel": [
+   0.0,
+   0.0,
+   0.16
+  ],
+  "Barb_Muzzle": [
+   0.0,
+   -0.8,
+   1.72
+  ],
+  "Winch_Drum": [
+   0.0,
+   0.42,
+   1.06
+  ],
+  "Harpooner_Stand": [
+   0.0,
+   0.86,
+   0.3
+  ],
+  "meshes": {
+   "Mount_Base": {
+    "tris": 176,
+    "parent": "HarpoonMount",
+    "materials": [
+     "SS_Harpoon_Timber",
+     "SS_Harpoon_Rope",
+     "SS_Harpoon_Iron"
+    ],
+    "colour_attrs": [
+     "GameColor"
+    ],
+    "zero_area_faces": 0
+   },
+   "Swivel_Body": {
+    "tris": 608,
+    "parent": "Swivel",
+    "materials": [
+     "SS_Harpoon_Timber",
+     "SS_Harpoon_Rope",
+     "SS_Harpoon_Iron"
+    ],
+    "colour_attrs": [
+     "GameColor"
+    ],
+    "zero_area_faces": 0
+   },
+   "Winch_Coil": {
+    "tris": 944,
+    "parent": "Winch_Drum",
+    "materials": [
+     "SS_Harpoon_Timber",
+     "SS_Harpoon_Rope",
+     "SS_Harpoon_Iron"
+    ],
+    "colour_attrs": [
+     "GameColor"
+    ],
+    "zero_area_faces": 0
+   }
+  },
+  "tris": 1728,
+  "bounds": [
+   [
+    -0.899,
+    -0.802,
+    -0.0
+   ],
+   [
+    0.899,
+    1.06,
+    1.9
+   ]
+  ]
+ },
+ "HarpoonBarb.fbx": {
+  "roots": [
+   "HarpoonBarb"
+  ],
+  "Line_Attach": [
+   0.0,
+   0.335,
+   -0.0
+  ],
+  "meshes": {
+   "Barb_Mesh": {
+    "tris": 192,
+    "parent": "HarpoonBarb",
+    "materials": [
+     "SS_Harpoon_Timber",
+     "SS_Harpoon_Rope",
+     "SS_Harpoon_Iron"
+    ],
+    "colour_attrs": [
+     "GameColor"
+    ],
+    "zero_area_faces": 0
+   }
+  },
+  "tris": 192,
+  "bounds": [
+   [
+    -0.19,
+    -0.55,
+    -0.067
+   ],
+   [
+    0.19,
+    0.405,
+    0.067
+   ]
+  ]
+ },
+ "base_on_deck": {
+  "underside_points": 26,
+  "max_abs_gap_m": 0.003,
+  "off_deck_points": 0
+ },
+ "sweep_-45_to_45": {
+  "-45": {
+   "hull_overlaps": 0,
+   "verts_in_gun_clearance": 0
+  },
+  "-40": {
+   "hull_overlaps": 0,
+   "verts_in_gun_clearance": 0
+  },
+  "-35": {
+   "hull_overlaps": 0,
+   "verts_in_gun_clearance": 0
+  },
+  "-30": {
+   "hull_overlaps": 0,
+   "verts_in_gun_clearance": 0
+  },
+  "-25": {
+   "hull_overlaps": 0,
+   "verts_in_gun_clearance": 0
+  },
+  "-20": {
+   "hull_overlaps": 0,
+   "verts_in_gun_clearance": 0
+  },
+  "-15": {
+   "hull_overlaps": 0,
+   "verts_in_gun_clearance": 0
+  },
+  "-10": {
+   "hull_overlaps": 0,
+   "verts_in_gun_clearance": 0
+  },
+  "-5": {
+   "hull_overlaps": 0,
+   "verts_in_gun_clearance": 0
+  },
+  "0": {
+   "hull_overlaps": 0,
+   "verts_in_gun_clearance": 0
+  },
+  "5": {
+   "hull_overlaps": 0,
+   "verts_in_gun_clearance": 0
+  },
+  "10": {
+   "hull_overlaps": 0,
+   "verts_in_gun_clearance": 0
+  },
+  "15": {
+   "hull_overlaps": 0,
+   "verts_in_gun_clearance": 0
+  },
+  "20": {
+   "hull_overlaps": 0,
+   "verts_in_gun_clearance": 0
+  },
+  "25": {
+   "hull_overlaps": 0,
+   "verts_in_gun_clearance": 0
+  },
+  "30": {
+   "hull_overlaps": 0,
+   "verts_in_gun_clearance": 0
+  },
+  "35": {
+   "hull_overlaps": 0,
+   "verts_in_gun_clearance": 0
+  },
+  "40": {
+   "hull_overlaps": 0,
+   "verts_in_gun_clearance": 0
+  },
+  "45": {
+   "hull_overlaps": 0,
+   "verts_in_gun_clearance": 0
+  }
+ },
+ "rope_blocked_by_hull (yaw@range: parts)": {
+  "-5@10m": [
+   "Bow_Cap_Connector"
+  ],
+  "0@10m": [
+   "Bow_Cap_Connector",
+   "Lantern_Bow_Frame"
+  ],
+  "0@20m": [
+   "Lantern_Bow_Frame"
+  ],
+  "0@35m": [
+   "Lantern_Bow_Frame"
+  ],
+  "5@10m": [
+   "Bow_Cap_Connector"
+  ]
+ },
+ "muzzle_height_above_deck_m": 1.72,
+ "footprint_review_m": [
+  [
+   -0.899,
+   -8.852
+  ],
+  [
+   0.899,
+   -6.99
+  ]
+ ],
+ "deck_level_clearance_to_hatch_marker_m": 0.365,
+ "mount_at_review_m": [
+  0.0,
+  -8.05,
+  1.055
+ ]
+}
