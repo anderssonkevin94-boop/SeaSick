@@ -272,7 +272,36 @@ namespace SeaSick.World
         /// played; tune here if a load reads wrong on the phone. Read
         /// through `OutpostLedger.CarryArmful`, which picks this or `Armful`
         /// by who is carrying.
-        public static int BarrowArmful(string r) => r switch
+        public static int BarrowArmful(string r) => BarrowArmful(r, 0);
+
+        /// **The barrow with the Storehouse's perk (2026-10-03, Kevin:
+        /// "the more you upgrade it, the more / better runners you get")**:
+        /// `extraArmfuls` (0, +1 from a Storehouse, +2 at its level 3; read
+        /// through `OutpostLedger.RunnerPerks`) more of a hand's armful on
+        /// top of the base load below -- logs 6 / 8 / 10, stone 8 / 11 / 14,
+        /// boards 10 / 14 / 18. On top of the base rather than a literal
+        /// (3 + n) x armful, so a camp WITHOUT a Storehouse keeps exactly
+        /// today's loads (stone 8, boards 10 are not 3 armfuls). Small goods
+        /// go up half a crate an armful (16 / 20 / 24); arrows, bows and
+        /// saw blades scale x(3 + n) / 3, rounded down (blades 2 / 2 / 3);
+        /// fish keep "the whole box at once" (never below `FishArmful`).
+        /// The tray DRAWS at most `RunnerBarrow.MaxLogs/MaxPlanks/MaxRocks/
+        /// MaxBricks`; the ledger's count is the truth.
+        public static int BarrowArmful(string r, int extraArmfuls)
+        {
+            int n = System.Math.Max(0, extraArmfuls);
+            int b = BarrowBase(r);
+            if (n == 0) return b;
+            switch (r)
+            {
+                case Arrows: case Bow: case SawBlade: return b * (3 + n) / 3;
+                case Fish: return System.Math.Max(BarrowSmallGoods + 4 * n, FishArmful);
+            }
+            if (Armful(r) >= CrateArmful) return BarrowSmallGoods + 4 * n;
+            return b + n * Armful(r);
+        }
+
+        static int BarrowBase(string r) => r switch
         {
             Timber => 6,
             Stone => 8,

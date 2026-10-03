@@ -137,8 +137,11 @@ namespace SeaSick.World
         /// a runner jogs behind his barrow, loaded or empty, at
         /// `VillagerGaits.Barrow` (his body's own `CruiseSpeed`, so a watched
         /// and an unwatched camp keep the same pace); everybody else at
-        /// `WalkMetresPerSecond`.
-        public static float WalkSpeedOf(OutpostHand h) => IsRunner(h) ? VillagerGaits.Barrow : WalkMetresPerSecond;
+        /// `WalkMetresPerSecond`. **Instance since 2026-10-03:** the jog
+        /// takes this camp's Storehouse perk (`RunnerJogSpeed`, 10 % / 20 %
+        /// faster at levels 2 / 3), the same number the body is given, so
+        /// the offline catch-up walks the runner exactly as fast as you see.
+        public float WalkSpeedOf(OutpostHand h) => IsRunner(h) ? RunnerJogSpeed() : WalkMetresPerSecond;
         /// Straight line to walked path. **Unused by the books since
         /// 2026-09-27** (legs are measured on `CampPath` through `router`,
         /// or walked straight); kept for old callers.

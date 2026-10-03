@@ -65,7 +65,25 @@ namespace SeaSick.World
         /// 2.7x `Books` (0.75) and 3.9x a carrier (0.53); x1.3 on a road is
         /// rate 1.3, inside `RateMax`.
         public static float BarrowRate = 1f;
-        public static float Barrow => RunClip * BarrowRate;
+        public static float Barrow => BarrowAt(1f);
+
+        /// **The jog with a camp's Storehouse perk** (2026-10-03: x1.1 at
+        /// Storehouse level 2, x1.2 at level 3; `OutpostLedger.RunnerJogSpeed`),
+        /// m/s. The Run clip plays at speed / `RunClip`, so the rate is
+        /// `BarrowRate x speedMul` off the road and that x the road's
+        /// `CampRoads.SpeedMultiplier` on it; both must stay inside
+        /// `RateMax` or the feet skate. So the off-road rate is clamped to
+        /// `RateMax / road`: at today's tuning (road 1.3, RateMax 2.0) that
+        /// is 1.54, and level 3's 1.2 (2.45 m/s, 3.18 on a road = rate 1.56)
+        /// never reaches it -- **the clamp only bites if the road multiplier
+        /// is tuned above 1.67, or `BarrowRate` above 1.28.** Books and body
+        /// read this one number, so a clamp that bites slows both alike.
+        public static float BarrowAt(float speedMul)
+        {
+            float road = Mathf.Max(1f, CampRoads.SpeedMultiplier);
+            float rate = Mathf.Min(BarrowRate * Mathf.Max(0.1f, speedMul), RateMax / road);
+            return RunClip * rate;
+        }
 
         /// **The books' walking speed** (`OutpostLedger.WalkMetresPerSecond`):
         /// a trip is out brisk and back carrying, so the harmonic mean of

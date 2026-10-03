@@ -51,12 +51,68 @@ namespace SeaSick.World
         /// The store hut's plan id: a Work hand there is a runner.
         public static string StorageId => BuildPlans.Storage.id;
 
+        /// The Storehouse's plan id: a Work hand there is a runner too
+        /// (2026-10-03, below).
+        public static string StorehouseId => BuildPlans.Storehouse.id;
+
         /// Runners one store hut takes, at level 1 and from level 2.
         public const int RunnersPerStoreL1 = 2;
         public const int RunnersPerStoreL2 = 4;
 
+        // --- the Storehouse: runner progression (2026-10-03) -----------------
+        //
+        // **Kevin, 2026-10-03, approved as written:** island stores are
+        // unlimited now, so the Storehouse's old "+20 of each" was dead. Its
+        // new purpose: "the more you upgrade it, the more / better runners
+        // you get." It STACKS on the store huts (they keep 2 / 4 posts each):
+        //
+        //   Storehouse | its own runner posts | perk for EVERY runner on the island
+        //   L1 (built) | 2                    | barrow +1 armful
+        //   L2         | 4                    | + jog 10 % faster
+        //   L3 (fire 3)| 6                    | barrow +2 armfuls, jog 20 % faster
+        //
+        // Perks come from the HIGHEST-level Storehouse standing on the camp
+        // (a second copy adds its posts, never a second perk). They derive
+        // from building levels alone, so nothing new is saved.
+
+        /// Runner posts one Storehouse takes at `level` (1..3): 2 / 4 / 6.
+        public static int StorehouseRunners(int level) => 2 * Mathf.Clamp(level, 1, 3);
+
+        /// Extra barrow armfuls and jog multiplier a Storehouse at `level`
+        /// gives every runner on its island; level 0 = none standing. Static
+        /// so the upgrade row can quote the NEXT level's perk.
+        public static (int extraArmfuls, float speedMul) PerksAt(int level)
+        {
+            if (level <= 0) return (0, 1f);
+            if (level == 1) return (1, 1f);
+            if (level == 2) return (1, 1.1f);
+            return (2, 1.2f);
+        }
+
+        /// **The camp-wide runner perks right now** (`PerksAt` of the highest
+        /// Storehouse standing here). Read by the barrow (`CarryArmful`), the
+        /// books (`WalkSpeedOf`) and the body (`CampWorker` -> `VillagerActing
+        /// .BarrowSpeedMul`) alike, so a watched and an unwatched camp agree.
+        public (int extraArmfuls, float speedMul) RunnerPerks() => PerksAt(StorehouseLevel());
+
+        /// The highest level of any Storehouse standing here, 0 when none.
+        public int StorehouseLevel() =>
+            CountBuilt(StorehouseId) > 0 ? Mathf.Max(1, LevelOf(StorehouseId)) : 0;
+
+        /// "barrow +1 armful · jog 10% faster" -- a perk for the UI, or "".
+        public static string PerkWords(int level)
+        {
+            var (n, mul) = PerksAt(level);
+            string a = n <= 0 ? null : n == 1 ? "barrow +1 armful" : $"barrow +{n} armfuls";
+            int pct = Mathf.RoundToInt((mul - 1f) * 100f);
+            string b = pct > 0 ? $"jog {pct}% faster" : null;
+            if (a != null && b != null) return a + " · " + b;
+            return a ?? b ?? "";
+        }
+
         /// The refusal for one runner too many.
         public const string RunnersFullReason = "Every barrow at this store hut is taken";
+        public const string StorehouseFullReason = "Every barrow at this storehouse is taken";
 
         /// **Quanta a bench may stand idle waiting on a runner** before its
         /// worker fetches for himself (0.02 work-day each, ~3.6 s of the
@@ -70,17 +126,29 @@ namespace SeaSick.World
 
         // --- the API (the UI codes against exactly this) -------------------------
 
-        /// A hand on the Work order at the store hut.
-        public static bool IsRunner(OutpostHand h) =>
-            h != null && h.order == OutpostOrder.Work && h.target == BuildPlans.Storage.id;
+        /// A plan whose Work hands are runners: the store hut, and since
+        /// 2026-10-03 the Storehouse.
+        public static bool IsRunnerPost(string planId) => planId == StorageId || planId == StorehouseId;
 
-        /// Runner places over every store hut standing here.
-        public int RunnerSlots()
+        /// A hand on the Work order at a store hut or a Storehouse.
+        public static bool IsRunner(OutpostHand h) =>
+            h != null && h.order == OutpostOrder.Work && IsRunnerPost(h.target);
+
+        /// Runner places over every store hut AND Storehouse standing here.
+        public int RunnerSlots() => RunnerSlotsAt(StorageId) + RunnerSlotsAt(StorehouseId);
+
+        /// Runner places over every standing copy of ONE runner plan (the
+        /// Hand's per-building "Runner" tiles count their own posts).
+        public int RunnerSlotsAt(string planId)
         {
-            int n = CountBuilt(StorageId), k = 0;
-            for (int o = 0; o < n; o++) k += StationCapacity(StorageId, o);
+            if (!IsRunnerPost(planId)) return 0;
+            int n = CountBuilt(planId), k = 0;
+            for (int o = 0; o < n; o++) k += StationCapacity(planId, o);
             return k;
         }
+
+        /// A store hut or a Storehouse stands here: runners have a post.
+        bool AnyRunnerPost => CountBuilt(StorageId) > 0 || CountBuilt(StorehouseId) > 0;
 
         /// Hands on the runner order right now.
         public int RunnerCount()
@@ -125,8 +193,15 @@ namespace SeaSick.World
 
         /// What this hand takes in one trip of `res`: a runner's barrow, or
         /// an armful.
+        /// A runner's barrow grows with the Storehouse (`RunnerPerks`,
+        /// 2026-10-03).
         public int CarryArmful(OutpostHand h, string res) =>
-            IsRunner(h) ? Res.BarrowArmful(res) : Res.Armful(res);
+            IsRunner(h) ? Res.BarrowArmful(res, RunnerPerks().extraArmfuls) : Res.Armful(res);
+
+        /// **A runner's jog in m/s, books and body alike** (2026-10-03): the
+        /// barrow pace times the Storehouse's perk, held under the walk
+        /// clip's rate window even on a road (`VillagerGaits.BarrowAt`).
+        public float RunnerJogSpeed() => VillagerGaits.BarrowAt(RunnerPerks().speedMul);
 
         bool TrulyIdle(OutpostHand h)
         {
@@ -144,7 +219,7 @@ namespace SeaSick.World
         /// Runners able to run this quantum (`CountRunners`, once a `Step`).
         [System.NonSerialized] int activeRunners;
 
-        /// At least one runner is up and his store hut stands: the rest of
+        /// At least one runner is up and his post stands: the rest of
         /// the camp leaves the hauling to the runners.
         bool RunnersOn => activeRunners > 0;
 
@@ -155,9 +230,11 @@ namespace SeaSick.World
         void CountRunners()
         {
             activeRunners = 0;
-            if (hands == null || CountBuilt(StorageId) <= 0) return;
+            if (hands == null || !AnyRunnerPost) return;
+            // His OWN post must stand (2026-10-03: a Storehouse runner whose
+            // Storehouse was taken down is no runner on the ground).
             foreach (var h in hands)
-                if (IsRunner(h) && !h.Busy) activeRunners++;
+                if (IsRunner(h) && !h.Busy && CountBuilt(h.target) > 0) activeRunners++;
         }
 
         // --- the runner's day ----------------------------------------------------
@@ -168,7 +245,7 @@ namespace SeaSick.World
         /// he goes back to the store and waits there.
         void RunnerDay(OutpostHand h, ref float budget)
         {
-            if (CountBuilt(StorageId) <= 0) { if (h.Hauling) AdvanceHaul(h, ref budget); return; }
+            if (CountBuilt(h.target) <= 0) { if (h.Hauling) AdvanceHaul(h, ref budget); return; }
             for (int guard = 0; guard < 64 && budget > Eps; guard++)
             {
                 if (h.Hauling)
@@ -212,10 +289,22 @@ namespace SeaSick.World
                 if (mayTransfer && StartTransferTrip(h)) { transferredLast.Add(h); continue; }
                 transferredLast.Remove(h);
                 if (FindHaulerChore(h, out var c)) { BeginChore(h, c); continue; }
-                // Nothing to carry: wait at the store.
-                if (StoreAt(out var sAt)) WalkTo(h, sAt, ref budget, WorkFactor(h));
+                // Nothing to carry: wait at HIS post -- the store hut or the
+                // Storehouse he is posted at, the copy his body walks to
+                // (`CampWorker.TickWorkAt` -> `RunnerWaitSpot`). It was the
+                // first store standing, which put a second hut's runners
+                // (and now a Storehouse's) in the books at the wrong door.
+                if (RunnerPostAt(h, out var sAt) || StoreAt(out sAt)) WalkTo(h, sAt, ref budget, WorkFactor(h));
                 break;
             }
+        }
+
+        /// Where this runner's own post stands (his copy of his plan).
+        bool RunnerPostAt(OutpostHand h, out Vector3 at)
+        {
+            at = default;
+            if (!IsRunner(h)) return false;
+            return PlanPlace(h.target, Mathf.Max(0, OrdinalOfHand(h)), out at);
         }
 
         /// Runners whose last trip was a transfer armful (`RunnerDay`'s

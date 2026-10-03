@@ -677,6 +677,12 @@ namespace SeaSick.World
             // always use their wheelbarrow"): up a ladder chain, or lying
             // down by the fire, it is set down where he left it.
             RunnerBarrow.Sync(this, r, acting, climb.Active || lyingByFire);
+            // **The Storehouse's jog perk (2026-10-03)**: the same multiplier
+            // the books walk him at (`OutpostLedger.RunnerJogSpeed`). Asked
+            // only for a runner: a few list reads a frame.
+            if (acting != null)
+                acting.BarrowSpeedMul = OutpostLedger.IsRunner(r) && camp != null && camp.Ledger != null
+                    ? camp.Ledger.RunnerPerks().speedMul : 1f;
 
             // **The rescuer (death/rescue phase 2), ahead of everything
             // else** -- a hand sent to drag somebody home is not doing his
