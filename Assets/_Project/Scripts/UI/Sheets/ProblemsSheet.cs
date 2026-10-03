@@ -53,6 +53,10 @@ namespace SeaSick.UI.Sheets
         {
             head = CardKit.Head("clock", Title);
             head.SetPill("", StationPage.PillWait);
+            // Whichever the host builds first, the next refresh writes the
+            // subtitle ("3 things stuck right now").
+            shownCount = -1;
+            nextCollect = 0f;
             return head.Root;
         }
 
