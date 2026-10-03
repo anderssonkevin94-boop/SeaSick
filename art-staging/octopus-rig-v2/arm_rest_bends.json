@@ -1,0 +1,278 @@
+{
+ "note": "rest_bend_deg = bend from parent to this bone about this bone's local X; positive = curled toward the suckers already in the bind pose. Rotating this bone by -rest_bend_deg about local X straightens that joint.",
+ "bones": {
+  "Arm0_00": {
+   "length": 0.1332
+  },
+  "Arm0_01": {
+   "length": 0.1285,
+   "rest_bend_deg": -19.3
+  },
+  "Arm0_02": {
+   "length": 0.1092,
+   "rest_bend_deg": -4.0
+  },
+  "Arm0_03": {
+   "length": 0.0928,
+   "rest_bend_deg": 24.6
+  },
+  "Arm0_04": {
+   "length": 0.0789,
+   "rest_bend_deg": 35.3
+  },
+  "Arm0_05": {
+   "length": 0.0671,
+   "rest_bend_deg": 32.8
+  },
+  "Arm0_06": {
+   "length": 0.057,
+   "rest_bend_deg": 27.6
+  },
+  "Arm0_07": {
+   "length": 0.0485,
+   "rest_bend_deg": 36.8
+  },
+  "Arm0_08": {
+   "length": 0.0412,
+   "rest_bend_deg": 25.8
+  },
+  "Arm0_09": {
+   "length": 0.035,
+   "rest_bend_deg": -21.6
+  },
+  "Arm1_00": {
+   "length": 0.1246
+  },
+  "Arm1_01": {
+   "length": 0.1213,
+   "rest_bend_deg": -25.4
+  },
+  "Arm1_02": {
+   "length": 0.1031,
+   "rest_bend_deg": -6.4
+  },
+  "Arm1_03": {
+   "length": 0.0876,
+   "rest_bend_deg": 14.3
+  },
+  "Arm1_04": {
+   "length": 0.0745,
+   "rest_bend_deg": 27.6
+  },
+  "Arm1_05": {
+   "length": 0.0633,
+   "rest_bend_deg": 25.6
+  },
+  "Arm1_06": {
+   "length": 0.0538,
+   "rest_bend_deg": 30.1
+  },
+  "Arm1_07": {
+   "length": 0.0457,
+   "rest_bend_deg": 16.3
+  },
+  "Arm1_08": {
+   "length": 0.0389,
+   "rest_bend_deg": 2.4
+  },
+  "Arm1_09": {
+   "length": 0.033,
+   "rest_bend_deg": -45.4
+  },
+  "Arm2_00": {
+   "length": 0.1243
+  },
+  "Arm2_01": {
+   "length": 0.121,
+   "rest_bend_deg": -18.5
+  },
+  "Arm2_02": {
+   "length": 0.1028,
+   "rest_bend_deg": -24.9
+  },
+  "Arm2_03": {
+   "length": 0.0874,
+   "rest_bend_deg": -21.8
+  },
+  "Arm2_04": {
+   "length": 0.0743,
+   "rest_bend_deg": 20.2
+  },
+  "Arm2_05": {
+   "length": 0.0631,
+   "rest_bend_deg": 48.7
+  },
+  "Arm2_06": {
+   "length": 0.0537,
+   "rest_bend_deg": 41.9
+  },
+  "Arm2_07": {
+   "length": 0.0456,
+   "rest_bend_deg": 16.8
+  },
+  "Arm2_08": {
+   "length": 0.0388,
+   "rest_bend_deg": 7.3
+  },
+  "Arm2_09": {
+   "length": 0.033,
+   "rest_bend_deg": -29.8
+  },
+  "Arm3_00": {
+   "length": 0.1434
+  },
+  "Arm3_01": {
+   "length": 0.1372,
+   "rest_bend_deg": -19.7
+  },
+  "Arm3_02": {
+   "length": 0.1166,
+   "rest_bend_deg": -21.5
+  },
+  "Arm3_03": {
+   "length": 0.0991,
+   "rest_bend_deg": -30.4
+  },
+  "Arm3_04": {
+   "length": 0.0842,
+   "rest_bend_deg": -18.3
+  },
+  "Arm3_05": {
+   "length": 0.0716,
+   "rest_bend_deg": 11.1
+  },
+  "Arm3_06": {
+   "length": 0.0609,
+   "rest_bend_deg": 41.6
+  },
+  "Arm3_07": {
+   "length": 0.0517,
+   "rest_bend_deg": 41.4
+  },
+  "Arm3_08": {
+   "length": 0.044,
+   "rest_bend_deg": 10.0
+  },
+  "Arm3_09": {
+   "length": 0.0374,
+   "rest_bend_deg": -31.0
+  },
+  "Arm4_00": {
+   "length": 0.1454
+  },
+  "Arm4_01": {
+   "length": 0.1389,
+   "rest_bend_deg": -13.4
+  },
+  "Arm4_02": {
+   "length": 0.1181,
+   "rest_bend_deg": -24.0
+  },
+  "Arm4_03": {
+   "length": 0.1004,
+   "rest_bend_deg": -27.0
+  },
+  "Arm4_04": {
+   "length": 0.0853,
+   "rest_bend_deg": -27.9
+  },
+  "Arm4_05": {
+   "length": 0.0725,
+   "rest_bend_deg": 8.6
+  },
+  "Arm4_06": {
+   "length": 0.0616,
+   "rest_bend_deg": 33.4
+  },
+  "Arm4_07": {
+   "length": 0.0524,
+   "rest_bend_deg": 57.9
+  },
+  "Arm4_08": {
+   "length": 0.0445,
+   "rest_bend_deg": 32.7
+  },
+  "Arm4_09": {
+   "length": 0.0379,
+   "rest_bend_deg": -12.2
+  },
+  "Arm5_00": {
+   "length": 0.1101
+  },
+  "Arm5_01": {
+   "length": 0.1089,
+   "rest_bend_deg": -16.2
+  },
+  "Arm5_02": {
+   "length": 0.0925,
+   "rest_bend_deg": -36.9
+  },
+  "Arm5_03": {
+   "length": 0.0786,
+   "rest_bend_deg": -23.0
+  },
+  "Arm5_04": {
+   "length": 0.0669,
+   "rest_bend_deg": 13.1
+  },
+  "Arm5_05": {
+   "length": 0.0568,
+   "rest_bend_deg": 33.9
+  },
+  "Arm5_06": {
+   "length": 0.0483,
+   "rest_bend_deg": 39.8
+  },
+  "Arm5_07": {
+   "length": 0.0411,
+   "rest_bend_deg": 26.5
+  },
+  "Arm5_08": {
+   "length": 0.0349,
+   "rest_bend_deg": 15.1
+  },
+  "Arm5_09": {
+   "length": 0.0297,
+   "rest_bend_deg": -11.9
+  },
+  "Arm6_00": {
+   "length": 0.1451
+  },
+  "Arm6_01": {
+   "length": 0.1386,
+   "rest_bend_deg": -32.9
+  },
+  "Arm6_02": {
+   "length": 0.1178,
+   "rest_bend_deg": -14.4
+  },
+  "Arm6_03": {
+   "length": 0.1001,
+   "rest_bend_deg": 38.3
+  },
+  "Arm6_04": {
+   "length": 0.0851,
+   "rest_bend_deg": 40.4
+  },
+  "Arm6_05": {
+   "length": 0.0724,
+   "rest_bend_deg": 36.5
+  },
+  "Arm6_06": {
+   "length": 0.0615,
+   "rest_bend_deg": 34.9
+  },
+  "Arm6_07": {
+   "length": 0.0523,
+   "rest_bend_deg": 17.7
+  },
+  "Arm6_08": {
+   "length": 0.0444,
+   "rest_bend_deg": -2.0
+  },
+  "Arm6_09": {
+   "length": 0.0378,
+   "rest_bend_deg": -54.6
+  }
+ }
+}
