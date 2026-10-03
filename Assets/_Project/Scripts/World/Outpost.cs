@@ -3172,6 +3172,10 @@ namespace SeaSick.World
             h.target = resource;
             h.playerIdle = false;   // any other order ends his reserve (2026-09-28)
             h.workPin = 0;          // any other order drops his copy (2026-09-28)
+            // The player's order now, not the food draft's (2026-10-03): a
+            // drafted hunter the player re-sends hunting stays when it ends.
+            h.autoFood = false;
+            h.autoStation = false;
             MarkNightOrder(h);
             ArrangeHands();
             PuppetsToWork();
@@ -3214,6 +3218,7 @@ namespace SeaSick.World
             h.target = planId;
             h.playerIdle = false;   // any other order ends his reserve (2026-09-28)
             h.autoStation = false;  // the player's now, not the food emergency's (2026-10-02)
+            h.autoFood = false;     // (2026-10-03, same for a drafted hunter/forager)
             h.workPin = room + 1;   // the copy with room
             MarkNightOrder(h);
             ArrangeHands();
@@ -3279,6 +3284,8 @@ namespace SeaSick.World
             h.playerIdle = false;   // any other order ends his reserve (2026-09-28)
             h.playerBuild = true;   // the player's builder: the food draft leaves him be (2026-10-02)
             h.workPin = 0;          // any other order drops his copy (2026-09-28)
+            h.autoFood = false;     // the player's order, not the food draft's (2026-10-03)
+            h.autoStation = false;
             MarkNightOrder(h);
             ArrangeHands();
             PuppetsToWork();
@@ -3299,6 +3306,8 @@ namespace SeaSick.World
             h.target = "";
             h.playerIdle = reserve;
             h.workPin = 0;          // any other order drops his copy (2026-09-28)
+            h.autoFood = false;     // off the food draft's books too (2026-10-03)
+            h.autoStation = false;
             // Idling a hand is not "give me this job tonight" -- let the
             // evening/sleep routine reclaim him at its own next check.
             h.orderOverride = false;

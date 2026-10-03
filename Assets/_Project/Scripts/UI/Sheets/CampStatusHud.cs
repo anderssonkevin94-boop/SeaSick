@@ -9,7 +9,8 @@ namespace SeaSick.UI.Sheets
     // active (the tally line was removed 2026-09-30). It sits just ABOVE the
     // thumb bar (`ThumbBar.ReservePanel`), or above the safe-area bottom edge
     // when the bar is hidden; keep it one short row. Hidden behind sheets; notices remain undoable
-    // until the draft ends. The ledger owns both the draft and the one-day veto.
+    // until the draft ends. The ledger owns both the draft and the veto (saved
+    // on the hand until the draft ends, 2026-10-03: OutpostLedger.FoodDraft.cs).
     internal sealed class CampStatusHud
     {
         readonly VisualElement footer, banner;

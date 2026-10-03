@@ -56,6 +56,7 @@ namespace SeaSick.World
             var sp = st.SpotAt(spotIndex);
             if (sp == null) return;
             sp.Stop();
+            sp.draftOrder = false;   // the player's own stop (2026-10-03)
             if (sp.BenchBusy) ReturnBenchInputs(st, sp);
             st.queue?.Clear();
             RefreshSpots(st);
@@ -81,6 +82,9 @@ namespace SeaSick.World
             if (sp.BenchBusy && sp.benchRecipe != r.id) ReturnBenchInputs(st, sp);
             sp.recipeId = r.id;
             sp.count = Mathf.Max(0, count);
+            // Anyone's selection ends the food draft's claim on the spot
+            // (2026-10-03); `DraftSelect` sets it again for its own.
+            sp.draftOrder = false;
             st.queue?.Clear();
             RefreshSpots(st);
             return true;

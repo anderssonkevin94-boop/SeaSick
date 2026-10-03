@@ -271,11 +271,12 @@ namespace SeaSick.World
             // potatoes, baked potatoes, fish and forage. Above `FedDays` the
             // emergency's hand stays on until `FoodSafeDays` (or until the
             // store can take no more of what he makes) and says that.
+            // **One food draft, one wording (2026-10-03)**: farmhand, cook,
+            // hunter or forager alike.
             bool shortOfFood = FoodShort;
-            if (h.autoFood && FoodDraftOrder(h) && shortOfFood) return "food is low";
-            if (h.autoStation && FoodStationOrder(h))
+            if ((h.autoStation && FoodStationOrder(h)) || (h.autoFood && FoodDraftOrder(h)))
             {
-                if (shortOfFood) return $"food emergency · under {FedDays:0} days of food";
+                if (shortOfFood) return $"food draft · under {FedDays:0} days of food";
                 string stall = StallReason(h);
                 if (!string.IsNullOrEmpty(stall)) return stall;
                 return $"camp is fed · staying on food until {FoodSafeDays:0} days are stored";

@@ -138,6 +138,19 @@ namespace SeaSick.World
         /// (the rack had no room for them).
         public int benchOut;
 
+        /// **The food draft chose this spot's recipe (2026-10-03,
+        /// `OutpostLedger.KitchenCanCook`)**, and nobody has touched the spot
+        /// since -- every selection or stop clears it (`SetSpot`,
+        /// `StopSpot`). When the draft ends the spot gets `draftKept` back
+        /// (`OutpostLedger.RestoreDraftOrders`): the emergency cook used to
+        /// overwrite the player's chosen dish for good. Saved; an old save
+        /// reads false (nothing to restore).
+        public bool draftOrder;
+        /// The player's recipe the draft replaced ("" = the spot was empty)
+        /// and its count (0 = until stopped). Only meaningful with `draftOrder`.
+        public string draftKept = "";
+        public int draftKeptCount;
+
         /// **Why a selected spot is not running right now, or null.**
         /// Worked out by the ledger every step (`OutpostLedger.RefreshSpots`)
         /// -- never saved: "waiting for onion", "store full of grilled fish",

@@ -91,6 +91,14 @@ namespace SeaSick.World
         /// clears it, so a hand the player puts there himself stays. Saved;
         /// an old save reads false.
         public bool autoStation;
+        /// **The player said "not him" to the food draft (2026-10-03,
+        /// `OutpostLedger.UndoFoodDraft`).** Holds until that draft ends
+        /// (`OutpostLedger.EndFoodDraft`), so the next quantum cannot
+        /// re-draft him. Was a one-game-day timer (~3 real minutes) kept off
+        /// the save, so a reload or a long draft put him straight back on
+        /// food after the player had sent him home. Saved; an old save reads
+        /// false (no veto), which is how it loaded before.
+        public bool foodVeto;
         /// **Held in reserve by the player (2026-09-28, designer call).**
         /// Two different things both read as `OutpostOrder.Idle`: "no job"
         /// -- the system let him go (build queue emptied, his building torn
@@ -3110,7 +3118,6 @@ namespace SeaSick.World
             GrowPlots(days);
             ReconcileSites();
             DecayDelivered(days);
-            AgeFoodVetoes(days);
             FeedFirst();
             // Grief pouts run on the game clock (2026-10-02).
             PoutStep(days);
@@ -3869,94 +3876,37 @@ namespace SeaSick.World
             if (hands == null || hands.Count == 0) return;
             float have = FoodFill();
             float day = hands.Count * EatPerHandPerDay;
-            // **The food emergency (2026-10-02, OutpostLedger.FoodDraft.cs):**
-            // under `FedDays` free hands farm and cook before anybody forages
-            // (forage alone regrows a third of what five hands eat); they go
-            // back to "no job" once the camp holds `FoodSafeDays`.
-            // **Fed, with the store out of room for what the posts make, is
-            // safe too (2026-10-02 play check):** the store caps each food
-            // (`ceilingPer`) and raw food is a quarter fill, so a big camp's
-            // full store can hold under `FoodSafeDays` (e.g. 30 each of potato,
-            // baked potato, fish and forage = 37.5 fill, under 5 days for
-            // eight) -- Pip stayed on "food emergency" for good beside a full
-            // store and the banner read "Food low" over 90+ food.
-            if (have >= day * FoodSafeDays || (have >= day * FedDays && !FoodPostsCanBank())) ReleaseFoodStations();
-            else if (have < day * FedDays) StaffFoodStations();
-
-            if (have >= day * FedDays)
+            // **ONE food draft (2026-10-03, villager review group 3).** Two
+            // drafts used to run side by side on their own thresholds: the
+            // hunt/forage draft (under 1 day, home at `FedDays`) and the food
+            // emergency's farm/kitchen staffing (under `FedDays`, home at
+            // `FoodSafeDays`), each with its own banner. Now one rule
+            // (OutpostLedger.FoodDraft.cs): it starts under `FedDays`, fills
+            // the Farm, then the Kitchen, then hunts or forages as the
+            // fallback, and it ends -- for every hand it drafted at once --
+            // at `FoodSafeDays`, or once fed (`FedDays`) with nothing its
+            // posts make left room in the store (`FoodPostsCanBank`;
+            // 2026-10-02 play check: a capped store can hold under
+            // `FoodSafeDays` for good, and Pip stayed on "food emergency"
+            // beside a full store).
+            if (have >= day * FoodSafeDays || (have >= day * FedDays && !FoodPostsCanBank()))
             {
-                foreach (var h in hands)
-                    if (h != null && h.autoFood)
-                    {
-                        h.autoFood = false;
-                        // Re-ordered by the player since? Their order stands.
-                        if (FoodDraftOrder(h))
-                        { h.order = OutpostOrder.Idle; h.target = ""; h.playerIdle = false; }
-                    }
+                EndFoodDraft();
                 return;
             }
-            // **A hunter who cannot hunt goes back to "no job" (2026-09-28).**
-            // Drafted when there was a spear and a beast; if either is gone
-            // (or the store has no room for a carcass) and he is not already
-            // out on a trip, he would stand "hunting" at the fire for good.
-            // Sent back as a SYSTEM release, never as the player's reserve,
-            // so `EnlistFree` puts him on the sites this same step. **A
-            // drafted forager the same (2026-09-28)**: nothing left standing
-            // or no room for it.
-            foreach (var h in hands)
-                if (h != null && h.autoFood && !h.Hauling && h.order == OutpostOrder.Gather
-                    && ((h.target == Res.Game && !HuntCanStart(h))
-                        || (h.target == Res.Food && !ForageCanStart())))
-                { h.autoFood = false; h.order = OutpostOrder.Idle; h.target = ""; h.playerIdle = false; }
-            if (have >= day) return;
-
-            int feeding = 0;
-            foreach (var h in hands)
-                if (h != null && h.order == OutpostOrder.Gather && (h.target == Res.Game || h.target == Res.Food))
-                    feeding++;
-            int want = Mathf.Max(1, hands.Count / 4);
-            if (feeding >= want) return;
-            // **Only a hunt that can start (2026-09-28)** -- `StartHuntTrip`'s
-            // own checks: a spear in the pile, room for a carcass, and a
-            // beast nobody is already after; one draft per such beast. A
-            // hand drafted without them stood at the fire "hunting" forever.
-            // **No hunt: forage (2026-09-28, designer call)** -- a Gather
-            // order on `Res.Food` (wild forage, the same order a player can
-            // give), when something stands to pick and the store has room.
-            // Same cap, same release at `FedDays`.
-            var game = Stock(Res.Game);
-            bool hunt = game != null && game.standing >= 1f && HuntCanStart(null);
-            if (!hunt && !ForageCanStart()) return;
-            string res = hunt ? Res.Game : Res.Food;
-            int limit = hunt ? GameUnclaimed(null) : int.MaxValue;
-            int drafted = 0;
+            ReleaseStuckFoodGatherers();
+            // Between `FedDays` and `FoodSafeDays`: the draft holds (no
+            // swapping in and out round the line), nobody new is drafted.
+            if (have >= day * FedDays) return;
             draftNames.Clear();
-
-            // Idle first, then builders -- never a hand the player put on
-            // other work, nor one the player is holding in reserve, nor one
-            // the player just sent back from a draft (`UndoFoodDraft`).
-            // **Nor a builder the player sent (2026-10-02, `playerBuild`):**
-            // only the idle ladder's own builders are drafted.
-            for (int pass = 0; pass < 2 && feeding < want && drafted < limit; pass++)
-                foreach (var h in hands)
-                {
-                    if (feeding >= want || drafted >= limit) break;
-                    if (h == null || h.Busy || Reserve(h) || FoodVetoed(h)) continue;
-                    var from = pass == 0 ? OutpostOrder.Idle : OutpostOrder.Build;
-                    if (h.order != from || PlayerBuilder(h)) continue;
-                    h.order = OutpostOrder.Gather;
-                    h.target = res;
-                    h.autoFood = true;
-                    h.playerIdle = false;
-                    feeding++;
-                    drafted++;
-                    draftNames.Add(h.name);
-                }
-            if (drafted > 0) AnnounceFoodDraft(hunt);
+            StaffFoodStations();
+            DraftFoodGatherers(have < day);
+            AnnounceFoodDraft();
         }
 
-        /// Days of food in the pile before hunters who went on their own
-        /// initiative come back to the build queue.
+        /// **Under this many days of food the food draft starts**
+        /// (OutpostLedger.FoodDraft.cs; Kevin 2026-10-02: "under 3 days").
+        /// Also the "Food low" line (`FoodShort`). It ends at `FoodSafeDays`.
         public const float FedDays = 3f;
 
         /// **Free hands take the initiative, 2026-09-23.** Kevin: *"i want
