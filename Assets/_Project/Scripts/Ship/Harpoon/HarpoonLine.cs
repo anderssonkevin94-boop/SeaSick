@@ -22,6 +22,10 @@ namespace SeaSick.Ship.Harpoon
         const float WhipSeconds = 0.55f;
 
         LineRenderer lr;
+        MaterialPropertyBlock props;
+        static readonly int AmbientId = Shader.PropertyToID("_Ambient");
+        // `_Ambient` per band (the villager session's look pass, 2026-10-04).
+        const float GlowSlack = 0.08f, GlowTaut = 0.35f, GlowStrainLow = 0.5f, GlowStrainHigh = 1.0f;
         readonly Vector3[] pts = new Vector3[Points];
         static AudioClip creakClip;
         AudioSource creak;
@@ -56,6 +60,8 @@ namespace SeaSick.Ship.Harpoon
             lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             lr.receiveShadows = false;
             lr.textureMode = LineTextureMode.Stretch;
+            // Normals: without them the lit rope shader shaded "taut" olive.
+            lr.generateLightingData = true;
             lr.sharedMaterial = RopeMaterial();
             lr.enabled = false;
             ReadLook();
@@ -215,18 +221,20 @@ namespace SeaSick.Ship.Harpoon
 
         void Apply(float t)
         {
-            float w; Color c;
+            float w; Color c; float glow;
             if (t < HarpoonTuning.tautBand)
             {
                 float k = t / Mathf.Max(0.01f, HarpoonTuning.tautBand);
                 w = Mathf.Lerp(slackWidth, tautWidth, k * 0.5f);
                 c = Color.Lerp(slackColor, tautColor, k * 0.5f);
+                glow = Mathf.Lerp(GlowSlack, GlowTaut, k * 0.5f);
             }
             else if (t < HarpoonTuning.strainBand)
             {
                 float k = Mathf.InverseLerp(HarpoonTuning.tautBand, HarpoonTuning.strainBand, t);
                 w = Mathf.Lerp(tautWidth, strainedWidth, k * 0.3f);
                 c = Color.Lerp(tautColor, strainedColor, k * 0.25f);
+                glow = GlowTaut;
             }
             else
             {
@@ -236,7 +244,14 @@ namespace SeaSick.Ship.Harpoon
                 float pulse = 0.85f + 0.15f * Mathf.Sin(Time.time * (8f + 10f * k));
                 c = Color.Lerp(Color.Lerp(tautColor, strainedColor, 0.6f), strainedColor, k) * pulse;
                 c.a = 1f;
+                // The rope shader's only self-light is `_Ambient`: a real warm
+                // glow, pulsing harder the nearer the snap.
+                glow = Mathf.Lerp(GlowStrainLow, GlowStrainHigh, 0.5f + 0.5f * Mathf.Sin(Time.time * (6f + 10f * k)));
             }
+            if (props == null) props = new MaterialPropertyBlock();
+            lr.GetPropertyBlock(props);
+            props.SetFloat(AmbientId, glow);
+            lr.SetPropertyBlock(props);
             lr.startWidth = lr.endWidth = w;
             lr.startColor = lr.endColor = c;
             lr.SetPositions(pts);
