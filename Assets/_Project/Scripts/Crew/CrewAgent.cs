@@ -45,6 +45,9 @@ namespace SeaSick.Crew
 
         [Header("Shore leave")]
         [SerializeField] float shoreWalkSpeed = 6.5f;
+        /// His pace ashore, m/s -- for the landing party's trip-time
+        /// estimate (`GatherParty.TripSeconds`, 2026-10-03).
+        public float ShoreWalkSpeed => shoreWalkSpeed;
         [SerializeField] float swingInterval = 0.42f;
 
         [Header("Bailing")]
@@ -331,6 +334,7 @@ namespace SeaSick.Crew
             nextIsleLookup = 0f;
             groundHeld = false;
             groundTickEnd = 0f;
+            partyRoute.Clear();
             PathToShore(landingPoint);
             state = State.GoingAshore;
         }
@@ -393,11 +397,25 @@ namespace SeaSick.Crew
                     state = State.Boarding;
                     return;
                 }
-                // Off the deck he goes down the plank first; from the beach
-                // (or the last rock) it is a straight walk the party has
-                // already checked is walkable from the landing.
-                if (fromDeck) PathToShore(targetNode.transform.position);
-                else SetPath(targetNode.transform.position);
+                // Off the deck he goes down the plank first, then the party's
+                // way from the landing to the source (`GatherParty.RouteTo`,
+                // 2026-10-03: a straight line when one is walkable, else the
+                // island walk grid's corners -- sources anywhere on the
+                // island, not 80 m round the landing). From the beach (or a
+                // source someone else took) he first retraces his last way
+                // back toward the landing, so he never strikes out across
+                // ground the party has not checked.
+                pathBuild.Clear();
+                if (!fromDeck) AddRetrace(pathBuild);
+                party.RouteTo(targetNode, partyRoute);
+                if (partyRoute.Count == 0) partyRoute.Add(targetNode.transform.position);
+                if (fromDeck) PathToShore(partyRoute);
+                else
+                {
+                    if (pathBuild.Count > 0) pathBuild.Add(landingAt);
+                    pathBuild.AddRange(partyRoute);
+                    SetPath(pathBuild);
+                }
                 state = State.ToNode;
                 return;
             }
@@ -842,6 +860,7 @@ namespace SeaSick.Crew
                     if (FollowPath(dt, 1.2f))
                     {
                         DropOff();
+                        partyRoute.Clear();   // aboard: no way to retrace from the deck
                         SeekWork(true);
                     }
                     break;
@@ -1349,17 +1368,81 @@ namespace SeaSick.Crew
             pathIndex = 0;
         }
 
-        /// Route from wherever we are, over the plank, to a point on the ship.
+        void SetPath(List<Vector3> points)
+        {
+            path.Clear();
+            path.AddRange(points);
+            pathIndex = 0;
+        }
+
+        /// **The landing party's way out to his source (2026-10-03)**, landing
+        /// first, the source last (`GatherParty.RouteTo`). Empty off a party,
+        /// on explore/hunt errands, and once he is back aboard.
+        readonly List<Vector3> partyRoute = new List<Vector3>();
+        readonly List<Vector3> pathBuild = new List<Vector3>();
+
+        /// Where the party stepped ashore (the plank's foot), or where he is.
+        Vector3 landingAt => gangway != null && gangway.Ready ? gangway.LandingPoint : shoreTarget;
+
+        /// **The way back along `partyRoute`** from where he stands: its
+        /// corners (not the source) from the one nearest him back to the
+        /// first. A far source on the whole island (2026-10-03) can be round
+        /// a ridge, and the old straight walk home would have climbed it.
+        void AddRetrace(List<Vector3> into)
+        {
+            int last = partyRoute.Count - 2;
+            if (party == null || last < 0) return;
+            Vector3 at = transform.position;
+            int k = 0;
+            float best = float.MaxValue;
+            for (int i = 0; i <= last; i++)
+            {
+                float dx = partyRoute[i].x - at.x, dz = partyRoute[i].z - at.z;
+                float d = dx * dx + dz * dz;
+                if (d < best) { best = d; k = i; }
+            }
+            for (int i = k; i >= 0; i--) into.Add(partyRoute[i]);
+        }
+
+        /// Route from wherever we are, over the plank, to a point on the ship
+        /// -- back along the party's route first, when he has one.
         void PathToShip(Vector3 finalPoint)
         {
+            pathBuild.Clear();
+            AddRetrace(pathBuild);
             if (gangway != null && gangway.Ready && gangway.PierRoot is Vector3 root)
+            {
                 // At a pier, down the pier first: never cut across the water
                 // to the catwalk's foot on the head.
-                SetPath(root, gangway.LandingPoint, gangway.RailPoint, gangway.DeckPoint, finalPoint);
+                pathBuild.Add(root); pathBuild.Add(gangway.LandingPoint);
+                pathBuild.Add(gangway.RailPoint); pathBuild.Add(gangway.DeckPoint);
+            }
             else if (gangway != null && gangway.Ready)
-                SetPath(gangway.LandingPoint, gangway.RailPoint, gangway.DeckPoint, finalPoint);
-            else
-                SetPath(finalPoint);
+            {
+                pathBuild.Add(gangway.LandingPoint);
+                pathBuild.Add(gangway.RailPoint); pathBuild.Add(gangway.DeckPoint);
+            }
+            pathBuild.Add(finalPoint);
+            SetPath(pathBuild);
+        }
+
+        /// Route from the deck, over the plank, then along `tail` (the
+        /// party's way to a source, 2026-10-03).
+        void PathToShore(List<Vector3> tail)
+        {
+            pathBuild.Clear();
+            if (gangway != null && gangway.Ready && gangway.PierRoot is Vector3 root)
+            {
+                pathBuild.Add(gangway.DeckPoint); pathBuild.Add(gangway.RailPoint);
+                pathBuild.Add(gangway.LandingPoint); pathBuild.Add(root);
+            }
+            else if (gangway != null && gangway.Ready)
+            {
+                pathBuild.Add(gangway.DeckPoint); pathBuild.Add(gangway.RailPoint);
+                pathBuild.Add(gangway.LandingPoint);
+            }
+            pathBuild.AddRange(tail);
+            SetPath(pathBuild);
         }
 
         /// Route from the deck, over the plank, to a point ashore.

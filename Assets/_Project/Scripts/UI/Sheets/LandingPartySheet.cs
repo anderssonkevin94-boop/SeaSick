@@ -443,7 +443,22 @@ namespace SeaSick.UI.Sheets
                 var n = StationPage.Text(World.Economy.ResDefs.Label(r), "hs-tile-n");
                 n.style.fontSize = 12f;
                 b.Add(n);
-                b.Add(StationPage.Text(reach > 0 ? Mathf.Max(seen, reach).ToString() : "far", "hs-tile-s"));
+                // 2026-10-03 (Kevin: the party reaches the whole island,
+                // far = longer trip): "far" used to mean "past the 80 m
+                // cap"; now a tile the hands cannot walk to at all reads
+                // "cut off", and one whose nearest source is past
+                // `GatherParty.FarMetres` shows its trip time.
+                b.Add(StationPage.Text(reach > 0 ? Mathf.Max(seen, reach).ToString() : "cut off", "hs-tile-s"));
+                var opt = OptionOf(r);
+                if (reach > 0 && opt.nearestMetres > GatherParty.FarMetres)
+                {
+                    int secs = Mathf.RoundToInt(party.TripSeconds(r, opt.nearestMetres, Mathf.Min(reach, GatherParty.MaxArmful)));
+                    var far = StationPage.Text($"far · {secs / 60}:{secs % 60:00}", "hs-tile-s");
+                    far.style.whiteSpace = WhiteSpace.Normal;
+                    far.style.unityTextAlign = TextAnchor.MiddleCenter;
+                    far.style.color = (Color)new Color32(242, 196, 109, 255);
+                    b.Add(far);
+                }
                 grid.Add(b);
             }
 
@@ -475,7 +490,7 @@ namespace SeaSick.UI.Sheets
             if (room <= 0) { Thumb(null, "The hold is full. Unload it at a camp."); return; }
             if (gatherRes == null || InReach(gatherRes) <= 0)
             {
-                Thumb(null, $"No {Lower(gatherRes)} within reach of the landing.");
+                Thumb(null, $"No {Lower(gatherRes)} the hands can walk to from the landing.");
                 return;
             }
             if (who.Count == 0) { Thumb(null, "Tap who goes."); return; }
@@ -494,6 +509,12 @@ namespace SeaSick.UI.Sheets
         {
             foreach (var o in survey) if (o.resource == res) return o.units;
             return 0;
+        }
+
+        GatherParty.Option OptionOf(string res)
+        {
+            foreach (var o in survey) if (o.resource == res) return o;
+            return default;
         }
 
         static string Lower(string res) =>

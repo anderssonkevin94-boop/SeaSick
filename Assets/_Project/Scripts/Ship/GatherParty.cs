@@ -56,13 +56,30 @@ namespace SeaSick.Ship
     ///
     /// --- 2026-09-27 (the gather trip, unchanged) ---------------------------
     ///
-    /// **The trip.** Each hand walks from the landing to the nearest free
-    /// source of the good that is reachable from the landing (a straight,
-    /// walkable line: `LineWalkable`, `Walkability.MayStep` every
-    /// `LineStep` metres -- there is no camp path grid on an island without
-    /// a camp), works it at Kevin's dials (wood 5 s a log, stone 8 s, ore
-    /// 10 s, per unit), carries the whole armful back over the plank and
-    /// into the hold. Trip time is the walk itself: the body walks it.
+    /// **The trip.** Each hand walks from the landing to the free source of
+    /// the good with the shortest WALK from the landing, works it at Kevin's
+    /// dials (wood 5 s a log, stone 8 s, ore 10 s, per unit), carries the
+    /// whole armful back over the plank and into the hold. Trip time is the
+    /// walk itself: the body walks it.
+    ///
+    /// **The whole island (Kevin, 2026-10-03: "the landing party reaches
+    /// the whole island, nothing moves, far = longer trip").** Until then
+    /// a source had to stand within `Reach` (80 m) of the landing on a
+    /// straight walkable line, so the Ore outcrop -- ringed inland round
+    /// the surveyed clearing by `Outpost.PlaceCampStone` -- was never
+    /// offered. The cap is gone and nothing is moved to the party: a
+    /// source counts when a hand can walk to it, by the first of
+    ///  1. a straight walkable line (`LineWalkable`: `Walkability.MayStep`
+    ///     every `LineStep` m, no water inland) -- walked as it is;
+    ///  2. a route over the island's own walk grid (`CampPath`, the camps'
+    ///     A* map, which a surveyed camp-less island has too): ONE flood
+    ///     from the landing (`CampPath.FloodFrom`) gives every source's
+    ///     walked metres, and the hand walks its corners out and back
+    ///     (`RouteTo`, `CrewAgent`'s retrace);
+    /// else not at all (a source up a cliff, or no survey and no straight
+    /// line). A far source is simply a longer trip: the tile shows "far ·
+    /// m:ss" past `FarMetres` (`TripSeconds`). Hunting never had the cap
+    /// (a hunter walks straight at the nearest beast of the kind).
     ///
     /// **Stops** when the amount is in, the hold is full, nothing reachable
     /// is left, raiders come near, or the player recalls. Recall: everyone
@@ -101,8 +118,14 @@ namespace SeaSick.Ship
         public const float OreSecondsPerUnit = 10f;
         public const float OtherSecondsPerUnit = 5f;
 
-        /// How far from the landing a party will go, metres. A guess.
-        public const float Reach = 80f;
+        /// A source further than this WALK from the landing is "far" on the
+        /// sheet (its tile shows the trip time). The old `Reach` cap's 80 m:
+        /// a party used to go no further (2026-10-03: now it goes anywhere
+        /// it can walk).
+        public const float FarMetres = 80f;
+        /// Radius trees are stood up round the landing for a party -- the
+        /// whole island (`SceneryWood.Populate` still stands the 48 nearest).
+        const float WholeIsland = 2000f;
         /// Most units one hand carries in one trip.
         public const int MaxArmful = 8;
         /// Most loose rocks stood as party sources at once.
@@ -153,6 +176,8 @@ namespace SeaSick.Ship
             public string resource;
             public int sources;
             public int units;
+            /// Metres walked from the landing to the NEAREST source of it.
+            public float nearestMetres;
         }
 
         AnchorController anchor;
@@ -370,11 +395,14 @@ namespace SeaSick.Ship
             foreach (var n in ResourceNode.All)
             {
                 if (!Usable(n, isle, party)) continue;
-                if (party != null ? !party.InReach(n, from) : !InReachRaw(n, from)) continue;
-                by.TryGetValue(n.Resource, out var o);
+                float metres;
+                if (party != null) { var w = party.WalkOf(n); if (!w.ok) continue; metres = w.metres; }
+                else if (!InReachRaw(n, from, out metres)) continue;
+                bool first = !by.TryGetValue(n.Resource, out var o);
                 o.resource = n.Resource;
                 o.sources++;
                 o.units += UnitsIn(n);
+                o.nearestMetres = first ? metres : Mathf.Min(o.nearestMetres, metres);
                 by[n.Resource] = o;
             }
             foreach (var r in Order_)
@@ -410,7 +438,7 @@ namespace SeaSick.Ship
             if (string.IsNullOrEmpty(res) || !Res.IsGatherable(res)) { why = "pick what to fetch"; return false; }
             if (Room <= 0) { why = "the hold is full"; return false; }
             StandSources(island, landing);
-            if (!HasSource(res)) { why = $"no {res.ToLowerInvariant()} within reach of the landing"; return false; }
+            if (!HasSource(res)) { why = $"no {res.ToLowerInvariant()} the hands can walk to"; return false; }
 
             Resource = res;
             Target = amount <= 0 ? FillHold : amount;
@@ -553,15 +581,18 @@ namespace SeaSick.Ship
             if (!Out || Recalling || who == null) return null;
             if (Wanted <= 0) { StopFor(); return null; }
 
+            // Shortest WALK from the landing (2026-10-03): every trip starts
+            // at the ship, and on the whole island a source close as the
+            // crow flies can be a long way round.
             ResourceNode best = null, bestFits = null;
             float bestSq = float.MaxValue, fitsSq = float.MaxValue;
             int room = Room - InHand;
-            Vector3 at = who.transform.position;
             foreach (var n in ResourceNode.All)
             {
                 if (!Usable(n, island, this) || n.Resource != Resource || n.Claim.Held) continue;
-                if (!InReach(n, landing)) continue;
-                float sq = (n.transform.position - at).sqrMagnitude;
+                var w = WalkOf(n);
+                if (!w.ok) continue;
+                float sq = w.metres;
                 if (sq < bestSq) { bestSq = sq; best = n; }
                 // Prefer a source whose whole yield fits what the hold
                 // still takes, so a rock is never broken for half of it.
@@ -1123,7 +1154,7 @@ namespace SeaSick.Ship
         bool HasSource(string res)
         {
             foreach (var n in ResourceNode.All)
-                if (Usable(n, island, this) && n.Resource == res && InReach(n, landing)) return true;
+                if (Usable(n, island, this) && n.Resource == res && WalkOf(n).ok) return true;
             return false;
         }
 
@@ -1155,26 +1186,79 @@ namespace SeaSick.Ship
             return n.Resource == Res.Timber ? 1 : n.UnitsPerProp;
         }
 
-        /// Within reach of the landing and a walkable straight line from it.
-        /// Cached per node for the party's life.
-        readonly Dictionary<ResourceNode, bool> reachCache = new Dictionary<ResourceNode, bool>();
-        bool InReachCached(ResourceNode n, Vector3 from)
+        /// **How a hand gets from the landing to a source (2026-10-03).**
+        /// `ok` false: he cannot. `metres`: the walk one way. `routed`: over
+        /// the walk grid's corners (`RouteTo`) rather than a straight line.
+        public struct Walk { public bool ok, routed; public float metres; }
+
+        /// Per node, for the party's life at this landing (cleared when the
+        /// landing or the island changes, `StandSources`).
+        readonly Dictionary<ResourceNode, Walk> reachCache = new Dictionary<ResourceNode, Walk>();
+        CampPath walkMap;
+        bool floodTried, floodOk;
+
+        /// The walk from the landing to `n`, cached. See the class notes:
+        /// straight line first, then the flood over the island's walk grid.
+        public Walk WalkOf(ResourceNode n)
         {
-            if (reachCache.TryGetValue(n, out bool ok)) return ok;
-            ok = InReachRaw(n, from);
-            reachCache[n] = ok;
-            return ok;
+            if (n == null) return default;
+            if (reachCache.TryGetValue(n, out var w)) return w;
+            w = default;
+            if (InReachRaw(n, landing, out float straight)) { w.ok = true; w.metres = straight; }
+            else
+            {
+                if (!floodTried)
+                {
+                    floodTried = true;
+                    var o = Outpost.Of(island);
+                    walkMap = o != null && o.Sited ? CampPath.For(o) : null;
+                    floodOk = walkMap != null && walkMap.FloodFrom(landing);
+                }
+                if (floodOk && walkMap.FloodReach(n.transform.position, n.StandOff + 0.6f, out float m))
+                {
+                    w.ok = true; w.routed = true; w.metres = m;
+                }
+            }
+            reachCache[n] = w;
+            return w;
         }
 
-        bool InReach(ResourceNode n, Vector3 from) => InReachCached(n, from);
+        /// The way from the landing to `n` as points to walk in order, the
+        /// last being the source itself: just the source for a straight
+        /// walk, the grid's corners for a routed one. False if unreachable.
+        public bool RouteTo(ResourceNode n, List<Vector3> into)
+        {
+            into.Clear();
+            var w = WalkOf(n);
+            if (!w.ok) return false;
+            if (!w.routed || walkMap == null || !walkMap.FloodRoute(n.transform.position, n.StandOff + 0.6f, into))
+            {
+                into.Clear();
+                into.Add(n.transform.position);
+            }
+            return true;
+        }
 
-        static bool InReachRaw(ResourceNode n, Vector3 from)
+        /// Seconds one trip to a source `metres` away takes: out and back at
+        /// the crew's shore pace, plus working one armful. For the sheet's
+        /// "far" tag; the trip itself is timed by the body walking it.
+        public float TripSeconds(string res, float metres, int units)
+        {
+            float pace = 0f;
+            foreach (var c in Company(anchor)) { if (c != null) { pace = c.ShoreWalkSpeed; break; } }
+            if (pace <= 0.1f) pace = 6.5f;
+            return 2f * metres / pace + WorkSeconds(res, Mathf.Clamp(units, 1, MaxArmful));
+        }
+
+        /// A walkable straight line from `from` to where a hand stands to
+        /// work `n` (no distance cap since 2026-10-03), and its length.
+        static bool InReachRaw(ResourceNode n, Vector3 from, out float metres)
         {
             Vector3 p = n.transform.position;
             Vector3 d = p - from; d.y = 0f;
-            if (d.sqrMagnitude > Reach * Reach) return false;
             float stop = Mathf.Max(1.9f, n.StandOff + 0.6f);
             float len = d.magnitude;
+            metres = len;
             if (len <= stop) return true;
             return LineWalkable(from, from + d * ((len - stop) / len));
         }
@@ -1208,18 +1292,21 @@ namespace SeaSick.Ship
 
         /// Timber: materialise tree nodes round the landing (as the shore
         /// party does). Stone: when no camp stood nodes on the island's loose
-        /// rocks, stand party-only nodes on the ones in reach -- `Home` null,
-        /// so the camp systems (`GatherSync`, `CampWorker`) never see them.
+        /// rocks, stand party-only nodes on the ones a hand can walk to --
+        /// `Home` null, so the camp systems (`GatherSync`, `CampWorker`)
+        /// never see them. Both nearest the landing first and capped (48
+        /// trees, `MaxRockNodes` rocks), but no longer within 80 m: the
+        /// whole island (2026-10-03).
         void StandSources(Island isle, Vector3 from)
         {
             if (isle == null) return;
-            if (island != isle) { ClearRocks(); reachCache.Clear(); }
+            if (island != isle) { ClearRocks(); ForgetWalks(); }
             island = isle;
-            if ((from - landing).sqrMagnitude > 4f) reachCache.Clear();
+            if ((from - landing).sqrMagnitude > 4f) ForgetWalks();
             landing = from;
 
             var wood = isle.GetComponentInChildren<Terrain.SceneryWood>();
-            if (wood != null) wood.Populate(from, Reach);
+            if (wood != null) wood.Populate(from, WholeIsland);
 
             if (partyRocks.Count > 0) return;
             var rocks = Terrain.SceneryRocks.On(isle);
@@ -1233,7 +1320,6 @@ namespace SeaSick.Ship
                 if (books != null && books.RockTaken(i)) continue;
                 var r = rocks.RockAt(i);
                 Vector3 d = r.at - from; d.y = 0f;
-                if (d.sqrMagnitude > Reach * Reach) continue;
                 if (h != null && h(r.at.x, r.at.z) < 0.5f) continue;   // surf and wet sand stay scenery
                 picks.Add((d.sqrMagnitude, i));
             }
@@ -1248,7 +1334,7 @@ namespace SeaSick.Ship
                 var node = go.AddComponent<ResourceNode>();
                 node.Configure(Res.Stone, null, 4);
                 if (StoneDeposit.DressScenery(node, rocks, i) == null) { Destroy(go); continue; }
-                if (!InReachRaw(node, from)) { Destroy(go); continue; }
+                if (!WalkOf(node).ok) { Destroy(go); continue; }
                 partyRocks.Add(node);
             }
         }
@@ -1259,7 +1345,17 @@ namespace SeaSick.Ship
         {
             foreach (var n in partyRocks) if (n != null) Destroy(n.gameObject);
             partyRocks.Clear();
+            ForgetWalks();
+        }
+
+        /// The landing moved or the island changed: every cached walk and
+        /// the flood are stale.
+        void ForgetWalks()
+        {
             reachCache.Clear();
+            floodTried = false;
+            floodOk = false;
+            walkMap = null;
         }
     }
 }
