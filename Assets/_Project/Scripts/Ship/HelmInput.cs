@@ -1,197 +1,97 @@
-using SeaSick.UI;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.EnhancedTouch;
 
 namespace SeaSick.Ship
 {
-    /// The helm. WASD at a desk, ONE THUMB on a phone.
+    /// The helm. W/A/S/D at a desk, ONE THUMB on a phone — DREDGE's model
+    /// (2026-10-03, docs/PLAN-dredge-controls.md §3-§4, Kevin's decisions).
     ///
-    /// Touch is a floating stick (see `TouchHelm`): put a thumb down anywhere
-    /// in the lower half of the screen and drag. The DIRECTION is the world
-    /// heading she's ordered to steer for; the DISTANCE is the throttle,
-    /// continuous from stop out to full ahead and, past the rim, into the
-    /// burn tier. Let go and she KEEPS doing it — hands-free cruising — until
-    /// the next touch changes the order. A tap (short, barely moved) rings
-    /// the telegraph to stop without letting go of the heading. Dragging
-    /// behind her while nearly stopped orders astern instead of a heading
-    /// change; behind her while still making way just asks her to come
-    /// about.
+    /// Touch is a floating analog stick (`SeaStick`) that appears under the
+    /// thumb in the lower part of the screen. It is **boat-relative**:
+    /// - stick Y is SPEED, in proportion to the push: up = ahead 0..1, down
+    ///   = astern 0..`SailControlTuning.reverseCap`;
+    /// - stick X is the TURN (the rudder, through `turnCurve`). A pure
+    ///   sideways push at rest pivots her (the motor's rest turn).
+    /// **Nothing latches.** Let go and the throttle order and the rudder are
+    /// both zero; she glides to a stop on the coast-down physics. There is no
+    /// camera frame anywhere in it, no heading autopilot on the stick, no
+    /// tap = stop and no past-the-rim burn.
     ///
-    /// Replaces the axis-locked swipe wheel (2026-09-22), which rubber-banded
-    /// the rudder back to midships on release and stepped the telegraph
-    /// through notches on a flick. Kevin, same day, on THAT control: "slow,
-    /// uneventful, not responsive." Holding a course is what a real helm
-    /// does; a phone thumb can't hold anything and steer at the same time, so
-    /// this control holds the course FOR you and gives the thumb back.
+    /// **Boost** is a Haste-style toggle (`ToggleBoost`, the sea HUD's ⚡
+    /// button): one thumb can't hold the stick and a button, so a tap arms
+    /// it and, while armed, a push ahead reaches up to `motor.Overdrive`
+    /// (the burn tier, `ShipMotor.Burning`). It disarms on a second tap, on
+    /// `AllStop`, or once she has had no push ahead for
+    /// `boostIdleSeconds` and is near stopped. At a desk Shift HELD boosts.
     ///
-    /// W/S still drive directly (held, not an order that survives release)
-    /// and A/D still steer directly, both straight through to the rudder —
-    /// the desktop override, not a second version of the touch policy. A/D
-    /// also clear the heading target, so letting go of the key doesn't snap
-    /// her back toward a stale course.
+    /// Keys: W/S or ↑/↓ = ahead/astern, A/D or ←/→ = turn, each ramped over
+    /// `keyRampSeconds` so they read analog; R toggles rowing. The stick
+    /// wins while a thumb (or the mouse) holds it.
     ///
-    /// ## This class owns the POLICY
-    ///
-    /// `TouchHelm` turns one finger into a world heading, a distance and a
-    /// tap; this class decides what they mean (the throttle curve, the
-    /// astern/come-about split) and runs the heading autopilot: a Kp/Kd
-    /// controller on heading error and yaw rate, eased into the rudder so it
-    /// settles instead of hunting.
-    ///
-    /// ## Direct-rudder mode (`HelmTuning.directRudder`, default on, 2026-09-24)
-    ///
-    /// The same floating stick, read as a helm instead of a course:
-    /// - **Stick X is the rudder**, screen-relative: thumb right of where it
-    ///   landed = starboard helm, left = port, as a wheel would. Order =
-    ///   sign(x) * min(1,|x|)^rudderCurve * rudderPerRim (x in ring radii,
-    ///   clamped to full rudder). The blade follows the thumb at
-    ///   rudderMoveSpeed and, the moment the thumb lifts, springs back to
-    ///   midships at rudderReturnPerSec. It never holds an angle. The turn
-    ///   is braked out as the blade centres, and once it has died the drive
-    ///   HOLDS that heading (`HoldAllowed`, `HeadingHold`, 2026-10-02) until
-    ///   the next rudder -- a stop tap keeps it.
-    /// - **Stick Y is a LATCHED throttle lever, RELATIVE to where the thumb
-    ///   landed.** The lever position `lever` is picked up from the current
-    ///   order at touch-down, so a thumb landing anywhere never jumps the
-    ///   throttle. Then every frame the lever moves by the change in
-    ///   yEff = sign(y) * max(0,|y|-throttleDeadZone) / (1-throttleDeadZone)
-    ///   (y = thumb height above the touch-down point in ring radii, counting
-    ///   only VERTICAL travel: each frame's Y step less
-    ///   throttleArcAllowance x its X step, so the drift of a thumb sweeping
-    ///   an arc to steer never moves the lever, 2026-10-02): one ring radius
-    ///   of straight drag moves the lever exactly 1.0, i.e. stop to full.
-    ///   The lever maps to the order as: 0..1 = stop..full ahead;
-    ///   1..burnEngageFrac = ramp from full ahead into full burn
-    ///   (motor.Overdrive); 0..-stopDetent = a stop DETENT (still stop, so
-    ///   dragging down to stop at low speed doesn't overshoot into astern);
-    ///   below that, astern down to full astern at -(1+stopDetent).
-    ///   Astern can only be entered while her forward speed is under
-    ///   asternSpeedThreshold (or she is already ordered astern); otherwise
-    ///   the lever pins at stop. Every clamp is absorbed (the lever stops,
-    ///   the thumb doesn't owe it anything back), so reversing the drag
-    ///   responds at once. Lifting the thumb keeps whatever was set.
-    /// - A tap = stop (when HelmTuning.tapStops).
-    /// No hard axis lock: a steep diagonal drag moves both (a 45 degree one
-    /// moves the lever at half rate), a flat one only steers. The keyboard
-    /// is unchanged in both modes; a held A/D still hands back a held
-    /// heading on release, which the next thumb on the stick lets go of.
+    /// **Taps.** A touch only starts the stick where `UIBlocker` says it is
+    /// free, so RescueHud's swimmer tap zones and every HUD control keep
+    /// their taps (they block their own rects). A tap on an enemy ship is
+    /// NOT excluded: it may start the stick for a moment, but with nothing
+    /// latched a tap orders nothing, and `CombatLock` still reads the same
+    /// touch-up as a lock. Excluding it at touch-down would only stop a
+    /// thumb landing on an enemy from sailing (`CombatLock.WouldLock` is
+    /// no longer needed here).
     [RequireComponent(typeof(ShipMotor))]
     public class HelmInput : MonoBehaviour
     {
-        [Header("Heading autopilot")]
-        [Tooltip("Rudder order per degree of heading error. Default (1/25) puts full rudder at the same ~25 degrees the old hard-over lived at. UNTESTED ON DEVICE — first thing to hand-tune against the real hull.")]
+        [Header("Steer toward (man overboard)")]
+        [Tooltip("Rudder order per degree of heading error while steering toward a swimmer.")]
         [SerializeField] float steerKp = 0.04f;
-        [Tooltip("Rudder order per degree/second of yaw rate, SUBTRACTED from the Kp term so the turn brakes itself into the target heading instead of swinging past it and hunting back. UNTESTED — raise it if she oscillates around a course, lower it if she is sluggish to settle.")]
+        [Tooltip("Rudder order per degree/second of yaw rate, SUBTRACTED from the Kp term so the turn brakes itself into the bearing instead of hunting.")]
         [SerializeField] float steerKd = 0.02f;
-        [Tooltip("Rudder units/s the autopilot's OUTPUT is eased at, same job engageSpeed did for the old wheel: turns the Kp/Kd command into a gear change rather than a switch.")]
+        [Tooltip("Rudder units/s the swimmer steer's output is eased at.")]
         [SerializeField] float rudderEaseSpeed = 3.5f;
         [SerializeField, Range(-1f, 1f)] float testRudder = 0f; // editor/testing override
 
-        [Header("Floating stick")]
-        [Tooltip("Distance past the ring's rim, as a fraction of its radius, at which the order reaches full burn. 1.0 = the rim itself; between 1.0 and this the order ramps from full ahead into burn.")]
-        [SerializeField] float burnEngageFrac = 1.10f;
-        [Tooltip("Below this speed (m/s) a drag pointed behind her orders astern. At or above it the same drag just asks her to come about — she has to be nearly stopped to back down.")]
-        [SerializeField] float asternSpeedThreshold = 1.5f;
-        [Tooltip("Degrees off her CURRENT heading a drag has to point before it counts as behind her rather than a wide turn.")]
-        [SerializeField] float asternAngleThreshold = 135f;
-        [Tooltip("Direct-rudder mode only: lever travel (ring radii of drag, past the throttle dead zone) below stop that still reads STOP before astern engages, so dragging down to stop at low speed doesn't overshoot into going astern.")]
-        [SerializeField] float stopDetent = 0.15f;
-
         ShipMotor motor;
         Breakers breakers;
-        /// Same GameObject as the ship (see `Awake`). Consulted before a tap
-        /// is read as "stop" — a tap that locks an enemy must not also ring
-        /// the telegraph down (2026-09-27). Null off the player ship, where
-        /// there is nothing to lock and every tap is plainly a stop.
-        SeaSick.Combat.CombatLock combatLock;
 
         /// The stick. A plain object, not a component: it has no lifetime of
         /// its own and nothing else should be able to find it.
-        readonly TouchHelm helm = new TouchHelm();
+        readonly SeaStick stick = new SeaStick();
 
-        // --- policy state, held across frames so letting go keeps ordering it ---
-        float targetHeadingDeg;
-        bool hasTarget;
-        float throttleOrder;
-        bool astern;
+        Vector2 keyAxes;          // W/S/A/D, ramped (see keyRampSeconds)
+        float rudder;             // what went to motor.Rudder
+        float throttleOut;        // what went to motor.ThrottleOrder
+        bool boostArmed;          // the ⚡ toggle
+        bool shiftBoost;          // Shift held this frame
+        bool pushingAhead;        // stick/keys asking for headway this frame
+        float boostIdle;          // s with no push ahead while armed
+        float prevHeadingDeg;
+        bool prevHeadingValid;
 
-        // --- direct-rudder state (see the class doc) ---
-        float lever;              // throttle lever position, picked up from the order at touch-down
-        float prevYEff;           // last frame's dead-zoned stick Y, so the lever moves by the change
-        float yTravel;            // stick Y with sideways-sweep drift filtered out (throttleArcAllowance)
-        Vector2 prevStick;        // last frame's StickOffset, for that filter
-        float stickRudder;        // rudder the thumb is asking for this frame
-        bool stickRudderActive;   // a thumb is on the stick in direct mode
-        bool wasDragging;
-        bool lastDirect;
-        float throttleOut;        // what went to motor.ThrottleOrder this frame
-        bool holdAllowed;         // see HoldAllowed
+        // --- boost ------------------------------------------------------------
 
-        /// The rudder the helm is putting on her right now (what was written
-        /// to `motor.Rudder`), -1 hard a-port .. 1 hard a-starboard.
-        public float RudderOrder => rudder;
-        /// The throttle order the helm wrote this frame, in the motor's
-        /// units: -1 full astern, 0 stop, 1 full ahead, above 1 the burn tier
-        /// up to `motor.Overdrive`. Includes a held W/S.
-        public float ThrottleOrder01 => throttleOut;
-        /// True when the stick is a direct rudder + latched throttle rather
-        /// than the heading autopilot. Read live from `HelmTuning`.
-        public bool DirectMode => HelmTuning.directRudder;
-        /// **The helm's say on the heading hold** (2026-10-02): true when
-        /// nobody is steering -- direct mode, `HelmTuning.headingHold` on, no
-        /// thumb or key putting on rudder, no autopilot course (a tapped
-        /// destination, a swimmer, the non-direct stick). The drive that
-        /// turns her (`PaddleDrive`, `ShipMotor`) still waits for the blade
-        /// to centre and the turn to die before it captures the heading.
-        /// A stop tap leaves it true.
-        public bool HoldAllowed => holdAllowed;
-
-        // --- tap-to-sail (the seam for Astra's cinematic tap, 2026-09-24) ---
-        Vector3? sailTo;
-        bool sailToStop;
-
-        /// **Sail to a point on the water.** The heading autopilot steers
-        /// for it every frame; the throttle keeps whatever was ordered, or
-        /// takes `cruise01` if she was stopped so a tap actually moves her.
-        /// Arriving (within 1.5 hull lengths, at least 12 m) rings down to
-        /// stop when `stopThere`, else just lets the course go. Any thumb on
-        /// the stick or a held steering key takes over and cancels it, so
-        /// the player always wins over the tap.
-        public void SailTo(Vector3 worldPoint, bool stopThere = true, float cruise01 = 0.6f)
-        {
-            helm.CancelDrag();
-            sailTo = worldPoint;
-            sailToStop = stopThere;
-            astern = false;
-            if (throttleOrder <= 0.05f) throttleOrder = Mathf.Clamp01(cruise01);
-            SteerForSailTo();
-        }
-
-        public void CancelSailTo() { sailTo = null; }
-        public bool Sailing => sailTo.HasValue;
-        public Vector3? SailTarget => sailTo;
+        /// Boost is ready: the ⚡ toggle is armed, or Shift is held at a desk.
+        public bool BoostArmed => boostArmed || shiftBoost;
+        /// Tap the ⚡ button: arm boost, or disarm it.
+        public void ToggleBoost() { boostArmed = !boostArmed; boostIdle = 0f; }
+        /// Armed AND actually pushing ahead, so the order is reaching into
+        /// the burn tier.
+        public bool Boosting => BoostArmed && pushingAhead;
 
         // --- steer-toward (man overboard, phase 5b) --------------------------
         Transform steerTarget;
-        /// A drag within this many degrees of the swimmer's bearing only
-        /// sets speed; further off, it takes the helm back (man overboard).
-        const float SteerKeepDeg = 50f;
-        /// Direct-rudder mode: a thumb asking for more rudder than this
-        /// takes the helm back from the swimmer steer.
-        const float SteerKeepRudder = 0.35f;
         string steerTargetName;
+        /// A turn (0..1, after the curve) above this takes the helm back from
+        /// the swimmer steer. Below it the stick only sets the speed.
+        const float SteerKeepTurn = 0.35f;
 
-        /// **Tap a swimmer / the edge arrow -> heading-only autopilot toward
-        /// them.** Unlike `SailTo`, this NEVER touches the throttle — the
-        /// player keeps the engine, this only keeps the bow pointed at
-        /// `target` every frame. Ends the moment the player's thumb touches
-        /// the stick (drag OR tap) or a steering key is held, when `target`
-        /// resolves (its GameObject is destroyed — a Unity "fake null", so
-        /// the plain `!= null` check below already catches it), or by an
-        /// explicit `CancelSteerToward()`. Called by `RescueHud`, which is
-        /// the thing that intercepts the tap before `TouchHelm` ever sees it
-        /// (see that class for how).
+        /// **Tap a swimmer / the edge arrow -> autopilot toward them.** The
+        /// bow is kept on `target` every frame. A push on the stick (or W/S)
+        /// sets the speed; with no push she sails at the modest
+        /// `SailControlTuning.steerTowardThrottle`, easing off as she closes
+        /// (release no longer holds a speed, so the steer has to). Ends when
+        /// the player turns past `SteerKeepTurn`, when `target` resolves
+        /// (its GameObject destroyed — a Unity "fake null", caught by the
+        /// plain `!= null`), or on `CancelSteerToward()`. Called by
+        /// `RescueHud` (its tap zones block `SeaStick` first) and `SeaHud`.
         public void SteerToward(Transform target, string label)
         {
             steerTarget = target;
@@ -202,490 +102,196 @@ namespace SeaSick.Ship
         public bool SteeringToward => steerTarget != null;
         public string SteerTargetName => steerTargetName;
 
-        void SteerForSailTo()
-        {
-            if (!sailTo.HasValue || motor == null) return;
-            Vector3 d = sailTo.Value - transform.position; d.y = 0f;
-            float arrive = Mathf.Max(12f, 1.5f * motor.HullLength);
-            if (d.magnitude <= arrive)
-            {
-                if (sailToStop) { throttleOrder = 0f; astern = false; }
-                sailTo = null;             // course held, as after a released drag
-                return;
-            }
-            targetHeadingDeg = Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg;
-            hasTarget = true;
-        }
-        float rudder;
-        float prevHeadingDeg;
-        bool prevHeadingValid;
-
-
         void Awake()
         {
             motor = GetComponent<ShipMotor>();
             breakers = GetComponent<Breakers>();
-            combatLock = GetComponent<SeaSick.Combat.CombatLock>();
         }
-
-        /// True when the tap `helm` just reported landed on a ship
-        /// `CombatLock` would lock — the same touch-up is about to become a
-        /// lock, so the helm must not ALSO read it as "tap = stop".
-        bool TapLocksAShip() => combatLock != null && combatLock.WouldLock(helm.AnchorScreenPos);
 
         // `Touch.activeTouches` is empty until this is on, and it is
         // ref-counted, so enabling it per-component is safe even if something
         // else in the project starts doing the same.
         void OnEnable() => EnhancedTouchSupport.Enable();
-        void OnDisable() => EnhancedTouchSupport.Disable();
+
+        void OnDisable()
+        {
+            EnhancedTouchSupport.Disable();
+            // Probes disable the helm and drive the motor themselves: no
+            // stale "nobody is steering" left behind for the heading hold.
+            if (motor != null) motor.HoldAllowed = false;
+        }
 
         void Update()
         {
-            // **Not while the island view is up.** She is anchored whenever
-            // that view is engaged, so nothing moves -- but the stick would
-            // still take a drag meant for the ground (siting a building,
-            // pressing on a crewman) and HOLD it, and she would sail off it
-            // the moment the view closed. The same reason the arrows and WASD
-            // are guarded: R would otherwise ring down rowing at the exact
-            // moment it is also `CampSiting`'s rotate-the-ghost key.
+            float dt = Time.deltaTime;
+
+            // **Not while the island view or the shipyard modal is up.** She
+            // is anchored then, but the stick would still take a drag meant
+            // for the ground (siting a building, pressing on a crewman), and
+            // R is also `CampSiting`'s rotate-the-ghost key.
             bool ashore = SeaSick.CameraRig.IslandCam.Engaged
-                || SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked; // the shipyard modal owns input
-            helm.Sample(!ashore);
+                || SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked;
+            stick.Sample(!ashore);
 
-            // Read live every frame: the lab flips it on the phone.
-            bool direct = HelmTuning.directRudder;
-            if (direct != lastDirect)
-            {
-                // Into direct mode: drop the held course, the thumb is the
-                // helm now. Out of it: the autopilot starts with no course
-                // (rudder eases home) until the next drag gives it one.
-                hasTarget = false;
-                stickRudderActive = false;
-                lastDirect = direct;
-                // A thumb already down picks the lever up afresh this frame.
-                wasDragging = false;
-            }
-            bool dragBegan = helm.Dragging && !wasDragging;
-            wasDragging = helm.Dragging;
-
-            stickRudderActive = false;
-            if (!ashore)
-            {
-                if (direct) ReadStickDirect(dragBegan);
-                else ReadStick();
-            }
-
+            // --- keys: held, ramped, the desktop override ---
+            Vector2 keyTarget = Vector2.zero;
+            shiftBoost = false;
             var kb = Keyboard.current;
-            bool manualSteer = false;
-            float manualRudder = 0f;
-            float? drive = null;
-
             if (kb != null && !ashore)
             {
-                // A held key OVERRIDES the gesture and hands it straight back
-                // on release. Unlike the old rubber band there is nothing to
-                // hand back TO here except a stale course, so releasing the
-                // key hands back whatever heading she is on at that instant.
-                if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) { manualRudder = -1f; manualSteer = true; }
-                else if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) { manualRudder = 1f; manualSteer = true; }
-
-                if (kb.wKey.isPressed || kb.upArrowKey.isPressed) drive = 1f;
-                else if (kb.sKey.isPressed || kb.downArrowKey.isPressed) drive = -1f;
+                if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) keyTarget.x -= 1f;
+                if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) keyTarget.x += 1f;
+                if (kb.wKey.isPressed || kb.upArrowKey.isPressed) keyTarget.y += 1f;
+                if (kb.sKey.isPressed || kb.downArrowKey.isPressed) keyTarget.y -= 1f;
+                shiftBoost = kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed;
                 // R, not space — space already dismisses the voyage tally.
                 if (kb.rKey.wasPressedThisFrame) motor.Rowing = !motor.Rowing;
             }
+            float ramp = SailControlTuning.keyRampSeconds;
+            float step = ramp > 1e-3f ? dt / ramp : 1f;
+            keyAxes.x = Mathf.MoveTowards(keyAxes.x, keyTarget.x, step);
+            keyAxes.y = Mathf.MoveTowards(keyAxes.y, keyTarget.y, step);
+            if (ashore) keyAxes = Vector2.zero;
 
-            if (!Mathf.Approximately(testRudder, 0f)) { manualRudder = testRudder; manualSteer = true; }
+            Vector2 axes = stick.Held ? stick.Axes : keyAxes;
 
-            // Man overboard (5b): steering toward a swimmer, same "any
-            // thumb on the stick wins" cancellation as `SailTo` below, but
-            // this one never sets throttleOrder -- the player's own hand on
-            // the engine is untouched throughout.
-            //
-            // Kevin: *"tap the swimmer and the heading autopilot steers
-            // toward them. I still control the throttle."* The stick is
-            // also the throttle, so a thumb on it must NOT cancel the
-            // steer by itself: only a drag that clearly asks for another
-            // heading does (autopilot mode: pointing more than
-            // `SteerKeepDeg` away from the swimmer; direct mode: a real
-            // rudder deflection). Otherwise the drag's distance sets the
-            // speed and the swimmer keeps the heading.
+            // --- what the axes mean ---
+            float turn = Curve(axes.x, SailControlTuning.turnCurve);
+            if (!Mathf.Approximately(testRudder, 0f)) turn = testRudder;
+            float push = Mathf.Clamp(axes.y, -1f, 1f);
+            float shaped = Curve(push, SailControlTuning.throttleCurve);
+            pushingAhead = shaped > 0f;
+
+            // Boost: disarms on its own once she has sat with no push ahead
+            // and come (nearly) to a stop.
+            if (ashore) boostArmed = false;
+            if (boostArmed)
+            {
+                boostIdle = pushingAhead ? 0f : boostIdle + dt;
+                if (boostIdle >= SailControlTuning.boostIdleSeconds
+                    && motor.CurrentSpeed < SailControlTuning.boostStopSpeed)
+                    boostArmed = false;
+            }
+            float aheadTop = BoostArmed ? Mathf.Max(1f, motor.Overdrive) : 1f;
+            float throttle = shaped >= 0f
+                ? shaped * aheadTop
+                : shaped * Mathf.Clamp01(SailControlTuning.reverseCap);
+
+            // --- man overboard: the swimmer has the bow until a real turn ---
+            bool steering = false;
+            float rudderTarget = turn;
+            float rudderRate = SailControlTuning.rudderSlewPerSec;
+            if (steerTarget != null && Mathf.Abs(turn) > SteerKeepTurn) steerTarget = null;
             if (steerTarget != null)
             {
+                steering = true;
                 Vector3 d = steerTarget.position - transform.position; d.y = 0f;
                 float bearing = d.sqrMagnitude > 0.01f ? Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg : motor.Heading;
-                bool cancel = manualSteer;
-                if (!cancel && helm.Dragging)
+                rudderTarget = SteerFor(bearing, dt);
+                rudderRate = rudderEaseSpeed;
+                if (Mathf.Approximately(push, 0f) && !motor.Anchored)
                 {
-                    if (direct) cancel = stickRudderActive && Mathf.Abs(stickRudder) > SteerKeepRudder;
-                    else if (helm.HasDragDirection)
-                        cancel = Mathf.Abs(Mathf.DeltaAngle(helm.DragHeadingDeg, bearing)) > SteerKeepDeg;
-                }
-                if (cancel) steerTarget = null;
-                else
-                {
-                    targetHeadingDeg = bearing;
-                    hasTarget = true;
-                    stickRudderActive = false;   // the swimmer, not the thumb, has the blade
+                    float slowR = Mathf.Max(1f, SailControlTuning.steerTowardSlowHulls * motor.HullLength);
+                    throttle = Mathf.Lerp(SailControlTuning.steerTowardSlowThrottle,
+                        SailControlTuning.steerTowardThrottle, Mathf.Clamp01(d.magnitude / slowR));
                 }
             }
-
-            // A tapped destination steers until the player takes the helm
-            // back: a thumb on the stick, a tap (which rang her down), or a
-            // held key all cancel it.
-            if (sailTo.HasValue)
-            {
-                if (manualSteer || helm.Dragging || helm.Tapped) sailTo = null;
-                else SteerForSailTo();
-            }
-
-            // Heading hold: the drive holds the course once nobody steers.
-            // Read before the branches below, which is fine: they only ever
-            // clear `hasTarget` for a thumb or key that already counts here.
-            bool holdOn = direct && HelmTuning.headingHold;
-            holdAllowed = holdOn && !manualSteer && !hasTarget
-                && !(stickRudderActive && Mathf.Abs(stickRudder) > HelmTuning.HoldBreakRudder);
-
-            float rudderTarget;
-            float rudderRate = rudderEaseSpeed;
-            if (manualSteer)
-            {
-                rudderTarget = manualRudder;
-                if (holdOn)
-                {
-                    // A/D with the hold: released, the blade springs home
-                    // like the stick's and the drive captures the heading
-                    // where the turn dies -- not the heading at the instant
-                    // of release, which the autopilot would haul her back to
-                    // after she carried past it.
-                    hasTarget = false;
-                    rudderRate = HelmTuning.rudderMoveSpeed;
-                }
-                else
-                {
-                    targetHeadingDeg = motor.Heading;
-                    hasTarget = true;
-                }
-            }
-            else if (stickRudderActive)
-            {
-                // Direct mode, thumb on the stick: the blade follows it.
-                rudderTarget = stickRudder;
-                rudderRate = HelmTuning.rudderMoveSpeed;
-            }
-            else if (!hasTarget)
-            {
-                rudderTarget = 0f;
-                // Direct mode, thumb off: spring back to midships. (The
-                // autopilot mode keeps today's ease.)
-                if (direct) rudderRate = HelmTuning.rudderReturnPerSec;
-            }
-            else
-            {
-                // Kp on the heading error, Kd on the yaw rate (negated: it
-                // BRAKES the turn rather than chasing the error), full rudder
-                // saturating past the error a real helm would already be hard
-                // over at. `DeltaAngle` keeps the error signed and wrapped, so
-                // a target 179 degrees away doesn't fight itself over which
-                // way is shorter.
-                float err = Mathf.DeltaAngle(motor.Heading, targetHeadingDeg);
-                float yawRate = 0f;
-                float dt = Time.deltaTime;
-                if (prevHeadingValid && dt > 1e-5f)
-                    yawRate = Mathf.DeltaAngle(prevHeadingDeg, motor.Heading) / dt;
-
-                float steer = steerKp * err + steerKd * -yawRate;
-                steer = Mathf.Clamp(steer, -1f, 1f);
-                // Going astern, the same rudder swings the stern the other
-                // way relative to the bow's heading error, so the correction
-                // has to flip with it. This has to key off which way she is
-                // actually moving through the water (sign of her forward
-                // velocity), not the stick's `astern` order flag — the order
-                // and her way disagree right at the astern/ahead transition
-                // (ringing ahead while she still carries sternway, or vice
-                // versa), and flipping on the wrong signal steers her the
-                // wrong way at exactly the moment the autopilot is fighting
-                // to bring her round.
-                float fwdSpeed = Vector3.Dot(motor.Velocity, transform.forward);
-                if (fwdSpeed < -0.05f) steer = -steer;
-                rudderTarget = steer;
-            }
-
             prevHeadingDeg = motor.Heading;
             prevHeadingValid = true;
 
-            rudder = Mathf.MoveTowards(rudder, rudderTarget, Mathf.Max(0f, rudderRate) * Time.deltaTime);
+            rudder = Mathf.MoveTowards(rudder, rudderTarget, Mathf.Max(0f, rudderRate) * dt);
             motor.Rudder = rudder;
-
             // The engine's ramp in ShipMotor does the smoothing, and the
-            // crew's condition sets how fast it ramps -- an order is still
-            // only as good as whoever is below to answer it.
-            throttleOut = drive ?? throttleOrder;
+            // crew's condition sets how fast it ramps.
+            throttleOut = throttle;
             motor.ThrottleOrder = throttleOut;
+            // Heading hold (HeadingHold): the drive may hold the course while
+            // nobody is turning her. It still waits for the blade to centre
+            // and the turn to die before it captures.
+            motor.HoldAllowed = !steering && Mathf.Approximately(turn, 0f);
         }
 
-        /// Direct-rudder reading of the stick (see the class doc for the
-        /// whole mapping). Runs only in direct mode.
-        void ReadStickDirect(bool dragBegan)
+        /// sign(a) * |a|^curve, so the rim is still 1 and the centre is finer.
+        static float Curve(float a, float curve)
         {
-            if (helm.Tapped)
-            {
-                if (HelmTuning.tapStops && !TapLocksAShip()) { throttleOrder = 0f; astern = false; }
-                return;
-            }
-            if (!helm.Dragging) return;
+            float m = Mathf.Min(1f, Mathf.Abs(a));
+            return Mathf.Sign(a) * Mathf.Pow(m, Mathf.Max(0.05f, curve));
+        }
 
-            // The thumb has the helm: no held course survives it (a released
-            // A/D key or a tapped destination leaves one behind).
-            hasTarget = false;
-
-            Vector2 s = helm.StickOffset;
-
-            // --- rudder: follows the thumb, never latched ---
-            float ax = Mathf.Min(1f, Mathf.Abs(s.x));
-            float curve = Mathf.Max(0.05f, HelmTuning.rudderCurve);
-            stickRudder = Mathf.Clamp(
-                Mathf.Sign(s.x) * Mathf.Pow(ax, curve) * HelmTuning.rudderPerRim, -1f, 1f);
-            stickRudderActive = true;
-
-            // --- throttle: a latched lever, moved by the CHANGE in stick Y ---
-            // Steering sweeps are arcs, so Y drifts while X moves. Only the
-            // part of each frame's vertical step steeper than
-            // throttleArcAllowance x its sideways step is travel; a straight
-            // up/down drag counts in full, a sweep tilted under the
-            // allowance not at all (2026-10-02).
-            if (dragBegan) { yTravel = 0f; prevStick = s; }
-            float stepY = s.y - prevStick.y;
-            float steep = Mathf.Abs(stepY)
-                          - Mathf.Max(0f, HelmTuning.throttleArcAllowance) * Mathf.Abs(s.x - prevStick.x);
-            if (steep > 0f) yTravel += Mathf.Sign(stepY) * steep;
-            prevStick = s;
-            float dz = Mathf.Clamp(HelmTuning.throttleDeadZone, 0f, 0.9f);
-            float ay = Mathf.Abs(yTravel);
-            float yEff = ay <= dz ? 0f : Mathf.Sign(yTravel) * (ay - dz) / (1f - dz);
-            if (dragBegan)
-            {
-                lever = LeverFromOrder(throttleOrder);
-                prevYEff = yEff;   // 0 on the touch-down frame; no jump either way
-            }
-            lever += yEff - prevYEff;
-            prevYEff = yEff;
-
-            float detent = Mathf.Max(0f, stopDetent);
+        /// The swimmer steer's rudder: Kp on the heading error, Kd on the yaw
+        /// rate (negated: it BRAKES the turn rather than chasing the error).
+        float SteerFor(float bearingDeg, float dt)
+        {
+            float err = Mathf.DeltaAngle(motor.Heading, bearingDeg);
+            float yawRate = 0f;
+            if (prevHeadingValid && dt > 1e-5f)
+                yawRate = Mathf.DeltaAngle(prevHeadingDeg, motor.Heading) / dt;
+            float steer = Mathf.Clamp(steerKp * err + steerKd * -yawRate, -1f, 1f);
+            // Going astern the same rudder swings her the other way, so flip
+            // on which way she is actually moving through the water (not the
+            // order: the two disagree right at the ahead/astern change).
             float fwdSpeed = Vector3.Dot(motor.Velocity, transform.forward);
-            bool asternOk = astern || fwdSpeed < asternSpeedThreshold;
-            float floor = asternOk ? -(1f + detent) : 0f;
-            // Clamps are absorbed into the lever itself, so a thumb that
-            // overshoots the end of travel and comes back responds at once.
-            lever = Mathf.Clamp(lever, floor, BurnTop);
-
-            throttleOrder = OrderFromLever(lever);
-            astern = throttleOrder < 0f;
+            if (fwdSpeed < -0.05f) steer = -steer;
+            return steer;
         }
 
-        float BurnTop => Mathf.Max(1.01f, burnEngageFrac);
-
-        /// Lever position -> throttle order. 0..1 ahead, 1..BurnTop into the
-        /// burn tier, a stop detent just below 0, then astern.
-        float OrderFromLever(float l)
-        {
-            float detent = Mathf.Max(0f, stopDetent);
-            if (l >= 0f)
-            {
-                if (l <= 1f) return l;
-                float burnT = Mathf.InverseLerp(1f, BurnTop, l);
-                return Mathf.Lerp(1f, motor.Overdrive, burnT);
-            }
-            if (l > -detent) return 0f;
-            return -Mathf.Clamp01(-l - detent);
-        }
-
-        /// The inverse, so a thumb picks the lever up exactly where the
-        /// current order has it (a held-over order from the autopilot mode, a
-        /// tap-to-stop, a keyboard-free AllStop all land here).
-        float LeverFromOrder(float o)
-        {
-            if (o >= 0f)
-            {
-                if (o <= 1f) return o;
-                float over = Mathf.Max(1.0001f, motor.Overdrive);
-                return Mathf.Lerp(1f, BurnTop, Mathf.InverseLerp(1f, over, o));
-            }
-            return -(Mathf.Max(0f, stopDetent) + Mathf.Min(1f, -o));
-        }
-
-        /// Where the thumb would sit (ring radii, +right) for the blade's
-        /// CURRENT angle — the inverse of the rudder curve — so the drawn knob
-        /// shows the rudder, lagging the thumb and sliding home on release.
-        float RudderStickX()
-        {
-            float per = HelmTuning.rudderPerRim;
-            if (per <= 1e-3f) return 0f;
-            float curve = Mathf.Max(0.05f, HelmTuning.rudderCurve);
-            float a = Mathf.Clamp01(Mathf.Abs(rudder) / per);
-            return Mathf.Sign(rudder) * Mathf.Pow(a, 1f / curve);
-        }
-
-        /// Reads the floating stick and turns it into the policy this frame:
-        /// a held world heading, a continuous throttle order, and whether
-        /// she's being asked to back down rather than steer.
-        ///
-        /// Nothing here runs while a finger isn't on the stick — the whole
-        /// point of "hands-free cruising" is that `targetHeadingDeg` and
-        /// `throttleOrder` simply keep their last value until the next touch.
-        void ReadStick()
-        {
-            if (helm.Tapped)
-            {
-                // Ring down to stop without letting go of the course --
-                // unless this same tap is about to lock an enemy ship.
-                if (HelmTuning.tapStops && !TapLocksAShip()) { throttleOrder = 0f; astern = false; }
-                return;
-            }
-
-            if (!helm.Dragging) return;
-
-            if (helm.DragDistance01 < TouchHelm.DeadZoneFrac)
-            {
-                // Thumb is down but still inside the dead zone: not a change
-                // of order. A genuine TAP (short, barely moved) already fired
-                // `helm.Tapped` above on release; a held-still touch here
-                // must not stop her — keep whatever heading/throttle she
-                // already had.
-                return;
-            }
-
-            float mag01 = Mathf.Clamp01(
-                (helm.DragDistance01 - TouchHelm.DeadZoneFrac) / (1f - TouchHelm.DeadZoneFrac));
-
-            bool behindHer = helm.HasDragDirection
-                && Mathf.Abs(Mathf.DeltaAngle(motor.Heading, helm.DragHeadingDeg)) > asternAngleThreshold;
-            // Latched: once astern, a drag that still points behind her keeps
-            // her backing down no matter how fast the sternway builds — the
-            // speed gate only decides whether astern can be ENTERED, so
-            // holding the drag doesn't flip her to full ahead + a 180-degree
-            // target the instant she passes the threshold going backwards.
-            bool pointsAstern = astern
-                ? behindHer
-                : behindHer && motor.CurrentSpeed < asternSpeedThreshold;
-
-            if (pointsAstern)
-            {
-                astern = true;
-                throttleOrder = -mag01; // ShipMotor clamps the order to -1 anyway
-                // "Don't spin her": while backing, the held heading just
-                // tracks whatever she's doing right now, so the autopilot's
-                // error stays near zero and only the astern-flipped Kd term
-                // is left doing any correcting.
-                targetHeadingDeg = motor.Heading;
-                hasTarget = true;
-            }
-            else
-            {
-                astern = false;
-                if (helm.HasDragDirection)
-                {
-                    targetHeadingDeg = helm.DragHeadingDeg;
-                    hasTarget = true;
-                }
-                throttleOrder = ThrottleFromDistance(helm.DragDistance01);
-            }
-        }
-
-        /// 0 at the dead zone's edge to 1 at the rim, then a ramp from 1 up
-        /// to `motor.Overdrive` between the rim and `burnEngageFrac` — past
-        /// that the order clamps at full burn, which is what "the knob
-        /// clamps at the rim, with a visible burn state" means in practice:
-        /// the drawn knob stops moving but the order it stands for keeps
-        /// climbing until burn is fully engaged.
-        float ThrottleFromDistance(float distFrac)
-        {
-            const float Dz = TouchHelm.DeadZoneFrac;
-            if (distFrac < Dz) return 0f;
-            if (distFrac <= 1f) return Mathf.Clamp01((distFrac - Dz) / (1f - Dz));
-            float burnT = Mathf.InverseLerp(1f, burnEngageFrac, distFrac);
-            return Mathf.Lerp(1f, motor.Overdrive, Mathf.Clamp01(burnT));
-        }
-
-        /// What she is being asked to do RIGHT NOW, which is the held key if
-        /// there is one -- the readout must never say "stop" while a finger
-        /// on W has her making way.
-        ///
-        /// The words are bands rather than a lookup on the notch, because a
-        /// held W/S is an order too and it must read as one. Every branch
-        /// returns an interned literal, so `OrderWord` can be compared by
-        /// reference (the sea HUD's helm row re-texts only when it moves).
+        /// The live order in one short word. Every branch returns an interned
+        /// literal, so `OrderWord` can be compared by reference (the sea
+        /// HUD's order strip re-texts only when it moves).
         string Label()
         {
             float o = motor.ThrottleOrder;
-            if (o > 1.02f) return "BURN";
-            if (o > 0.85f) return "full ahead";
-            if (o > 0.55f) return "half ahead";
-            if (o > 0.05f) return "slow ahead";
-            if (o < -0.85f) return "full astern";
-            if (o < -0.05f) return "astern";
-            return "stop";
+            if (o > 1.02f) return "Burn";
+            if (o > 0.05f) return "Ahead";
+            if (o < -0.05f) return "Astern";
+            return "Stop";
         }
 
-        /// Ring down STOP from outside, and drop whatever gesture is in
-        /// progress. The notch is re-asserted into `motor.ThrottleOrder`
-        /// every Update, so anything that wants her stopped has to move the
-        /// CONTROL, not the value the control produces — writing the value
-        /// lasts exactly one frame and then the helm quietly puts it back.
+        /// Stop from outside (berthing): drop the stick, the ramped keys and
+        /// boost, and zero the orders. The helm re-asserts the motor's orders
+        /// every Update, so it is the INPUT that has to go to zero; the motor
+        /// is zeroed too so this frame agrees. (A swimmer steer is kept, as it
+        /// always was; its throttle stands down while she is anchored.)
         public void AllStop()
         {
-            helm.CancelDrag();
-            throttleOrder = 0f;
-            astern = false;
+            stick.CancelDrag();
+            keyAxes = Vector2.zero;
+            boostArmed = false;
+            boostIdle = 0f;
+            pushingAhead = false;
             rudder = 0f;
-            // (A stop tap keeps a swimmer steer: stopping to coast up to
-            // someone in the water is exactly how the line gets thrown.)
+            throttleOut = 0f;
+            if (motor != null) { motor.ThrottleOrder = 0f; motor.Rudder = 0f; }
         }
 
-        /// **Hook, not a mechanic.** How hard the burn notch is eating wood
-        /// right now, 0 when she is not burning. Nothing consumes it yet.
-        /// TODO(GDD §6 / ship ladder): burn costs wood per distance made —
-        /// wire this to the hold and make running out drop her to full ahead.
-        public float BurnRate01 => motor != null && motor.Burning ? 1f : 0f;
-
-        /// True while a thumb (or the mouse) is on the floating stick. The
-        /// sea HUD's first-use hint ("drag here to sail") goes for good the
-        /// first frame this is true (`GestureHints`).
-        public bool StickInUse => helm.Dragging;
+        /// True while a thumb (or the mouse) holds the sea stick. The sea
+        /// HUD's first-use hint goes for good the first frame this is true
+        /// (`GestureHints`).
+        public bool StickInUse => stick.Held;
 
         /// The ship's surf-zone reader, for the sea HUD's sea-state word
         /// ("BREAKERS" outranks the sea's name). Null on a ship without one.
         public Breakers Breakers => breakers;
 
-        /// The order word the helm row shows ("half ahead", "BURN",
-        /// "astern"): one of `Label()`'s interned literals, so a caller can
-        /// compare it by reference and never allocates.
-        public string OrderWord => motor != null ? Label() : "stop";
+        /// The live order word ("Stop", "Ahead", "Astern", "Burn"): one of
+        /// `Label()`'s interned literals, so a caller can compare it by
+        /// reference and never allocates.
+        public string OrderWord => motor != null ? Label() : "Stop";
 
-        /// **Only the floating stick is IMGUI now (Kevin, 2026-09-30, island
-        /// UI restructure phase 6, approved mockup "8 · Sea: sailing").** The
-        /// order word, the point-of-sail panel (sea line, resistance bar,
-        /// achieved-throttle bar, way gauge) and the Oars / Ease buttons that
-        /// were drawn here are the UI Toolkit helm row now
-        /// (`UI/Sheets/SeaHud.cs`: Oars · order readout · Ease), and the sea
-        /// state word is in its top bar. What stays is the ring drawn under
-        /// the thumb while it drags: it follows the finger at 60 Hz with
-        /// rotated rects, and converting it bought nothing but risk.
-        /// The INPUT is untouched (`Update`, `TouchHelm.Sample`).
+        /// Only the floating stick is IMGUI (the order strip and the ⚡
+        /// button are the UI Toolkit sea HUD, `UI/Sheets/SeaHud.cs`): the ring
+        /// follows the finger at 60 Hz with rotated rects.
         void OnGUI()
         {
-            // The helm is not on screen while she lies at a camp: the island
-            // sheet docks to the bottom of a portrait phone and the stick
-            // would be drawn under it, on a ship that is anchored anyway.
+            // The island sheet docks to the bottom of a portrait phone; the
+            // stick would be drawn under it, on a ship that is anchored anyway.
             if (SeaSick.CameraRig.IslandCam.Engaged) return;
-            // Same IMGUI-blind-spot suppression as the rest of the HUD
-            // (2026-09-26 review: the throttle stick sat under the Home card).
+            // Same IMGUI-blind-spot suppression as the rest of the HUD.
             if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen
                 || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
             if (Event.current.type != EventType.Repaint) return;
 
-            bool direct = HelmTuning.directRudder;
-            helm.Draw(throttleOrder, astern, motor.Burning, direct, direct ? RudderStickX() : 0f);
+            stick.Draw(throttleOut < -0.05f, Boosting || (motor != null && motor.Burning));
         }
     }
 }

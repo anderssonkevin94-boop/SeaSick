@@ -31,10 +31,11 @@ namespace SeaSick.UI.Sheets
     ///   offered this frame, the highest priority, in the Next card's look;
     ///   an offer that is information draws with no chevron and takes no
     ///   tap. Hidden while the combat row is up (`CombatHud`).</item>
-    /// <item>**The order strip**, under way (2026-10-02, was the helm row):
-    ///   one slim line at the very bottom of the safe area, "half ahead ·
-    ///   6.2 m/s" beside the stop-to-full bar (full-ahead tick, the burn
-    ///   stretch past it in dim amber). Information only: it does not block,
+    /// <item>**The order strip**, under way (2026-10-02, was the helm row;
+    ///   2026-10-03 DREDGE controls: it shows the LIVE drive, not a latched
+    ///   order): one slim line at the bottom of the safe area, "slow ahead ·
+    ///   6.2 m/s" beside the live-throttle bar (full-ahead tick, the burn
+    ///   stretch past it lit amber only while the boost is pushing). Information only: it does not block,
     ///   so a thumb resting there starts the stick. Kevin, after playing the
     ///   old 96-120 px row: "I don't like how far up the joystick is pushed
     ///   given all the UI below it", and "remove the ease and the oars from
@@ -42,8 +43,15 @@ namespace SeaSick.UI.Sheets
     ///   desktop R; easing has no control left and stays off). Replaces the
     ///   rest of `HelmInput.OnGUI` and `TouchHelm`'s readout; the floating
     ///   stick ring itself stays IMGUI.</item>
-    /// <item>**First-use hint**: a faint dashed ring and "drag here to sail"
-    ///   in the stick zone until the stick has been used once
+    /// <item>**The boost button** (2026-10-03): a 48 design-px round bolt at
+    ///   the bottom-right, level with the order strip, which gives up its
+    ///   right end to it. Tap = `HelmInput.ToggleBoost` (the Haste button:
+    ///   off / armed = lit outline / boosting = filled). It is a real
+    ///   button: `Blocks` covers `BoostRect`, so a thumb on it never starts
+    ///   the stick. `HelmRect` is the whole bottom row (strip + button) so
+    ///   the edge markers keep off both.</item>
+    /// <item>**First-use hint**: a faint dashed ring and "Drag to sail · let
+    ///   go to stop" in the stick zone until the stick has been used once
     ///   (`GestureHints`).</item>
     /// </list>
     ///
@@ -74,6 +82,9 @@ namespace SeaSick.UI.Sheets
         /// its height, design px (2026-10-02: was a 120/96 px helm row on a
         /// 16 px margin).
         public const float HelmBottom = 6f, HelmHeight = 30f;
+        /// The boost button's side (design px; 48 is >= 44 pt on a phone) and
+        /// the gap between it and the strip.
+        public const float BoostSize = 48f, BoostGap = 8f;
         /// Gap between the order strip (or the thumb bar) and the card, design px.
         public const float CardGap = 14f;
         const float LaneWidth = DesignWidth - Side * 2f;
@@ -84,7 +95,10 @@ namespace SeaSick.UI.Sheets
         /// GUI space (origin top-left), screen pixels. Zero while hidden.
         public static Rect TopRect { get; private set; }
         public static Rect AlertRect { get; private set; }
+        /// The whole bottom row: the order strip AND the boost button.
         public static Rect HelmRect { get; private set; }
+        /// The boost button alone (GUI space; zero while hidden).
+        public static Rect BoostRect { get; private set; }
         /// Panel units from the panel's top edge at which the chart
         /// instrument sits under the bar (0 = no bar, the chart keeps its
         /// corner). `ChartInstrument` reads it.
@@ -100,7 +114,7 @@ namespace SeaSick.UI.Sheets
             if (Time.frameCount - tickFrame > 1) return false;
             // Not `HelmRect`: the order strip is information, and the very
             // bottom of the screen is where the thumb starts the stick.
-            return TopRect.Contains(guiPoint) || AlertRect.Contains(guiPoint)
+            return TopRect.Contains(guiPoint) || AlertRect.Contains(guiPoint) || BoostRect.Contains(guiPoint)
                    || (cardTaps && SeaActions.Visible && SeaActions.Rect.Contains(guiPoint));
         }
 
@@ -117,7 +131,7 @@ namespace SeaSick.UI.Sheets
         static void Reset()
         {
             TopBarShowing = HelmShowing = cardTaps = false;
-            TopRect = AlertRect = HelmRect = Rect.zero;
+            TopRect = AlertRect = HelmRect = BoostRect = Rect.zero;
             ChartTopPanel = 0f;
             tickFrame = -10;
         }
@@ -149,10 +163,13 @@ namespace SeaSick.UI.Sheets
             readonly VisualElement helmRow;
             readonly Label orderText, speedText;
             readonly VisualElement barBurn, barFill, barTick;
+            // --- boost button
+            readonly Button boostBtn;
+            readonly SeaGlyph boostGlyph;
             // --- hint
             readonly VisualElement hint;
 
-            bool topShown = true, alertShown = true, cardShown = true, helmShown = true, hintShown = true;
+            bool topShown = true, alertShown = true, cardShown = true, helmShown = true, hintShown = true, boostShown = true;
             float nextRefresh;
 
             // Cached text keys (strings are rebuilt only when these move).
@@ -174,15 +191,15 @@ namespace SeaSick.UI.Sheets
 
             // Helm state.
             string shownOrder;
-            bool shownMoving;
+            bool shownBurn, shownAstern;
+            bool shownArmed, shownBoosting;
             int speedKey = int.MinValue;
             float fillShown = -1f, tickShown = -1f;
-            readonly Dictionary<string, string> movingWords = new Dictionary<string, string>();
             static readonly string[] speedTexts = new string[400];
 
             // The scale each root was last given (a root hidden when the
             // panel rescaled picks the new one up when it shows).
-            float kTop = -1f, kAlert = -1f, kHelm = -1f, kCard = -1f, kHint = -1f;
+            float kTop = -1f, kAlert = -1f, kHelm = -1f, kBoost = -1f, kCard = -1f, kHint = -1f;
 
             static void SetScale(VisualElement e, ref float last, float k)
             {
@@ -277,12 +294,22 @@ namespace SeaSick.UI.Sheets
                 helmRow.Add(bar);
                 root.Add(helmRow);
 
+                // --- the boost button: a real button (see `BoostRect`), the
+                // bolt painted rather than a font glyph.
+                boostBtn = new Button(TapBoost) { text = "" };
+                boostBtn.AddToClassList("sea-boost");
+                boostBtn.tooltip = "Boost";
+                boostGlyph = new SeaGlyph(SeaGlyph.Kind.Bolt);
+                boostGlyph.AddToClassList("sea-boost-icon");
+                boostBtn.Add(boostGlyph);
+                root.Add(boostBtn);
+
                 // --- first-use hint (never a target)
                 hint = Box("sea-hint");
                 var ring = new SeaGlyph(SeaGlyph.Kind.DashedRing);
                 ring.AddToClassList("sea-hint-ring");
                 hint.Add(ring);
-                Text(hint, "sea-hint-text").text = "drag here to sail";
+                Text(hint, "sea-hint-text").text = "Drag to sail · let go to stop";
                 root.Add(hint);
 
                 Hide();
@@ -301,6 +328,12 @@ namespace SeaSick.UI.Sheets
                 l.AddToClassList(cls);
                 into.Add(l);
                 return l;
+            }
+
+            void TapBoost()
+            {
+                var h = Helm();
+                if (h != null) h.ToggleBoost();
             }
 
             Button TopButton(VisualElement icon, System.Action tap, string tip, out Label label)
@@ -328,9 +361,10 @@ namespace SeaSick.UI.Sheets
                 Show(alertRow, ref alertShown, false);
                 Show(card, ref cardShown, false);
                 Show(helmRow, ref helmShown, false);
+                Show(boostBtn, ref boostShown, false);
                 Show(hint, ref hintShown, false);
                 TopBarShowing = HelmShowing = cardTaps = false;
-                TopRect = AlertRect = HelmRect = Rect.zero;
+                TopRect = AlertRect = HelmRect = BoostRect = Rect.zero;
                 ChartTopPanel = 0f;
                 SeaActions.Visible = false;
                 SeaActions.Rect = Rect.zero;
@@ -459,19 +493,31 @@ namespace SeaSick.UI.Sheets
                 else AlertRect = Rect.zero;
 
                 // --- the order strip
-                float helmH = HelmHeight;
+                // The bottom row is the strip (left) and the boost button
+                // (right, level with it); the row is as tall as the button.
+                float helmH = Mathf.Max(HelmHeight, BoostSize);
                 Show(helmRow, ref helmShown, helmOn);
+                Show(boostBtn, ref boostShown, helmOn);
                 if (helmOn)
                 {
                     float bottom = safe.yMin + HelmBottom * ppd;
+                    float stripW = LaneWidth - BoostSize - BoostGap;            // design px
+                    float stripBottom = bottom + (helmH - HelmHeight) * .5f * ppd;
                     helmRow.style.left = laneX * s;
-                    helmRow.style.bottom = bottom * s;
-                    helmRow.style.height = helmH;
+                    helmRow.style.bottom = stripBottom * s;
+                    helmRow.style.width = stripW;
+                    helmRow.style.height = HelmHeight;
                     SetScale(helmRow, ref kHelm, k);
-                    HelmRect = new Rect(laneX, Screen.height - bottom - helmH * ppd, laneW, helmH * ppd);
+                    float boostX = laneX + (LaneWidth - BoostSize) * ppd;
+                    boostBtn.style.left = boostX * s;
+                    boostBtn.style.bottom = bottom * s;
+                    SetScale(boostBtn, ref kBoost, k);
+                    BoostRect = new Rect(boostX, Screen.height - bottom - BoostSize * ppd, BoostSize * ppd, BoostSize * ppd);
+                    var stripRect = new Rect(laneX, Screen.height - stripBottom - HelmHeight * ppd, stripW * ppd, HelmHeight * ppd);
+                    HelmRect = Union(stripRect, BoostRect);
                     TickHelm(motor);
                 }
-                else HelmRect = Rect.zero;
+                else HelmRect = BoostRect = Rect.zero;
                 HelmShowing = helmOn;
                 // The combat row sits just above the strip (mockup 8b).
                 CombatHud.BottomPx = HelmBottom + helmH + CardGap;
@@ -530,7 +576,7 @@ namespace SeaSick.UI.Sheets
                     float lower = Screen.height - Mathf.Max(cardTop, safe.yMin + (HelmBottom + helmH) * ppd);
                     float cy = (upper + lower) * .5f;
                     float cx = safe.xMin + safe.width * .5f;
-                    hint.style.left = (cx - 80f * ppd) * s;
+                    hint.style.left = (cx - 100f * ppd) * s;
                     hint.style.top = (cy - 60f * ppd) * s;
                     SetScale(hint, ref kHint, k);
                 }
@@ -769,18 +815,32 @@ namespace SeaSick.UI.Sheets
             void TickHelm(ShipMotor motor)
             {
                 var h = Helm();
-                string word = h != null ? h.OrderWord : "stop";
-                bool moving = motor.ThrottleMoving;
-                if (!ReferenceEquals(word, shownOrder) || moving != shownMoving)
+                // The LIVE drive (no latched order any more): the word comes
+                // from the helm, the bar is the achieved throttle.
+                string word = h != null ? h.OrderWord : "Stop";
+                bool boosting = h != null && h.Boosting;
+                bool armed = h != null && h.BoostArmed;
+                bool astern = motor.Throttle < -0.05f;
+                if (!string.Equals(word, shownOrder) || boosting != shownBurn || astern != shownAstern)
                 {
                     shownOrder = word;
-                    shownMoving = moving;
-                    orderText.text = moving ? Moving(word) : word;
-                    bool burn = motor.ThrottleOrder > 1.02f, astern = motor.ThrottleOrder < -0.05f;
-                    orderText.EnableInClassList("sea-order--burn", burn);
+                    shownBurn = boosting;
+                    shownAstern = astern;
+                    orderText.text = word;
+                    orderText.EnableInClassList("sea-order--burn", boosting);
                     orderText.EnableInClassList("sea-order--astern", astern);
-                    barFill.EnableInClassList("sea-bar-fill--burn", burn);
+                    barFill.EnableInClassList("sea-bar-fill--burn", boosting);
                     barFill.EnableInClassList("sea-bar-fill--astern", astern);
+                    barBurn.EnableInClassList("sea-bar-burn--lit", boosting);
+                }
+                if (armed != shownArmed || boosting != shownBoosting)
+                {
+                    shownArmed = armed;
+                    shownBoosting = boosting;
+                    boostBtn.EnableInClassList("sea-boost--armed", armed && !boosting);
+                    boostBtn.EnableInClassList("sea-boost--on", boosting);
+                    boostGlyph.Tint = boosting ? Dark : armed ? Amber : Pearl;
+                    boostGlyph.Filled = boosting;
                 }
 
                 int sk = Mathf.Clamp(Mathf.RoundToInt(motor.CurrentSpeed * 10f), 0, speedTexts.Length - 1);
@@ -791,8 +851,8 @@ namespace SeaSick.UI.Sheets
                     speedText.text = speedTexts[sk];
                 }
 
-                // Stop at the left, full ahead at the tick, burn to the end:
-                // the ACHIEVED throttle, so the bar eases toward the order.
+                // Zero at the left, full at the tick, burn to the end: the
+                // ACHIEVED throttle (astern fills the same way, in amber).
                 float ceiling = Mathf.Max(1.05f, motor.Overdrive);
                 float f = Mathf.Clamp01(Mathf.Abs(motor.Throttle) / ceiling);
                 f = Mathf.Round(f * 250f) / 250f;
@@ -805,12 +865,6 @@ namespace SeaSick.UI.Sheets
                     barBurn.style.left = Length.Percent(t * 100f);   // the burn stretch, tick to end
                 }
             }
-
-            string Moving(string word)
-            {
-                if (!movingWords.TryGetValue(word, out var m)) movingWords[word] = m = word + " …";
-                return m;
-            }
         }
     }
 
@@ -821,7 +875,7 @@ namespace SeaSick.UI.Sheets
     /// drew as blank boxes on the phone's font).
     public sealed class SeaGlyph : VisualElement
     {
-        public enum Kind { Wave, Menu, DashedRing }
+        public enum Kind { Wave, Menu, DashedRing, Bolt }
 
         readonly Kind kind;
         Color tint;
@@ -833,6 +887,14 @@ namespace SeaSick.UI.Sheets
                 : (Color)new Color32(232, 242, 246, 255);
             pickingMode = PickingMode.Ignore;
             generateVisualContent += Draw;
+        }
+
+        bool filled;
+        /// The bolt only: solid (boosting) rather than an outline.
+        public bool Filled
+        {
+            get => filled;
+            set { if (value == filled) return; filled = value; MarkDirtyRepaint(); }
         }
 
         public Color Tint
@@ -880,6 +942,16 @@ namespace SeaSick.UI.Sheets
                     p.BeginPath(); p.MoveTo(V(2, 19));
                     p.BezierCurveTo(V(5, 16), V(7, 16), V(10, 19));
                     p.BezierCurveTo(V(13, 22), V(15, 22), V(18, 19));
+                    p.Stroke();
+                    break;
+                case Kind.Bolt:
+                    p.lineWidth = 2.4f * s;
+                    p.fillColor = tint;
+                    p.BeginPath();
+                    p.MoveTo(V(13.5f, 2)); p.LineTo(V(5, 13.5f)); p.LineTo(V(11, 13.5f));
+                    p.LineTo(V(9.5f, 22)); p.LineTo(V(19, 10)); p.LineTo(V(13, 10));
+                    p.ClosePath();
+                    if (filled) p.Fill();
                     p.Stroke();
                     break;
                 case Kind.Menu:

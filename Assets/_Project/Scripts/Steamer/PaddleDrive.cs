@@ -145,11 +145,9 @@ namespace SeaSick.Steamer
         // pair the estimate is measured from). rad/s, rad/s^2.
         float yawRef, yawDist, lastYawRate, lastServoAcc;
         bool servoPrimed;
-        // Heading hold (HelmTuning.headingHold) and the helm that allows it,
-        // looked up once per Configure: AI hulls have no HelmInput, no hold.
+        // Heading hold (HelmTuning.headingHold), gated by the helm's say
+        // (`ShipMotor.HoldAllowed`): AI hulls have no HelmInput, no hold.
         HeadingHold hold;
-        HelmInput helmInput;
-        bool helmLooked;
         // Share of the helm the pivot floor is paying for (0..1): the drawn
         // wheel ticks over with it, the kick that turns her on the spot.
         float pivot01;
@@ -231,7 +229,6 @@ namespace SeaSick.Steamer
             surgeAssistN = yawAssistNm = heelAssistNm = 0f;
             servoPrimed = false;
             hold.Reset();
-            helmLooked = false;
             probesWritten = false;
             if (!Configured) return;
             // Visual-only water rig reads this hull and the drawn rotor; forces are unchanged.
@@ -619,9 +616,7 @@ namespace SeaSick.Steamer
                 // not drift her). The capture waits on the REFERENCE, which
                 // the release brake takes to zero cleanly; her actual rate
                 // carries the sea.
-                if (!helmLooked) { helmInput = GetComponent<HelmInput>(); helmLooked = true; }
-                bool holdOk = helmInput != null && helmInput.isActiveAndEnabled && helmInput.HoldAllowed
-                              && !motor.AutopilotTarget.HasValue;
+                bool holdOk = motor.HoldAllowed && !motor.AutopilotTarget.HasValue;
                 float holdRate = hold.Step(holdOk, helm, motor.Heading, yawRef, dt);
                 if (hold.Active) { rCmd = holdRate; pivot01 = 0f; }
 

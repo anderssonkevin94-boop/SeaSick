@@ -22,12 +22,10 @@ namespace SeaSick.Ship.Overboard
     /// 2. **Tap to steer.** A tap within `TapRadiusUnits` of a swimmer's
     ///    projected screen position — on screen, or on the edge arrow —
     ///    calls `HelmInput.SteerToward`. **This tap has to be consumed
-    ///    BEFORE `TouchHelm` reads it as a stop-tap or starts a stick**:
-    ///    `TouchHelm.Feed` only claims a touch that BEGINS somewhere
-    ///    `UIBlocker.Blocked` says is free (`TouchHelm.cs:220`), so every hit
-    ///    zone here calls `UIBlocker.Block` on its own rect every `OnGUI`
-    ///    event — the same thing the oars/ease buttons already do
-    ///    (`HelmInput.cs`) — which is enough on its own; the `GUI.Button`
+    ///    BEFORE the sea stick starts on it**: `SeaStick.Feed` only claims a
+    ///    touch that BEGINS somewhere `UIBlocker.Blocked` says is free, so
+    ///    every hit zone here calls `UIBlocker.Block` on its own rect every
+    ///    `OnGUI` event, which is enough on its own; the `GUI.Button`
     ///    underneath is what actually reads the tap.
     /// 3. **Sail over them** (2026-09-28, replaced the Throw line button):
     ///    within `BoardReachMetres` of the hull's side for `BoardSeconds`
@@ -45,7 +43,7 @@ namespace SeaSick.Ship.Overboard
 
         /// Tap-catcher half-size, in `HudLayout.Unit`s — the build brief's
         /// "~60pt", and `HudLayout.Unit` is this project's stand-in for a
-        /// DPI-sane point (see `TouchHelm`/`HelmInput`, which size every
+        /// DPI-sane point (see `SeaStick`/`HelmInput`, which size every
         /// control off it with no separate DPI scale).
         const float TapRadiusUnits = 3.0f;
         const float EdgeMarginUnits = 2.6f;
@@ -267,7 +265,7 @@ namespace SeaSick.Ship.Overboard
 
         /// The invisible tap-catcher, on screen or at the edge arrow — the
         /// thing that turns a tap into `HelmInput.SteerToward`. Blocks
-        /// `TouchHelm` off this rect FIRST (see the class doc), then reads
+        /// `SeaStick` off this rect FIRST (see the class doc), then reads
         /// the tap with an ordinary (styleless, so invisible) `GUI.Button`.
         void DrawTapZone(Vector2 guiPoint, float half, IOverboardTarget t)
         {

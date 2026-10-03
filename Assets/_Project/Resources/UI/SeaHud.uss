@@ -96,8 +96,9 @@
 .sea-card-chevron { width: 28px; height: 28px; }
 
 /* ---------------- the order strip (2026-10-02): "half ahead · 6.2 m/s" + bar ----------------
-   One slim line at the very bottom; information only (nothing here picks),
-   so a thumb landing on it starts the stick. Height is also set from code. */
+   One slim line at the bottom, left of the boost button; it shows the LIVE
+   drive (2026-10-03). Information only (nothing here picks), so a thumb
+   landing on it starts the stick. Width and height are also set from code. */
 .sea-helm {
     position: absolute; left: 0; bottom: 0; width: 370px; height: 30px;
     flex-direction: row; align-items: center; margin: 0; padding: 0 12px;
@@ -127,21 +128,41 @@
 .sea-bar-burn {
     position: absolute; left: 70%; right: 0; top: 0; bottom: 0;
     border-top-right-radius: 4px; border-bottom-right-radius: 4px;
-    background-color: rgba(242, 196, 109, 0.28);
+    background-color: rgba(242, 196, 109, 0.10);
 }
+.sea-bar-burn--lit { background-color: rgba(242, 196, 109, 0.55); }
 .sea-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 4px; background-color: rgb(164, 210, 232); }
 .sea-bar-fill--astern, .sea-bar-fill--burn { background-color: rgb(242, 196, 109); }
 .sea-bar-tick { position: absolute; top: -4px; width: 2px; height: 16px; background-color: rgb(242, 196, 109); }
 
-/* ---------------- first-use hint: "drag here to sail" ---------------- */
+/* ---------------- the boost button (2026-10-03): bolt, bottom-right ----------------
+   A real button, 48 design px (>= 44 pt). Off = pearl bolt outline; armed =
+   amber outline; boosting = amber fill, dark bolt. The bolt is painted
+   (SeaGlyph.Bolt), never a font glyph. */
+.sea-boost {
+    position: absolute; left: 0; bottom: 0; width: 48px; height: 48px;
+    margin: 0; padding: 0; align-items: center; justify-content: center;
+    background-color: rgba(22, 41, 58, 0.92);
+    border-width: 2px; border-color: rgb(44, 74, 94); border-radius: 24px;
+    transform-origin: left bottom;
+}
+.sea-boost:hover { background-color: rgb(28, 50, 70); }
+.sea-boost:active { background-color: rgb(32, 57, 72); }
+.sea-boost-icon { width: 26px; height: 26px; }
+.sea-boost--armed, .sea-boost--armed:hover { background-color: rgb(42, 36, 21); border-color: rgb(242, 196, 109); }
+.sea-boost--on, .sea-boost--on:hover, .sea-boost--on:active {
+    background-color: rgb(242, 196, 109); border-color: rgb(255, 224, 150);
+}
+
+/* ---------------- first-use hint: "Drag to sail · let go to stop" ---------------- */
 .sea-hint {
-    position: absolute; left: 0; top: 0; width: 160px; height: 150px;
+    position: absolute; left: 0; top: 0; width: 200px; height: 150px;
     align-items: center; margin: 0; padding: 0;
     transform-origin: left top;
 }
 .sea-hint-ring { width: 120px; height: 120px; }
 .sea-hint-text {
-    margin: 8px 0 0 0; padding: 0; font-size: 11px; color: rgba(232, 242, 246, 0.75); white-space: nowrap;
+    margin: 8px 0 0 0; padding: 0; font-size: 11px; color: rgba(232, 242, 246, 0.75); white-space: normal; max-width: 200px;
     -unity-text-align: middle-center;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }

@@ -188,7 +188,7 @@ namespace SeaSick.Ship
 
         /// The hold's yaw-rate command this step, rad/s (+ to starboard), or
         /// 0 while it is off or waiting for the turn to die. `allowed` is
-        /// the helm's say (`HelmInput.HoldAllowed`); `helm` the blade, which
+        /// the helm's say (`ShipMotor.HoldAllowed`, written by `HelmInput`); `helm` the blade, which
         /// still has to be (near) midships; `yawRate` the rate the capture
         /// waits on, rad/s.
         public float Step(bool allowed, float helm, float headingDeg, float yawRate, float dt)

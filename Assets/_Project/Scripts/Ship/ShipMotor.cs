@@ -290,6 +290,11 @@ namespace SeaSick.Ship
         /// True when nobody but the captain is aboard (the HUD hint reads this).
         public bool SailingAlone => roster != null && roster.CrewCount == 0;
         public Vector3? AutopilotTarget { get; set; }
+        /// **The helm's say on the heading hold** (`HeadingHold`): true while
+        /// nobody is turning her. `HelmInput` writes it every Update and
+        /// clears it when disabled; AI hulls have no helm, so it stays false
+        /// and they are never held. Read by this motor and `PaddleDrive`.
+        public bool HoldAllowed { get; set; }
         public float CurrentSpeed { get; private set; }
         public float Heading => transform.eulerAngles.y;
         public Vector2 WindDirection { get; private set; } = new Vector2(0.95f, 0.33f);
@@ -849,11 +854,9 @@ namespace SeaSick.Ship
         }
 
         // Heading hold for the ladder (sail) hulls (2026-10-02, see
-        // `HeadingHold`); the steamer's lives in `PaddleDrive`. The helm is
-        // looked up once: AI hulls have none and are never held.
+        // `HeadingHold`); the steamer's lives in `PaddleDrive`. Gated by
+        // `HoldAllowed`, which only the player's helm ever sets.
         HeadingHold yawHold;
-        HelmInput holdHelm;
-        bool holdHelmLooked;
 
         void FixedUpdate()
         {
@@ -987,9 +990,7 @@ namespace SeaSick.Ship
             // Heading hold: once the helm is centred and the turn has died
             // it owns the rudder's share of the command; the broach still
             // pushes on top, so a following sea is still felt and fought.
-            if (!holdHelmLooked) { holdHelm = GetComponent<HelmInput>(); holdHelmLooked = true; }
-            bool holdOk = !Anchored && !AutopilotTarget.HasValue && holdHelm != null
-                          && holdHelm.isActiveAndEnabled && holdHelm.HoldAllowed;
+            bool holdOk = !Anchored && !AutopilotTarget.HasValue && HoldAllowed;
             float holdRate = yawHold.Step(holdOk, effectiveRudder, Heading, av.y, dt);
             if (yawHold.Active) targetYawRate = holdRate + broachBias;
             // First-order lag toward the commanded rate (was a 4 rad/s^2
