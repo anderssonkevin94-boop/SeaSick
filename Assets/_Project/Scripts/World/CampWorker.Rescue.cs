@@ -33,9 +33,19 @@ namespace SeaSick.World
         /// **This body is rescuing somebody**, at whatever stage: walking
         /// to him, or dragging him home. True = handled this frame (the
         /// caller returns without running the ordinary order dispatch).
+        /// This body was taken off its job to rescue somebody and has not
+        /// been handed back yet (2026-10-03). Not saved.
+        bool rescueTook;
+
         bool TickRescue(OutpostHand r, float dt)
         {
-            if (r == null || string.IsNullOrEmpty(r.rescuing)) return false;
+            if (r == null || string.IsNullOrEmpty(r.rescuing))
+            {
+                // The rescue is over (delivered below, or cleared by the
+                // ledger): back to the same job, clean (`BackOnJob`).
+                if (rescueTook) { rescueTook = false; BackOnJob(); }
+                return false;
+            }
             var ledger = camp != null ? camp.Ledger : null;
             if (ledger == null) { r.rescuing = ""; return false; }
             var down = ledger.Hand(r.rescuing);
@@ -45,8 +55,16 @@ namespace SeaSick.World
                 // simply gone: nothing more for this rescuer to do.
                 r.rescuing = "";
                 r.draggingNow = false;
+                if (rescueTook) { rescueTook = false; BackOnJob(); }
                 return false;
             }
+
+            // **The frame he is sent (2026-10-03):** the ledger dropped his
+            // load when it picked him (`DispatchRescuers`); the body lets go
+            // of his tree, his trip picture and any carcass to match, or the
+            // first free frame after the rescue walks him to his old
+            // drop-off holding nothing. See `StepOffJob`.
+            if (!rescueTook) { rescueTook = true; StepOffJob(); }
 
             // **A sleeping rescuer wakes for it (2026-09-28).** `TickRescue`
             // runs ahead of `TickRoutine`, so a hand the ledger picked while

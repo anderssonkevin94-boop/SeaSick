@@ -1798,11 +1798,53 @@ namespace SeaSick.World
         /// the comment above always claimed this was -- give it the ledger and
         /// the geometry and it puts the same trees down on any visit, however
         /// the terrain streamed in -- and `FellOwed` below is unchanged, still
-        /// the only thing that moves `treesFelled`, still bound by the grace
-        /// and the claim table while somebody is watching.
+        /// the only thing that moves `treesFelled`.
+        ///
+        /// ## What changed 2026-10-03: the tree falls when HIS chopping ends
+        ///
+        /// Kevin's rule: *trees fall because someone actually cut them, while
+        /// they're cutting.* The 2026-09-20 wait above did not deliver it,
+        /// because `timberTaken` rises at the PICKUP -- the last frame of the
+        /// hauler's chopping -- and by the next `CatchUp` he had turned for
+        /// home with the logs (`Coming`, not `Working`). So the wait held his
+        /// tree up while he carried it away; on his next trip he re-claimed
+        /// the same front tree and it fell on his first swing; he then chopped
+        /// its stump for the whole pickup; and the second log's tree went
+        /// over ten seconds later on the grace timer with nobody near it.
+        ///
+        /// Now **a watched camp never carries a debt**. The ledger tells us
+        /// the moment a Field timber pickup takes its armful
+        /// (`OutpostLedger.timberCut`), and `TimberCutHere` pays it in that
+        /// same frame, front of the order first -- and the front of the order
+        /// is the tree the camp handed that hauler (`ClaimTree` hands out the
+        /// front-most unclaimed trunk), so it falls in front of the man who
+        /// was swinging at it, as his swing ends. Nothing waits, so nothing
+        /// is ever there for him to come back to and fell on his first swing.
+        ///
+        /// **An armful of timber is two logs (`Res.Armful`), and the island's
+        /// stock IS its trees, one log each (`ReconcileWood`)** -- so each
+        /// armful fells TWO trees: his own, and the next one in the order.
+        /// With a second cutter out, that next tree is the one the camp handed
+        /// HIM, and it falls while he is at it (or walking to it; he turns
+        /// for the next trunk, `CampWorker.HaulPickupSpot`). With one cutter
+        /// it is the next-nearest trunk to the fire, falling in the same
+        /// instant as his. Making that second tree his too is an economy call
+        /// (a one-log timber armful, or a tree worth an armful), not this
+        /// file's to make.
+        ///
+        /// What is left for THIS method to pay is only ever catch-up -- the
+        /// ledger ran while nobody was looking (unwatched, a save loading, the
+        /// clock scrubbed, a pickup before the hook was wired) -- and that is
+        /// settled at once, count-based and front-first, exactly as an
+        /// unwatched camp always was (D2). The claim table no longer gates a
+        /// fall; it only keeps two men off one trunk.
         public void SyncFelling()
         {
             if (ledger == null) return;
+            // The hook that lets a pickup fell its tree this frame (see
+            // above). One cached delegate: this runs four times a second.
+            if (timberCutHook == null) timberCutHook = TimberCutHere;
+            if (ledger.timberCut != timberCutHook) ledger.timberCut = timberCutHook;
 
             // The plots first: they decide which trees the camp's order may
             // hold at all.
@@ -1814,59 +1856,53 @@ namespace SeaSick.World
             DrawWood(wood);
 
             int want = Mathf.FloorToInt(ledger.timberTaken);
-            if (want <= ledger.treesFelled) { owedSince = -1f; return; }
+            if (want <= ledger.treesFelled) return;
 
+            // Owed with no pickup in front of us to pay it: catch-up. Settle
+            // the whole debt now (see "What changed 2026-10-03").
             PruneClaims();
-
-            int cutters = claimHands.Count;
-            int backlog = want - ledger.treesFelled;
-
-            // Nobody here to see it, nobody cutting, or the arithmetic has run
-            // so far ahead that waiting would read as a bug rather than as a
-            // man walking: settle the whole debt now.
-            if (!Watched || cutters == 0 || backlog > cutters + Feel.fellBacklogSlack)
-            {
-                FellOwed(wood, want, true);
-                owedSince = -1f;
-                return;
-            }
-
-            if (owedSince < 0f) owedSince = Time.unscaledTime;
-            FellOwed(wood, want, false);
-            if (ledger.treesFelled >= want) owedSince = -1f;
+            FellOwed(wood, want, true);
         }
 
-        /// The one loop that takes trees down. `atOnce` is the old behaviour:
-        /// everything owed, front to back, no questions. Otherwise the front
-        /// tree has to be earned -- see `SyncFelling`.
-        void FellOwed(Terrain.SceneryWood wood, int want, bool atOnce)
-        {
-            bool overdue = !atOnce && Time.unscaledTime - owedSince > Feel.fellGraceSeconds;
+        System.Action<OutpostHand, int> timberCutHook;
 
+        /// **A hauler's chopping just ended and his armful came off the
+        /// trees** (`OutpostLedger.timberCut`, fired inside the pickup, so
+        /// his body is still at the tree facing it). Watched: fell what the
+        /// armful paid for, now, front-first -- his own tree first (see
+        /// `SyncFelling`). Unwatched: nothing to see; `SyncFelling`'s
+        /// count-based catch-up settles it on the next `CatchUp`, same as it
+        /// always did. Reads only the wood and the two counts -- it runs in
+        /// the middle of the ledger's pickup and must not touch the hands.
+        void TimberCutHere(OutpostHand h, int logs)
+        {
+            if (!Watched || ledger == null || logs <= 0) return;
+            var wood = WoodHere();
+            if (wood == null || wood.TreeCount == 0) return;
+            BuildFellOrder(wood);
+            DrawWood(wood);
+            int want = Mathf.FloorToInt(ledger.timberTaken);
+            if (want <= ledger.treesFelled) return;
+            PruneClaims();
+            FellOwed(wood, want, false);
+        }
+
+        /// The one loop that takes trees down: everything owed, front to back
+        /// -- the felled set stays a PREFIX of the order, the invariant this
+        /// whole section rests on. `flush` = catch-up nobody watched being
+        /// cut (counted in `FlushedTrees` for the probes); otherwise a
+        /// watched pickup paid for these (`TimberCutHere`).
+        void FellOwed(Terrain.SceneryWood wood, int want, bool flush)
+        {
             while (ledger.treesFelled < want && fellCursor < fellOrder.Length)
             {
                 int i = fellOrder[fellCursor];
                 if (wood.TreeAt(i).felled) { fellCursor++; continue; }
 
-                if (atOnce) FlushedTrees++;
-                else
-                {
-                    bool atIt = SomebodyChopping(i);
-                    if (!atIt && !overdue) break;
-                    if (!atIt)
-                    {
-                        // The grace ran out. One tree per expiry, then the
-                        // clock starts again -- a stretch where nobody is
-                        // cutting should dribble, not empty the wood.
-                        FlushedTrees++;
-                        overdue = false;
-                    }
-                }
-
+                if (flush) FlushedTrees++;
                 wood.FellForLedger(i);
                 ledger.treesFelled++;
                 fellCursor++;
-                owedSince = Time.unscaledTime;
             }
 
             // The island ran out of trees before the ledger ran out of logs.
@@ -2040,12 +2076,12 @@ namespace SeaSick.World
         Terrain.SceneryWood drawnWood;
         int drawnDown;
         Terrain.SceneryWood woodCache;
-        float owedSince = -1f;
 
-        /// Trees this outpost took down with nobody swinging at them: the
-        /// arrival flush, the clock being scrubbed, and the grace running out.
-        /// **Counted for the probes**, which gate that a camp working at the
-        /// pace of its own day never needs one.
+        /// Trees this outpost took down with nobody's pickup paying for them
+        /// in front of us: the arrival flush, the clock being scrubbed, a
+        /// save loading. **Counted for the probes**, which gate that a camp
+        /// working at the pace of its own day never needs one. (The grace
+        /// timer that used to add to this is gone, 2026-10-03.)
         public int FlushedTrees { get; private set; }
 
         /// Trees the ledger has paid for and the mesh has not yet shown. Zero
@@ -2674,17 +2710,10 @@ namespace SeaSick.World
         /// this way.
         public static class Feel
         {
-            /// How long a tree the ledger has paid for may stand with nobody
-            /// swinging at it. Long enough to cover the walk out from the fire
-            /// at camp pace; short enough that a watched camp never looks
-            /// stuck.
-            public static float fellGraceSeconds = 10f;
-
-            /// How far the ledger may run ahead of the mesh, over and above
-            /// one tree per hand cutting, before the lag is abandoned and the
-            /// whole debt is taken at once. Two is slack for the hand who is
-            /// carrying and the hand who is walking back.
-            public static int fellBacklogSlack = 2;
+            // `fellGraceSeconds` / `fellBacklogSlack` are gone (2026-10-03):
+            // a watched camp no longer lets a paid-for tree stand waiting for
+            // a cutter -- the pickup that paid for it fells it
+            // (`Outpost.TimberCutHere`), so there is no lag to time out.
 
             /// **Ground the wood never takes back.** Kevin, 2026-09-22:
             /// *"they should re-grow further away from camp, to help the camp
@@ -2833,16 +2862,6 @@ namespace SeaSick.World
         {
             for (int k = 0; k < claimHands.Count; k++)
                 if (claimTrees[k] == treeIndex && !ReferenceEquals(claimHands[k], w)) return true;
-            return false;
-        }
-
-        bool SomebodyChopping(int treeIndex)
-        {
-            for (int k = 0; k < claimHands.Count; k++)
-            {
-                var w = claimHands[k];
-                if (w != null && w.IsFellingNow(treeIndex)) return true;
-            }
             return false;
         }
 
