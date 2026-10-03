@@ -196,7 +196,10 @@ namespace SeaSick.Ship.Overboard
 
             if (!offscreen)
             {
-                DrawTapZone(gui, tapHalf, t);
+                // In the harpoon's bow arc (or on its line) the hook marker
+                // owns the tap -- one tap must not both pick the harpoon's
+                // target and set the helm steering at it (2026-10-04).
+                if (!HarpoonOwns(t)) DrawTapZone(gui, tapHalf, t);
                 return;
             }
 
@@ -261,6 +264,19 @@ namespace SeaSick.Ship.Overboard
             else if (dir.y < -1e-4f) t = Mathf.Min(t, (r.yMin - origin.y) / dir.y);
             if (t <= 0f || t == float.MaxValue) t = 100f;
             return origin + dir * t;
+        }
+
+        /// True when `t` is the harpoon's to tap: in its bow arc, or the load
+        /// on its line. Outside the arc the steer tap stays, to bring it in.
+        static bool HarpoonOwns(IOverboardTarget t)
+        {
+            var gun = SeaSick.Ship.Harpoon.HarpoonGun.Player;
+            if (gun == null || !gun.Available || !(t is SeaSick.Ship.Harpoon.IHarpoonable h)) return false;
+            if (gun.LineOut && ReferenceEquals(gun.Target, h)) return true;
+            var arc = gun.InArc;
+            for (int i = 0; i < arc.Count; i++)
+                if (ReferenceEquals(arc[i], h)) return true;
+            return false;
         }
 
         /// The invisible tap-catcher, on screen or at the edge arrow — the
