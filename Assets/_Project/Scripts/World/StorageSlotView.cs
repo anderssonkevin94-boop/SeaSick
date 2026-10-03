@@ -28,10 +28,16 @@ namespace SeaSick.World
     /// `Fill_<Res>_1..N` (`Fill_Fish_3`, `Res` = the ledger id) is
     /// preferred; the generic set is the fallback. N may differ per set
     /// (a log cradle 5, sacks 3: slumped / half / full).</item>
-    /// <item>An anchor with no `Fill_` children is NOT a slot to this view
-    /// -- that is what keeps it off Astra's old storage kit, whose
-    /// `Stock_Timber_NN` / `Stock_Boards_NN` meshes `StoreStockView` still
-    /// toggles until the new hut replaces it.</item>
+    /// <item>**The KIT path (2026-10-03, the shipping one):** the building
+    /// FBX's anchors are EMPTY and the steps come from the shared fill kit
+    /// `Resources/Kits/StorageL1/StorageFillKit` -- top-level children
+    /// `<Family>__Fill_<k>` / `<Family>__Fill_<Res>_<k>`, instantiated under
+    /// the anchor on first need at an identity local transform. The baked
+    /// `Fill_` children above are the fallback and win when present. With
+    /// no kit imported an empty anchor is not a slot -- which also keeps the
+    /// view off Astra's old storage kit (`StoreStockView`'s).</item>
+    /// <item>Blender's unique suffixes (`.001`) are stripped from every
+    /// name before matching.</item>
     /// <item>The fire cache must be parented under the CAMPFIRE building's
     /// root, the hut's anchors under the store hut's: the view finds its
     /// site from the `Building` it sits on.</item>
@@ -55,15 +61,82 @@ namespace SeaSick.World
         /// Seconds between refreshes. Goods move at walking pace.
         const float RefreshSeconds = 0.3f;
 
-        /// One authored slot.
+        /// One authored slot. The step lists are either the anchor's own
+        /// baked `Fill_` children (scene objects) or, on the kit path, the
+        /// SHARED kit templates for its family (`Kit`), instantiated under
+        /// the anchor lazily into `made` the first time a step is needed.
         sealed class Slot
         {
             public int number;                  // NN off the name
-            public readonly List<GameObject> generic = new List<GameObject>();   // Fill_k at [k-1]
-            public Dictionary<string, List<GameObject>> perRes;                  // Fill_<Res>_k
+            public Transform anchor;
+            public List<GameObject> generic = new List<GameObject>();   // Fill_k at [k-1]
+            public Dictionary<string, List<GameObject>> perRes;          // Fill_<Res>_k
+            public bool kit;
+            public Dictionary<GameObject, GameObject> made;              // kit template -> instance
+            public GameObject shown;            // the one visible step, or null
             public string shownRes;
             public int shownStep = -1;
         }
+
+        // --- the fill kit (2026-10-03) ----------------------------------------
+        //
+        // Baking every fill step into the hut FBX cost ~163k tris a hut, of
+        // which at most ~28k are ever visible. So the building FBXs carry only
+        // the structure and EMPTY `Stock_<Family>_NN` anchors, and one kit
+        // FBX (`Resources/Kits/StorageL1/StorageFillKit`) holds ONE copy of
+        // each step as a top-level child named `<Family>__Fill_<k>` or
+        // `<Family>__Fill_<Res>_<k>` (`Sacks__Fill_Potato_2`,
+        // `StoneCrib__Fill_Brick_3`, `GearRack__Fill_Spear_4`), authored in
+        // the slot's local space: an instance sits under its anchor at an
+        // identity local transform. Loaded once per session, shared by every
+        // view; an instance shares the template's mesh and materials.
+
+        const string KitPath = "Kits/StorageL1/StorageFillKit";
+
+        sealed class KitSets
+        {
+            public readonly List<GameObject> generic = new List<GameObject>();
+            public Dictionary<string, List<GameObject>> perRes;
+        }
+
+        static KitSets[] kit;
+        static bool kitTried, kitWarned;
+
+        static KitSets KitFor(StoreFamily f)
+        {
+            if (!kitTried)
+            {
+                kitTried = true;
+                var root = Resources.Load<GameObject>(KitPath);
+                if (root != null)
+                {
+                    kit = new KitSets[StorageSlots.FamilyCount];
+                    var t = root.transform;
+                    for (int i = 0; i < t.childCount; i++)
+                    {
+                        var c = t.GetChild(i);
+                        string stem = StripSuffix(c.name);
+                        int sep = stem.IndexOf("__", System.StringComparison.Ordinal);
+                        if (sep <= 0 || !StorageSlots.TryFamilyFromWord(stem.Substring(0, sep), out var fam)) continue;
+                        var sets = kit[(int)fam] ??= new KitSets();
+                        AddFill(sets.generic, ref sets.perRes, stem.Substring(sep + 2), c.gameObject);
+                    }
+                    if (kit != null)
+                        foreach (var k in kit)
+                        {
+                            if (k == null) continue;
+                            Compact(k.generic);
+                            if (k.perRes != null) foreach (var kv in k.perRes) Compact(kv.Value);
+                        }
+                }
+            }
+            return kit != null ? kit[(int)f] : null;
+        }
+
+        /// Blender's unique suffix (`.001`) off a name.
+        static readonly System.Text.RegularExpressions.Regex BlenderSuffix =
+            new System.Text.RegularExpressions.Regex(@"\.\d+$");
+        static string StripSuffix(string name) => BlenderSuffix.Replace(name, "");
 
         readonly List<Slot>[] slots = new List<Slot>[StorageSlots.FamilyCount];
         bool any;
@@ -170,7 +243,9 @@ namespace SeaSick.World
         readonly int[] scratch = new int[StorageSlots.FamilyCount];
 
         /// Show one slot: `units` of `res` (0 = empty). Touches the scene
-        /// only when the shown resource or step changes.
+        /// only when the shown resource or step changes; exactly one step is
+        /// ever visible. Per-resource set first, the family's generic set as
+        /// the fallback.
         static void Show(Slot s, string res, int units)
         {
             List<GameObject> set = null;
@@ -191,21 +266,36 @@ namespace SeaSick.World
             if (step == s.shownStep && shownRes == s.shownRes) return;
             s.shownStep = step;
             s.shownRes = shownRes;
-            SetAll(s.generic, set == s.generic ? step : 0);
-            if (s.perRes != null)
-                foreach (var kv in s.perRes) SetAll(kv.Value, set == kv.Value ? step : 0);
+            GameObject want = step > 0 ? set[step - 1] : null;
+            if (want != null && s.kit) want = Instance(s, want);
+            if (s.shown == want) return;
+            if (s.shown != null && s.shown.activeSelf) s.shown.SetActive(false);
+            s.shown = want;
+            if (want != null && !want.activeSelf) want.SetActive(true);
         }
 
-        /// Exactly `Fill_step` on (cumulative steps), the rest off.
-        static void SetAll(List<GameObject> set, int step)
+        /// The anchor's own copy of a kit step, made the first time it is
+        /// needed and kept (hidden) for reuse -- never per frame.
+        static GameObject Instance(Slot s, GameObject template)
+        {
+            s.made ??= new Dictionary<GameObject, GameObject>();
+            if (s.made.TryGetValue(template, out var go) && go != null) return go;
+            go = Object.Instantiate(template, s.anchor, false);
+            go.name = template.name;
+            go.SetActive(false);
+            var t = go.transform;
+            t.localPosition = Vector3.zero;
+            t.localRotation = Quaternion.identity;
+            t.localScale = Vector3.one;
+            s.made[template] = go;
+            return go;
+        }
+
+        /// Hide every baked step (the first refresh shows the truth).
+        static void HideAll(List<GameObject> set)
         {
             for (int k = 0; k < set.Count; k++)
-            {
-                var go = set[k];
-                if (go == null) continue;
-                bool on = k == step - 1;
-                if (go.activeSelf != on) go.SetActive(on);
-            }
+                if (set[k] != null && set[k].activeSelf) set[k].SetActive(false);
         }
 
         // --- discovery --------------------------------------------------------
@@ -216,25 +306,60 @@ namespace SeaSick.World
             for (int f = 0; f < slots.Length; f++) slots[f] = null;
             foreach (var t in GetComponentsInChildren<Transform>(true))
             {
-                if (!TryAnchor(BuildingFactory.Stem(t.name), out var fam, out int number)) continue;
-                var s = new Slot { number = number };
+                if (!TryAnchor(StripSuffix(t.name), out var fam, out int number)) continue;
+                var s = new Slot { number = number, anchor = t };
+                // Baked path first (the fallback): the anchor's own Fill_ children.
                 foreach (var c in t.GetComponentsInChildren<Transform>(true))
                 {
                     if (c == t) continue;
-                    AddFill(s, BuildingFactory.Stem(c.name), c.gameObject);
+                    AddFill(s.generic, ref s.perRes, StripSuffix(c.name), c.gameObject);
                 }
-                if (s.generic.Count == 0 && s.perRes == null) continue;   // not a slot (old kit)
                 Compact(s.generic);
                 if (s.perRes != null) foreach (var kv in s.perRes) Compact(kv.Value);
-                // Everything starts hidden; the first refresh shows the truth.
-                SetAll(s.generic, 0);
-                if (s.perRes != null) foreach (var kv in s.perRes) SetAll(kv.Value, 0);
+                if (s.generic.Count > 0 || s.perRes != null)
+                {
+                    HideAll(s.generic);
+                    if (s.perRes != null) foreach (var kv in s.perRes) HideAll(kv.Value);
+                }
+                else
+                {
+                    // Kit path: an empty anchor takes its family's kit steps.
+                    // No kit (not imported yet) = not a slot. An empty
+                    // `Stock_` with neither is also how Astra's OLD storage
+                    // kit looks to this view, so it stays StoreStockView's.
+                    var sets = KitFor(fam);
+                    if (sets == null)
+                    {
+                        if (kit == null && !kitWarned && t.childCount == 0 && IsNewSite())
+                        {
+                            kitWarned = true;
+                            Debug.LogWarning($"[StorageSlotView] empty slot anchors but no fill kit at Resources/{KitPath}; the store is not drawn.");
+                        }
+                        continue;
+                    }
+                    s.kit = true;
+                    s.generic = sets.generic;
+                    s.perRes = sets.perRes;
+                }
                 s.shownStep = 0;
                 (slots[(int)fam] ??= new List<Slot>()).Add(s);
                 any = true;
             }
             for (int f = 0; f < slots.Length; f++)
                 slots[f]?.Sort((a, b) => a.number.CompareTo(b.number));
+        }
+
+        /// True on the new slot buildings (`StorageHutL1`, `FireCache` roots
+        /// in the model), so the one missing-kit warning never fires for the
+        /// old Astra storage kit's `Stock_Timber_NN` meshes.
+        bool IsNewSite()
+        {
+            foreach (var t in GetComponentsInChildren<Transform>(true))
+            {
+                string n = StripSuffix(t.name);
+                if (n == "StorageHutL1" || n == "FireCache") return true;
+            }
+            return false;
         }
 
         /// `Stock_<Family>_NN` -> family and NN.
@@ -248,8 +373,10 @@ namespace SeaSick.World
             return StorageSlots.TryFamilyFromWord(stem.Substring(6, us - 6), out fam);
         }
 
-        /// `Fill_k` (generic) or `Fill_<Res>_k` (per resource), 1-based.
-        static void AddFill(Slot s, string stem, GameObject go)
+        /// `Fill_k` (generic) or `Fill_<Res>_k` (per resource), 1-based,
+        /// into a step list (`Fill_Brick_3`, never "FillBrick").
+        static void AddFill(List<GameObject> generic, ref Dictionary<string, List<GameObject>> perRes,
+            string stem, GameObject go)
         {
             if (!stem.StartsWith("Fill_", System.StringComparison.Ordinal)) return;
             string rest = stem.Substring(5);
@@ -257,11 +384,11 @@ namespace SeaSick.World
             string res = us > 0 ? rest.Substring(0, us) : null;
             if (!int.TryParse(us > 0 ? rest.Substring(us + 1) : rest, out int k) || k < 1 || k > 64) return;
             List<GameObject> into;
-            if (res == null) into = s.generic;
+            if (res == null) into = generic;
             else
             {
-                s.perRes ??= new Dictionary<string, List<GameObject>>();
-                if (!s.perRes.TryGetValue(res, out into)) s.perRes[res] = into = new List<GameObject>();
+                perRes ??= new Dictionary<string, List<GameObject>>();
+                if (!perRes.TryGetValue(res, out into)) perRes[res] = into = new List<GameObject>();
             }
             while (into.Count < k) into.Add(null);
             into[k - 1] = go;
