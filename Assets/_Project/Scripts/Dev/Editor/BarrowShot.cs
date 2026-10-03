@@ -103,6 +103,17 @@ public static class BarrowShot
                 ("jog bricks x24", Res.Brick, 24, VillagerGaits.Barrow, 0f, 0f),
                 ("jog stone x12", Res.Stone, 12, VillagerGaits.Barrow, 0f, 0f),
                 ("jog potatoes x8", Res.Potato, 8, VillagerGaits.Barrow, 0f, 0f),
+                // The Storehouse's bigger barrows (2026-10-03): +1 and +2
+                // armfuls (`Res.BarrowArmful(r, n)`), drawn whole, flat jog.
+                ("jog logs x8 (+1)", Res.Timber, Res.BarrowArmful(Res.Timber, 1), VillagerGaits.Barrow, 0f, 0f),
+                ("jog logs x10 (+2)", Res.Timber, Res.BarrowArmful(Res.Timber, 2), VillagerGaits.Barrow, 0f, 0f),
+                ("jog stone x11 (+1)", Res.Stone, Res.BarrowArmful(Res.Stone, 1), VillagerGaits.Barrow, 0f, 0f),
+                ("jog stone x14 (+2)", Res.Stone, Res.BarrowArmful(Res.Stone, 2), VillagerGaits.Barrow, 0f, 0f),
+                ("jog planks x14 (+1)", Res.Boards, Res.BarrowArmful(Res.Boards, 1), VillagerGaits.Barrow, 0f, 0f),
+                ("jog planks x18 (+2)", Res.Boards, Res.BarrowArmful(Res.Boards, 2), VillagerGaits.Barrow, 0f, 0f),
+                ("jog potatoes x20 (+1)", Res.Potato, Res.BarrowArmful(Res.Potato, 1), VillagerGaits.Barrow, 0f, 0f),
+                ("jog potatoes x24 (+2)", Res.Potato, Res.BarrowArmful(Res.Potato, 2), VillagerGaits.Barrow, 0f, 0f),
+                ("jog logs x10 on a road, jog x1.2", Res.Timber, 10, VillagerGaits.BarrowAt(1.2f) * 1.3f, 0f, 0f),
                 ("jog logs on a road x1.3", Res.Timber, 6, VillagerGaits.Barrow * 1.3f, 0f, 0f),
                 ("parked logs x6", Res.Timber, 6, 0f, 0f, 0f),
                 ("parked stone x5", Res.Stone, 5, 0f, 0f, 0f),

@@ -418,8 +418,30 @@ namespace SeaSick.World
             return crate;
         }
 
+        /// **A runner's barrow load** (2026-10-03, the Storehouse's bigger
+        /// barrows: small goods 16 / 20 / 24): `Build`, except that crate
+        /// goods are drawn WHOLE, up to three layers of the crate's 8 slots
+        /// -- each layer above pulled in toward the crate's middle and set a
+        /// half slot over so it nests, a heap rather than a column. The arm
+        /// carry keeps `Build` (one layer, 8).
+        public static void BuildHeaped(string res, int count, Transform root)
+        {
+            var row = For(res);
+            if (row.kind != Kind.Crate || count <= CrateSlots) { Build(res, count, root); return; }
+            var load = new GameObject("Load").transform;
+            load.SetParent(root, false);
+            load.localPosition = new Vector3(0f, 0f, Forward(row.kind));
+            Crate(load, res, Mathf.Min(count, CrateSlots * HeapLayers), HeapLayers);
+        }
+
+        /// Layers a heaped crate holds (`BuildHeaped`), and the rise and pull
+        /// of each layer over the one below (metres; share of the slot's
+        /// distance from the crate's middle).
+        const int HeapLayers = 3;
+        const float HeapRise = 0.07f, HeapPull = 0.22f;
+
         /// The open crate on the socket, `n` of `res` in its slots.
-        static void Crate(Transform root, string res, int n)
+        static void Crate(Transform root, string res, int n, int layers = 1)
         {
             var art = LoadCrate();
             var box = new GameObject("Crate").transform;
@@ -437,9 +459,17 @@ namespace SeaSick.World
             }
             else StandInCrate(box);
 
-            for (int i = 0; i < n && i < CrateSlots; i++)
+            for (int i = 0; i < n && i < CrateSlots * layers; i++)
             {
-                Vector3 slot = art != null ? art.slots[i] : StandInSlot(i);
+                int layer = i / CrateSlots, j = i % CrateSlots;
+                Vector3 slot = art != null ? art.slots[j] : StandInSlot(j);
+                if (layer > 0)
+                {
+                    // Nested on the layer below: pulled toward the middle,
+                    // nudged a quarter slot along, raised one item.
+                    float pull = 1f - HeapPull * layer;
+                    slot = new Vector3(slot.x * pull + (layer % 2 == 1 ? 0.027f : -0.027f), slot.y + HeapRise * layer, slot.z * pull);
+                }
                 Item(box, res, i, slot);
             }
         }

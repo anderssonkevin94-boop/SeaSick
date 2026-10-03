@@ -70,7 +70,25 @@ namespace SeaSick.World
         const float FistFollowSeconds = 0.06f;
 
         /// Most of one load drawn in the tray (the ledger's count is the truth).
-        const int MaxLogs = 6, MaxPlanks = 10, MaxRocks = 12, MaxBricks = 24;
+        /// **Raised 2026-10-03 for the Storehouse's bigger barrows** (base /
+        /// +1 / +2 armfuls: logs 6/8/10, stone 8/11/14, boards 10/14/18,
+        /// bricks 12/16/20, small goods 16/20/24 -- `Res.BarrowArmful`): what
+        /// a body pushes must match what the books handed him, so every
+        /// perk load is drawn whole. Loads up to the old maxima keep their
+        /// old layouts exactly; past them each layout below gains rows or
+        /// layers, kept inside the tray box and under `MaxHeap`, heaped to the
+        /// FRONT (+z, away from his arms and grips) where it leans at all.
+        /// NOT yet mirrored in art-staging/wheelbarrow-v2/check-fit.py; `Fit`
+        /// still holds anything that strays to the tray.
+        const int MaxLogs = 12, MaxPlanks = 18, MaxRocks = 14, MaxBricks = 24;
+        /// Small goods: the crate's 8 slots, heaped up to three deep in the
+        /// barrow (`CarryLook.BuildHeaped`).
+        const int MaxSmallGoods = 24;
+        /// Log billets when the load rides in two rows (more than `LogsLong`):
+        /// two of these end to end fill the 0.56 m tray.
+        const float ShortBillet = 0.25f;
+        /// Logs drawn as one row of long billets (the old 3 / 2 / 1 stack).
+        const int LogsLong = 6;
 
         // **The tray's inside** (wheelbarrow v2 A, `art-staging/wheelbarrow-v2`,
         // Load frame: origin = `Load_Anchor`, the middle of the floor top).
@@ -600,7 +618,9 @@ namespace SeaSick.World
                 var turn = new GameObject("CarryLayout").transform;
                 turn.SetParent(into, false);
                 turn.localRotation = Quaternion.Euler(0f, 90f, 0f);
-                CarryLook.Build(res, n, turn);
+                // Heaped up to three deep for the barrow's bigger loads
+                // (2026-10-03); anything not in the crate as `Build`.
+                CarryLook.BuildHeaped(res, Mathf.Min(n, MaxSmallGoods), turn);
                 var pushed = turn.Find("Load");
                 if (pushed != null) pushed.localPosition = Vector3.zero;
             }
@@ -657,10 +677,16 @@ namespace SeaSick.World
         /// Logs lengthwise, stacked 3 / 2 / 1 (Timber_Unit: 1.60 m long on z,
         /// 0.245 thick, bottom origin), cut to `BilletLength`: 0.15 x 0.50 m.
         /// The top log rises 0.12 m over the rim, over the floor only.
+        ///
+        /// **More than `LogsLong` (2026-10-03, the Storehouse's 8 / 10):**
+        /// cut shorter (`ShortBillet`) and laid in two rows end to end, each
+        /// row stacked 3 / 2 / 1, filled a layer at a time with the front
+        /// row first -- ten logs stand 0.28 m, under the old six's 0.41.
         bool Logs(int n, Transform into)
         {
             n = Mathf.Clamp(n, 1, MaxLogs);
             float d = 0.245f * longScale;
+            if (n > LogsLong) return LogsTwoRows(n, d, into);
             for (int i = 0; i < n; i++)
             {
                 Vector3 at;
@@ -673,19 +699,44 @@ namespace SeaSick.World
             return true;
         }
 
+        /// Two rows of short billets, `Logs` past `LogsLong`. Order: layer 0
+        /// (3 front, 3 back), layer 1 (2 front, 2 back), layer 2 (1, 1).
+        bool LogsTwoRows(int n, float d, Transform into)
+        {
+            const float RowZ = 0.14f;   // 0.14 +- 0.125: inside -0.277..0.285
+            int k = 0;
+            for (int layer = 0; layer < 3 && k < n; layer++)
+            {
+                int across = 3 - layer;
+                for (int row = 0; row < 2 && k < n; row++)
+                    for (int c = 0; c < across && k < n; c++, k++)
+                    {
+                        float x = (c - (across - 1) * 0.5f) * d * (layer == 0 ? 1.02f : 1f);
+                        var at = new Vector3(x, InFloor + layer * 0.86f * d, (row == 0 ? RowZ : -RowZ) + ((k * 37) % 3 - 1) * 0.003f);
+                        if (!Unit(Res.Timber, into, at, ((k * 53) % 5 - 2) * 0.8f, longScale, ShortBillet)) return false;
+                    }
+            }
+            return true;
+        }
+
         /// A bundle of planks lengthwise, two side by side, layer on layer
         /// (Boards_Unit: 1.60 x 0.25 wide x 0.075 m, long on z, bottom origin),
         /// cut to `BilletLength`. Ten = five layers, 0.23 m: under the rim.
+        /// **Past ten (2026-10-03, the Storehouse's 14 / 18): three side by
+        /// side** (0.47 m of the 0.52 tray), 18 = six layers, 0.28 m.
         bool Planks(int n, bool fine, Transform into)
         {
             n = Mathf.Clamp(n, 1, MaxPlanks);
             float k = longScale * (fine ? 0.92f : 1f);
             float w = 0.25f * k, th = 0.075f * k;
+            int cols = n > 10 ? 3 : 2;
+            int full = n - n % cols;   // planks in whole layers; the rest centred on top
             for (int i = 0; i < n; i++)
             {
-                int layer = i / 2, col = i % 2;
-                bool lone = n % 2 == 1 && i == n - 1;
-                var at = new Vector3(lone ? 0f : (col - 0.5f) * (w + 0.01f), InFloor + layer * th, ((i * 17) % 3 - 1) * 0.012f);
+                int layer = i / cols, col = i % cols;
+                int inLayer = i < full ? cols : n - full;
+                float x = (col - (inLayer - 1) * 0.5f) * (w + 0.01f);
+                var at = new Vector3(x, InFloor + layer * th, ((i * 17) % 3 - 1) * (cols == 3 ? 0.006f : 0.012f));
                 if (!Unit(Res.Boards, into, at, i % 2 == 0 ? 1f : -1f, k, BilletLength)) return false;
             }
             return true;
@@ -693,7 +744,11 @@ namespace SeaSick.World
 
         /// Stones / ore: a 3 x 3 bed (front row first, every other one turned a
         /// quarter), then three in the hollows on top. 0.16 m tall at twelve.
+        /// **Past twelve (2026-10-03, the Storehouse's 14):** all four
+        /// hollows of the bed, then one on the crown -- ~0.22 m.
         static readonly Vector2[] RockTop = { new Vector2(-0.08f, 0.085f), new Vector2(0.08f, 0.085f), new Vector2(0f, -0.085f) };
+        static readonly Vector2[] RockHollows = { new Vector2(-0.08f, 0.085f), new Vector2(0.08f, 0.085f),
+            new Vector2(-0.08f, -0.085f), new Vector2(0.08f, -0.085f) };
         bool Rocks(string res, int n, Transform into)
         {
             n = Mathf.Clamp(n, 1, MaxRocks);
@@ -702,7 +757,9 @@ namespace SeaSick.World
             {
                 Vector3 at = i < 9
                     ? new Vector3((i % 3 - 1) * 0.16f, InFloor, (1 - i / 3) * 0.17f)
-                    : new Vector3(RockTop[i - 9].x, InFloor + 0.55f * h, RockTop[i - 9].y);
+                    : n <= 12 ? new Vector3(RockTop[i - 9].x, InFloor + 0.55f * h, RockTop[i - 9].y)
+                    : i < 13 ? new Vector3(RockHollows[i - 9].x, InFloor + 0.55f * h, RockHollows[i - 9].y)
+                    : new Vector3(0f, InFloor + 1.1f * h, 0.02f);
                 float yaw = (i % 2) * 90f + ((i * 7) % 5 - 2) * 3f;
                 if (ResourceKit.Spawn(res, false, into, at, Quaternion.Euler(0f, yaw, 0f), rockScale) == null) return false;
             }
