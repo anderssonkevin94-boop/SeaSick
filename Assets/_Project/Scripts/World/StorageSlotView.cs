@@ -30,9 +30,13 @@ namespace SeaSick.World
     /// (a log cradle 5, sacks 3: slumped / half / full).</item>
     /// <item>**The KIT path (2026-10-03, the shipping one):** the building
     /// FBX's anchors are EMPTY and the steps come from the shared fill kit
-    /// `Resources/Kits/StorageL1/StorageFillKit` -- top-level children
-    /// `<Family>__Fill_<k>` / `<Family>__Fill_<Res>_<k>`, instantiated under
-    /// the anchor on first need at an identity local transform. The baked
+    /// `Resources/Kits/StorageL1/StorageFillKit` (.fbx) -- top-level
+    /// children `<Family>__Fill_<k>` / `<Family>__Fill_<Res>_<k>`, Family
+    /// the long name (LogCradle, BoardBearers, StoneCrib, Sacks, HangBeam,
+    /// DishShelf, GearRack); anchors under the `FireCache` root look up
+    /// `Fire<Family>__...` first and fall back to the plain set. A step is
+    /// instantiated WITH its children (the food models inside a sack step)
+    /// under the anchor on first need, at an identity local transform. The baked
     /// `Fill_` children above are the fallback and win when present. With
     /// no kit imported an empty anchor is not a slot -- which also keeps the
     /// view off Astra's old storage kit (`StoreStockView`'s).</item>
@@ -99,10 +103,24 @@ namespace SeaSick.World
             public Dictionary<string, List<GameObject>> perRes;
         }
 
-        static KitSets[] kit;
+        /// Plain `<Family>__` sets and the fire cache's own `Fire<Family>__`
+        /// sets (FireLogCradle, FireBoardBearers, FireStoneCrib, FireGearRack
+        /// exist; Sacks, HangBeam, DishShelf have none), by family.
+        static KitSets[] kit, kitFire;
         static bool kitTried, kitWarned;
 
-        static KitSets KitFor(StoreFamily f)
+        /// The kit steps for a slot of `f`: under the FireCache root the
+        /// `Fire<Family>__` set first, else (and as the fallback) the plain
+        /// `<Family>__` set. Null = no kit or no set for the family.
+        static KitSets KitFor(StoreFamily f, bool fire)
+        {
+            LoadKit();
+            if (kit == null) return null;
+            if (fire && kitFire[(int)f] != null) return kitFire[(int)f];
+            return kit[(int)f];
+        }
+
+        static void LoadKit()
         {
             if (!kitTried)
             {
@@ -111,18 +129,30 @@ namespace SeaSick.World
                 if (root != null)
                 {
                     kit = new KitSets[StorageSlots.FamilyCount];
+                    kitFire = new KitSets[StorageSlots.FamilyCount];
                     var t = root.transform;
+                    // Top-level children only: a step's own children (the
+                    // food models inside a sack step) come with it when it
+                    // is instantiated, they are not steps themselves.
                     for (int i = 0; i < t.childCount; i++)
                     {
                         var c = t.GetChild(i);
                         string stem = StripSuffix(c.name);
                         int sep = stem.IndexOf("__", System.StringComparison.Ordinal);
-                        if (sep <= 0 || !StorageSlots.TryFamilyFromWord(stem.Substring(0, sep), out var fam)) continue;
-                        var sets = kit[(int)fam] ??= new KitSets();
+                        if (sep <= 0) continue;
+                        string word = stem.Substring(0, sep);
+                        var table = kit;
+                        if (!StorageSlots.TryFamilyFromWord(word, out var fam))
+                        {
+                            if (!word.StartsWith("Fire", System.StringComparison.Ordinal)
+                                || !StorageSlots.TryFamilyFromWord(word.Substring(4), out fam)) continue;
+                            table = kitFire;
+                        }
+                        var sets = table[(int)fam] ??= new KitSets();
                         AddFill(sets.generic, ref sets.perRes, stem.Substring(sep + 2), c.gameObject);
                     }
-                    if (kit != null)
-                        foreach (var k in kit)
+                    foreach (var table in new[] { kit, kitFire })
+                        foreach (var k in table)
                         {
                             if (k == null) continue;
                             Compact(k.generic);
@@ -130,7 +160,6 @@ namespace SeaSick.World
                         }
                 }
             }
-            return kit != null ? kit[(int)f] : null;
         }
 
         /// Blender's unique suffix (`.001`) off a name.
@@ -327,7 +356,7 @@ namespace SeaSick.World
                     // No kit (not imported yet) = not a slot. An empty
                     // `Stock_` with neither is also how Astra's OLD storage
                     // kit looks to this view, so it stays StoreStockView's.
-                    var sets = KitFor(fam);
+                    var sets = KitFor(fam, UnderFireCache(t));
                     if (sets == null)
                     {
                         if (kit == null && !kitWarned && t.childCount == 0 && IsNewSite())
@@ -347,6 +376,15 @@ namespace SeaSick.World
             }
             for (int f = 0; f < slots.Length; f++)
                 slots[f]?.Sort((a, b) => a.number.CompareTo(b.number));
+        }
+
+        /// Is this anchor under the `FireCache` root (the fire's own kit
+        /// variants, `Fire<Family>__`)?
+        static bool UnderFireCache(Transform t)
+        {
+            for (var p = t.parent; p != null; p = p.parent)
+                if (StripSuffix(p.name) == "FireCache") return true;
+            return false;
         }
 
         /// True on the new slot buildings (`StorageHutL1`, `FireCache` roots
