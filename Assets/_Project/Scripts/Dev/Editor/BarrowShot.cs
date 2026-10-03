@@ -22,7 +22,8 @@ using SeaSick.World;
 /// (2.04 m/s; the road row x1.3) on the `Run` legs with the arms held on
 /// the grips (`VillagerActing.ApplyBarrowGrip`), stepped in the game's
 /// order (Animator, acting, barrow). A pushed row also FAILS when the legs
-/// are not on `Run` or his fists are more than `GripGapMax` off the grips.
+/// are not on `Run` or either fist is more than `GripGapMax` off the grip on
+/// its side (2026-10-03: paired by side -- the rig's hand.L is his right).
 ///
 /// `unity cmd eval --json --code 'return BarrowShot.Run("<dir>");'`
 /// Everything it creates is destroyed before it returns.
@@ -33,7 +34,7 @@ public static class BarrowShot
         | BindingFlags.Public | BindingFlags.NonPublic;
     const float Dt = 1f / 30f;
     static Vector3 Origin => new Vector3(0f, 1500f, 0f);
-    /// Most his fists' midpoint may be off the grips' midpoint while pushing, metres.
+    /// Most either fist may be off the grip on its side while pushing, metres.
     const float GripGapMax = 0.06f;
 
     public static string Run(string outDir)
@@ -164,7 +165,12 @@ public static class BarrowShot
                 {
                     Vector3 fl = bones.TryGetValue("hand.L", out var hl) ? hl.TransformPoint(VillagerActing.ToolGripLocal) : Vector3.zero;
                     Vector3 fr = bones.TryGetValue("hand.R", out var hr) ? hr.TransformPoint(VillagerActing.ToolGripLocal) : Vector3.zero;
-                    gripGap = Vector3.Distance((gl + gr) * 0.5f, (fl + fr) * 0.5f);
+                    // Each fist against the grip on ITS side of him (the rig's
+                    // hand.L is his right hand): the worse of the two.
+                    float Side(Vector3 w) => Vector3.Dot(w - bt.position, bt.right);
+                    Vector3 gLeftSide = Side(gl) < Side(gr) ? gl : gr, gRightSide = Side(gl) < Side(gr) ? gr : gl;
+                    Vector3 fLeftSide = Side(fl) < Side(fr) ? fl : fr, fRightSide = Side(fl) < Side(fr) ? fr : fl;
+                    gripGap = Mathf.Max(Vector3.Distance(gLeftSide, fLeftSide), Vector3.Distance(gRightSide, fRightSide));
                     grips = $"gripL {F(bt.InverseTransformPoint(gl))} gripR {F(bt.InverseTransformPoint(gr))} | fistL {F(bt.InverseTransformPoint(fl))} fistR {F(bt.InverseTransformPoint(fr))} gap {gripGap:0.000}";
                 }
                 bool running = anim != null && anim.GetCurrentAnimatorStateInfo(0).shortNameHash == Animator.StringToHash("Run");

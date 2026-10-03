@@ -240,6 +240,7 @@ namespace SeaSick.World
             push = Mathf.MoveTowards(push, moving ? 1f : 0f, dt / Mathf.Max(0.01f, easeSeconds));
             float k = Mathf.SmoothStep(0f, 1f, push);
             FollowFists(dt);
+            var art0 = Art.Load();
             Settle(k);
             RememberBody();
             spin = Mathf.Repeat(spin + fwd / WheelRadius * Mathf.Rad2Deg, 360f);
@@ -255,6 +256,10 @@ namespace SeaSick.World
             }
             ShowLoad(res, n);
             SetActing(true, moving);
+            // His fists onto the grips, now that they are where they are
+            // this frame (2026-10-03: the arm pose alone left them at his hips).
+            if (acting != null && art0 != null && tilt != null)
+                acting.ReachGrips(tilt.TransformPoint(art0.gripL), tilt.TransformPoint(art0.gripR), k);
         }
 
         // --- on the ground ------------------------------------------------------
@@ -347,7 +352,9 @@ namespace SeaSick.World
             if (fistRise < 0f) fistRise = flatRise;
             float wantReach = FistReach, wantRise = flatRise;
             Vector3 mid = default;
-            fistsLive = acting != null && acting.BarrowFists(out mid);
+            // The arms reach the grips now (`VillagerActing.ReachGrips`); the
+            // barrow keeps its own measured hold, or the two would chase.
+            fistsLive = false;
             if (fistsLive)
             {
                 Vector3 fwd = Quaternion.Euler(0f, transform.eulerAngles.y, 0f) * Vector3.forward;

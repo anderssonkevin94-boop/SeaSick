@@ -603,6 +603,72 @@ namespace SeaSick.World
             return true;
         }
 
+        /// **Fists onto the grips: two-bone IK** (2026-10-03, BarrowShot: the
+        /// Carry arm pose over the run's lean left his fists 9-16 cm under
+        /// the handles, at his hips; the barrow cannot come down to them --
+        /// its legs would drag). Called by `RunnerBarrow` AFTER it has laid
+        /// the barrow out this frame (it runs after this component), with the
+        /// two grips in world space. Each fist goes to the grip on ITS side
+        /// of him (the rig's `hand.L` is his right hand: paired by side, not
+        /// by name). Per arm: the upper arm is swung so the elbow lands where
+        /// a chain of his own two lengths reaching the grip puts it, bent
+        /// back, out and down (`ElbowPole`), then the forearm so the fist
+        /// (the wrist's `ToolGripLocal`, carried rigidly with it) lands on the
+        /// grip. World ROTATIONS only -- never a bone position (the rig's
+        /// x100 / ~92x bone scales; memory: astra-rig-scale-trap). The hand
+        /// keeps the Carry clip's fist, which already closes palm-down-in on
+        /// a bar. `weight` 0..1 eases it in with the grip pose.
+        public void ReachGrips(Vector3 gripA, Vector3 gripB, float weight)
+        {
+            float w = Mathf.Clamp01(weight) * Mathf.SmoothStep(0f, 1f, gripW);
+            if (w <= 0.0001f) return;
+            Bind();
+            Vector3 right = transform.right;
+            // The grip on each arm's side.
+            bool aIsLeftSide = Vector3.Dot(gripA - transform.position, right) < Vector3.Dot(gripB - transform.position, right);
+            Vector3 gripLeftSide = aIsLeftSide ? gripA : gripB, gripRightSide = aIsLeftSide ? gripB : gripA;
+            ReachArm(armL, foreL, handL, gripLeftSide, gripRightSide, w);
+            ReachArm(armR, foreR, handR, gripLeftSide, gripRightSide, w);
+        }
+
+        /// Elbow hint for the barrow push, body frame per unit of his height
+        /// scale: behind the shoulder, out to his side, below it.
+        public static Vector3 ElbowPole = new Vector3(0.35f, -0.45f, -0.45f);
+
+        void ReachArm(Transform upper, Transform fore, Transform hand, Vector3 gripLeftSide, Vector3 gripRightSide, float w)
+        {
+            if (upper == null || fore == null || hand == null) return;
+            Vector3 a = upper.position, b = fore.position;
+            Vector3 c = hand.TransformPoint(ToolGripLocal);
+            float sideSign = Vector3.Dot(a - transform.position, transform.right) >= 0f ? 1f : -1f;
+            Vector3 t = sideSign < 0f ? gripLeftSide : gripRightSide;
+            float la = (b - a).magnitude, lb = (c - b).magnitude;
+            if (la < 1e-4f || lb < 1e-4f) return;
+            Vector3 at = t - a;
+            float d = Mathf.Clamp(at.magnitude, Mathf.Abs(la - lb) + 1e-3f, la + lb - 1e-3f);
+            Vector3 dir = at.sqrMagnitude > 1e-8f ? at.normalized : transform.forward;
+            // The bend plane: through the shoulder, the grip and the pole.
+            Vector3 pole = transform.TransformDirection(new Vector3(ElbowPole.x * sideSign, ElbowPole.y, ElbowPole.z));
+            Vector3 bend = Vector3.ProjectOnPlane(pole, dir);
+            if (bend.sqrMagnitude < 1e-8f) bend = Vector3.ProjectOnPlane(-transform.up, dir);
+            bend.Normalize();
+            float cosA = Mathf.Clamp((la * la + d * d - lb * lb) / (2f * la * d), -1f, 1f);
+            float sinA = Mathf.Sqrt(1f - cosA * cosA);
+            Vector3 elbow = a + (dir * cosA + bend * sinA) * la;
+
+            Quaternion beforeU = upper.localRotation;
+            Quaternion swingU = Quaternion.FromToRotation(b - a, elbow - a) * upper.rotation;
+            upper.rotation = Quaternion.Slerp(upper.rotation, swingU, w);
+            Record(upper, beforeU);
+
+            b = fore.position;
+            c = hand.TransformPoint(ToolGripLocal);
+            Quaternion beforeF = fore.localRotation;
+            Quaternion swingF = Quaternion.FromToRotation(c - b, t - b) * fore.rotation;
+            fore.rotation = Quaternion.Slerp(fore.rotation, swingF, w);
+            Record(fore, beforeF);
+        }
+
         // --- the level 2 sawmill's crank (2026-10-01) ------------------------
 
         static readonly List<VillagerActing> live = new List<VillagerActing>();
