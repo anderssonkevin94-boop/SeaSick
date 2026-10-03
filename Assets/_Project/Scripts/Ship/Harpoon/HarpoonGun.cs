@@ -122,9 +122,10 @@ namespace SeaSick.Ship.Harpoon
         const float FallbackStemAhead = 1.2f;
         const float FallbackStemDrop = 0.3f;
 
-        /// **The rope's fairlead**: the top of the hull's bow stem cap plus a
-        /// hand of clearance, in world space (refreshed with the fitting on
-        /// every refit). Without hull data, a point ahead of the muzzle.
+        /// **The rope's fairlead**: the top of the hull's bow stem cap, at its
+        /// forward-most face (`HarpoonMount.ScanBow`), plus a hand of
+        /// clearance, in world space (refreshed with the fitting on every
+        /// refit). Without hull data, a point ahead of the muzzle.
         public Vector3 StemTopWorld
         {
             get

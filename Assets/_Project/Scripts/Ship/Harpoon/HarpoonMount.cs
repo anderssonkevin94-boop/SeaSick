@@ -62,7 +62,9 @@ namespace SeaSick.Ship.Harpoon
         /// authoring units, module-local from the bow module's aft socket
         /// (its origin): on the centreline, 6.3 forward, flush on the foredeck
         /// at 2.11 up -- the placement the mount art was exported against
-        /// (3.15 m forward at the coaster's 0.5 m per unit).
+        /// (3.15 m forward at the coaster's 0.5 m per unit). The scan keeps
+        /// its x/z and stands it on the deck actually there; the 2.11 is the
+        /// height when there is no mesh to read.
         static readonly Vector3 BowModuleMountU = new Vector3(6.3f, 0f, 2.11f);
 
         /// The modular hull's view, if she wears one (a refitted hull does).
@@ -71,19 +73,24 @@ namespace SeaSick.Ship.Harpoon
 
         /// **The bow stem in ship-local space**: where the fitting stands,
         /// on the centreline at deck height. A modular hull places it on its
-        /// bow module at `BowModuleMountU` (the art's own spot). The stock
-        /// steamer carries a `HullFormData` (rebound on each refit): its
-        /// forward-most station with room on deck. A hull with neither falls
-        /// back to its `FleetVisual` deck line, then to the motor's length.
+        /// bow module at `BowModuleMountU`'s x/z (the art's own spot), on the
+        /// top deck the scan finds there (a raised bow's upper floor, not the
+        /// foredeck under it). The stock steamer carries a `HullFormData`
+        /// (rebound on each refit): its forward-most station with room on
+        /// deck. A hull with neither falls back to its `FleetVisual` deck
+        /// line, then to the motor's length.
         public static Vector3 BowStem(Transform ship)
         {
-            var view = ModularView(ship);
-            var bow = view != null && view.Current != null
-                ? view.Current.Find(SeaSick.Ship.Modular.ShipAssembler.StdKeyBow) : null;
-            if (bow != null)
+            if (Bow(ship, out var view, out var bow, out var host))
             {
-                Vector3 inView = bow.positionM + bow.rotation
-                    * SeaSick.Ship.Modular.ModularScale.AuthoringToGame(BowModuleMountU, view.Current.metresPerUnit);
+                Vector3 inBow = SeaSick.Ship.Modular.ModularScale.AuthoringToGame(BowModuleMountU, view.Current.metresPerUnit);
+                if (host != null)
+                {
+                    var scan = ScanBow(host, inBow);
+                    if (scan.hasDeck) inBow.y = scan.deckY;
+                    return ship.InverseTransformPoint(host.TransformPoint(inBow));
+                }
+                Vector3 inView = bow.positionM + bow.rotation * inBow;
                 return ship.InverseTransformPoint(view.transform.TransformPoint(inView));
             }
 
@@ -118,24 +125,33 @@ namespace SeaSick.Ship.Harpoon
         }
 
         /// **The top of the bow stem cap in ship-local space**, ahead of the
-        /// fitting: the rope's fairlead. A modular hull gives its bow module's
-        /// forward-most, highest point on the centreline (module bounds, the
-        /// same module and units `BowModuleMountU` is measured in); the stock
-        /// steamer gives its forward-most station at the deck line. False when
-        /// the hull has neither, and the gun falls back to a point ahead of
-        /// the muzzle.
+        /// fitting: the rope's fairlead. A modular hull gives the scan's stem
+        /// point (the cap's forward-most face, at its top), else its bow
+        /// module's bounds corner (the same module and units
+        /// `BowModuleMountU` is measured in); the stock steamer gives its
+        /// forward-most station at the deck line. False when the hull has
+        /// neither, and the gun falls back to a point ahead of the muzzle.
         public static bool StemTop(Transform ship, out Vector3 local)
         {
-            var view = ModularView(ship);
-            var bow = view != null && view.Current != null
-                ? view.Current.Find(SeaSick.Ship.Modular.ShipAssembler.StdKeyBow) : null;
-            if (bow != null && bow.boundsMaxU.x > BowModuleMountU.x)
+            if (Bow(ship, out var view, out var bow, out var host))
             {
-                var tipU = new Vector3(bow.boundsMaxU.x, 0f, Mathf.Max(bow.boundsMaxU.z, BowModuleMountU.z));
-                Vector3 inView = bow.positionM + bow.rotation
-                    * SeaSick.Ship.Modular.ModularScale.AuthoringToGame(tipU, view.Current.metresPerUnit);
-                local = ship.InverseTransformPoint(view.transform.TransformPoint(inView));
-                return true;
+                float k = view.Current.metresPerUnit;
+                if (host != null)
+                {
+                    var scan = ScanBow(host, SeaSick.Ship.Modular.ModularScale.AuthoringToGame(BowModuleMountU, k));
+                    if (scan.hasStem)
+                    {
+                        local = ship.InverseTransformPoint(host.TransformPoint(scan.stemTop));
+                        return true;
+                    }
+                }
+                if (bow.boundsMaxU.x > BowModuleMountU.x)
+                {
+                    var tipU = new Vector3(bow.boundsMaxU.x, 0f, Mathf.Max(bow.boundsMaxU.z, BowModuleMountU.z));
+                    Vector3 inView = bow.positionM + bow.rotation * SeaSick.Ship.Modular.ModularScale.AuthoringToGame(tipU, k);
+                    local = ship.InverseTransformPoint(view.transform.TransformPoint(inView));
+                    return true;
+                }
             }
 
             var steamer = ship.GetComponent<SeaSick.Steamer.SteamerShip>();
@@ -151,6 +167,215 @@ namespace SeaSick.Ship.Harpoon
             }
 
             local = Vector3.zero;
+            return false;
+        }
+
+        /// The modular view, its placed bow module and that module's drawn
+        /// GameObject (`ModularShipView.Build` names it "bow (moduleId)"). The
+        /// LAST match: a rebuild adds the new module after the old one, which
+        /// is still a child until its Destroy lands at the end of the frame.
+        /// `host` is null when the view drew nothing for the bow.
+        static bool Bow(Transform ship, out SeaSick.Ship.Modular.ModularShipView view,
+            out SeaSick.Ship.Modular.PlacedModule bow, out Transform host)
+        {
+            view = ModularView(ship);
+            bow = view != null && view.Current != null
+                ? view.Current.Find(SeaSick.Ship.Modular.ShipAssembler.StdKeyBow) : null;
+            host = null;
+            if (bow == null) return false;
+            string prefix = bow.instanceKey + " (";
+            foreach (Transform t in view.transform)
+                if (t.name.StartsWith(prefix, System.StringComparison.Ordinal)) host = t;
+            return true;
+        }
+
+        // --- the bow scan --------------------------------------------------
+
+        /// What the bow module's own meshes say, in its local metres (+Z
+        /// forward, +Y up; the frame the kit is authored in).
+        public struct BowScan
+        {
+            public bool hasStem;
+            /// The stem cap's forward-most face, at the cap's top.
+            public Vector3 stemTop;
+            public bool hasDeck;
+            /// The top deck under the fitting's footprint.
+            public float deckY;
+        }
+
+        /// m either side of the centreline a vertex still counts as the stem.
+        const float StemHalfWidth = 0.25f;
+        /// m behind the stem's front face the cap's top is looked for.
+        const float StemTopDepth = 0.15f;
+        /// m out from the fitting's centre to the four other footprint
+        /// samples (the art's base is about 0.7 m across).
+        const float FootprintReach = 0.2f;
+        /// m a sloping deck may differ between footprint samples.
+        const float DeckTolerance = 0.08f;
+        /// A deck face's normal is at least this upright (|n.y| of a unit
+        /// normal; 0.7 ≈ 45°): walls and the stem's faces never count.
+        const float DeckFlatness = 0.7f;
+
+        static Transform scannedHost;
+        static Vector3 scannedAt;
+        static BowScan scanned;
+        static readonly System.Collections.Generic.List<Vector3> scanVerts = new System.Collections.Generic.List<Vector3>(4096);
+        static readonly System.Collections.Generic.List<int> scanTris = new System.Collections.Generic.List<int>(12288);
+        static readonly System.Collections.Generic.List<Vector3> scanStem = new System.Collections.Generic.List<Vector3>(1024);
+        static readonly System.Collections.Generic.List<float>[] scanHeights =
+        {
+            new System.Collections.Generic.List<float>(), new System.Collections.Generic.List<float>(),
+            new System.Collections.Generic.List<float>(), new System.Collections.Generic.List<float>(),
+            new System.Collections.Generic.List<float>(),
+        };
+
+        /// **Reads the bow module's real meshes, once per drawn module**
+        /// (cached on its GameObject, which a refit replaces; the gun only
+        /// calls this from its fit). Every readable mesh under the module,
+        /// minus the lanterns (kit or harpoon beam: they hang ahead of the
+        /// stem and are not the cap) and the merged draw batch (a copy of the
+        /// same triangles, lanterns included), brought into module space.
+        ///
+        /// Stem: the forward-most vertex within `StemHalfWidth` of the
+        /// centreline is the cap's front face; the highest centreline vertex
+        /// within `StemTopDepth` behind it is the cap's top.
+        ///
+        /// Deck: a downward ray, in effect, at five points (the fitting's
+        /// centre and `FootprintReach` to each side): every near-flat
+        /// triangle over a point gives a height there. The deck is the
+        /// highest height at the centre that all four other points share
+        /// (within `DeckTolerance`), so it is a surface at least as broad as
+        /// the fitting: a rail, post or cap passing over one point is not a
+        /// deck, and neither is a floor's underside below another floor's
+        /// top. A raised bow gives its upper floor, a low bow its foredeck.
+        ///
+        /// Cost: one pass over the module's vertices and triangles (the
+        /// coaster bows are ~43k / ~66k vertices, ~14k / ~22k triangles),
+        /// most triangles rejected by a box test before the five point tests.
+        public static BowScan ScanBow(Transform host, Vector3 mountInBow)
+        {
+            if (host == scannedHost && host != null && scannedAt == mountInBow) return scanned;
+            var r = new BowScan();
+            float frontZ = float.NegativeInfinity;
+            scanStem.Clear();
+            for (int i = 0; i < scanHeights.Length; i++) scanHeights[i].Clear();
+            float minX = mountInBow.x - FootprintReach, maxX = mountInBow.x + FootprintReach;
+            float minZ = mountInBow.z - FootprintReach, maxZ = mountInBow.z + FootprintReach;
+            Matrix4x4 toBow = host.worldToLocalMatrix;
+
+            foreach (var rend in host.GetComponentsInChildren<Renderer>(true))
+            {
+                Mesh mesh = null;
+                if (rend is MeshRenderer)
+                {
+                    var mf = rend.GetComponent<MeshFilter>();
+                    mesh = mf != null ? mf.sharedMesh : null;
+                }
+                else if (rend is SkinnedMeshRenderer skin) mesh = skin.sharedMesh;
+                if (mesh == null || !mesh.isReadable || Skipped(rend.transform, host)) continue;
+
+                Matrix4x4 m = toBow * rend.transform.localToWorldMatrix;
+                mesh.GetVertices(scanVerts);
+                for (int i = 0; i < scanVerts.Count; i++)
+                {
+                    Vector3 v = m.MultiplyPoint3x4(scanVerts[i]);
+                    scanVerts[i] = v;
+                    if (Mathf.Abs(v.x) > StemHalfWidth) continue;
+                    scanStem.Add(v);
+                    if (v.z > frontZ) frontZ = v.z;
+                }
+
+                for (int sub = 0; sub < mesh.subMeshCount; sub++)
+                {
+                    if (mesh.GetTopology(sub) != MeshTopology.Triangles) continue;
+                    mesh.GetTriangles(scanTris, sub);
+                    for (int t = 0; t + 2 < scanTris.Count; t += 3)
+                    {
+                        Vector3 a = scanVerts[scanTris[t]], b = scanVerts[scanTris[t + 1]], c = scanVerts[scanTris[t + 2]];
+                        if (Mathf.Max(a.x, Mathf.Max(b.x, c.x)) < minX || Mathf.Min(a.x, Mathf.Min(b.x, c.x)) > maxX
+                            || Mathf.Max(a.z, Mathf.Max(b.z, c.z)) < minZ || Mathf.Min(a.z, Mathf.Min(b.z, c.z)) > maxZ) continue;
+                        Vector3 n = Vector3.Cross(b - a, c - a);
+                        float len = n.magnitude;
+                        if (len < 1e-8f || Mathf.Abs(n.y) < DeckFlatness * len) continue;
+                        for (int s = 0; s < scanHeights.Length; s++)
+                            if (HeightOver(a, b, c, FootprintSample(mountInBow, s), out float h)) scanHeights[s].Add(h);
+                    }
+                }
+            }
+
+            if (scanStem.Count > 0)
+            {
+                float topY = float.NegativeInfinity;
+                foreach (var v in scanStem)
+                    if (v.z >= frontZ - StemTopDepth && v.y > topY) topY = v.y;
+                r.hasStem = true;
+                r.stemTop = new Vector3(0f, topY, frontZ);
+            }
+
+            var centre = scanHeights[0];
+            centre.Sort();
+            for (int i = centre.Count - 1; i >= 0 && !r.hasDeck; i--)
+            {
+                bool broad = true;
+                for (int s = 1; s < scanHeights.Length && broad; s++)
+                    broad = HasNear(scanHeights[s], centre[i], DeckTolerance);
+                if (broad) { r.hasDeck = true; r.deckY = centre[i]; }
+            }
+
+            scanVerts.Clear();
+            scanTris.Clear();
+            scanStem.Clear();
+            scannedHost = host;
+            scannedAt = mountInBow;
+            scanned = r;
+            return r;
+        }
+
+        /// Sample 0 is the fitting's centre; 1-4 sit `FootprintReach` to
+        /// either side and fore and aft of it.
+        static Vector3 FootprintSample(Vector3 centre, int s)
+        {
+            switch (s)
+            {
+                case 1: return centre + new Vector3(FootprintReach, 0f, 0f);
+                case 2: return centre - new Vector3(FootprintReach, 0f, 0f);
+                case 3: return centre + new Vector3(0f, 0f, FootprintReach);
+                case 4: return centre - new Vector3(0f, 0f, FootprintReach);
+                default: return centre;
+            }
+        }
+
+        /// The triangle's height straight above or below `p` (x/z), false
+        /// when `p` is outside it seen from above.
+        static bool HeightOver(Vector3 a, Vector3 b, Vector3 c, Vector3 p, out float h)
+        {
+            h = 0f;
+            float ux = b.x - a.x, uz = b.z - a.z, vx = c.x - a.x, vz = c.z - a.z;
+            float d = ux * vz - uz * vx;
+            if (Mathf.Abs(d) < 1e-10f) return false;
+            float px = p.x - a.x, pz = p.z - a.z;
+            float s = (px * vz - pz * vx) / d;
+            float t = (ux * pz - uz * px) / d;
+            const float eps = 1e-5f;
+            if (s < -eps || t < -eps || s + t > 1f + eps) return false;
+            h = a.y + s * (b.y - a.y) + t * (c.y - a.y);
+            return true;
+        }
+
+        static bool HasNear(System.Collections.Generic.List<float> heights, float y, float tolerance)
+        {
+            foreach (var h in heights) if (Mathf.Abs(h - y) <= tolerance) return true;
+            return false;
+        }
+
+        /// Lantern pieces (any "Lantern" in the name up to the module: the
+        /// kit's `Lantern_Bow_*`, the harpoon's `BowLantern` beam, chain and
+        /// glass) and the merged draw batch are not the hull's shape.
+        static bool Skipped(Transform t, Transform host)
+        {
+            if (t.GetComponent<SeaSick.Ship.Modular.CoasterOwnedMesh>() != null) return true;
+            for (; t != null && t != host; t = t.parent)
+                if (t.name.IndexOf("Lantern", System.StringComparison.Ordinal) >= 0) return true;
             return false;
         }
 
