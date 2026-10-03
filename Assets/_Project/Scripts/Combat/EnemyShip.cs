@@ -996,8 +996,17 @@ namespace SeaSick.Combat
             transform.position = new Vector3(
                 p.x, Mathf.Lerp(p.y, surface, 1f - Mathf.Exp(-7f * dt)), p.z);
 
-            gunHeelVel += (-30f * gunHeel - 3.6f * gunHeelVel) * dt;
-            gunHeel += gunHeelVel * dt;
+            // The gun-heel spring is stiff (w ~5.5 rad/s): one Euler step
+            // past ~0.3 s -- a load hitch, an editor stall, a probe running
+            // at 3x time -- overshoots, diverges, and the NaN lands in
+            // Quaternion.Euler below. Substepped, it is stable at any dt.
+            for (float left = dt; left > 0f; left -= 0.02f)
+            {
+                float h = Mathf.Min(left, 0.02f);
+                gunHeelVel += (-30f * gunHeel - 3.6f * gunHeelVel) * h;
+                gunHeel += gunHeelVel * h;
+            }
+            if (!float.IsFinite(gunHeel) || !float.IsFinite(gunHeelVel)) gunHeel = gunHeelVel = 0f;
 
             float lean = Mathf.Sin((Time.time + bobSeed) * 0.8f) * 3.5f + gunHeel;
             float pitch = Mathf.Sin((Time.time + bobSeed) * 1.1f) * 2.2f;
