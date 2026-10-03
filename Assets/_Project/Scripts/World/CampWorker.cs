@@ -9,13 +9,25 @@ namespace SeaSick.World
     /// one is doing it."* They were standing in a ring like ornaments while
     /// the pile filled itself.
     ///
-    /// **This produces NOTHING, and that is the whole design.** The outpost is
-    /// numbers; a crewman carrying a log is the picture of an increment the
-    /// ledger already made. If this component fell trees or added to a pile,
-    /// then a camp would pay differently depending on whether anybody was
-    /// watching it — which is the exact thing the absentee loop was built to
-    /// avoid. So it walks, it waits, it carries something back, and it touches
-    /// no state at all.
+    /// **The ledger decides; this body walks what it decided.** The outpost
+    /// is numbers, and a camp must pay the same whether anybody is watching
+    /// it or not -- which is the exact thing the absentee loop was built for.
+    /// This component never invents a unit, never fells a tree and never adds
+    /// to a pile. What it DOES write, since 2026-09-27
+    /// (docs/DELIVERY-ON-ARRIVAL.md), is where the feet are: while the camp
+    /// is watched this body IS the ledger's walker, and it reports
+    /// `OutpostLedger.BodyAt` (where he stands), `BodyArrived` (at a pickup
+    /// or a drop-off) and `BodyWorked` (seconds of work at a pickup). The
+    /// ledger moves stock on those reports and nowhere else.
+    ///
+    /// **Honest bodies (Kevin, 2026-10-03): a villager never carries anything
+    /// the ledger didn't hand him.** A load on his shoulder is a load the
+    /// books have on him (`OutpostHand.Hauling`, drawn by `TickHaul`); with
+    /// no trip he works or rests at his post and his arms are empty -- the
+    /// status line (`OutpostLedger.StallReason`) already says why. The old
+    /// "mime" loops that walked a made-up armful home between trips (the
+    /// farmhand's potato crate, the gatherer's stone, the cutter's log) are
+    /// gone; see `TickWorkAt`, `TickErrand`, `TickCutting`.
     ///
     /// **That holds for the felling too, and it is the whole of the
     /// 2026-09-20 pass.** Kevin: *"when collecting wood they seem to cut at
@@ -98,6 +110,7 @@ namespace SeaSick.World
         int claimedTree = -1;  // the trunk the camp gave him, by index
         Vector3 claimAt;       // and where it stands
         float chopFor;         // how long he has been swinging at it
+        float stallPollAt;     // next `Ledger.Stalled` ask while swinging (2026-10-03)
         /// **Standing the thing up rather than fetching for it, 2026-09-23.**
         /// True for a builder whose site has every material in: he walks to
         /// the drawing, swings a hammer at it and carries nothing. See
@@ -174,11 +187,6 @@ namespace SeaSick.World
         /// Arm's length. He closes to this and no further -- walking to the
         /// animal's own position would put him inside it.
         const float HuntReach = 1.2f;
-        /// How far they will wander for a PROP to work at -- stone, ore,
-        /// spice. Trees are not bounded by this any more: a cutter is handed
-        /// the ledger's next tree wherever on the island it stands
-        /// (`Outpost.ClaimTree`, 2026-09-21).
-        const float Reach = 34f;
 
         /// How long a stint at a building lasts before the made goods are
         /// walked to the pile. Long enough to be seen working, short enough
@@ -610,6 +618,18 @@ namespace SeaSick.World
             {
                 if (phase != Phase.Downed)
                 {
+                    // **Empty-handed on the ground (2026-10-03, honest
+                    // bodies).** `OutpostLedger.Down` already dropped his
+                    // load where he fell (a `GroundLoad` somebody else
+                    // collects) or cancelled a planned one, so the carry
+                    // pose he went down in is a load nobody has. Clear it,
+                    // forget the trip he was drawing (so getting back up
+                    // never "sets it down" at the old drop-off, see
+                    // `EndTripMime`) and hand back any tree/bed/site claim.
+                    Drop();
+                    ForgetTrip();
+                    ReleaseClaim();
+                    wasHauling = false;
                     phase = Phase.Downed;
                     Vector3 p = transform.position;
                     p.y = WorkerPad.Foot(p, camp.GroundAt(p));
@@ -922,7 +942,33 @@ namespace SeaSick.World
                     // there simply isn't one THIS tick; try again next.
                     if (r.order == OutpostOrder.Build) { wait = RestSeconds; return; }
 
-                    target = FindSomethingToWorkAt(r);
+                    // **A gatherer between trips (2026-10-03, honest
+                    // bodies).** Every armful a gatherer brings home is a
+                    // ledger trip (`OutpostLedger.GatherDay` ->
+                    // `StartGatherTrip`), drawn by `TickHaul`; reaching here
+                    // means there is none on him THIS step. Stalled -- store
+                    // full, nothing left standing -- he rests at home
+                    // (`StallReason` says why on his sheet). Otherwise he
+                    // may go and swing at his rock until the next trip
+                    // takes him, but never with anything to carry back. No
+                    // rock to swing at: rest here too (this used to be a
+                    // potter to a random spot by the fire, a pick swung at
+                    // the grass and a stone walked home that never existed).
+                    // (Home and stalled is "arrived": the sheet then says
+                    // why he rests, not "still on the way up from the ship"
+                    // -- `StallReason` reads `walkingIn` first.)
+                    if (camp.Ledger != null && camp.Ledger.Stalled(r))
+                    {
+                        if (Near(home, 1f)) r.walkingIn = false;
+                        wait = RestSeconds;
+                        return;
+                    }
+                    if (!FindSomethingToWorkAt(r, out target))
+                    {
+                        if (Near(home, 1f)) r.walkingIn = false;
+                        wait = RestSeconds;
+                        return;
+                    }
                     phase = Phase.Going;
                     return;
 
@@ -992,33 +1038,31 @@ namespace SeaSick.World
                         wait = RestSeconds * 0.5f;
                         return;
                     }
-                    // What they carry back is what the row says they are
-                    // after — the only place this component reads an order
-                    // for anything but a picture.
-                    carrying = Carries(r);
-                    dropAt = Dropoff(r, carrying);
-                    phase = Phase.Coming;
-                    acting?.Set(VillagerActing.Mode.Carry, carrying, CarryCount(r));
+                    // **No armful at the end of a swing (2026-10-03, honest
+                    // bodies).** This used to shoulder the row's target and walk
+                    // it to the store with no ledger call -- a stone the
+                    // books never had. The real armful is the ledger's next
+                    // gather trip, and `Update` hands him to `TickHaul` the
+                    // frame it starts (pickup at this same kind of rock,
+                    // `HaulPickupSpot`). Until then: stalled -> home to rest;
+                    // the rock worked out from under him -> rest and pick
+                    // another; else another swing where he stands.
+                    if ((camp.Ledger != null && camp.Ledger.Stalled(r))
+                        || (workNode != null && workNode.Harvested))
+                    {
+                        Drop();
+                        phase = Phase.Resting;
+                        wait = RestSeconds;
+                        return;
+                    }
+                    wait = SwingSeconds * Random.Range(0.85f, 1.35f);
                     return;
 
                 case Phase.Coming:
-                    // **Re-aimed every step, 2026-09-23.** Kevin: *"if the
-                    // building needed 1 more wood and all 4 villagers were
-                    // carrying wood to the building site they deposited the
-                    // wood even though the amount was already reached."*
-                    // Four men set off with the site short of one log; by
-                    // the time the second arrives it is short of none.
-                    // `Dropoff` asks the ledger which site still WANTS what
-                    // is on this man's shoulder, so the other three turn
-                    // mid-walk and take it to the pile (or to the next
-                    // drawing that is short of it) instead.
-                    dropAt = Dropoff(r, carrying);
-                    // The armful can shrink mid-walk (the store filled while
-                    // he was on his way and `DepositHaul` put down what fit),
-                    // so the stack he shoulders is re-read every step too —
-                    // `Set` is a no-op unless it actually changed.
-                    acting?.Set(VillagerActing.Mode.Carry, carrying, CarryCount(r));
-                    if (!Walk(dropAt, dt)) return;
+                    // Nothing reaches this any more (2026-10-03): the swing
+                    // above never shoulders a load. Kept so a phase left
+                    // over from anywhere else can only ever put down what
+                    // is in his hands and rest -- never walk it anywhere.
                     Drop();
                     phase = Phase.Resting;
                     wait = RestSeconds;
@@ -1131,6 +1175,19 @@ namespace SeaSick.World
                     bool there = Walk(home, dt);
                     wait -= dt;
                     if (wait > 0f) { if (there) FaceRest(dt, 0f); return; }
+                    // **Stalled: rest, don't swing (2026-10-03, honest
+                    // bodies).** Store full of timber, or nothing left
+                    // standing: the ledger starts no trip, so no tree will
+                    // come down for him and no log is coming home. He rests
+                    // at home with his hands empty and gives the trunk back
+                    // (`StallReason` names why on his sheet).
+                    if (camp.Ledger != null && camp.Ledger.Stalled(r))
+                    {
+                        if (claimedTree >= 0) ReleaseClaim();
+                        wait = RestSeconds;
+                        if (there) { r.walkingIn = false; FaceRest(dt, 0f); }
+                        return;
+                    }
                     if (!Claim())
                     {
                         // Nothing standing anywhere on the island (or every
@@ -1177,16 +1234,34 @@ namespace SeaSick.World
                     Face(claimAt - transform.position, dt);
                     if (camp.TreeIsFelled(claimedTree))
                     {
-                        // It went over while he was swinging at it. Shoulder a
-                        // log and take it where it belongs -- the pile, or the
-                        // blueprint if he is building.
-                        carrying = Res.Timber;
-                        dropAt = Dropoff(r, carrying);
-                        phase = Phase.Coming;
-                        acting?.Set(VillagerActing.Mode.Carry, carrying, CarryCount(r));
+                        // **It went over -- and no log goes on his shoulder
+                        // (2026-10-03, honest bodies).** This used to
+                        // shoulder a log and walk it home with no ledger
+                        // call. A log only comes home on a ledger timber
+                        // trip (`TickHaul`; the tree falls at that trip's
+                        // pickup, `Outpost.SyncFelling`). Between trips he
+                        // takes the next tree in the felling order and
+                        // swings at that one.
+                        Reclaim();
+                        if (phase == Phase.Working) phase = Phase.Going;
                         return;
                     }
                     chopFor += dt;
+                    // Stalled while swinging (the store filled, the wood ran
+                    // out): no trip is coming, so stop and rest -- polled
+                    // once a second, `Stalled` is not free.
+                    if (Time.time >= stallPollAt)
+                    {
+                        stallPollAt = Time.time + 1f;
+                        if (camp.Ledger != null && camp.Ledger.Stalled(r))
+                        {
+                            ReleaseClaim();
+                            Drop();
+                            phase = Phase.Resting;
+                            wait = RestSeconds;
+                            return;
+                        }
+                    }
                     if (chopFor < Feel.chopPatience) return;
                     Drop();
                     phase = Phase.Resting;
@@ -1194,9 +1269,10 @@ namespace SeaSick.World
                     return;
 
                 case Phase.Coming:
-                    // Re-aimed every step: a hut raised mid-carry takes it.
-                    dropAt = Dropoff(r, carrying);
-                    if (!Walk(dropAt, dt)) return;
+                    // Nothing reaches this any more (2026-10-03): a felled
+                    // tree is never shouldered above. Kept so a leftover
+                    // phase only ever empties his hands -- never walks a
+                    // log the ledger does not have.
                     Drop();
                     phase = Phase.Resting;
                     wait = RestSeconds;
@@ -1444,12 +1520,11 @@ namespace SeaSick.World
 
         /// **The old shift loop**, for a building that employs somebody but
         /// keeps no `StationStock` (the farm, whose field is its input and
-        /// whose yield is a per-day rate into the store; the watchtower).
-        /// Walk to the door, work the shift, carry what the building makes to
-        /// the store, come back -- unchanged from before 2026-09-24, because
-        /// for these the store IS where the books put it. The store is its
-        /// stack by the fire until a storage building stands, then the hut
-        /// (`StoreSpot`; it used to be the fire ring for good).
+        /// whose yield goes into the farmhand's basket; the watchtower).
+        /// Walk to the door, work the shift, straighten up, work again.
+        /// **No carry in this loop since 2026-10-03** (honest bodies): the
+        /// basket goes to the store only as a ledger trip (`CarryBasket`),
+        /// drawn by `TickHaul` like every other load.
         void TickWorkAt(OutpostHand r, float dt)
         {
             Building post = WorkPostOf(r);
@@ -1477,7 +1552,9 @@ namespace SeaSick.World
             {
                 Drop();
                 phase = Phase.Resting;
-                if (Walk(door, dt)) Face(face - transform.position, dt);
+                // At his post and stalled is arrived (2026-10-03): the sheet
+                // says "waiting for crops", not "on the way up from the ship".
+                if (Walk(door, dt)) { r.walkingIn = false; Face(face - transform.position, dt); }
                 return;
             }
 
@@ -1511,24 +1588,26 @@ namespace SeaSick.World
                     Face(face - transform.position, dt);
                     wait -= dt;
                     if (wait > 0f) return;
-                    carrying = BuildPlans.Named(r.target).makes;
-                    if (string.IsNullOrEmpty(carrying))
-                    {
-                        // A building with no output: the shift just runs again.
-                        phase = Phase.Resting;
-                        wait = RestSeconds;
-                        return;
-                    }
-                    dropAt = StoreSpot(carrying, out _);
-                    phase = Phase.Coming;
-                    acting?.Set(VillagerActing.Mode.Carry, carrying, CarryCount(r));
+                    // **The end of a shift is a breather, never a crate
+                    // (2026-10-03, honest bodies).** Kevin's farm: every 6-10
+                    // s the farmhand shouldered a crate of potatoes
+                    // (`BuildPlans.Named(target).makes`) and walked it to the
+                    // store with no ledger call -- a load the books never
+                    // had. Every unit a non-station post makes reaches the
+                    // store as a ledger basket trip (`OutpostLedger.CarryBasket`
+                    // -> a picked-up Field->Store haul), which `Update` hands
+                    // to `TickHaul` the frame it starts, so that is the ONLY
+                    // carry he does. Here he straightens up at the plot
+                    // (Resting at the door, `RestSeconds`) and goes back to
+                    // it; a post with no output (the watchtower) is the same.
+                    phase = Phase.Resting;
+                    wait = RestSeconds;
                     return;
 
                 case Phase.Coming:
-                    // Re-aimed every step, like the gather loop: a hut
-                    // raised while he is walking takes the load.
-                    dropAt = StoreSpot(carrying, out _);
-                    if (!Walk(dropAt, dt)) return;
+                    // Nothing reaches this any more (2026-10-03): the shift
+                    // above never shoulders a load. A leftover phase only
+                    // ever empties his hands.
                     Drop();
                     phase = Phase.Resting;
                     wait = RestSeconds;
@@ -1573,8 +1652,13 @@ namespace SeaSick.World
                 ReleaseClaim();
                 mimedTrip = r.haulSerial;
                 BeginTripMime(r, view);
+                haulTickFrame = Time.frameCount;
                 if (settingDown) return;     // `TickDelivery` owns the next moment
             }
+            // Drawn this frame -- AFTER the check above, which needs last
+            // frame's: `EndTripMime` calls a set-down honest only straight
+            // after a frame that had him walking this trip (2026-10-03).
+            haulTickFrame = Time.frameCount;
 
             switch (view.leg)
             {
@@ -1623,7 +1707,11 @@ namespace SeaSick.World
                     return;
                 }
                 default:
-                    // At a full store: he holds it until room comes.
+                    // At a full store: he holds it until room comes. The
+                    // books have him AT the drop-off with it (a body that
+                    // became the walker mid-wait included), so the step
+                    // that finds room is a real deposit here (`EndTripMime`).
+                    mimeLoaded = mimeArrived = true;
                     Face(mimeFace - transform.position, dt);
                     if (mimeEating) acting?.Set(VillagerActing.Mode.Reach, view.resource, 1);
                     else acting?.Set(VillagerActing.Mode.Carry, view.resource, Mathf.Max(1, view.count));
@@ -1655,6 +1743,7 @@ namespace SeaSick.World
         const float CatchUpLag = 0.1f;
 
         // The trip being drawn (`mimedTrip` is its serial).
+        int haulTickFrame = -10;  // last frame `TickHaul` drew an active trip (2026-10-03)
         bool mimeLoaded;          // shouldered: the carry leg
         bool mimeArrived;         // at the drop-off with it
         bool mimePlaced;          // set down ahead of the books (the hold ran out)
@@ -1709,12 +1798,28 @@ namespace SeaSick.World
         /// the set-down stoop now; a few steps short, walk them then set it
         /// down. True when a delivery was started (the caller must not
         /// `Drop()`, which would cancel it).
+        ///
+        /// **Only where the ledger actually put it (2026-10-03, honest
+        /// bodies).** While the camp is watched this body is the walker, so
+        /// the books deposit a load only on his `BodyArrived` at the
+        /// drop-off (`TickHaul` plays that set-down itself) or, at a full
+        /// store, on a later step while he stands there holding it
+        /// (`AtDrop`). Any other end -- a raid or a rescue or a fight made
+        /// the ledger drop it on the ground where he stood
+        /// (`DropCarriedLoad`), a walled-off trip given up -- is NOT a
+        /// deposit, and this used to walk the load to the old drop-off and
+        /// "set it down" anyway whenever he was within `TailMetres` of it.
+        /// So: a set-down only if he had reached the drop-off (`mimeArrived`)
+        /// AND the trip was being drawn up to last frame (`haulTickFrame`:
+        /// nothing -- an alarm, a pout, a rescue -- took him away from it
+        /// first). Anything else just empties his hands (the caller `Drop`s).
         bool EndTripMime()
         {
             bool holding = mimeLoaded && !mimePlaced;
+            bool deposited = mimeArrived && Time.frameCount - haulTickFrame <= 1;
             mimeLoaded = mimeArrived = mimePlaced = false;
             mimeHold = 0f;
-            if (!holding) return false;
+            if (!holding || !deposited) return false;
             // A meal in his hand: he eats it where he stands.
             if (mimeEating) { StartEat(mimeFace, mimeRes); return true; }
             float left = FlatDistance(transform.position, mimeDrop);
@@ -2333,30 +2438,11 @@ namespace SeaSick.World
         /// `OutpostLedger.BuilderWants`), for the direct-carry loop below;
         /// that loop is a ledger haul now (`TickHaul` reads `HaulOf(r)`,
         /// which already knows exactly what is on the books and skips this
-        /// entirely), so a Build row never reaches this any more -- but see
-        /// `Carries`, called from the hunting and station-work mimes too,
-        /// which is why this still takes the general row rather than just a
-        /// resource name.
+        /// entirely), so a Build row never reaches this any more. (`Carries`
+        /// and `CarryCount`, which sized the made-up armful of the old
+        /// gather/farm/cut loops, went with them on 2026-10-03: every load
+        /// shown now is a ledger trip's, `HaulView.count`.)
         string WhatFor(OutpostHand r) => r?.target;
-
-        /// **What ends up on his shoulder**, which is not always what he was
-        /// sent after. One row splits the two: a hunter is sent after Game
-        /// and comes back with Food, because Game is counted in animals on
-        /// the crag and the yield lands in the larder (`OutpostLedger`). The
-        /// pile he walks to, the sack in his hands and the stack he sets it
-        /// on all come off this, so all three agree.
-        ///
-        /// Everything else carries what `WhatFor` says, unchanged.
-        string Carries(OutpostHand r) => Hunting(r) ? Res.Meat : WhatFor(r);
-
-        /// **How many units are in his arms**, for `VillagerActing.Set`'s
-        /// visible stack (Kevin, 2026-09-23: *"if they carry 3 logs, you see
-        /// three logs"*). A real ledger haul (`OutpostHand.Hauling` —
-        /// builder site trips fetched from a pile or a station) says the
-        /// true armful; a single swing at a tree, a rock or a beast — which
-        /// never went through the haul system — is one unit, same as it
-        /// always looked.
-        static int CarryCount(OutpostHand r) => r != null && r.Hauling ? Mathf.Max(1, r.haulCount) : 1;
 
         /// The swing that suits the material. An axe for wood, the pick
         /// (`Mine`, 2026-10-01: the v15 clip, was a hammer) for the things
@@ -2470,57 +2556,48 @@ namespace SeaSick.World
         /// standing", and that is exactly the half of Kevin's complaint about
         /// random trees: it was a second opinion about which tree mattered,
         /// competing with the ledger's. Cutting goes through `TickCutting` and
-        /// the camp's claim table now. Everything else is unchanged: the
-        /// nearest unharvested prop of the kind the row is after, falling back
-        /// to a spot near the fire rather than refusing to move, because a
-        /// hand with nothing to walk to should still look like somebody at a
-        /// camp and not like a statue.
+        /// the camp's claim table now.
+        ///
+        /// **Where his next trip will send him, or nowhere (2026-10-03,
+        /// honest bodies).** Only asked of a gatherer between ledger trips
+        /// (`TickErrand`). The prop is `NearestNode` -- the same pick
+        /// `HaulPickupSpot` makes for the trip itself (nearest to the camp
+        /// centre, this island, reachable, no `Reach` bound since the
+        /// ledger's trip has none) -- so the swing between trips is at the
+        /// rock the next armful comes off. False when there is nothing of
+        /// the kind to work: the caller rests at home instead of the old
+        /// potter to a random spot by the fire, swinging at the grass.
         ///
         /// **Measured from the CAMP, not from the man.** It is the camp that
         /// works outward, and asking from where each hand happens to be
         /// standing would send somebody who has just walked home back to the
         /// same place the pile came from.
-        Vector3 FindSomethingToWorkAt(OutpostHand r)
+        bool FindSomethingToWorkAt(OutpostHand r, out Vector3 spot)
         {
+            spot = home;
+            workNode = null;
             string what = WhatFor(r);
-            Vector3 from = camp.CampCentre;
 
             // Wheat: the camp hands out the bed the ledger will cut next,
             // nearest the fire outward, one hand a bed (`Outpost.ClaimBed`).
             if (what == Res.Food && camp.ClaimBed(this, out _, out Vector3 bedAt))
-                return Stand(bedAt);
-
-            if (!string.IsNullOrEmpty(what) && what != Res.Timber)
             {
-                ResourceNode near = null;
-                // **A builder is not bounded by `Reach`.** A gatherer who
-                // has to walk further than 34 m is a gatherer the player
-                // told to do the wrong thing, and pottering by the fire says
-                // so. A builder was told to build THIS drawing, the ledger
-                // is already paying for the stone whatever the distance, and
-                // the handful of boulders a camp has stand just outside the
-                // clearing -- which on a wide clearing is past 34 m. So he
-                // walks to the nearest one wherever it is, and the body goes
-                // on agreeing with the books.
-                float best = r.order == OutpostOrder.Build
-                    ? float.MaxValue : Reach * Reach;
-                foreach (var n in ResourceNode.All)
-                {
-                    if (n == null || n.Harvested || n.Resource != what) continue;
-                    if (camp.Island != null && n.Home != camp.Island) continue;   // not across the water
-                    Vector3 d = n.transform.position - from;
-                    d.y = 0f;
-                    float m = d.sqrMagnitude;
-                    // Not a rock up a cliff (2026-09-27): skip to the next.
-                    if (m < best && CampPath.Reachable(camp, n.transform.position)) { best = m; near = n; }
-                }
-                if (near != null) return Stand(near.transform.position, near.StandOff);
+                spot = Stand(bedAt);
+                return true;
             }
 
-            // Nothing in reach: potter about near the fire.
-            Vector2 off = Random.insideUnitCircle.normalized * Random.Range(6f, 12f);
-            return Stand(camp.CampCentre + new Vector3(off.x, 0f, off.y));
+            if (string.IsNullOrEmpty(what) || what == Res.Timber) return false;
+            var near = NearestNode(what);
+            if (near == null) return false;
+            workNode = near;
+            spot = Stand(near.transform.position, near.StandOff);
+            return true;
         }
+
+        /// The prop a gatherer is swinging at between trips
+        /// (`FindSomethingToWorkAt`), so the swing stops when it is worked
+        /// out from under him. Null at a wheat bed or at nothing.
+        ResourceNode workNode;
 
         /// Beside the thing, not inside it — and on a bearing of this hand's
         /// own, so three cutters sent to the same trunk ring it instead of
@@ -2746,12 +2823,36 @@ namespace SeaSick.World
             // never walk off it, and the slope give-up just below called
             // every errand "reached" from the pad: store, bay, rack all
             // arrived on the spot, trip after trip, poses flipping in place.
+            //
+            // **Far away is never "reached" (2026-10-03, honest bodies).**
+            // The give-up after `SlopeGiveUp` seconds used to return reached
+            // at ANY distance: a body refused by a slope 30 m from the store
+            // fired `BodyArrived` and the goods moved from 30 m away. Now
+            // only the foot of the climb (`SlopeArrive`) counts. Further out,
+            // a refusal that lasts is a stuck walker: the route is thrown
+            // away and re-planned from where he stands, his sheet says so
+            // (`stallNote` -> `bodyBlocked` -> the Stuck alert), and the
+            // stall guard above (`TickStall`) steps him out of the wedge and
+            // re-plans every `StallSeconds`, exactly as for a man pinned
+            // by a wall. His order and his trip are left alone -- he just
+            // does not arrive. The pad fix above (`Grounded(here)`) is
+            // untouched, so a sawyer on the lumber mill's boards still
+            // steps off them.
             if (!Walkability.MayStep(camp, Grounded(here), next, Walkability.Feet.Man))
             {
                 routeAge = Mathf.Max(routeAge, RePlanSeconds - 0.5f);
                 slopeStuck += dt;
-                if (dist < SlopeArrive || slopeStuck > SlopeGiveUp)
+                if (dist < SlopeArrive)
                 { slopeStuck = 0f; stride.Stop(); ClearRoute(); return Reached(gated); }
+                if (slopeStuck > SlopeGiveUp)
+                {
+                    slopeStuck = 0f;
+                    stallNote = "stuck — the ground's too steep to get there";
+                    hasRoute = false;
+                    route.Clear();
+                    routeAt = 0;
+                    if (routeAge > 0f) routeAge = 0f;   // re-planned next step
+                }
                 stride.Stop();
                 Face(leg, dt);
                 return false;
