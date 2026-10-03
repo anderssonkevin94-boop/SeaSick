@@ -11,11 +11,17 @@ echo "== quit editor $(date +%T)"
 ~/.unity/bin/unity cmd eval --json --code 'UnityEditor.EditorApplication.Exit(0); return "bye";' >/dev/null 2>&1
 # Any Unity editor process on this project, however it was launched (Hub, `open -a --args`,
 # extra -psn args between): 2026-09-28 a reopened editor slipped past the old exact pattern.
-EDITOR_RE="Unity.app/Contents/MacOS/Unity.*Desktop/SeaSick"
+EDITOR_RE="Unity.app/Contents/MacOS/Unity .*-projectPath /Users/kevinandersson/Desktop/SeaSick( |\$)"
 for i in $(seq 1 40); do pgrep -if "$EDITOR_RE" >/dev/null || break; sleep 3; done
 if pgrep -if "$EDITOR_RE" >/dev/null; then echo "EDITOR STILL OPEN - abort"; exit 1; fi
 echo "== unity build $(date +%T)"
-tools/build-ios.sh --dev > Builds/build-ios.out 2>&1; echo "build-ios exit $?"
+# Trust the exit code AND a fresh log: 2026-10-03 the export refused to start
+# (exit 2), the old log still said "Success", and xcodebuild shipped the
+# previous export to the phone.
+STAMP=$(date +%s)
+tools/build-ios.sh --dev > Builds/build-ios.out 2>&1; B=$?; echo "build-ios exit $B"
+[ $B -ne 0 ] && { cat Builds/build-ios.out | tail -5; echo "UNITY BUILD FAILED"; exit 1; }
+[ "$(stat -f %m Builds/ios-build.log 2>/dev/null || echo 0)" -ge "$STAMP" ] || { echo "UNITY BUILD LOG NOT FRESH"; exit 1; }
 grep -E "Build Finished|result=" Builds/ios-build.log | tail -2
 grep -q "Build Finished, Result: Success" Builds/ios-build.log || { echo "UNITY BUILD FAILED"; exit 1; }
 echo "== xcodebuild $(date +%T)"

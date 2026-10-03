@@ -13,8 +13,11 @@ UNITY="/Applications/Unity/Hub/Editor/6000.4.3f1/Unity.app/Contents/MacOS/Unity"
 LOG="$P/Builds/ios-build.log"
 mkdir -p "$P/Builds"
 
-if pgrep -f "Unity.app/Contents/MacOS/Unity" >/dev/null; then
-  echo "Unity editor is running -- close it first (batchmode cannot open the same project)."; exit 2
+# Only an editor on THIS project blocks the build (2026-10-03: other sessions
+# run headless compile checks on their own worktrees, e.g. ~/Desktop/SeaSick-x,
+# and the old any-Unity test refused the build while one ran).
+if pgrep -if "Unity.app/Contents/MacOS/Unity .*-projectPath $P( |\$)" >/dev/null; then
+  echo "Unity editor is running on $P -- close it first (batchmode cannot open the same project)."; exit 2
 fi
 
 DEV=""
