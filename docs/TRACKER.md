@@ -42,8 +42,9 @@ Sessions end every report with a **"loose ends:"** line. The orchestrator copies
 ## Known loose ends (each needs a fix or Kevin's "park it")
 
 - Harpoon phase 1 (only the phone can verify): real thumb taps on the markers and button; castaway, kraken-loot and wreckage hooks untested in play; the miss path unexercised; default snap tuning is a guess (does it snap often enough?); SmoothnessMeter during a reel unmeasured.
-- Harpoon art landed before Kevin approved the shots. The look needs his OK before the build.
-- Harpoon mount may block the nose of the crew passage. Show Kevin.
+- Harpoon placement fix cc81ff52 (stem fairlead, raised-bow mount): verified numerically only. In-engine check: the villager's re-shoot or Kevin's phone.
+- Raised bow: the kit post-lantern sits in the rope's path until the gun-lamp build removes all bow lanterns.
+- CoasterOutfitting may match the outgoing module during an in-play rebuild (unconfirmed). Sailing confirms/fixes it with the gun-lamp.
 
 
 - Cannon shift: nothing on screen shows the 3 s wait. Untested: switching the locked side mid-walk, and the ~6 s walk on a big hull.
