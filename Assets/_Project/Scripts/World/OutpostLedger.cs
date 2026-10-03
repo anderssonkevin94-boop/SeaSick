@@ -1196,6 +1196,35 @@ namespace SeaSick.World
         /// many to take down.
         public int treesFelled;
 
+        /// **One tree is one armful (2026-10-03).** Kevin: *"make forest
+        /// last longer ... logs is 2 ... obviously only the tree cut down is
+        /// the one that falls."* A timber armful is 2 logs (`Res.Armful`) and
+        /// a tree used to be worth 1, so every armful felled the cutter's
+        /// tree AND the next in the order. Now a tree is worth a whole
+        /// armful: `timberTaken` stays in LOGS, the felling is driven by
+        /// `TreesOwed`, and the island's log stock is its standing trees x
+        /// this (`Outpost.ReconcileWood`), so the same wood lasts twice as
+        /// long.
+        public const int LogsPerTree = 2;
+
+        /// Trees the logs taken so far have paid for.
+        public int TreesOwed => Mathf.FloorToInt(timberTaken / LogsPerTree);
+
+        /// Which logs-per-tree rule `timberTaken` was last written under:
+        /// 0 = a save from before 2026-10-03 (one log a tree).
+        public const int TimberTreesVersion = 1;
+        public int timberTreesV;
+
+        /// A pre-2026-10-03 save counted one log a tree: scale what it took
+        /// so the trees already down still match (`TreesOwed` unchanged), and
+        /// never run again. A fresh camp has taken nothing, so it just marks.
+        public void MigrateTimberTrees()
+        {
+            if (timberTreesV >= TimberTreesVersion) return;
+            timberTaken *= LogsPerTree;
+            timberTreesV = TimberTreesVersion;
+        }
+
         /// **How much of that wood has grown back**, in trees, fractions and
         /// all. Kevin, 2026-09-22: *"they should re-grow further away from
         /// camp, to help the camp not get overgrown."*
@@ -2704,6 +2733,11 @@ namespace SeaSick.World
             l.ceilingPer = CampfireCeiling;
             l.SeedStock(Res.Timber, workedHectares);
             l.lastTicked = TimeOfDay.Seconds;
+            // Born under the one-armful-a-tree rule: nothing to migrate. Not a
+            // field initializer -- `JsonUtility` keeps a constructed value for
+            // a field an old save does not mention, which would skip the
+            // migration those saves need.
+            l.timberTreesV = TimberTreesVersion;
             return l;
         }
 

@@ -374,9 +374,12 @@ namespace SeaSick.World
                 if (!wood.TreeAt(i).felled) standing++;
 
             var stock = ledger.Wood;
-            if (stock.standing > standing) stock.standing = standing;
+            // In LOGS: a standing tree is a whole armful (2026-10-03,
+            // `OutpostLedger.LogsPerTree`).
+            int logs = standing * OutpostLedger.LogsPerTree;
+            if (stock.standing > logs) stock.standing = logs;
             else if (stock.standing < 1f && standing >= 1)
-                stock.standing = Mathf.Min(Mathf.Max(1f, stock.standingMax), standing);
+                stock.standing = Mathf.Min(Mathf.Max(1f, stock.standingMax), logs);
         }
 
         /// **The herd is the authority on game, the way the trees are on
@@ -1821,16 +1824,14 @@ namespace SeaSick.World
         /// was swinging at it, as his swing ends. Nothing waits, so nothing
         /// is ever there for him to come back to and fell on his first swing.
         ///
-        /// **An armful of timber is two logs (`Res.Armful`), and the island's
-        /// stock IS its trees, one log each (`ReconcileWood`)** -- so each
-        /// armful fells TWO trees: his own, and the next one in the order.
-        /// With a second cutter out, that next tree is the one the camp handed
-        /// HIM, and it falls while he is at it (or walking to it; he turns
-        /// for the next trunk, `CampWorker.HaulPickupSpot`). With one cutter
-        /// it is the next-nearest trunk to the fire, falling in the same
-        /// instant as his. Making that second tree his too is an economy call
-        /// (a one-log timber armful, or a tree worth an armful), not this
-        /// file's to make.
+        /// **One armful, one tree (Kevin, 2026-10-03).** An armful of timber
+        /// is two logs (`Res.Armful`) and a tree is now worth two
+        /// (`OutpostLedger.LogsPerTree`; the island's log stock is its
+        /// standing trees x 2, `ReconcileWood`), so a full armful fells
+        /// exactly one tree -- HIS: `HisTreeFirst` swaps the trunk his body
+        /// was swinging at to the front of the order before paying. A short
+        /// armful (the store nearly full) leaves half a tree owed, and the
+        /// next pickup that completes it fells that cutter's tree.
         ///
         /// What is left for THIS method to pay is only ever catch-up -- the
         /// ledger ran while nobody was looking (unwatched, a save loading, the
@@ -1855,7 +1856,8 @@ namespace SeaSick.World
             PinRegrowth();
             DrawWood(wood);
 
-            int want = Mathf.FloorToInt(ledger.timberTaken);
+            ledger.MigrateTimberTrees();   // backstop: a ledger that never went through the load path
+            int want = ledger.TreesOwed;
             if (want <= ledger.treesFelled) return;
 
             // Owed with no pickup in front of us to pay it: catch-up. Settle
@@ -1881,10 +1883,41 @@ namespace SeaSick.World
             if (wood == null || wood.TreeCount == 0) return;
             BuildFellOrder(wood);
             DrawWood(wood);
-            int want = Mathf.FloorToInt(ledger.timberTaken);
+            int want = ledger.TreesOwed;
             if (want <= ledger.treesFelled) return;
             PruneClaims();
+            HisTreeFirst(wood, h);
             FellOwed(wood, want, false);
+        }
+
+        /// **Only the tree he cut falls (2026-10-03).** Kevin: *"obviously
+        /// only the tree cut down is the one that falls."* `FellOwed` fells
+        /// the front of the order, and with two cutters out the front can be
+        /// the OTHER man's trunk (the camp hands trees out front-first, but
+        /// pickups finish in any order). So before paying, the tree this
+        /// hauler's body was swinging at swaps places in the order with the
+        /// front standing tree: his goes down, the other man's stays up for
+        /// him. The felled set stays a prefix of the (swapped) order, which
+        /// is what `DrawWood` rests on. The swap lives until the order is
+        /// rebuilt (a plot raised, a gather party's take, a load) -- then the
+        /// picture is redrawn from the count, nearest the fire first, at a
+        /// moment nobody is watching a particular tree.
+        void HisTreeFirst(Terrain.SceneryWood wood, OutpostHand h)
+        {
+            if (h == null || fellOrder == null || posInOrder == null) return;
+            int mine = -1;
+            for (int k = 0; k < claimHands.Count; k++)
+                if (claimHands[k] != null && ReferenceEquals(claimHands[k].HandRow, h)) { mine = claimTrees[k]; break; }
+            if (mine < 0 || mine >= posInOrder.Length || wood.TreeAt(mine).felled) return;
+            int pm = posInOrder[mine];
+            if (pm < 0) return;   // a plot's tree: not the camp's to pay with
+            int pf = -1;
+            for (int k = Mathf.Clamp(fellCursor, 0, fellOrder.Length); k < fellOrder.Length; k++)
+                if (!wood.TreeAt(fellOrder[k]).felled) { pf = k; break; }
+            if (pf < 0 || pf >= pm) return;   // his is already the front
+            int front = fellOrder[pf];
+            fellOrder[pf] = mine; posInOrder[mine] = pf;
+            fellOrder[pm] = front; posInOrder[front] = pm;
         }
 
         /// The one loop that takes trees down: everything owed, front to back
@@ -2087,7 +2120,7 @@ namespace SeaSick.World
         /// Trees the ledger has paid for and the mesh has not yet shown. Zero
         /// is the only acceptable answer the moment she stops looking.
         public int TreesOwed => ledger == null
-            ? 0 : Mathf.Max(0, Mathf.FloorToInt(ledger.timberTaken) - ledger.treesFelled);
+            ? 0 : Mathf.Max(0, ledger.TreesOwed - ledger.treesFelled);
 
         /// The welded wood on this island, cached. `GetComponentInChildren` was
         /// being run on a path that is now touched every frame a camp is
@@ -4770,6 +4803,8 @@ namespace SeaSick.World
             // A pre-`playerBuild` save: its builders count as the player's,
             // so the food draft never takes them (2026-10-02).
             ledger.MigratePlayerBuild();
+            // A pre-2026-10-03 save: one log a tree, now one armful a tree.
+            ledger.MigrateTimberTrees();
             if (ledger.stores == null) ledger.stores = new List<OutpostStore>();
             if (ledger.stocks == null) ledger.stocks = new List<OutpostStock>();
 
