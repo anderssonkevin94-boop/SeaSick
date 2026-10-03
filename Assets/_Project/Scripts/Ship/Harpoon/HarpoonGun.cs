@@ -41,7 +41,11 @@ namespace SeaSick.Ship.Harpoon
         public bool Demand => LineOut || (Available && Target != null);
         public Transform BowPost => stand;
 
-        public IHarpoonable Target { get; private set; }
+        /// Null once the load is destroyed (boarded, sunk): an interface
+        /// reference does not go null with the Unity object, and the HUD
+        /// reads this the same frame a bottle comes aboard.
+        public IHarpoonable Target { get => Gone(target) ? null : target; private set => target = value; }
+        IHarpoonable target;
         public IReadOnlyList<IHarpoonable> InArc => inArc;
         public string TargetLabel => Target != null ? Target.HarpoonLabel : "";
         public float TargetDistance => Target != null ? FlatDistance(MuzzlePos, Target.HookPoint) : 0f;

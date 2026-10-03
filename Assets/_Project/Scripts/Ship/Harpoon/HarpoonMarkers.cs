@@ -192,13 +192,18 @@ namespace SeaSick.Ship.Harpoon
                 float size = isTarget ? ring * TargetScale : ring;
                 var box = new Rect(gx - size * 0.5f, gy - size * 0.5f, size, size);
                 // Never under another piece of the sea HUD or the combat row.
-                if (SeaHud.Overlaps(box)) continue;
-                if (CombatHud.Visible && CombatHud.Rect.Overlaps(box)) continue;
+                if (HudHit(box)) continue;
 
                 // On a ship CombatLock would lock: look only. The tap there is its.
                 bool onShip = combatLive && combat.WouldLock(new Vector2(gx, sp.y));
                 slots[count++] = new Slot { target = t, gui = new Vector2(gx, gy), isTarget = isTarget, tappable = !onShip };
-                if (!onShip) UIBlocker.Block(new Rect(gx - hit, gy - hit, hit * 2f, hit * 2f));
+                if (!onShip)
+                {
+                    // The full 60 pt circle where it is clear; near the HUD it
+                    // shrinks to the marker itself rather than steal a strip of it.
+                    var claim = new Rect(gx - hit, gy - hit, hit * 2f, hit * 2f);
+                    UIBlocker.Block(HudHit(claim) ? box : claim);
+                }
             }
 
             var prevColor = GUI.color;
@@ -207,6 +212,18 @@ namespace SeaSick.Ship.Harpoon
                 for (int i = 0; i < count; i++)
                     if (slots[i].isTarget == (pass == 1)) DrawMarker(slots[i], ring);
             GUI.color = prevColor;
+        }
+
+        /// True when `r` lands on the sea HUD, the combat row, or any panel the
+        /// layout has reserved (the bottom stack's Wheel slot included).
+        static bool HudHit(Rect r)
+        {
+            if (SeaHud.Overlaps(r)) return true;
+            if (CombatHud.Visible && CombatHud.Rect.Overlaps(r)) return true;
+            var issued = HudLayout.Issued;
+            for (int i = 0; i < issued.Count; i++)
+                if (issued[i].Overlaps(r)) return true;
+            return false;
         }
 
         void DrawMarker(in Slot m, float ring)
