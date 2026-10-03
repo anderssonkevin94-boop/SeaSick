@@ -277,6 +277,18 @@ namespace SeaSick.CameraRig
         /// Set by CombatLock; cleared when the target dies or breaks away.
         public Transform LockTarget { get; set; }
 
+        /// **A point at sea to frame the way a lock frames its target,
+        /// without being a lock** (2026-10-03, the kraken's surfacing): no
+        /// guns, no reticle, nothing `CombatLock` knows about -- just the
+        /// same seat swing, back-off and midpoint aim. A real `LockTarget`
+        /// outranks it; `PointOfInterest` (the shore-party framing, which
+        /// puts a target 55 m out under the lens and her off the bottom of
+        /// a portrait screen) is not used for this. Null = nothing.
+        public Vector3? SeaFocus { get; set; }
+
+        bool HasLockAim => LockTarget != null || SeaFocus.HasValue;
+        Vector3 LockAimPos => LockTarget != null ? LockTarget.position : SeaFocus.GetValueOrDefault();
+
         /// How far into the lock framing the rig is, 0..1, for `LockOnCheck`.
         public float LockLevel => lockLevel;
 
@@ -930,7 +942,7 @@ namespace SeaSick.CameraRig
             bool sailingQuarter = sailingYard != null && sailingYard.IsCoaster
                 && !PointOfInterest.HasValue && !SailOverride.HasValue
                 && !Overview.HasValue && !OverviewOverride.HasValue && overviewLevel < .001f
-                && LockTarget == null && lockLevel < .001f;
+                && !HasLockAim && lockLevel < .001f;
             // V2 at sea: the plain chase or a lock, no tuner, shore party or
             // island view. The rig then rides her translation exactly and
             // springs only the seat's swing round her (see the position
@@ -1086,7 +1098,7 @@ namespace SeaSick.CameraRig
                 flatForward.y = 0f;
                 flatForward = flatForward.sqrMagnitude < 0.001f ? Vector3.forward : flatForward.normalized;
 
-                bool locked = LockTarget != null;
+                bool locked = HasLockAim;
 
                 // Cruise: only while genuinely making way, and never in a fight.
                 bool making = motor != null && motor.CurrentSpeed >= motor.MaxSpeed * cruiseSpeed01;
@@ -1112,7 +1124,7 @@ namespace SeaSick.CameraRig
                 // Remember where the target was, so a lock that ENDS (sunk,
                 // dropped) eases out from where it was rather than snapping
                 // the seat and the aim home the frame LockTarget goes null.
-                if (locked) { lastLockPos = LockTarget.position; haveLockPos = true; }
+                if (locked) { lastLockPos = LockAimPos; haveLockPos = true; }
                 else if (lockLevel <= 0.001f) haveLockPos = false;
 
                 // The tuner overrides the BASE numbers, not the seat, so the
@@ -1206,9 +1218,9 @@ namespace SeaSick.CameraRig
                     sternDir = Quaternion.AngleAxis(orbitAngle * (1f - lockLevel), Vector3.up) * sternDir;
 
                 float lockBlend = 0f, lockAim = 0f;
-                if (lockLevel > 0.001f && (LockTarget != null || haveLockPos) && v2Seat)
+                if (lockLevel > 0.001f && (HasLockAim || haveLockPos) && v2Seat)
                 {
-                    Vector3 lockPos = LockTarget != null ? LockTarget.position : lastLockPos;
+                    Vector3 lockPos = HasLockAim ? LockAimPos : lastLockPos;
                     Vector3 tgt = new Vector3(lockPos.x, 0f, lockPos.z);
                     Vector3 toTarget = tgt - shipFlat;
                     float sep = toTarget.magnitude;
@@ -1255,9 +1267,10 @@ namespace SeaSick.CameraRig
                                   * Mathf.InverseLerp(0f, 10f, depth);
                     lockAim = SeaSick.Ship.JuiceTuning.SoftLimit(bearing * 0.5f + turnLead, keepOffDeg);
                 }
-                else if (lockLevel > 0.001f && LockTarget != null)
+                else if (lockLevel > 0.001f && HasLockAim)
                 {
-                    Vector3 tgt = new Vector3(LockTarget.position.x, 0f, LockTarget.position.z);
+                    Vector3 lockPos = LockAimPos;
+                    Vector3 tgt = new Vector3(lockPos.x, 0f, lockPos.z);
                     Vector3 toTarget = tgt - shipFlat;
                     float sep = toTarget.magnitude;
                     Vector3 dirToTarget = sep < 0.5f ? flatForward : toTarget / sep;

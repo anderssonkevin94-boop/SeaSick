@@ -192,6 +192,9 @@ namespace SeaSick.Dev
             DrawWeather();
 
             GUILayout.Space(8);
+            DrawKraken();
+
+            GUILayout.Space(8);
             DrawOverboard();
 
             GUILayout.Space(8);
@@ -285,6 +288,20 @@ namespace SeaSick.Dev
                 squalls?.DebugSpawnAhead();
             if (GUILayout.Button("Clear weather", GUILayout.Height(RowH)))
                 squalls?.DebugClear();
+            GUILayout.EndHorizontal();
+        }
+
+        /// **The kraken, build step 1 (2026-10-03):** surface it off a bow
+        /// quarter now, or send it back down, without waiting on the deep-water
+        /// spawning that step 4 brings. Harmless in step 1: no swats yet.
+        void DrawKraken()
+        {
+            GUILayout.Label("Kraken (dev)");
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Summon kraken", GUILayout.Height(RowH)))
+                Banner.Show(Kraken.DevSummon());
+            if (GUILayout.Button("Dismiss kraken", GUILayout.Height(RowH)))
+                Banner.Show(Kraken.DevDismiss());
             GUILayout.EndHorizontal();
         }
 
