@@ -35,6 +35,9 @@ namespace SeaSick.UI.Sheets
         CardKit.Bar bar;
         CardKit.Now now;
         Button mainBtn;
+        /// "Raise to level 2" (2026-10-03): the stations' own upgrade card,
+        /// fed this segment's length-priced step (`Outpost.WallUpgradeOf`).
+        StationPage.UpgradeCard upgrade;
 
         public WallSheet(Outpost camp, WallSegment segment)
         {
@@ -73,6 +76,9 @@ namespace SeaSick.UI.Sheets
             kindV = WatchTiles.Chip(chips, "KIND", false);
             bar = new CardKit.Bar(col);
             now = new CardKit.Now(col, CardKit.GlyphIcon("wall"));
+            upgrade = new StationPage.UpgradeCard(DoUpgrade, null, outpost);
+            upgrade.Root.style.marginTop = 12;
+            col.Add(upgrade.Root);
 
             var acts = CardKit.Acts(root);
             new CardKit.Confirm(acts, "Tear down", "Tap again · logs lost", TearDown);
@@ -100,7 +106,9 @@ namespace SeaSick.UI.Sheets
             WatchTiles.Set(hpV, $"{Mathf.RoundToInt(fill * 100f)}%");
             WatchTiles.Tone(hpV, breached ? 2 : fill < 0.5f ? 1 : 0);
             WatchTiles.Set(lenV, $"{wall.Length:0.#} m");
-            WatchTiles.Set(kindV, wall.IsGate ? "Gate" : "Palisade");
+            WatchTiles.Set(kindV, wall.Level >= 2
+                ? (wall.IsGate ? "Gate II" : "Wall II")
+                : (wall.IsGate ? "Gate" : "Palisade"));
             bar.Set(fill, breached ? CardKit.Ember : fill < 0.5f ? CardKit.Amber : (Color?)null);
 
             now.Set(breached ? "Broken through" : wall.IsGate ? "Your people walk through" : "Raiders break it to get in",
@@ -115,6 +123,28 @@ namespace SeaSick.UI.Sheets
             if (mainBtn.text != text) mainBtn.text = text;
             mainBtn.SetEnabled(enabled);
             CardKit.Primary(mainBtn, pri);
+            RefreshUpgrade(breached, repair != null || gate != null);
+        }
+
+        /// The upgrade card shows on a standing wall with no work ordered on
+        /// it (a breach is repaired first, a gate built first) -- one
+        /// decision at a time, and the sheet stays short.
+        void RefreshUpgrade(bool breached, bool workOrdered)
+        {
+            if (upgrade == null || outpost == null) return;
+            var l = outpost.Ledger;
+            bool show = l != null && !breached && !workOrdered;
+            upgrade.Root.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
+            if (!show) return;
+            var next = outpost.WallUpgradeOf(wall);
+            bool can = outpost.CanUpgradeWall(wall, out string why);
+            upgrade.Show(l, next, wall.Level, can, why);
+        }
+
+        void DoUpgrade()
+        {
+            if (outpost == null || wall == null) return;
+            if (outpost.UpgradeWall(wall)) Refresh();
         }
 
         void Main()

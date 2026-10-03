@@ -92,9 +92,15 @@ namespace SeaSick.World
         /// exists (the factory) and after (the refresh). The segment itself,
         /// and anything on the same two posts (the wall a gate is replacing),
         /// are not its neighbours.
-        public WallVisual.Fit FitFor(Vector3 a, Vector3 b, bool gate, WallSegment self)
+        /// `level` is for a segment not standing yet (the factory); a
+        /// standing one (`self`) answers with its own `Level`.
+        public WallVisual.Fit FitFor(Vector3 a, Vector3 b, bool gate, WallSegment self, int level = 1)
         {
-            var fit = new WallVisual.Fit { gate = gate, flip = WallVisual.Flip(a, b, Centre) };
+            var fit = new WallVisual.Fit
+            {
+                gate = gate, flip = WallVisual.Flip(a, b, Centre),
+                level = self != null ? self.Level : Mathf.Max(1, level),
+            };
             Vector3 ab = WallVisual.Flat(b - a);
             // A wall tower on either node (2026-09-27): the run stops at
             // its legs. Not for a gate -- a tower never snaps to a gate's
@@ -135,6 +141,10 @@ namespace SeaSick.World
         {
             public Vector3 at;
             public bool covered;
+            /// The highest level of the segments meeting here (2026-10-03):
+            /// one pillar per node, so a level 2 run puts the stone pillar
+            /// on both its ends, whatever runs on beside it.
+            public int level = 1;
             public readonly List<Vector3> outgoing = new List<Vector3>(3);
         }
 
@@ -162,8 +172,8 @@ namespace SeaSick.World
             {
                 var s = segs[i];
                 bool gateHere = s.IsGate && WallVisual.GateOnNode(WallVisual.Flat(s.B - s.A).magnitude);
-                AddEnd(nodes, s.A, s.B - s.A, gateHere);
-                AddEnd(nodes, s.B, s.A - s.B, gateHere);
+                AddEnd(nodes, s.A, s.B - s.A, gateHere, s.Level);
+                AddEnd(nodes, s.B, s.A - s.B, gateHere, s.Level);
             }
 
             CoverTowers(nodes);
@@ -179,7 +189,8 @@ namespace SeaSick.World
             bool postsChanged = false;
             var stale = new List<long>();
             foreach (var pair in posts)
-                if (pair.Value == null || !nodes.TryGetValue(pair.Key, out var n) || n.covered)
+                if (pair.Value == null || !nodes.TryGetValue(pair.Key, out var n) || n.covered
+                    || pair.Value.name != WallVisual.PostName(n.level))   // its level changed
                     stale.Add(pair.Key);
             foreach (var key in stale)
             {
@@ -200,14 +211,14 @@ namespace SeaSick.World
                     p.rotation = turn;
                     continue;
                 }
-                posts[pair.Key] = WallVisual.PostMarker(postRoot, n.at, yaw).transform;
+                posts[pair.Key] = WallVisual.PostMarker(postRoot, n.at, yaw, n.level).transform;
                 postsChanged = true;
             }
 
             if (postsChanged) WallVisual.BakePosts(postRoot, posts.Values);
         }
 
-        static void AddEnd(Dictionary<long, Node> nodes, Vector3 at, Vector3 outward, bool gateHere)
+        static void AddEnd(Dictionary<long, Node> nodes, Vector3 at, Vector3 outward, bool gateHere, int level)
         {
             long key = Key(at);
             if (!nodes.TryGetValue(key, out var n))
@@ -216,6 +227,7 @@ namespace SeaSick.World
                 nodes[key] = n;
             }
             n.covered |= gateHere;
+            n.level = Mathf.Max(n.level, level);
             n.outgoing.Add(WallVisual.Flat(outward));
         }
 

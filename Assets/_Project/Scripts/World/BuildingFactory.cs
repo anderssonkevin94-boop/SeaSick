@@ -351,7 +351,7 @@ namespace SeaSick.World
         /// its transform (the sheet's anchor, a hauler's target) is about
         /// the middle of the segment.
         public static GameObject RaiseWall(Transform parent, Vector3 a, Vector3 b,
-            bool gate, out Transform whole, out Transform broken, bool withBroken = true)
+            bool gate, out Transform whole, out Transform broken, bool withBroken = true, int level = 1)
         {
             Vector3 mid = 0.5f * (a + b);
             Vector3 run = b - a;
@@ -370,8 +370,9 @@ namespace SeaSick.World
             {
                 var chain = WallChain.Of(parent, create: true);
                 var camp = parent != null ? parent.GetComponentInParent<Outpost>() : null;
-                var fit = chain != null ? chain.FitFor(a, b, gate, null)
-                    : WallVisual.Loose(a, b, gate, camp);
+                // `level`: a saved level 2 segment comes back in stone (2026-10-03).
+                var fit = chain != null ? chain.FitFor(a, b, gate, null, level)
+                    : WallVisual.Loose(a, b, gate, camp, level);
                 WallVisual.Build(root.transform, a, b, fit,
                     camp != null ? camp.GroundAt : (System.Func<Vector3, float>)null,
                     out whole, out broken, withBroken);

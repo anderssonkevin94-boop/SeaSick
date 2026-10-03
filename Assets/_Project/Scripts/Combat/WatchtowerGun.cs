@@ -180,25 +180,45 @@ namespace SeaSick.Combat
             var go = new GameObject("TowerGun");
             go.transform.SetParent(gunPivot, false);
             go.transform.localPosition = Vector3.zero;
-            go.transform.localScale = Vector3.one * 1.1f;
+            go.transform.localScale = Vector3.one * (Level2Mark() != null ? Level2Scale : Level1Scale);
+            gunBody = go.transform;
 
             gun = go.AddComponent<Ship.Cannon>();
             gun.Build(wood, iron);
         }
 
+        /// The level 1 gun's size, and the level 2 gun's: three quarters of
+        /// Astra's cannon on the bay deck (`art-staging/watchtower-lvl2-v2`:
+        /// at that size the carriage and barrel sweep a 0.98 m circle round
+        /// `Gun_Pivot`, which fits inside the rail with room for the lookout).
+        const float Level1Scale = 1.1f;
+        const float Level2Scale = 0.75f;
+        /// The level 2 deck's boards stand 0.06 m over `Gun_Pivot` (the
+        /// marker sits at the 4.61 m deck line, the traverse ring at 4.67).
+        const float Level2Lift = 0.06f;
+        Transform gunBody;
+
+        /// The level 2 deck's own `Gun_Pivot` marker, else null.
+        Transform Level2Mark()
+        {
+            foreach (var t in GetComponentsInChildren<Transform>(true))
+                if (World.BuildingFactory.Stem(t.name) == "Gun_Pivot") return t;
+            return null;
+        }
+
         /// **Where the gun stands:** the level 2 deck's own `Gun_Pivot`
-        /// (2026-10-01: the turntable in the back-left quadrant, so the
-        /// lookout's corner and the lane round to it stay outside the swept
-        /// circle; same 4.76 m height), else level 1's deck centre at
-        /// `DeckHeight + 0.15`. It turns the full 360 degrees on both.
+        /// (2026-10-03: the middle of the bay behind the deck centre, at
+        /// 0.75 scale so its 0.98 m sweep clears the rail and the lookout's
+        /// corner), else level 1's deck centre at `DeckHeight + 0.15` at its
+        /// 1.1 scale. It turns the full 360 degrees on both.
         void Seat()
         {
             if (gunPivot == null) return;
-            Transform mark = null;
-            foreach (var t in GetComponentsInChildren<Transform>(true))
-                if (World.BuildingFactory.Stem(t.name) == "Gun_Pivot") { mark = t; break; }
-            gunPivot.position = mark != null ? mark.position
+            Transform mark = Level2Mark();
+            gunPivot.position = mark != null ? mark.position + Vector3.up * Level2Lift
                 : transform.position + Vector3.up * (DeckHeight + 0.15f);
+            if (gunBody != null)
+                gunBody.localScale = Vector3.one * (mark != null ? Level2Scale : Level1Scale);
         }
 
         /// The tower's model was just swapped (`BuildingFactory.ShowLevel`,

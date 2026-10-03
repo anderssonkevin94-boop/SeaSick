@@ -225,11 +225,12 @@ namespace SeaSick.World
             foreach (var (p, q) in new[] { (a, node), (node, b) })
             {
                 float len = Vector2.Distance(new Vector2(p.x, p.z), new Vector2(q.x, q.z));
-                float max = WallSegment.HpFor(len, false);
+                float max = WallSegment.HpFor(len, false, seg.Level);
                 StandWall(new BuiltWall
                 {
                     ax = p.x, az = p.z, bx = q.x, bz = q.z,
                     isGate = false, hp = max * frac, maxHp = max,
+                    level = seg.Level,   // both halves keep the run's level
                 });
             }
         }

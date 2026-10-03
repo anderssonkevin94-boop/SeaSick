@@ -542,8 +542,10 @@ namespace SeaSick.World
         /// from `footprint` and `ridge` rather than an authored prefab.
         /// **A guess, never played.**
         /// **The mill, fire II (food rework, 2026-09-27).** Two wheat grind
-        /// to one flour; bread and biscuit want it. PLACEHOLDER ART: wears
-        /// the sawmill model until Astra makes a mill.
+        /// to one flour; bread and biscuit want it. **Art (2026-10-03):** the
+        /// level 1 grain mill, a canvas awning over a quern on a stump
+        /// (`art-staging/grain-mill-lvl1-v1`, `GrainMillL1Import`):
+        /// wheat sheaves in, flour sacks out.
         public static readonly BuildPlan Mill = new BuildPlan
         {
             id = "Mill",
@@ -560,7 +562,7 @@ namespace SeaSick.World
             takes = Res.Wheat,
             makes = Res.Flour,
             rate = 6f,
-            prefab = "Settlement/sawmill",
+            prefab = "Settlement/mill_l1",
             front = Vector3.forward,
         };
 

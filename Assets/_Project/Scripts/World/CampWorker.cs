@@ -2385,7 +2385,11 @@ namespace SeaSick.World
             return m == VillagerActing.Mode.Saw && Cranks(post) ? VillagerActing.Mode.Crank : m;
         }
 
-        /// Does `post`'s model have the level 2 crank? Cached per building
+        /// Does `post`'s model have the level 2 crank, or the level 1 mill's
+        /// quern (2026-10-03: the miller's `Mill` clip is authored with the
+        /// peg at his front-right, so he stands square to the building's
+        /// front on the exact `Worker_Stand`, as the sawyer does at the
+        /// crank)? Cached per building
         /// and model revision (asked every frame he works).
         bool Cranks(Building post)
         {
@@ -2394,7 +2398,8 @@ namespace SeaSick.World
             {
                 crankPost = post;
                 crankRev = post.ModelRevision;
-                crankHere = post.GetComponentInChildren<MillCrankWheels>(true) != null;
+                crankHere = post.GetComponentInChildren<MillCrankWheels>(true) != null
+                    || post.GetComponentInChildren<MillQuern>(true) != null;
             }
             return crankHere;
         }

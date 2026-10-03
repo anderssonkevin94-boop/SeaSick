@@ -30,6 +30,7 @@ namespace SeaSick.World
         [SerializeField] bool isGate;
         [SerializeField] float maxHp = 100f;
         [SerializeField] float hp = 100f;
+        [SerializeField] int level = 1;
 
         /// The two posts, world metres, at ground height.
         public Vector3 A => a;
@@ -37,6 +38,13 @@ namespace SeaSick.World
         public bool IsGate => isGate;
         public float MaxHp => maxHp;
         public float Hp => hp;
+
+        /// **The segment's level (2026-10-03).** 1 is the palisade; 2 is
+        /// the stone-based wall / stone-pillared gate (`WallL2Import`).
+        /// Per segment, like every building's own level: a segment is what
+        /// is tapped, sheeted, broken and mended on its own. Saved on the
+        /// `BuiltWall` row; an old save's 0 reads as 1.
+        public int Level => Mathf.Max(1, level);
 
         /// **Breached, not destroyed.** A broken segment goes on standing
         /// there with its middle third gone: it is the thing the hands
@@ -86,18 +94,27 @@ namespace SeaSick.World
         /// in. Half again.
         public const float GateHpMultiplier = 1.5f;
 
-        public static float HpFor(float length, bool gate)
+        /// **Level 2's strength (2026-10-03), PROVISIONAL**: half again, the
+        /// same modest step the gate takes over the fence. A stone base is
+        /// sturdier, not a different game.
+        public const float Level2HpMultiplier = 1.5f;
+
+        public static float HpFor(float length, bool gate, int level = 1)
         {
             float h = Mathf.Max(1f, length) * HpPerMetre;
-            return gate ? h * GateHpMultiplier : h;
+            if (gate) h *= GateHpMultiplier;
+            return level >= 2 ? h * Level2HpMultiplier : h;
         }
 
         /// Stand one up. Called only by `Outpost.RaiseWall`, which owns the
         /// ledger row and the grid marking that go with it.
         public void Configure(Outpost camp, Vector3 postA, Vector3 postB, bool gate,
-            float hitPoints, float maxHitPoints, Transform wholeVisual, Transform brokenVisual)
+            float hitPoints, float maxHitPoints, Transform wholeVisual, Transform brokenVisual,
+            int wallLevel = 1)
         {
             Camp = camp;
+            // Before the chain's fit below: the key it remembers includes it.
+            level = Mathf.Max(1, wallLevel);
             a = postA;
             b = postB;
             isGate = gate;
@@ -230,7 +247,7 @@ namespace SeaSick.World
             if (map != null) map.MarkWall(this, false);   // off the map as a WALL
 
             isGate = true;
-            maxHp = HpFor(Length, true);
+            maxHp = HpFor(Length, true, Level);
             hp = maxHp;
             if (Row != null) { Row.isGate = true; Row.hp = hp; Row.maxHp = maxHp; }
             Redraw(gateWhole, gateBroken,
@@ -240,6 +257,23 @@ namespace SeaSick.World
             if (chain != null) chain.MarkDirty();
 
             if (map != null) map.MarkWall(this, true);    // back on, as a GATE
+        }
+
+        /// **Raise it a level (2026-10-03).** Called by `Outpost.UpgradeWall`
+        /// once the price is paid. The posts never move; the strength goes
+        /// to the new level's full, and the drawing follows on the chain's
+        /// next settle: the level is part of the fit's key, so `WallChain.
+        /// Refresh` redraws this segment with the level 2 kit and turns the
+        /// pillars on its two nodes to stone.
+        public void RaiseLevel(int toLevel)
+        {
+            if (toLevel <= Level) return;
+            level = toLevel;
+            maxHp = HpFor(Length, isGate, level);
+            hp = maxHp;
+            if (Row != null) { Row.level = level; Row.hp = hp; Row.maxHp = maxHp; }
+            ShowState();
+            if (chain != null) chain.MarkDirty();
         }
 
         /// Take it down for good. The ledger row goes with it and the cells

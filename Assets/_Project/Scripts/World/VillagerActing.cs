@@ -443,6 +443,19 @@ namespace SeaSick.World
         /// once a loop, so the wheels read their angle off this and stay in
         /// step with his fists. False when nobody there is playing it.
         public static bool CrankPhaseNear(Vector3 at, float radius, out float phase)
+            => ClipPhaseNear(CrankId, at, radius, out phase);
+
+        static readonly int MillId = Animator.StringToHash("Mill");
+
+        /// **Where in his `Mill` loop a body within `radius` of `at` is
+        /// (0..1)**, for `MillQuern`: the miller turns the quern once per
+        /// 1.5 s loop and the runner stone reads its angle off this.
+        public static bool MillPhaseNear(Vector3 at, float radius, out float phase)
+            => ClipPhaseNear(MillId, at, radius, out phase);
+
+        /// Where in the loop of the animator state `stateHash` a body within
+        /// `radius` of `at` is (0..1); false when nobody there plays it.
+        static bool ClipPhaseNear(int stateHash, Vector3 at, float radius, out float phase)
         {
             phase = 0f;
             for (int i = 0; i < live.Count; i++)
@@ -453,9 +466,9 @@ namespace SeaSick.World
                 d.y = 0f;
                 if (d.sqrMagnitude > radius * radius) continue;
                 var st = a.anim.GetCurrentAnimatorStateInfo(0);
-                if (st.shortNameHash != CrankId && a.anim.IsInTransition(0))
+                if (st.shortNameHash != stateHash && a.anim.IsInTransition(0))
                     st = a.anim.GetNextAnimatorStateInfo(0);
-                if (st.shortNameHash != CrankId) continue;
+                if (st.shortNameHash != stateHash) continue;
                 phase = st.normalizedTime - Mathf.Floor(st.normalizedTime);
                 return true;
             }

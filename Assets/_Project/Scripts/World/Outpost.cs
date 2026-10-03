@@ -1362,6 +1362,8 @@ namespace SeaSick.World
             if (string.IsNullOrEmpty(who)) return null;
             var already = BodyNamed(who);
             if (already != null) return already;
+            var held = HeldBody(who);
+            if (held != null) return held;
 
             var a = Crew.BornVillager.Make(who, transform);
             if (a == null)
@@ -1391,12 +1393,37 @@ namespace SeaSick.World
                 if (h == null || string.IsNullOrEmpty(h.name)) continue;
                 if (!h.born) continue;
                 if (bodies == null) bodies = Parked();
-                bool have = false;
+                // **One row, one body (Kevin 2026-10-03: "two physical yaras
+                // but i can only select and control one ... they run into
+                // each other and get stuck").** Picking her up lifts her out
+                // of this outpost's children, so `Parked` stopped seeing her
+                // and the next tick grew a second Yara at the fire. The body
+                // in the Hand counts as hers; any extra body wearing a row's
+                // name is the copy and goes. Only bodies -- never a row, so
+                // no real villager can be lost by this.
+                bool inHand = HeldBody(h.name) != null;
+                Crew.CrewAgent keep = null;
                 foreach (var a in bodies)
-                    if (a != null && a.DisplayName == h.name) { have = true; break; }
-                if (have) continue;
+                {
+                    if (a == null || a.DisplayName != h.name) continue;
+                    if (keep == null && !inHand) { keep = a; continue; }
+                    CampWorker.Remove(a);
+                    a.gameObject.SetActive(false);
+                    a.transform.SetParent(null, false);
+                    Destroy(a.gameObject);
+                }
+                if (keep != null || inHand) continue;
                 if (SpawnVillager(h.name) != null) bodies = Parked();
             }
+        }
+
+        /// The body in the Hand if it wears `who`, else null. Held bodies are
+        /// unparented while carried, so `Parked` cannot see them.
+        static Crew.CrewAgent HeldBody(string who)
+        {
+            var hand = UI.Hand.Instance;
+            var held = hand != null ? hand.Held : null;
+            return held != null && held.DisplayName == who ? held : null;
         }
 
         /// **Take a villager born here away with the ship.**
@@ -5655,7 +5682,7 @@ namespace SeaSick.World
         /// does NOT test the ground: a gate and a repair are both on a line
         /// that already proved itself.
         PendingBuild QueueWallRow(BuildPlan plan, Vector3 a, Vector3 b, bool fresh = false,
-            bool repair = false)
+            bool repair = false, int extraStone = 0, int extraBrick = 0)
         {
             Vector3 mid = 0.5f * (a + b);
             float len = Vector3.Distance(new Vector3(a.x, 0f, a.z), new Vector3(b.x, 0f, b.z));
@@ -5666,8 +5693,8 @@ namespace SeaSick.World
             // priced flat.** `BuildPlan.cost` is zero on the palisade
             // precisely so nothing can price a wall by the plan.
             int fullNeeded = isGatePlan ? Mathf.Max(0, plan.cost) : BuildPlans.PalisadeCost(len);
-            int fullStone = Mathf.Max(0, plan.stoneCost);
-            int fullBrick = Mathf.Max(0, plan.brickCost);
+            int fullStone = Mathf.Max(0, plan.stoneCost) + Mathf.Max(0, extraStone);
+            int fullBrick = Mathf.Max(0, plan.brickCost) + Mathf.Max(0, extraBrick);
             // Only a plain run's repair is a fraction (see
             // `PalisadeRepairShare`) -- a gate repair pays in full.
             float share = repair && !isGatePlan ? PalisadeRepairShare : 1f;
@@ -5732,8 +5759,11 @@ namespace SeaSick.World
             // is a palisade again. `repair: true` prices it by the gap
             // (`PalisadeRepairShare`) and tells `EnsureBlueprints` to draw
             // the partial ghost instead of the whole run.
+            // A level 2 segment also pays its share of the stone base.
+            float len = Vector3.Distance(new Vector3(seg.A.x, 0f, seg.A.z), new Vector3(seg.B.x, 0f, seg.B.z));
+            Economy.WallUpgrades.StoneOf(len, seg.IsGate, seg.Level, out int l2Stone, out int l2Brick);
             return QueueWallRow(seg.IsGate ? BuildPlans.Gate : BuildPlans.Palisade,
-                seg.A, seg.B, fresh: false, repair: true);
+                seg.A, seg.B, fresh: false, repair: true, extraStone: l2Stone, extraBrick: l2Brick);
         }
 
         /// The segment on these posts, or null. Posts are on the 2 m
@@ -5784,8 +5814,9 @@ namespace SeaSick.World
             {
                 if (gate && !existing.IsGate)
                 {
+                    // At the wall's own level: a level 2 wall becomes a level 2 gate.
                     var go = BuildingFactory.RaiseWall(transform, a, b, true,
-                        out var gWhole, out var gBroken);
+                        out var gWhole, out var gBroken, level: existing.Level);
                     // The visuals live under the segment that is already
                     // standing; the factory root is only their carrier.
                     gWhole.SetParent(existing.transform, false);
@@ -5829,15 +5860,17 @@ namespace SeaSick.World
             if (w == null || !Sited) return;
             Vector3 a = new Vector3(w.ax, GroundAt(new Vector3(w.ax, 0f, w.az)), w.az);
             Vector3 b = new Vector3(w.bx, GroundAt(new Vector3(w.bx, 0f, w.bz)), w.bz);
+            // An old save's row has no level (0): level 1, as it was built.
+            int lv = Mathf.Max(1, w.level);
             var root = BuildingFactory.RaiseWall(transform, a, b, w.isGate,
-                out var whole, out var broken);
+                out var whole, out var broken, level: lv);
             var seg = root.AddComponent<WallSegment>();
             seg.Configure(BuildPlans.Named(w.isGate ? BuildPlans.Gate.id : BuildPlans.Palisade.id));
             float maxHp = w.maxHp > 0f ? w.maxHp : WallSegment.HpFor(
-                Vector3.Distance(new Vector3(a.x, 0f, a.z), new Vector3(b.x, 0f, b.z)), w.isGate);
+                Vector3.Distance(new Vector3(a.x, 0f, a.z), new Vector3(b.x, 0f, b.z)), w.isGate, lv);
             seg.Row = w;
             w.maxHp = maxHp;
-            seg.Configure(this, a, b, w.isGate, w.hp, maxHp, whole, broken);
+            seg.Configure(this, a, b, w.isGate, w.hp, maxHp, whole, broken, lv);
             walls.Add(seg);
             ledger.builtWalls.Add(w);
 

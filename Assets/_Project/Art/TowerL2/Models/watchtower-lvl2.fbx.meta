@@ -7,18 +7,8 @@ ModelImporter:
   - first:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule
-      name: SS_TowerL1_Hemp
-    second: {fileID: 2100000, guid: 843cda6c1e93043a1a8115e665925fec, type: 2}
-  - first:
-      type: UnityEngine:Material
-      assembly: UnityEngine.CoreModule
-      name: SS_TowerL1_Peeled_Stone
+      name: No Name
     second: {fileID: 2100000, guid: 3dab29cfa0fdd47c2963665e72223a6c, type: 2}
-  - first:
-      type: UnityEngine:Material
-      assembly: UnityEngine.CoreModule
-      name: SS_TowerL1_Wood
-    second: {fileID: 2100000, guid: 73057fd8265454e3dbfc04a207a8dc85, type: 2}
   materials:
     materialImportMode: 1
     materialName: 0

@@ -6,17 +6,28 @@ using UnityEngine;
 
 namespace SeaSick.Dev
 {
-    /// **The level 2 watchtower, big gun deck (2026-10-01),
-    /// `art-staging/watchtower-lvl2-v1`.** A copy of `TowerL1Import`.
+    /// **The level 2 watchtower, final (2026-10-03),
+    /// `art-staging/watchtower-lvl2-v2`:** level 1's tower with its lower half
+    /// in stone, a gun bay opposite the ladder (deck 2.5 x 3.4 m at 4.61 m,
+    /// total height 5.51 m) and a chunky rail. Replaces the first draft
+    /// (v1, 3.20 m deck, `Lookout_Corner`/`Lane_*`/`Hatch` markers).
     ///
     /// Puts `Art/TowerL2/Models/watchtower-lvl2.fbx` behind its own wrapper,
     /// `Resources/Settlement/watchtower_l2.prefab` (created on the first
     /// run, GUID kept after), the level 2 look `BuildingLevelLook` swaps in
     /// (`BuildingFactory.ShowLevel`). Its materials are the level 1 tower's
     /// own three (`Art/TowerL1/Materials`), remapped by stem; nothing new.
-    /// Five new markers: `Gun_Pivot` (`WatchtowerGun`), `Lookout_Corner`
-    /// (`Outpost.TowerMarks`), `Lane_1`/`Lane_2` (`Outpost.TowerClimbShape`)
-    /// and `Hatch` (informational).
+    ///
+    /// **Markers.** The FBX carries four: `Ladder_Bottom`, `Ladder_Top`,
+    /// `Lookout_Anchor` (all unchanged from level 1) and `Gun_Pivot`
+    /// (`WatchtowerGun`, 0.565 m behind the deck centre, in the bay).
+    /// `Lookout_Corner` is NOT in the model, so this import derives it: the
+    /// deck's front-right strip, between the ladder hatch and the rail
+    /// (wrapper (0.85, 4.61, 0.68)), 0.53 m outside the 0.98 m circle the
+    /// 0.75-scale gun sweeps. From the hatch it is a short straight walk
+    /// (the nearest point of that line is 1.2 m from the pivot), so no
+    /// `Lane_*` markers are made (`Outpost.TowerClimbShape` skips them when
+    /// absent) and `Hatch` is gone (it was informational).
     ///
     /// - The model lives OUTSIDE `Art/AstraPlaytest`, so
     ///   `AstraPlaytestImport.Execute` (which flattens every material slot of
@@ -49,14 +60,18 @@ namespace SeaSick.Dev
             { "Ladder_Bottom", new Vector3(0f, 0.05f, 1.23f) },
             { "Ladder_Top", new Vector3(0f, 4.61f, 1.10f) },
             { "Lookout_Anchor", new Vector3(0f, 4.61f, 0f) },
-            { "Gun_Pivot", new Vector3(-0.40f, 4.76f, -0.40f) },
-            { "Lookout_Corner", new Vector3(1.19f, 4.61f, -1.20f) },
-            { "Lane_1", new Vector3(0.45f, 4.61f, 1.175f) },
-            { "Lane_2", new Vector3(1.175f, 4.61f, 1.175f) },
-            { "Hatch", new Vector3(0f, 4.61f, 1.46f) },
+            // README says 0.6 behind the centre; the FBX carries 0.565.
+            { "Gun_Pivot", new Vector3(0f, 4.61f, -0.565f) },
         };
 
-        [MenuItem("SeaSick/Art/Import level 2 watchtower (big gun deck V1)")]
+        /// Markers the model does not carry: made here, in the wrapper frame,
+        /// under the model node (see the class comment).
+        static readonly Dictionary<string, Vector3> Derived = new Dictionary<string, Vector3>
+        {
+            { "Lookout_Corner", new Vector3(0.85f, 4.61f, 0.68f) },
+        };
+
+        [MenuItem("SeaSick/Art/Import level 2 watchtower (V2, stone + gun bay)")]
         public static string Execute()
         {
             var log = new StringBuilder();
@@ -149,7 +164,10 @@ namespace SeaSick.Dev
 
             foreach (var name in source)
             {
-                if (!mats.TryGetValue(Stem(name), out var target))
+                // The v2 export carries ONE unnamed material (the look is all
+                // vertex colour): the plain, map-less level 1 material.
+                string stem = name == "No Name" ? "SS_TowerL1_Peeled_Stone" : Stem(name);
+                if (!mats.TryGetValue(stem, out var target))
                     throw new System.Exception($"{Model}: material '{name}' has no SS_TowerL1_* match");
                 mi.AddRemap(new AssetImporter.SourceAssetIdentifier(typeof(Material), name), target);
             }
@@ -231,11 +249,21 @@ namespace SeaSick.Dev
                     r.receiveShadows = true;
                 }
 
-                foreach (var kv in Markers)
+                // Derived markers: empty children of the model node, placed
+                // by wrapper-frame position (the node carries the frame
+                // rotation and the FBX's 100x scale, so go through world space).
+                foreach (var kv in Derived)
+                {
+                    var d = new GameObject(kv.Key).transform;
+                    d.SetParent(model.transform, false);
+                    d.position = root.TransformPoint(kv.Value);
+                    log.AppendLine($"{kv.Key}: derived at {kv.Value:F3}");
+                }
+                foreach (var kv in Markers.Concat(Derived))
                 {
                     var p = root.InverseTransformPoint(Find(root, kv.Key).position);
                     log.AppendLine($"{kv.Key}: {p:F3} (want {kv.Value:F3})");
-                    if ((p - kv.Value).magnitude > 0.01f)
+                    if ((p - kv.Value).magnitude > 0.02f)
                         throw new System.Exception($"{kv.Key} at {p:F3}, spec {kv.Value:F3}: the wrapper frame is off");
                 }
 
@@ -244,16 +272,16 @@ namespace SeaSick.Dev
                 int subs = rs.Sum(r => r.GetComponent<MeshFilter>().sharedMesh.subMeshCount);
                 var used = rs.SelectMany(r => r.sharedMaterials).Distinct().Count();
                 log.AppendLine($"bounds {b.min:F3}..{b.max:F3} size {b.size:F3}; tris {Tris(root)}; renderers {rs.Length}, submeshes {subs}, materials {used}");
-                if (Mathf.Abs(b.max.y - 5.37f) > 0.02f || Mathf.Abs(b.min.y + 0.12f) > 0.02f)
-                    throw new System.Exception($"height {b.min.y:F3}..{b.max.y:F3}, spec -0.12..5.37: the scale is off");
+                if (Mathf.Abs(b.max.y - 5.51f) > 0.02f || Mathf.Abs(b.min.y) > 0.02f)
+                    throw new System.Exception($"height {b.min.y:F3}..{b.max.y:F3}, spec 0..5.51: the scale is off");
                 // The ground parts stay in the 2.6 m plot; the deck (from
-                // 4.21 m up) overhangs it to ~3.92 m.
+                // 3.2 m up) is 2.5 x 3.4 m, the bay overhanging the back.
                 var low = Bounds(root, 0.5f);
                 log.AppendLine($"below 0.5 m {low.size.x:F2} x {low.size.z:F2}; deck {b.size.x:F2} x {b.size.z:F2}");
                 if (low.size.x > 2.6f || low.size.z > 2.6f)
                     throw new System.Exception($"ground footprint {low.size.x:F2} x {low.size.z:F2} exceeds the 2.6 x 2.6 plot");
-                if (b.size.x > 3.95f || b.size.z > 3.95f)
-                    throw new System.Exception($"deck {b.size.x:F2} x {b.size.z:F2} is over 3.95 m");
+                if (b.size.x > 2.6f || b.size.z > 3.6f)
+                    throw new System.Exception($"deck {b.size.x:F2} x {b.size.z:F2} is over 2.6 x 3.6 m");
 
                 PrefabUtility.SaveAsPrefabAsset(contents, Wrapper);
             }

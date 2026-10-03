@@ -56,6 +56,12 @@ namespace SeaSick.World
             left = Find(transform, "Gate_Hinge");
             right = Find(transform, "Gate_Hinge_Right");
             passage = Find(transform, "Gate__Passage");
+            // The level 2 gate (`Gate_L2`, 2026-10-03): the same contract
+            // under the kit's own names -- hinges at the wrapper root, leaves
+            // under them, the same -100/+100 swing (checked by WallL2Import).
+            if (left == null) left = Find(transform, "Gate2_Hinge");
+            if (right == null) right = Find(transform, "Gate2_Hinge_Right");
+            if (passage == null) passage = Find(transform, "Gate2__Passage");
             if (left != null) leftClosed = left.localRotation;
             if (right != null) rightClosed = right.localRotation;
             if (left == null || right == null)

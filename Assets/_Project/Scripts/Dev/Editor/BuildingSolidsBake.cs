@@ -46,6 +46,10 @@ namespace SeaSick.Dev
         static readonly (string prefab, string[] parts)[] Table =
         {
             ("Settlement/sawmill", new[] { "Mill_Workbench", "Mill_InputCradle", "Mill_OutputRack", "Mill_Pillars" }),
+            // The level 1 grain mill (2026-10-03): the quern's stump and the
+            // sheaf rack / sack pallet; the platform is walked on, the
+            // canopy and dressing are overhead.
+            ("Settlement/mill_l1", new[] { "Mill1_QuernBase", "Input_Container_Rack", "Output_Container_Pallet" }),
             ("Settlement/kitchen_astra", new[] { "Counter_Fitted_Base", "Continuous_Countertop", "Sculpted_Hearth",
                 "Hearth_Back", "Grill_Firebox", "Grill_Stone_Slab", "Serving_Terrace_Supports", "Serving_Front_Terrace",
                 "Canopy_Frame" }),

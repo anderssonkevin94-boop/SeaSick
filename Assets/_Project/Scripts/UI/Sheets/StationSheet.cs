@@ -2054,6 +2054,16 @@ namespace SeaSick.UI.Sheets
             public void Update(OutpostLedger l, int raisedIndex, string planId, int level, bool pinned = false)
             {
                 var next = l.NextUpgradeAt(raisedIndex, planId);
+                string why = null;
+                bool can = next != null && l.CanUpgradeAt(raisedIndex, planId, out why);
+                Show(l, next, level, can, why, pinned);
+            }
+
+            /// The same card for a step that is not a `raised` row's: a wall
+            /// segment's (2026-10-03, `WallSheet`), priced by its length.
+            /// `can` / `why` are the caller's own answer to "can it go up".
+            public void Show(OutpostLedger l, UpgradeStep next, int level, bool can, string why, bool pinned = false)
+            {
                 if (next == null)
                 {
                     fixSlot?.Bind(camp, default(ShortFix.Fix));
@@ -2093,7 +2103,6 @@ namespace SeaSick.UI.Sheets
                     label.EnableInClassList("st-cost--short", have < n);
                 }
 
-                bool can = l.CanUpgradeAt(raisedIndex, planId, out string why);
                 var fix = default(ShortFix.Fix);
                 if (!can && fixSlot != null)
                 {
@@ -2139,6 +2148,9 @@ namespace SeaSick.UI.Sheets
                 if (step.housesBonus != 0) parts.Add(step.housesBonus == 1 ? "+1 bed" : $"+{step.housesBonus} beds");
                 // The level 2 tower's whole point (2026-10-01).
                 if (parts.Count == 0 && step.planId == OutpostLedger.WatchtowerId) return "bigger gun deck";
+                // A wall or gate (2026-10-03, `WallUpgrades`).
+                if (parts.Count == 0 && (step.planId == BuildPlans.Palisade.id || step.planId == BuildPlans.Gate.id))
+                    return $"stone, +{Mathf.RoundToInt((WallSegment.Level2HpMultiplier - 1f) * 100f)}% strength";
                 return parts.Count > 0 ? string.Join(" · ", parts) : "stronger";
             }
         }

@@ -902,6 +902,9 @@ namespace SeaSick.World
         /// breached segment brings the breach back.
         public float hp;
         public float maxHp;
+        /// The segment's level (2026-10-03, `WallSegment.Level`). 0 -- every
+        /// save written before level 2 walls -- reads as 1.
+        public int level;
 
         public Vector3 A => new Vector3(ax, 0f, az);
         public Vector3 B => new Vector3(bx, 0f, bz);

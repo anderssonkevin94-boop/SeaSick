@@ -101,9 +101,14 @@ namespace SeaSick.World
             /// A wall tower stands on this end's node (2026-09-27): the run
             /// stops `TowerTrim` short of it, at the tower's legs.
             public bool towerA, towerB;
+            /// The segment's level (2026-10-03): 2 draws the stone-based
+            /// level 2 kit. 0 and 1 are level 1 -- and add nothing to `Key`,
+            /// so a level 1 drawing is keyed exactly as before.
+            public int level;
 
             public int Key => (gate ? 1 : 0) | (flip ? 2 : 0) | (trimA ? 4 : 0)
-                | (trimB ? 8 : 0) | (ownPosts ? 16 : 0) | (towerA ? 32 : 0) | (towerB ? 64 : 0);
+                | (trimB ? 8 : 0) | (ownPosts ? 16 : 0) | (towerA ? 32 : 0) | (towerB ? 64 : 0)
+                | (level >= 2 ? 128 : 0);
         }
 
         // --- the kit ---------------------------------------------------------
@@ -111,6 +116,53 @@ namespace SeaSick.World
         static GameObject[] runs;
         static GameObject half, quarter, breach, post, gate, gateBroken;
         static bool loaded, ready;
+
+        /// **One level's pieces (2026-10-03).** Level 1 is the fields above,
+        /// loaded as always; level 2 (`Dev/Editor/WallL2Import`: stone base,
+        /// squared oak, stone pillars, `Wall2_*` / `Gate_L2`) is loaded the
+        /// first time a level 2 segment is drawn. Same frame, same snap
+        /// contract, so every placement rule below serves both.
+        sealed class KitSet
+        {
+            public GameObject[] runs;
+            public GameObject half, quarter, breach, post, gate, gateBroken;
+        }
+
+        static KitSet kit1, kit2;
+        static bool loaded2;
+
+        /// The pieces for `level`. Level 2 falls back to level 1 (with one
+        /// warning) when its wrappers have not been imported yet.
+        static KitSet KitFor(int level)
+        {
+            if (!loaded) Load();
+            if (level < 2) return kit1;
+            if (!loaded2)
+            {
+                loaded2 = true;
+                var k = new KitSet
+                {
+                    runs = new[] { Kit("Wall2_Run_1m_A"), Kit("Wall2_Run_1m_B"), Kit("Wall2_Run_1m_C") },
+                    half = Kit("Wall2_Filler_050m"),
+                    quarter = Kit("Wall2_Filler_025m"),
+                    breach = Kit("Wall2_Breached_1m"),
+                    post = Kit("Wall2_Post"),
+                    gate = Kit("Gate_L2"),
+                    gateBroken = Kit("Gate_Breached_L2"),
+                };
+                bool ok = k.runs[0] != null && k.runs[1] != null && k.runs[2] != null && k.half != null
+                    && k.quarter != null && k.breach != null && k.post != null && k.gate != null
+                    && k.gateBroken != null;
+                if (ok) kit2 = k;
+                else Debug.LogWarning("[Camp] level 2 wall kit missing under Resources/Palisade "
+                    + "(run Dev/Editor/WallL2Import) -- level 2 walls are drawn with level 1's pieces.");
+            }
+            return kit2 ?? kit1;
+        }
+
+        /// The post piece's name at `level` -- what a chain's post marker is
+        /// called, so a node whose level changed knows its marker is stale.
+        public static string PostName(int level) => KitFor(level).post.name;
 
         /// False when any piece failed to load -- the factory then raises
         /// the old extruded wall, the same way `BuildingFactory.Dress`
@@ -137,6 +189,11 @@ namespace SeaSick.World
             post = Kit("Palisade_Post");
             gate = Kit("Gate_L1");
             gateBroken = Kit("Gate_Breached_3m");
+            kit1 = new KitSet
+            {
+                runs = runs, half = half, quarter = quarter, breach = breach,
+                post = post, gate = gate, gateBroken = gateBroken,
+            };
             ready = runs[0] != null && runs[1] != null && runs[2] != null && half != null
                 && quarter != null && breach != null && post != null && gate != null
                 && gateBroken != null;
@@ -274,10 +331,10 @@ namespace SeaSick.World
         /// one per node as before (`HasPostAt`, the turning), but the drawing
         /// is `BakePosts`'s one merged mesh. Falls back to a real post when
         /// the kit cannot be merged.
-        public static GameObject PostMarker(Transform parent, Vector3 node, float yaw)
+        public static GameObject PostMarker(Transform parent, Vector3 node, float yaw, int level = 1)
         {
-            if (!loaded) Load();
-            if (!Merge || !MeshOf(post).mergeable) return Post(parent, node, yaw);
+            var post = KitFor(level).post;
+            if (!Merge || !MeshOf(post).mergeable) return Post(parent, node, yaw, level);
             var go = new GameObject(post.name);
             go.transform.SetParent(parent, false);
             go.transform.SetPositionAndRotation(node + Vector3.down * PostSink,
@@ -296,9 +353,12 @@ namespace SeaSick.World
             if (!Merge || !MeshOf(post).mergeable) return;
             var batch = new Batch(postRoot);
             Matrix4x4 toRoot = postRoot.worldToLocalMatrix;
+            // A marker is named after its post piece (`PostMarker`): level 2
+            // nodes carry the stone pillar.
+            var post2 = KitFor(2).post;
             foreach (var t in markers)
                 if (t != null && t.GetComponent<Renderer>() == null && t.childCount == 0)
-                    batch.Add(post, toRoot * t.localToWorldMatrix);
+                    batch.Add(t.name == post2.name ? post2 : post, toRoot * t.localToWorldMatrix);
             batch.Finish("WallPosts batch");
         }
 
@@ -316,12 +376,13 @@ namespace SeaSick.World
 
         /// The fit of a drawing that has no chain to ask: a blueprint ghost.
         /// It carries its own posts and faces the camp it stands in, if any.
-        public static Fit Loose(Vector3 a, Vector3 b, bool isGate, Outpost camp)
+        public static Fit Loose(Vector3 a, Vector3 b, bool isGate, Outpost camp, int level = 1)
             => new Fit
             {
                 gate = isGate,
                 flip = camp != null && Flip(a, b, camp.CampCentre),
                 ownPosts = true,
+                level = level,
             };
 
         /// Does a gate of this length put its own post on its nodes?
@@ -342,7 +403,8 @@ namespace SeaSick.World
             if (!loaded) Load();
             whole = Holder(root, "Whole");
             broken = withBroken ? Holder(root, "Broken") : null;
-            var s = new Span(a, b, fit.flip, ground);
+            var k = KitFor(fit.level);
+            var s = new Span(a, b, fit.flip, ground, k);
             // A standing segment is merged; a ghost (no broken state) is
             // not -- it is tinted piece by piece and redrawn as the thumb
             // drags.
@@ -363,8 +425,8 @@ namespace SeaSick.World
                 // make a whole quarter: that post is 0.38 m deep and hides
                 // it, where a gap beside it would be a hole.
                 float side = (L - GateSpan) * 0.5f;
-                s.Spawn(whole, gate, side, GateSpan).AddComponent<GateLeaves>().Fit();
-                if (broken != null) s.Spawn(broken, gateBroken, side, GateSpan);
+                s.Spawn(whole, k.gate, side, GateSpan).AddComponent<GateLeaves>().Fit();
+                if (broken != null) s.Spawn(broken, k.gateBroken, side, GateSpan);
                 if (side > Eps)
                 {
                     foreach (var h in new[] { whole, broken })
@@ -395,7 +457,7 @@ namespace SeaSick.World
                 {
                     float third = (u1 - u0) / 3f;
                     s.Tile(broken, u0, u0 + third, tA, false);
-                    s.Metres(broken, breach, u0 + third, u0 + 2f * third);
+                    s.Metres(broken, k.breach, u0 + third, u0 + 2f * third);
                     s.Tile(broken, u0 + 2f * third, u1, false, tB);
                 }
             }
@@ -405,15 +467,15 @@ namespace SeaSick.World
             if (fit.ownPosts && !(fit.gate && GateOnNode(L)))
             {
                 float yaw = s.Yaw;
-                Post(root, a, yaw);
-                Post(root, b, yaw);
+                Post(root, a, yaw, fit.level);
+                Post(root, b, yaw, fit.level);
             }
         }
 
         /// A post with its centre on `node`, turned to `yaw` (degrees).
-        public static GameObject Post(Transform parent, Vector3 node, float yaw)
+        public static GameObject Post(Transform parent, Vector3 node, float yaw, int level = 1)
         {
-            if (!loaded) Load();
+            var post = KitFor(level).post;
             var go = Object.Instantiate(post, parent, false);
             go.name = post.name;
             go.transform.SetPositionAndRotation(node + Vector3.down * PostSink,
@@ -470,6 +532,7 @@ namespace SeaSick.World
             readonly System.Func<Vector3, float> ground;
             readonly float midY;
             readonly uint seed;
+            readonly KitSet kit;
             public readonly float L;
 
             /// The holders whose pieces are merged rather than
@@ -478,8 +541,9 @@ namespace SeaSick.World
 
             public float Yaw => Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
 
-            public Span(Vector3 a, Vector3 b, bool flip, System.Func<Vector3, float> ground)
+            public Span(Vector3 a, Vector3 b, bool flip, System.Func<Vector3, float> ground, KitSet kit)
             {
+                this.kit = kit;
                 this.a = a;
                 this.b = b;
                 this.flip = flip;
@@ -563,7 +627,7 @@ namespace SeaSick.World
                 for (int i = 0; i < metres; i++)
                 {
                     if (i == before) u = Fillers(holder, u, rest);
-                    Place(holder, runs[Variant(u)], u, 1f);
+                    Place(holder, kit.runs[Variant(u)], u, 1f);
                     u += 1f;
                 }
                 if (metres == 0) Fillers(holder, u, rest);
@@ -571,8 +635,8 @@ namespace SeaSick.World
 
             float Fillers(Transform holder, float u, int rest)
             {
-                if (rest >= 2) { Place(holder, half, u, 0.5f); u += 0.5f; }
-                if ((rest & 1) == 1) { Place(holder, quarter, u, 0.25f); u += 0.25f; }
+                if (rest >= 2) { Place(holder, kit.half, u, 0.5f); u += 0.5f; }
+                if ((rest & 1) == 1) { Place(holder, kit.quarter, u, 0.25f); u += 0.25f; }
                 return u;
             }
 
