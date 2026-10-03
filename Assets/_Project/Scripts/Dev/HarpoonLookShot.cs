@@ -25,7 +25,8 @@ namespace SeaSick.Dev
     /// `Shot(path)` (game view + HUD), `Close(path, yaw, dist, height, fov)`
     /// (temp camera, phone portrait, no HUD), `Info()`, `End()`.
     /// Bow lantern on its beam (Kevin 2026-10-04): `Lantern(dir)` = the line
-    /// out dead ahead over it, three shots + its clearance to the line.
+    /// out dead ahead over it, three shots + its clearance to the line;
+    /// `Passage(path)` = high view of the foredeck nose the mount blocks.
     public class HarpoonLookShot : MonoBehaviour
     {
         static HarpoonLookShot inst;
@@ -152,6 +153,28 @@ namespace SeaSick.Dev
             sb.AppendLine(Close(Path.Combine(dir, "lantern_close_high.png"), 150f, 4.0f, 2.2f, 45f, 0.05f));
             sb.AppendLine(Shot(Path.Combine(dir, "lantern_game_deadahead.png")));
             return sb.ToString();
+        }
+
+        /// **The crew passage at the nose** (e_crew_passage_bow.png): high 3/4
+        /// from astern over the foredeck, phone portrait, no HUD, so the mount's
+        /// footprint (and the lantern beam's root at the stem) reads against
+        /// the deck the hands walk. Reports the nearest crew hand for scale.
+        public static string Passage(string path, float height = 6.5f, float back = 3.2f, float fov = 42f)
+        {
+            if (inst == null) return "not running";
+            var m = inst.mount;
+            Vector3 fwd = Vector3.ProjectOnPlane(m.forward, Vector3.up).normalized;
+            Vector3 aim = m.position + fwd * 0.9f;
+            Vector3 eye = m.position - fwd * back + Vector3.up * height;
+            string hand = "no crew hand found";
+            float best = float.MaxValue;
+            foreach (var a in FindObjectsByType<Animator>(FindObjectsSortMode.None))
+            {
+                if (!a.isActiveAndEnabled || !a.transform.IsChildOf(inst.ship)) continue;
+                float d = Vector3.Distance(a.transform.position, m.position);
+                if (d < best) { best = d; hand = $"nearest animated hand {a.name} {d:F1} m from the mount"; }
+            }
+            return Render(path, eye, aim, fov) + "; " + hand;
         }
 
         string LanternReport()
