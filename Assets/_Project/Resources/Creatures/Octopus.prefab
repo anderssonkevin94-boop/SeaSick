@@ -9,6 +9,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 4745667221682280695}
+  - component: {fileID: 586741661523421785}
+  - component: {fileID: 444730621317235514}
   m_Layer: 0
   m_Name: Octopus
   m_TagString: Untagged
@@ -32,6 +34,32 @@ Transform:
   - {fileID: 7113126233721377730}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &586741661523421785
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3828019314749316691}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6f47dab5a384f4e3ab8d61219ab51000, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Combat.KrakenArms
+  poses: {fileID: 11400000, guid: 7912b2cee74d24e85959f4b96ca824ad, type: 2}
+  curlBudgetDeg: 50
+--- !u!114 &444730621317235514
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3828019314749316691}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a4eecda764e9d412499ee423f298e1c9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Combat.Kraken
 --- !u!1001 &7294810921200055337
 PrefabInstance:
   m_ObjectHideFlags: 0

@@ -76,6 +76,9 @@ namespace SeaSick.Dev
             // The island art's ship-style ambient (Kevin, 2026-10-02: "that
             // rich beautiful color that we somehow created for the boat").
             "SeaSick.Terrain.RichLight",
+            // The kraken's look and motion (GDD §6 "The Kraken", 2026-10-03:
+            // "every number ... lives in a FeelLab tuning class").
+            "SeaSick.Combat.KrakenTuning",
         };
 
         /// The spec's range table, keyed "ClassName.fieldName". Anything not
@@ -85,6 +88,15 @@ namespace SeaSick.Dev
         static readonly Dictionary<string, (float min, float max)> Ranges =
             new Dictionary<string, (float min, float max)>
         {
+            // The kraken: a few knobs whose default*0.25..4 fallback is wrong
+            // (negative, or needing zero).
+            {"KrakenTuning.waterlineOffset",   (-6f, 3f)},
+            {"KrakenTuning.swayAmplitudeDeg",  (0f, 25f)},
+            {"KrakenTuning.sideSwayDeg",       (0f, 15f)},
+            {"KrakenTuning.breathDeg",         (0f, 6f)},
+            {"KrakenTuning.turnDegPerSec",     (0f, 30f)},
+            {"KrakenTuning.foam",              (0f, 4f)},
+
             {"HelmTuning.rudderPerRim",        (0.3f, 1.5f)},
             {"HelmTuning.rudderCurve",         (0.5f, 3f)},
             {"HelmTuning.rudderMoveSpeed",     (1f, 12f)},
