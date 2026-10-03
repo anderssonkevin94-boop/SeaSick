@@ -286,7 +286,7 @@ namespace SeaSick.World
             id = "Storehouse",
             baseStoneCost = 4,
             label = "storehouse",
-            blurb = "keeps 40 more out of the weather",
+            blurb = "keeps much more out of the weather",
             resource = Res.Timber,
             baseCost = 25,
             storeCapacity = 40,
@@ -313,7 +313,8 @@ namespace SeaSick.World
             baseStoneCost = 0,
             kind = BuildKind.Fire,
             label = "make camp",
-            blurb = "a fire, and somewhere to keep ten of anything",
+            // Storage slots (2026-10-03): the fire cache, a groundsheet and tripod.
+            blurb = "a fire, and a small cache beside it",
             resource = Res.Timber,
             baseCost = 4,
             storeCapacity = OutpostLedger.CampfireCeiling,
@@ -351,7 +352,8 @@ namespace SeaSick.World
             id = "Storage",
             baseStoneCost = 2,
             label = "store hut",
-            blurb = "keeps 20 more of each thing",
+            // Storage slots (2026-10-03): its own containers, not "+20 of each".
+            blurb = "racks, sacks and bays",
             resource = Res.Timber,
             baseCost = 16,
             storeCapacity = 20,

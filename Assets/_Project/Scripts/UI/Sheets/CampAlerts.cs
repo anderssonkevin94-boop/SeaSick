@@ -272,22 +272,25 @@ namespace SeaSick.UI.Sheets
         }
 
         /// **"Store full" (2026-09-30)**: a pile sits at the store's ceiling
-        /// (`ceilingPer`, what the fire and the store huts keep of EACH
-        /// thing) AND a hand is trying to add to it -- gathering it, a
-        /// station whose rack can go nowhere, a load waiting at the store
+        /// (its container slots since 2026-10-03, `OutpostLedger.CapacityOf`;
+        /// was `ceilingPer`, the same of EACH thing) AND a hand is trying
+        /// to add to it -- gathering it, a station whose rack can go nowhere, a load waiting at the store
         /// (`OutpostLedger.StoreFullFor`). A full pile nobody is feeding is
         /// a saving, not a problem, so it is not an alert. Since 2026-10-02
         /// the chip names the piles AND the fix, whole (it wraps, never
         /// cut): "Store full of boards · build or upgrade a store hut". The
-        /// fix is a store hut (Build): it keeps 20 more of each thing at
-        /// once, where raising an existing one needs fire II and gives 10.
+        /// fix is a store hut (Build): its own containers at once (a log
+        /// cradle, stone crib, sacks, ...), where raising an existing one
+        /// needs fire II and gives one more slot of each family.
         /// `stops`: somebody's work has stopped on it (not only a
         /// gatherer's pile topped out).
         internal static bool StoreFullText(OutpostLedger l, out string text, out bool stops)
         {
             text = null;
             stops = false;
-            if (l == null || l.ceilingPer <= 0) return false;
+            // Slots (2026-10-03): no store slots and no fallback ceiling =
+            // nowhere to keep anything, which is not a "full" store.
+            if (l == null || (l.storeSlots == null && l.ceilingPer <= 0)) return false;
             var piles = fullPiles;
             piles.Clear();
             foreach (var h in l.hands)

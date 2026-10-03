@@ -181,6 +181,7 @@ namespace SeaSick.World
             // the buildings the moment a storehouse went up; instead the
             // buildings ARE the ledger's ceiling, pushed in before every tick.
             ledger.ceilingPer = KeepsOfEach;
+            PushStoreSlots();
             // The ship's end of the transfer orders (2026-09-24) -- bound
             // before the tick, so a trip starts only while she is here.
             ShipCargoSide.BindTo(this);
@@ -962,6 +963,7 @@ namespace SeaSick.World
                 SetCampCentre(stoodAt);
             ledger.built.Add(plan.id);
             ledger.ceilingPer = KeepsOfEach;
+            PushStoreSlots();
 
             // **The ground is cleared now, not when it was sited.** At home
             // the village clearing is reserved before the scenery is baked;
@@ -3435,6 +3437,44 @@ namespace SeaSick.World
         /// singular and means the same thing there: home keeps one pile.
         public int StoreCapacity => KeepsOfEach;
 
+        /// **The store's container slots, per `StoreFamily` (2026-10-03).**
+        ///
+        /// Kevin approved the storage-slot containers preview: capacity =
+        /// visible slots x bundle size (`StorageSlots`). Summed over what
+        /// STANDS, each building at its own level, the same walk
+        /// `KeepsOfEach` makes -- the fire cache, every store hut (level 2 =
+        /// `StorageSlots.HutLevel2ExtraSlotsPerFamily` more of each), every
+        /// storehouse -- plus the fire cache early for a camp somebody is
+        /// actively building (`KeepsOfEach`'s landed-rations exception).
+        /// `openCapacity` is 0 on every island since 2026-09-22 and is not
+        /// expressed in slots. `Techs.StoreBonus` is no longer read for
+        /// capacity: the level's extra is slots now.
+        public void StoreSlotsNow(int[] into)
+        {
+            if (into == null) return;
+            System.Array.Clear(into, 0, into.Length);
+            bool campfireBuilt = false;
+            for (int i = 0; i < built.Count; i++)
+            {
+                var b = built[i];
+                if (b == null) continue;
+                StorageSlots.AddSite(into, b.Id, LevelOfBuilding(b));
+                if (b.Id == BuildPlans.Campfire.id) campfireBuilt = true;
+            }
+            if (!campfireBuilt && Building) StorageSlots.AddFireCache(into);
+        }
+
+        /// Push `StoreSlotsNow` into the ledger, beside `ceilingPer`, before
+        /// every tick and on every raise/load -- one definition of the store,
+        /// and it is what stands on the ground. Reuses the ledger's array.
+        void PushStoreSlots()
+        {
+            if (ledger == null) return;
+            if (ledger.storeSlots == null || ledger.storeSlots.Length != StorageSlots.FamilyCount)
+                ledger.storeSlots = new int[StorageSlots.FamilyCount];
+            StoreSlotsNow(ledger.storeSlots);
+        }
+
         public IReadOnlyList<Building> Built => built;
 
         public int CountOf(string planId)
@@ -4906,6 +4946,7 @@ namespace SeaSick.World
             StandSavedRoads();
 
             ledger.ceilingPer = KeepsOfEach;
+            PushStoreSlots();
 
             // **Every already-sited grave, exactly where it stood
             // (2026-09-28, death/rescue phase 3).** Same "buildings never

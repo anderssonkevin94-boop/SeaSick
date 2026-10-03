@@ -569,7 +569,7 @@ namespace SeaSick.UI.Sheets
             {
                 case OutpostOrder.Gather:
                     if (h.target == Res.Game) return $"{l.StoreCountOf(Res.Food)} food in the store";
-                    return $"{l.StoreCountOf(h.target)} / {l.ceilingPer} kept in the store";
+                    return $"{l.StoreCountOf(h.target)} / {l.KeepsUpTo(h.target)} kept in the store";
                 case OutpostOrder.Build:
                 {
                     var site = l.BuildSiteFor(h) ?? l.Focus;
@@ -770,7 +770,7 @@ namespace SeaSick.UI.Sheets
                     }
                     else if (here) sub = "here now";
                     else if (r == Res.Game) sub = $"{l.StoreCountOf(Res.Food)} food";
-                    else sub = $"{l.StoreCountOf(r)} / {l.ceilingPer}";
+                    else sub = $"{l.StoreCountOf(r)} / {l.KeepsUpTo(r)}";
                     break;
                 }
                 default:

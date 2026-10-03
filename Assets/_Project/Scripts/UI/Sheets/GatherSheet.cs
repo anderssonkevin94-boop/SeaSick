@@ -136,7 +136,7 @@ namespace SeaSick.UI.Sheets
 
             int kept = l.StoreCountOf(res);
             stockBig.text = kept.ToString();
-            stockSmall.text = res == Res.Game ? "food in the store" : $"of {l.ceilingPer} kept";
+            stockSmall.text = res == Res.Game ? "food in the store" : $"of {l.KeepsUpTo(res)} kept";
             SheetKit.SetBar(stockBar, l.Fill01(res), SheetBits.Colour(res));
 
             if (huntBlocked)

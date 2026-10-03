@@ -1059,12 +1059,78 @@ namespace SeaSick.World
         /// What is left in the ground, per resource. Seeded from the survey.
         public List<OutpostStock> stocks = new List<OutpostStock>();
 
-        /// **What this place can keep OF EACH THING.** A campfire watches over
-        /// ten of anything; a storehouse is how you raise it. This ceiling is
-        /// the whole reason the loop does not become an idle game: hands fill
-        /// it and stop, so the only way to get more out of an island is to
-        /// invest in it.
+        /// **What this place can keep OF EACH THING -- now only the fallback
+        /// (2026-10-03).** A campfire watched over ten of anything; a
+        /// storehouse raised it. This ceiling is the whole reason the loop
+        /// does not become an idle game: hands fill it and stop, so the only
+        /// way to get more out of an island is to invest in it.
+        ///
+        /// **Storage slots replaced it** (Kevin approved the storage-slot
+        /// containers preview, 2026-10-03): a live camp's capacity is
+        /// `storeSlots` (`CapacityOf`). `Outpost` still pushes the old number
+        /// here (saved, read by the probes), and a ledger with no slot layout
+        /// pushed -- the self-tests, which set this to 1000 to take the
+        /// ceiling out of the question -- keeps the old uniform rule.
         public int ceilingPer = CampfireCeiling;
+
+        /// **The store's container slots, per `StoreFamily`** (2026-10-03),
+        /// or null = no layout (fall back to `ceilingPer`). NOT saved: it is
+        /// what stands, pushed by `Outpost.PushStoreSlots` before every tick,
+        /// exactly like `ceilingPer` was -- one definition, the buildings.
+        [System.NonSerialized] public int[] storeSlots;
+
+        /// Slots of family `f` this camp has (0 with no layout).
+        public int SlotsOf(StoreFamily f) =>
+            storeSlots != null && (int)f < storeSlots.Length ? storeSlots[(int)f] : 0;
+
+        /// **Units of `res` the STORE could hold in all** (2026-10-03): the
+        /// slots of its family that the OTHER resources of that family do not
+        /// occupy, times `res`'s bundle. A slot holds one resource; an empty
+        /// one can be claimed by any resource of the family and frees when
+        /// emptied. "Occupy" counts the store AND every load already walking
+        /// there (a haul reserves its room at pickup), whole bundles, a part
+        /// bundle being a whole slot. `res`'s own units are NOT subtracted --
+        /// that is `RoomFor`. Order-free, so whichever slot the view draws a
+        /// resource in, the arithmetic is the same.
+        ///
+        /// **Over capacity (Kevin DECIDED 2026-10-03):** an old save can hold
+        /// more than this. Nothing is ever deleted; `RoomFor` is simply 0
+        /// until the count falls back under it.
+        public int CapacityOf(string res)
+        {
+            if (storeSlots == null) return ceilingPer;
+            var f = StorageSlots.FamilyOf(res);
+            int free = SlotsOf(f);
+            int m = StorageSlots.MemberCount(f);
+            bool flight = AnyInFlightToStore();
+            for (int k = 0; k < m && free > 0; k++)
+            {
+                string o = StorageSlots.Member(f, k);
+                if (o == res) continue;
+                int n = StoreCountOf(o);
+                if (flight) n += InFlightTo(HaulPlace.Store, -1, o);
+                free -= StorageSlots.SlotsFor(o, n);
+            }
+            return Mathf.Max(0, free) * StorageSlots.BundleOf(res);
+        }
+
+        /// **"N / this" for a sheet** (2026-10-03): the most of `res` the store
+        /// could show right now -- `CapacityOf`, or the count itself when an
+        /// old save holds more than its slots (never "34 / 30" read as a
+        /// bug; it reads "34 / 34", full). Replaces every `ceilingPer` a
+        /// sheet printed.
+        public int KeepsUpTo(string res) => Mathf.Max(StoreCountOf(res), CapacityOf(res));
+
+        /// Cheap pre-check for `CapacityOf`'s inner loop: is anybody carrying
+        /// anything to the store at all? Saves a walk over the hands for
+        /// every empty family member.
+        bool AnyInFlightToStore()
+        {
+            if (hands == null) return false;
+            foreach (var h in hands)
+                if (h != null && h.Hauling && h.haulTo == HaulPlace.Store) return true;
+            return false;
+        }
 
         public OutpostStore Store(string resource, bool create = false)
         {
@@ -1112,8 +1178,12 @@ namespace SeaSick.World
         /// Room left in the STORE for this resource, in whole units, net of
         /// loads already walking there (a haul reserves its room at pickup).
         /// The ceiling is the store's; station stock does not use it up.
+        ///
+        /// **Per resource from the slots since 2026-10-03** (`CapacityOf`):
+        /// room in its own part-filled slot plus every free slot of its
+        /// family. Never negative -- an over-capacity old save reads 0.
         public int RoomFor(string resource) =>
-            Mathf.Max(0, ceilingPer - StoreCountOf(resource) - InFlightTo(HaulPlace.Store, -1, resource));
+            Mathf.Max(0, CapacityOf(resource) - StoreCountOf(resource) - InFlightTo(HaulPlace.Store, -1, resource));
 
         /// Whole and part together -- what a tool check or a recipe's "have"
         /// arithmetic wants, since a saw blade at 0.95 is still a saw blade.
@@ -3442,8 +3512,17 @@ namespace SeaSick.World
         }
 
         /// How full this resource's pile is, for anything drawing a gauge.
-        public float Fill01(string resource) => ceilingPer > 0
-            ? Mathf.Clamp01(StoreCountOf(resource) / (float)ceilingPer) : 0f;
+        /// Against `CapacityOf` (2026-10-03): the room this resource could
+        /// still claim, so a sack's worth of potato with the other sacks free
+        /// reads low, and the same potato with every other sack taken reads
+        /// full. An over-capacity pile reads 1.
+        public float Fill01(string resource)
+        {
+            int n = StoreCountOf(resource);
+            int cap = CapacityOf(resource);
+            if (cap <= 0) return n > 0 ? 1f : 0f;
+            return Mathf.Clamp01(n / (float)cap);
+        }
 
         /// Nothing more for this hand to do: their pile is full, or their
         /// stock is gone, or the thing they work at has nothing to work on.

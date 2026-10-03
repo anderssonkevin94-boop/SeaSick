@@ -1170,8 +1170,9 @@ namespace SeaSick.UI.Sheets
             {
                 // A selected spot pauses when its output has nowhere to go
                 // ("store full of X", `OutpostLedger.SpotPause`): the store's
-                // per-kind ceiling, "a campfire watches over ten of anything".
-                int ceil = Mathf.Max(1, l.ceilingPer);
+                // room for what it makes -- its container slots since
+                // 2026-10-03 (`KeepsUpTo`), no longer one ceiling of each.
+                int ceil = Mathf.Max(1, l.KeepsUpTo(r.makes));
                 if (r.takes.Length == 0) text = $"Runs until {ceil} are in the store.";
                 else if (r.takes.Length == 1) text = $"Runs until {RunsOut(ResDefs.Label(r.takes[0].res))} or {ceil} are in the store.";
                 else text = $"Runs until an input runs out or {ceil} are in the store.";
@@ -1483,7 +1484,8 @@ namespace SeaSick.UI.Sheets
                 while (j >= 0 && l.StoreCountOf(held[j]) < c) { held[j + 1] = held[j]; j--; }
                 held[j + 1] = r;
             }
-            int ceil = Mathf.Max(1, l.ceilingPer);
+            // Per resource since storage slots (2026-10-03): what its family's
+            // slots leave it (`KeepsUpTo`), not one ceiling of each kind.
             for (int i = 0; i < storeTiles.Length; i++)
             {
                 var t = storeTiles[i];
@@ -1493,6 +1495,7 @@ namespace SeaSick.UI.Sheets
                 if (!show) continue;
                 string res = held[i];
                 int have = l.StoreCountOf(res);
+                int ceil = Mathf.Max(1, l.KeepsUpTo(res));
                 StationPage.SetIcon(t.icon, res);
                 t.res = res;
                 string text = ItemIconSet.Get(res) == null ? $"{ResDefs.Label(res)} {have}" : $"{have}/{ceil}";
@@ -1501,7 +1504,7 @@ namespace SeaSick.UI.Sheets
                 bool full = have >= ceil;
                 t.root.EnableInClassList("st-store-tile--full", full);
             }
-            string holds = held.Count == 0 ? "The store is empty" : $"Holds {ceil} of each kind";
+            string holds = held.Count == 0 ? "The store is empty" : "Kept in sacks, racks and bays";
             if (storeHolds.text != holds) storeHolds.text = holds;
             string all = held.Count > storeTiles.Length ? $"All {held.Count} kinds →" : "All stores →";
             if (storeAll.text != all) storeAll.text = all;

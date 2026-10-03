@@ -132,7 +132,7 @@ namespace SeaSick.UI.Sheets
                 fill = FillFood,
             },
             BuildStep("store", BuildPlans.Storage.id, "Build a store hut",
-                $"The fire holds only {OutpostLedger.CampfireCeiling} of each. Store huts raise the cap.",
+                "The fire cache holds only a little. A store hut adds racks, sacks and bays.",
                 (o, l) => Built(l, BuildPlans.Storehouse.id)),
             BuildStep("sawmill", Saw, "Build a sawmill", "Logs into boards. Boards raise the fire."),
             new Step

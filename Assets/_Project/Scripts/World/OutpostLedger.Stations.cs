@@ -873,7 +873,8 @@ namespace SeaSick.World
             var st = Store(res);
             int whole = st != null ? st.whole : 0;
             float part = st != null ? st.part : 0f;
-            return (ceilingPer - whole - InFlightTo(HaulPlace.Store, -1, res)) - part;
+            // The slots' capacity (2026-10-03), not the old uniform ceiling.
+            return (CapacityOf(res) - whole - InFlightTo(HaulPlace.Store, -1, res)) - part;
         }
 
         /// Put the load down where it was going (the store if that station
@@ -928,7 +929,10 @@ namespace SeaSick.World
             }
 
             var st = Store(h.haulRes, true);
-            int put = force ? h.haulCount : Mathf.Clamp(ceilingPer - st.whole, 0, h.haulCount);
+            // What the slots still take (2026-10-03): `CapacityOf` already
+            // nets out the other resources of the family and their loads
+            // walking in, and leaves this load's own reservation out.
+            int put = force ? h.haulCount : Mathf.Clamp(CapacityOf(h.haulRes) - st.whole, 0, h.haulCount);
             st.whole += put;
             h.haulCount -= put;
             if (put > 0 && h.haulFrom == HaulPlace.Field && h.haulTo == HaulPlace.Store)

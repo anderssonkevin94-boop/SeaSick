@@ -376,7 +376,7 @@ namespace SeaSick.World
                 if (s == null || s.whole <= 0 || string.IsNullOrEmpty(s.resource)) continue;
                 if (summarySb.Length > 0) summarySb.Append("   ·   ");
                 summarySb.Append(Lower(s.resource)).Append(' ').Append(s.whole)
-                         .Append(" / ").Append(l.ceilingPer);
+                         .Append(" / ").Append(l.KeepsUpTo(s.resource));
             }
             if (summarySb.Length == 0) summarySb.Append("nothing gathered yet");
             summaryText = summarySb.ToString();
@@ -395,6 +395,9 @@ namespace SeaSick.World
             if (l == null) return 0L;
             long k = ((long)l.keyX * 73856093) ^ ((long)l.keyZ * 19349663)
                      ^ ((long)l.ceilingPer * 83492791);
+            // The slot layout (2026-10-03) is what "may hold" means now.
+            if (l.storeSlots != null)
+                for (int f = 0; f < l.storeSlots.Length; f++) k = k * 31 + l.storeSlots[f];
             foreach (var s in l.stores)
             {
                 if (s == null || string.IsNullOrEmpty(s.resource)) continue;
