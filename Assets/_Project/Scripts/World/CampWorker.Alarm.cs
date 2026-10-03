@@ -34,6 +34,62 @@ namespace SeaSick.World
         bool bodyHidden;
         float returnSpearStuck;
 
+        /// This body has been taken off its job by the alarm (any role:
+        /// fetching, hiding, crouching, carrying a spear home) and has not
+        /// been handed back yet. Not saved, same as the roles' own picture.
+        bool alarmTook;
+
+        /// **Off the job for an emergency, cleanly (2026-10-03).** The alarm,
+        /// a defence or a rescue takes a hand off whatever he was doing; the
+        /// BOOKS already dropped his load where he stood
+        /// (`OutpostLedger.DropCarriedLoadNow`) and cancelled the trip. This
+        /// is the body agreeing with them, the frame he is taken:
+        ///
+        /// - **His tree / rock / clearing / beast go back** (`ReleaseClaim`).
+        ///   A hider used to keep his trunk, so the camp's claim table had a
+        ///   "cutter" sitting in a hut, and that trunk could not go to anyone
+        ///   else for the whole raid.
+        /// - **The trip picture is forgotten** (`ForgetTrip`), and the
+        ///   one-frame "trip just ended" edge (`wasHauling`) with it: left
+        ///   set, the first free frame after the raid read it as his trip
+        ///   finishing and walked him to the old drop-off to set down a load
+        ///   the books had already dropped on the ground. Kevin's rule: a
+        ///   villager never carries anything the ledger did not hand him.
+        /// - **Nothing in his arms** (`Drop`) and **no carcass on his
+        ///   shoulders** (`HunterProps.PutDown`): the carcass is the ground
+        ///   load now. A hunter caught out kept it on his back through the
+        ///   whole fight, because the fight keeps driving his spear prop.
+        ///
+        /// Idempotent: the roles hand a body between each other (fetch ->
+        /// defend -> carry the spear home) and each calls this.
+        void StepOffJob()
+        {
+            ReleaseClaim();
+            ForgetTrip();
+            wasHauling = false;
+            Drop();
+            DropHunterLoad();
+        }
+
+        /// **Back to the same job, from where he stands (2026-10-03).** The
+        /// order was never touched (the alarm, a fight and a rescue are not
+        /// orders), so all this does is clear the picture: `Resting` is where
+        /// every order's own loop decides what happens next -- a cutter asks
+        /// the camp for a tree, a hauler picks up his next trip, a sawyer
+        /// walks back to his bench. Without it a hider came out still
+        /// `Working`, and a cutter stood at the hut door "chopping" his old
+        /// tree until `chopPatience` ran out. Left alone while the Hand has
+        /// him or he is in the air/down: those own the phase.
+        void BackOnJob()
+        {
+            Drop();
+            ClearRoute();
+            if (phase == Phase.Held || phase == Phase.Flying || phase == Phase.Landing
+                || phase == Phase.Downed) return;
+            if (phase != Phase.Resting) wait = 0f;
+            phase = Phase.Resting;
+        }
+
         /// True = handled this frame.
         bool TickAlarmRole(OutpostHand r, float dt)
         {
@@ -58,14 +114,23 @@ namespace SeaSick.World
                 // take it from there).
                 if (bodyHidden && !asleep) RevealBody(r);
                 returnSpearStuck = 0f;
+                // The alarm is done with him: back to the same job, clean
+                // (2026-10-03, see `BackOnJob`).
+                if (alarmTook) { alarmTook = false; BackOnJob(); }
                 return false;
             }
             if (camp == null || camp.Ledger == null)
             {
                 r.fetchingSpear = r.hidingHut = r.hidingCrouch = r.returningSpear = false;
                 if (bodyHidden && !asleep) RevealBody(r);
+                if (alarmTook) { alarmTook = false; BackOnJob(); }
                 return false;
             }
+
+            // **The frame the alarm takes him (2026-10-03):** off his job
+            // cleanly -- tree let go, trip picture forgotten, carcass down.
+            // See `StepOffJob`.
+            if (!alarmTook) { alarmTook = true; StepOffJob(); }
 
             // **The alarm wakes a sleeper (2026-09-28).** A role is his whole
             // night now: left `asleep`, the reveal guard above would keep him
@@ -177,7 +242,10 @@ namespace SeaSick.World
                 }
             }
 
-            phase = Phase.Working;
+            // Inside: standing still, not at work (2026-10-03). Was
+            // `Working`, which -- with the tree claim he also kept -- read to
+            // the felling as a man swinging at his trunk from inside a hut.
+            phase = Phase.Resting;
             acting?.Set(VillagerActing.Mode.None);
             if (!bodyHidden) HideBody(r);
             return true;
@@ -201,6 +269,10 @@ namespace SeaSick.World
                 }
             }
 
+            // `Working` only so the spacing pass treats him as planted (a
+            // crouch is not shoved about); his claims went at `StepOffJob`,
+            // so it can no longer read as felling or hunting (2026-10-03),
+            // and `BackOnJob` clears it when the raid lets him go.
             phase = Phase.Working;
             Face(camp.CampCentre - transform.position, dt);
             acting?.Set(VillagerActing.Mode.Bend);

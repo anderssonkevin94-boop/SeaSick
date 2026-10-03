@@ -217,6 +217,20 @@ namespace SeaSick.World
 
         // --- the pickup --------------------------------------------------------
 
+        /// **Logs just came off the island's trees: (hand, logs).** Fired by
+        /// `PickUp` the instant a Field timber pickup takes its armful,
+        /// right after `timberTaken` rises. Set by `Outpost.SyncFelling`
+        /// (null for a probe's ledger, which has no wood to fell). Not saved.
+        ///
+        /// 2026-10-03 (Kevin's rule: "trees fall because someone actually
+        /// cut them, while they're cutting"): the scene used to learn about
+        /// the cut only on its next quarter-second `CatchUp`, by which time
+        /// the hauler had turned for home -- so the tree he chopped stood
+        /// while he walked off with its logs, and fell later on a grace
+        /// timer with nobody near it. This lets `Outpost` drop it in the
+        /// very frame his chopping ends, while he is still facing it.
+        [System.NonSerialized] public System.Action<OutpostHand, int> timberCut;
+
         /// **The pickup event.** The source gives up what it really has of
         /// the planned load, now. False (and the trip is over) when it has
         /// none: somebody else took it, a raid, the herd moved on.
@@ -259,8 +273,14 @@ namespace SeaSick.World
                     {
                         stock.standing = Mathf.Max(0f, stock.standing - got);
                         // The trees go over as they are cut, not when the
-                        // logs land: the scene reads this.
-                        if (res == Res.Timber) timberTaken += got;
+                        // logs land: the scene reads this -- and, watched,
+                        // hears it this very frame (`timberCut`, 2026-10-03)
+                        // so the tree falls in front of the man who cut it.
+                        if (res == Res.Timber)
+                        {
+                            timberTaken += got;
+                            timberCut?.Invoke(h, got);
+                        }
                     }
                     break;
                 }

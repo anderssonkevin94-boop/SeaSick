@@ -70,7 +70,11 @@ namespace SeaSick.World
                 party.MarkDefender(r.name);
                 if (armedNow) defendArmedLatch = true;
                 ledger.DropCarriedLoadNow(r);
-                Drop();
+                // Off his job cleanly (2026-10-03): tree/beast let go, trip
+                // picture forgotten, and a hunter's carcass off his back --
+                // the books just dropped it, and this fight keeps driving his
+                // spear prop, so nothing else would ever take it off.
+                StepOffJob();
                 defendJabClock = 0f;
             }
 
@@ -147,7 +151,9 @@ namespace SeaSick.World
                 r.defending = false;
                 r.defendSpear = null;
                 r.bowDry = false;
-                phase = Phase.Resting;
+                // Back to the SAME job from where the fight left him, with no
+                // stale phase or route (2026-10-03, `BackOnJob`).
+                BackOnJob();
                 acting?.Set(VillagerActing.Mode.None);
             }
             return false;

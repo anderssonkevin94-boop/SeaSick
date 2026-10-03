@@ -36,6 +36,10 @@ namespace SeaSick.World
         HunterProps hunterProps;
         float setDownLeft = -1f;
         float fallWait;
+        /// The trip (`OutpostHand.haulSerial`) the carcass on his shoulders
+        /// belongs to (2026-10-03). A carcass on any OTHER trip is a load the
+        /// ledger took off him -- see the set-down check in `TickHunting`.
+        int carcassTrip = -1;
 
         void TickHunting(OutpostHand r, float dt)
         {
@@ -65,7 +69,13 @@ namespace SeaSick.World
             // (Also a carcass left on his shoulders by a trip that ended
             // some other way.) Runs before the next trip's walk, which the
             // books may already have planned in the same frame.
-            if (setDownLeft >= 0f || (!trip && props.HasCarcass))
+            // 2026-10-03: also a carcass from an EARLIER trip. The books can
+            // cancel his trip (the load dropped where he stood) and plan the
+            // next hunt in the same frame, so `trip` is true again -- and he
+            // set off stalking the next beast with the old one still on his
+            // back. A load the ledger did not hand him is not shown.
+            bool staleCarcass = props.HasCarcass && (!trip || r.haulSerial != carcassTrip);
+            if (setDownLeft >= 0f || staleCarcass)
             {
                 props.Drive(spear, HunterProps.Pose.Upright);
                 if (setDownLeft < 0f) setDownLeft = SetDownSeconds;
@@ -117,7 +127,7 @@ namespace SeaSick.World
                         acting?.Set(VillagerActing.Mode.Bend);
                         return;
                     }
-                    if (quarry.Down) props.Shoulder(quarry);
+                    if (quarry.Down) { props.Shoulder(quarry); carcassTrip = r.haulSerial; }
                     quarry = null;           // not Unclaim: it is a carcass now
                 }
                 fallWait = 0f;
@@ -181,6 +191,26 @@ namespace SeaSick.World
         }
 
         /// A point `off` metres from a beast, on the side he is standing on.
+        /// **The carcass comes off his shoulders, now (2026-10-03).** For
+        /// every way a hunt ends that is not the set-down at the store: the
+        /// alarm taking him, a fight (`TickDefend` keeps driving his spear, so
+        /// `HunterProps`' own "not driven any more" cleanup never ran and he
+        /// fought with the beast still on his back), a rescue. The books have
+        /// already put it on the ground as a dropped load
+        /// (`OutpostLedger.DropCarriedLoad`), and that pile is its picture
+        /// now -- two carcasses would be one too many. The spear/bow stays:
+        /// it is shown or hidden by whoever drives the props next (the fight
+        /// shows it; anything else leaves it undriven and `HunterProps`
+        /// hides it the same frame). A set-down already under way is
+        /// cancelled with it, so `TickHunting` does not stoop over nothing.
+        void DropHunterLoad()
+        {
+            var props = hunterProps != null ? hunterProps : GetComponent<HunterProps>();
+            if (props != null && props.HasCarcass) props.PutDown();
+            setDownLeft = -1f;
+            fallWait = 0f;
+        }
+
         Vector3 StandOffFrom(Vector3 beast, float off)
         {
             Vector3 away = transform.position - beast;
