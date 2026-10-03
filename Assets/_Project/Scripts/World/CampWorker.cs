@@ -626,10 +626,10 @@ namespace SeaSick.World
                     // forget the trip he was drawing (so getting back up
                     // never "sets it down" at the old drop-off, see
                     // `EndTripMime`) and hand back any tree/bed/site claim.
-                    Drop();
-                    ForgetTrip();
-                    ReleaseClaim();
-                    wasHauling = false;
+                    // `StepOffJob` (CampWorker.Alarm.cs) also puts down a
+                    // hunter's carcass -- the same clean-up the alarm, a
+                    // fight and a rescue use.
+                    StepOffJob();
                     phase = Phase.Downed;
                     Vector3 p = transform.position;
                     p.y = WorkerPad.Foot(p, camp.GroundAt(p));
@@ -1674,6 +1674,21 @@ namespace SeaSick.World
                 }
                 case TripLeg.AtPickup:
                 {
+                    // **His tree went over under somebody else's armful
+                    // (2026-10-03).** A timber armful is 2 logs and a tree
+                    // 1, so a pickup fells his tree AND the next in the
+                    // order (`Outpost.TimberCutHere`) -- which may be the one
+                    // this cutter is swinging at. Don't chop the stump: walk
+                    // to the next standing tree (`HaulPickupSpot` re-claims)
+                    // and only then work; the pickup's work timer waits
+                    // while he walks.
+                    if (view.from == HaulPlace.Field && view.resource == Res.Timber
+                        && claimedTree >= 0 && camp.TreeIsFelled(claimedTree))
+                    {
+                        phase = Phase.Going;
+                        acting?.Set(VillagerActing.Mode.None);
+                        if (!Walk(HaulPickupSpot(view), dt)) return;
+                    }
                     phase = Phase.Working;
                     r.walkingIn = false;
                     Face(PickFace(view) - transform.position, dt);
