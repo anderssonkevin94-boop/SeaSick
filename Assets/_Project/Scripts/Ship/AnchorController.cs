@@ -231,15 +231,51 @@ namespace SeaSick.Ship
         /// the prompt appears where the beach is. `HasBeachToward` still
         /// refuses a cliff. The old radius stays only as the fallback for a
         /// scene with no field.
+        /// **No flicker at the shelf (2026-10-03, Kevin: "I can't always land
+        /// at a new island").** `landingDepth` (12 m) is also the depth of
+        /// the shelf round every island (seabed -12 m, +-0.25 m of detail),
+        /// so over the shelf the test flipped in and out on ~25 m patches and
+        /// the "Land here" card blinked -- a tap could fall on a frame it had
+        /// gone. Now: the SHALLOWEST water under bow, middle or stern (the
+        /// points `HullIntegrity.HoldOffTheLand` uses, so a long hull nosed
+        /// into a steep coast counts from her bow), and once in range she
+        /// stays in range until `landingDepthLeave` deeper. The card turns on
+        /// where it did (or a little sooner) and stays on.
+        const float landingDepthLeave = 1f;
+        Island inRangeIsle;
+
         Island IslandInRange()
         {
             var isle = Island.Nearest(transform.position);
-            if (isle == null) return null;
-            float depth = WaterDepthUnder(transform.position);
-            if (!float.IsNaN(depth)) return depth <= landingDepth ? isle : null;
+            if (isle == null) { inRangeIsle = null; return null; }
+            float depth = ShallowestUnderHull();
+            if (!float.IsNaN(depth))
+            {
+                float limit = landingDepth + (isle == inRangeIsle ? landingDepthLeave : 0f);
+                inRangeIsle = depth <= limit ? isle : null;
+                return inRangeIsle;
+            }
+            inRangeIsle = null;
             float reach = isle.RadiusToward(transform.position) + 30f;
             return Island.FlatDistance(transform.position, isle.transform.position) <= reach
                 ? isle : null;
+        }
+
+        /// The shallowest water under bow, middle and stern (NaN only when
+        /// none of the three has a reading).
+        float ShallowestUnderHull()
+        {
+            float half = motor != null ? motor.HullLength * 0.4f : 0f;
+            Vector3 fwd = transform.forward; fwd.y = 0f;
+            fwd = fwd.sqrMagnitude > 1e-4f ? fwd.normalized : Vector3.forward;
+            Vector3 c = transform.position;
+            float best = float.NaN;
+            for (int k = -1; k <= 1; k++)
+            {
+                float d = WaterDepthUnder(c + fwd * (half * k));
+                if (!float.IsNaN(d) && (float.IsNaN(best) || d < best)) best = d;
+            }
+            return best;
         }
 
         /// Metres of water under `p` at mean level, from the shore grid where
