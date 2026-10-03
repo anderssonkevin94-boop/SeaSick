@@ -12,7 +12,11 @@ namespace SeaSick.UI.Sheets
     /// target, pointing the way to turn, with its distance underneath:
     /// gold = the course (the set camp or the way home), ember = a hostile
     /// ship inside 400 m (the locked one bigger and brighter), ice = the
-    /// nearest island you have glimpsed but not yet landed on.
+    /// nearest island you have glimpsed but not yet landed on. The kraken
+    /// (2026-10-03) is ember too, bigger, bold and pulsing while its warning
+    /// runs: it points at the darkening water (`KrakenDirector.WarningPoint`)
+    /// and then at the beast while it is up and not sinking away, first in
+    /// the list so nothing pushes it out.
     ///
     /// IMGUI, the same family as `RescueHud` / `SquallHud` (self-installing,
     /// Repaint-only drawing, clamped to a band that avoids the helm). Where
@@ -45,12 +49,12 @@ namespace SeaSick.UI.Sheets
         /// Closer than this the thing is on top of you: no marker.
         const float ArrivedMetres = 30f;
         const int MaxHostiles = 4;
-        const int MaxMarkers = MaxHostiles + 2;
+        const int MaxMarkers = MaxHostiles + 3;   // + course, island, kraken
         const float RefreshSeconds = 0.25f;
         /// Share of the safe height kept clear at the bottom for the stick.
         const float BottomClearShare = 0.35f;
 
-        enum Kind { Hostile, Course, Island }
+        enum Kind { Hostile, Course, Island, Kraken }
 
         struct Marker
         {
@@ -97,6 +101,12 @@ namespace SeaSick.UI.Sheets
             var motor = SheetBits.Motor;
             if (motor == null || !SeaHud.HelmShowing || !ChartData.UnderWay) return;
             Vector3 me = motor.transform.position;
+
+            // The kraken first, so no other marker can push it out: the
+            // water darkening off the bow, then the beast itself. No range:
+            // it is only ever ~55 m off, and a warning is worth showing.
+            if (TryKraken(out Vector3 krakenPos))
+                markers[count++] = new Marker { kind = Kind.Kraken, label = Fmt(Flat(krakenPos, me)) };
 
             // Hostiles: the nearest few inside range, the locked one always.
             IHittable locked = CombatHud.Source != null ? CombatHud.Source.Locked : null;
@@ -156,6 +166,23 @@ namespace SeaSick.UI.Sheets
                         label = Fmt(bestD),
                     };
             }
+        }
+
+        /// Where the kraken threat is, flat (y = 0): the warning point while
+        /// the water darkens, else the live kraken unless it is sinking away.
+        static bool TryKraken(out Vector3 pos)
+        {
+            var warn = KrakenDirector.WarningPoint;
+            if (warn.HasValue) { pos = warn.Value; pos.y = 0f; return true; }
+            var k = Kraken.Active;
+            if (k != null && !k.Retreating)
+            {
+                pos = k.transform.position;
+                pos.y = 0f;
+                return true;
+            }
+            pos = default;
+            return false;
         }
 
         static float Flat(Vector3 a, Vector3 b)
@@ -218,6 +245,11 @@ namespace SeaSick.UI.Sheets
                     if (m.ship == null || !m.ship.Alive) continue;
                     world = m.ship.transform.position;
                 }
+                else if (m.kind == Kind.Kraken)
+                {
+                    // Live, like a hostile: the shadow glides and the beast turns.
+                    if (!TryKraken(out world)) continue;
+                }
                 else world = m.pos;
 
                 // --- on screen already? then the thing speaks for itself
@@ -239,7 +271,10 @@ namespace SeaSick.UI.Sheets
                 }
                 dir.Normalize();
 
-                float size = u * (m.locked ? 3.9f : m.kind == Kind.Hostile ? 3.3f : m.kind == Kind.Course ? 3.3f : 2.7f);
+                float size = u * (m.locked ? 3.9f : m.kind == Kind.Kraken ? 4.2f : m.kind == Kind.Hostile ? 3.3f : m.kind == Kind.Course ? 3.3f : 2.7f);
+                // It breathes while the water is still only darkening.
+                if (m.kind == Kind.Kraken && KrakenDirector.Warning)
+                    size *= 1f + 0.12f * Mathf.Sin(Time.unscaledTime * 7f);
                 float half = size * 0.62f;   // a rotated square's worst reach
                 var band = new Rect(safe.xMin + pad + half, top + half,
                     safe.width - (pad + half) * 2f, bottom - top - half * 2f);
@@ -265,7 +300,7 @@ namespace SeaSick.UI.Sheets
 
                 Color col = m.kind == Kind.Course ? Gold
                     : m.kind == Kind.Island ? Ice
-                    : m.locked ? EmberLocked : Ember;
+                    : m.locked || m.kind == Kind.Kraken ? EmberLocked : Ember;
 
                 // The chevron: a tinted white kite with its own dark outline.
                 float ang = Mathf.Atan2(dir.x, -dir.y) * Mathf.Rad2Deg;
@@ -275,7 +310,7 @@ namespace SeaSick.UI.Sheets
                 GUI.DrawTexture(new Rect(at.x - size * 0.5f, at.y - size * 0.5f, size, size), arrow, ScaleMode.ScaleToFit, true);
                 GUI.matrix = prevMatrix;
 
-                DrawLabel(at, size, band, m.label, col, m.locked);
+                DrawLabel(at, size, band, m.label, col, m.locked || m.kind == Kind.Kraken);
             }
 
             GUI.matrix = prevMatrix;

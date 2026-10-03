@@ -307,6 +307,10 @@ namespace SeaSick.CameraRig
         public float SeaFocusElevDeg { get; set; } = 24f;
         public float SeaFocusSwingDeg { get; set; } = 65f;
         public float SeaFocusMaxBack { get; set; } = 140f;
+        /// A `LockTarget` that IS the SeaFocus thing (the kraken's head):
+        /// locking it keeps the SeaFocus composition instead of the lock
+        /// framing. Any other lock still outranks SeaFocus.
+        public Transform SeaFocusLockAlias { get; set; }
         /// 0..1, how far into the SeaFocus composition the rig is.
         public float SeaFocusLevel => seaLevel;
 
@@ -1374,7 +1378,8 @@ namespace SeaSick.CameraRig
             // the shore party). With SeaFocus null and the level home, this
             // whole block is skipped and the frame is exactly what it was.
             {
-                bool seaOnly = SeaFocus.HasValue && LockTarget == null
+                bool seaOnly = SeaFocus.HasValue
+                    && (LockTarget == null || (SeaFocusLockAlias != null && LockTarget == SeaFocusLockAlias))
                     && !PointOfInterest.HasValue && !SailOverride.HasValue;
                 if (seaOnly) { lastSeaPos = SeaFocus.Value; haveSeaPos = true; }
                 if (seaOnly || seaLevel > 0f)

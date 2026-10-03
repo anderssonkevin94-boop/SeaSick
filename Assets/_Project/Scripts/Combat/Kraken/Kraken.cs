@@ -64,8 +64,16 @@ namespace SeaSick.Combat
         public Phase State { get; private set; }
         public KrakenArms Arms => arms;
         public KrakenSwat Swat => swat;
-        /// 0..1. Always 1 until step 3 gives it health.
-        public float Health01 { get; private set; } = 1f;
+        /// 0..1: 1 - damage / `KrakenTuning.hitPoints`. At 0 it is driven off.
+        public float Health01 => Mathf.Clamp01(1f - damage / Mathf.Max(1f, KrakenTuning.hitPoints));
+        public int HitPoints => Mathf.Max(1, Mathf.RoundToInt(KrakenTuning.hitPoints));
+        public int DamageTaken => Mathf.RoundToInt(damage);
+        /// The head: THE hit target, what the lock picks (step 3).
+        public IHittable BodyTarget => bodyTarget;
+        /// The head has broken the water (it can be shot from here on).
+        public bool Breached => breached;
+        /// How this encounter is ending (meaningful once `Retreating`).
+        public KrakenOutcome Outcome => outcome;
         /// True from the moment it starts going back down.
         public bool Retreating => State == Phase.Sinking;
         /// Summoned from the dev panel / eval: sinks on its own after
@@ -78,6 +86,17 @@ namespace SeaSick.Combat
         public Transform Ship => ship;
 
         KrakenOutcome outcome = KrakenOutcome.Dismissed;
+        KrakenBodyTarget bodyTarget;
+        float damage;
+        float lastHitAt = -99f;
+        float farFor;            // seconds the ship has been past escapeDistance
+        float fightFor;          // seconds surfaced, for the safety timeout
+        SkinnedMeshRenderer[] skin;
+        Color[] skinColor;
+        MaterialPropertyBlock mpb;
+        bool flashClear = true;
+        static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        static readonly Color HitFlash = new Color(1f, 0.35f, 0.28f);
         bool endedRaised;
         KrakenSwat swat;
 
@@ -199,6 +218,75 @@ namespace SeaSick.Combat
             skirt = KrakenFx.FoamSkirt(transform);
             swat = GetComponent<KrakenSwat>();
             if (swat == null) swat = gameObject.AddComponent<KrakenSwat>();
+            bodyTarget = KrakenBodyTarget.Create(this);
+            skin = GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            skinColor = new Color[skin.Length];
+            for (int i = 0; i < skin.Length; i++)
+                skinColor[i] = skin[i] != null && skin[i].sharedMaterial != null
+                    && skin[i].sharedMaterial.HasProperty(BaseColorId)
+                    ? skin[i].sharedMaterial.GetColor(BaseColorId) : Color.white;
+            mpb = new MaterialPropertyBlock();
+        }
+
+        // ------------------------------------------------------------- damage
+
+        /// A hit landed (`KrakenBodyTarget`, or a fraction of one through an
+        /// arm). Flash, writhe, a burst of spray where it went in; at zero
+        /// health it is driven off.
+        public void TakeDamage(Vector3 point, float amount)
+        {
+            if (Retreating || amount <= 0f) return;
+            damage += amount;
+            lastHitAt = Time.time;
+            if (arms != null) arms.Writhe = 1f;
+            KrakenFx.Splash(point, 1.6f, 0.25f, "KrakenHit");
+            if (damage >= KrakenTuning.hitPoints) DriveOff();
+        }
+
+        /// Health gone: it goes under with a great splash, the loot floats up
+        /// where it sank (`RaiseEnded`), `Ended(DrivenOff)`.
+        void DriveOff()
+        {
+            if (Retreating) return;
+            Vector3 at = WaterPoint();
+            KrakenFx.Splash(at + Vector3.up * 0.3f, KrakenTuning.breachSplashRadius * 0.6f, 2f, "KrakenDrivenOff");
+            DynamicWaterSim.Splash(at, KrakenTuning.breachSplashRadius, KrakenTuning.breachSplashStrength);
+            Retreat(KrakenOutcome.DrivenOff);
+        }
+
+        void TickFlash()
+        {
+            const float FlashTime = 0.35f;
+            float since = Time.time - lastHitAt;
+            if (since < FlashTime) { Tint(1f - since / FlashTime); flashClear = false; }
+            else if (!flashClear) { Tint(0f); flashClear = true; }
+        }
+
+        void Tint(float flash)
+        {
+            if (skin == null) return;
+            for (int i = 0; i < skin.Length; i++)
+            {
+                var r = skin[i];
+                if (r == null) continue;
+                r.GetPropertyBlock(mpb);
+                mpb.SetColor(BaseColorId, flash > 0f ? Color.Lerp(skinColor[i], HitFlash, flash * 0.75f) : skinColor[i]);
+                r.SetPropertyBlock(mpb);
+            }
+        }
+
+        /// The fight's two non-violent endings: the ship got clear (past
+        /// `escapeDistance` for `escapeSeconds`), or the safety timeout.
+        void TickEscape(float dt)
+        {
+            if (ship == null) return;
+            fightFor += dt;
+            Vector3 d = ship.position - transform.position;
+            d.y = 0f;
+            farFor = d.magnitude > KrakenTuning.escapeDistance ? farFor + dt : 0f;
+            if (farFor >= KrakenTuning.escapeSeconds) { Retreat(KrakenOutcome.Escaped); return; }
+            if (KrakenTuning.maxFightSeconds > 0f && fightFor >= KrakenTuning.maxFightSeconds)
+                Retreat(KrakenOutcome.Escaped);
         }
 
         void OnEnable() => EnsureProbe();
@@ -257,6 +345,7 @@ namespace SeaSick.Combat
             transform.position = p;
 
             FaceShip(dt);
+            TickFlash();
             transform.rotation = Quaternion.Euler(Mathf.Sin(t * 0.43f) * 1.2f,
                 yaw, Mathf.Sin(t * 0.37f + 1f) * 1.4f);
 
@@ -270,6 +359,11 @@ namespace SeaSick.Combat
             endedRaised = true;
             ReleaseCamera();
             if (Active == this) Active = null;
+            if (outcome == KrakenOutcome.DrivenOff)
+            {
+                try { KrakenLoot.Drop(WaterPoint()); }
+                catch (System.Exception e) { Debug.LogException(e); }
+            }
             try { Ended?.Invoke(this, outcome); }
             catch (System.Exception e) { Debug.LogException(e); }
         }
@@ -334,7 +428,8 @@ namespace SeaSick.Combat
             depth = 0f;
             if (arms != null) arms.Raise01 = 1f;
             // Dev summons only: a real encounter ends by escape or drive-off.
-            if (DevSummoned && phaseT >= KrakenTuning.surfacedSeconds) Dismiss();
+            if (DevSummoned && phaseT >= KrakenTuning.surfacedSeconds) { Dismiss(); return; }
+            TickEscape(dt);
         }
 
         /// True once it is all the way under.
@@ -515,7 +610,12 @@ namespace SeaSick.Combat
             // Held through the sink until the head is under, so the camera
             // watches it go instead of swinging away the moment it starts.
             bool up = State != Phase.Sinking || depth > -HeadBreaksAt;
-            bool want = KrakenTuning.frameCamera && up && chaseCam.LockTarget == null;
+            // A lock on its own head is still this shot (the camera composes
+            // it for the alias); any other lock outranks it.
+            Transform head = bodyTarget != null ? bodyTarget.transform : null;
+            chaseCam.SeaFocusLockAlias = head;
+            bool want = KrakenTuning.frameCamera && up
+                && (chaseCam.LockTarget == null || chaseCam.LockTarget == head);
             if (!want) { ReleaseCamera(); return; }
 
             var cur = chaseCam.SeaFocus;
@@ -530,7 +630,7 @@ namespace SeaSick.Combat
             MeasureAboveWater(out float height, out float radius);
             chaseCam.SeaFocusHeight = height;
             chaseCam.SeaFocusRadius = radius;
-            chaseCam.SeaFocusShip01 = KrakenTuning.camShip01;
+            chaseCam.SeaFocusShip01 = SeaSick.UI.HudLayout.Wide ? KrakenTuning.camShip01Desk : KrakenTuning.camShip01;
             float top01 = KrakenTuning.camTop01;
             var bar = SeaSick.UI.Sheets.SeaHud.TopRect;
             if (bar.height > 1f && Screen.height > 0)
@@ -581,6 +681,8 @@ namespace SeaSick.Combat
 
         void ReleaseCamera()
         {
+            if (chaseCam != null && bodyTarget != null && chaseCam.SeaFocusLockAlias == bodyTarget.transform)
+                chaseCam.SeaFocusLockAlias = null;
             if (!ownsPoi) return;
             ownsPoi = false;
             if (chaseCam != null && chaseCam.SeaFocus.HasValue && chaseCam.SeaFocus.Value == ourPoi)

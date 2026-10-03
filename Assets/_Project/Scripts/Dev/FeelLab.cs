@@ -79,6 +79,9 @@ namespace SeaSick.Dev
             // The kraken's look and motion (GDD §6 "The Kraken", 2026-10-03:
             // "every number ... lives in a FeelLab tuning class").
             "SeaSick.Combat.KrakenTuning",
+            // When, where and how the kraken is announced (GDD §6, build
+            // step 4) and the haul it leaves.
+            "SeaSick.Combat.KrakenSpawnTuning",
         };
 
         /// The spec's range table, keyed "ClassName.fieldName". Anything not
@@ -88,6 +91,22 @@ namespace SeaSick.Dev
         static readonly Dictionary<string, (float min, float max)> Ranges =
             new Dictionary<string, (float min, float max)>
         {
+            // The kraken in the wild: odds, warning, deep-water test, loot.
+            {"KrakenSpawnTuning.minDistanceFromHome",  (0f, 3000f)},
+            {"KrakenSpawnTuning.checkIntervalSeconds", (3f, 120f)},
+            {"KrakenSpawnTuning.baseChancePerCheck",   (0f, 0.3f)},
+            {"KrakenSpawnTuning.chancePerExtraKm",     (0f, 0.2f)},
+            {"KrakenSpawnTuning.maxChancePerCheck",    (0f, 1f)},
+            {"KrakenSpawnTuning.nightMultiplier",      (1f, 5f)},
+            {"KrakenSpawnTuning.stormMultiplier",      (1f, 6f)},
+            {"KrakenSpawnTuning.cooldownSeconds",      (0f, 1800f)},
+            {"KrakenSpawnTuning.warningSeconds",       (4f, 20f)},
+            {"KrakenSpawnTuning.spawnDistance",        (45f, 120f)},
+            {"KrakenSpawnTuning.minDeepDepth",         (12f, 150f)},
+            {"KrakenSpawnTuning.minIslandClearance",   (0f, 400f)},
+            {"KrakenSpawnTuning.lootMeatUnits",        (1f, 60f)},
+            {"KrakenSpawnTuning.lootMeatCrates",       (1f, 6f)},
+            {"KrakenSpawnTuning.lootInkUnits",         (1f, 5f)},
             // The kraken: a few knobs whose default*0.25..4 fallback is wrong
             // (negative, or needing zero).
             {"KrakenTuning.waterlineOffset",   (-6f, 3f)},
@@ -97,6 +116,7 @@ namespace SeaSick.Dev
             {"KrakenTuning.turnDegPerSec",     (0f, 30f)},
             {"KrakenTuning.foam",              (0f, 4f)},
             {"KrakenTuning.camShip01",         (0.15f, 0.5f)},
+            {"KrakenTuning.camShip01Desk",     (0.15f, 0.6f)},
             {"KrakenTuning.camTop01",          (0.6f, 0.95f)},
             {"KrakenTuning.camElevDeg",        (8f, 45f)},
             {"KrakenTuning.camSwingDeg",       (0f, 120f)},
@@ -120,6 +140,13 @@ namespace SeaSick.Dev
             {"KrakenTuning.crewJolt",          (0f, 0.2f)},
             {"KrakenTuning.missRoll",          (0f, 40f)},
             {"KrakenTuning.missRockRange",     (0f, 40f)},
+            {"KrakenTuning.hitPoints",         (3f, 40f)},
+            {"KrakenTuning.armHitDamage",      (0f, 1f)},
+            {"KrakenTuning.bodyHitRadius",     (4f, 16f)},
+            {"KrakenTuning.armHitRadius",      (1f, 6f)},
+            {"KrakenTuning.escapeDistance",    (60f, 250f)},
+            {"KrakenTuning.escapeSeconds",     (1f, 15f)},
+            {"KrakenTuning.maxFightSeconds",   (0f, 900f)},
 
             {"HelmTuning.rudderPerRim",        (0.3f, 1.5f)},
             {"HelmTuning.rudderCurve",         (0.5f, 3f)},

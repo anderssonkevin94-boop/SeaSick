@@ -450,11 +450,14 @@
     padding-bottom: 4px;
 }
 
+/* One line, and the pill sizes to it (2026-10-03): wrapped inside the
+ * chart's narrow box, "heavy to the south-west" broke onto a second line
+ * the pill did not grow for, and "west" hung outside it. */
 .chart-tab-text {
     font-size: 17px;
     color: rgb(244, 232, 207);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
-    white-space: normal;
+    white-space: nowrap;
 }
 
 .chart-tab-weather {

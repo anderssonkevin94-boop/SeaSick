@@ -31,6 +31,10 @@ namespace SeaSick.World.Economy
         /// Grown on a farm plot (food rework, 2026-09-27): raw, never made,
         /// never gathered off the island.
         Grown,
+        /// Won at sea and nowhere else (2026-10-03, kraken ink): raw, never
+        /// made, never gathered or hunted off an island. Appended last; the
+        /// enum is not serialised (`ResDefs` is a static table).
+        Salvaged,
     }
 
     /// **Which Stores tab a resource lands on** (2026-09-26). Independent of
@@ -108,6 +112,8 @@ namespace SeaSick.World.Economy
                 blurb = "dark rock with the metal in it, on the far islands", category = ResCategory.Raw },
             new ResDef { id = Res.Spice, label = "spice", tier = ResTier.Raw, source = ResSource.Gathered, campfireLevel = 2,
                 blurb = "picked far out; what the last rungs of the ship cost", category = ResCategory.Food },
+            new ResDef { id = Res.KrakenInk, label = "kraken ink", tier = ResTier.Raw, source = ResSource.Salvaged, campfireLevel = 1,
+                blurb = "a trophy from a driven-off kraken; its use is still to be decided", category = ResCategory.Raw },
 
             // --- treated ---
             new ResDef { id = Res.Boards, label = "boards", tier = ResTier.Treated, source = ResSource.Made, campfireLevel = 1,

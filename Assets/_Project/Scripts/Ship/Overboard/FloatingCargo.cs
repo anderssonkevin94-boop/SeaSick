@@ -41,7 +41,7 @@ namespace SeaSick.Ship.Overboard
         // --- IOverboardTarget -------------------------------------------
         Transform IOverboardTarget.Transform => transform;
         public float TimeLeft01 => timeTotal > 0f ? Mathf.Clamp01(timeLeft / timeTotal) : 0f;
-        string IOverboardTarget.Label => Units + " " + Resource.ToLowerInvariant();
+        string IOverboardTarget.Label => Units + " " + SeaSick.World.Economy.ResDefs.Label(Resource);
         /// Cargo yields to a person (build brief item 1).
         int IOverboardTarget.RescuePriority => 1;
         bool IOverboardTarget.Boardable => true;
@@ -129,7 +129,7 @@ namespace SeaSick.Ship.Overboard
         {
             if (Resolved) return;
             Resolved = true;
-            Banner.Show("The " + Resource.ToLowerInvariant() + " sank.");
+            Banner.Show("The " + SeaSick.World.Economy.ResDefs.Label(Resource) + " sank.");
             Debug.Log("[FloatingCargo] " + Units + " " + Resource + " lost overboard (sank).");
             Destroy(gameObject);
         }
@@ -153,7 +153,7 @@ namespace SeaSick.Ship.Overboard
                     for (int i = 0; i < Units; i++) shipHold.AddVisual(Resource);
             }
 
-            Banner.Show("Recovered " + Units + " " + Resource.ToLowerInvariant());
+            Banner.Show("Recovered " + Units + " " + SeaSick.World.Economy.ResDefs.Label(Resource));
             Destroy(gameObject);
         }
 

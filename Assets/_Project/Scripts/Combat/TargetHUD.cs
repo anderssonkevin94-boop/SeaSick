@@ -54,7 +54,7 @@ namespace SeaSick.Combat
             foreach (var t in HitTargets.All)
             {
                 // Never label your own ship.
-                if (t == null || !t.Alive || t is PlayerHull) continue;
+                if (t == null || !t.Alive || t is PlayerHull || t is ILockExempt) continue;
 
                 Vector3 world = t.HitCentre + Vector3.up * headroom;
                 float dist = Vector3.Distance(transform.position, t.HitCentre);

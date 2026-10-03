@@ -61,6 +61,10 @@ namespace SeaSick.Combat
         /// Where the ship sits on the screen while framed, fraction of the
         /// height from the bottom (the lower third).                            0.15..0.5
         public static float camShip01 = 0.27f;
+        /// The same on a wide (desktop) screen, where the combat row sits in
+        /// the bottom centre: 0.27 put her stern behind the Lock button
+        /// (step-3 desktop capture).                                            0.15..0.6
+        public static float camShip01Desk = 0.40f;
         /// Highest the kraken's top may reach, fraction from the bottom, when
         /// the HUD's top bar is not up to measure against (it is read live
         /// when it is).                                                          0.6..0.95
@@ -123,6 +127,24 @@ namespace SeaSick.Combat
         /// `missRockRange` metres from the ring's edge.                       0..40
         public static float missRoll = 14f;
         public static float missRockRange = 18f;
+        // ------------------------------------------------- fight back (step 3)
+        /// Body hits (one cannonball = 1) that drive it off.                   3..40
+        public static float hitPoints = 12f;
+        /// What a hit on a raised arm costs it, as a share of a body hit (the
+        /// arm hit's real reward is the cancelled swat).                       0..1
+        public static float armHitDamage = 0.35f;
+        /// The head's hit sphere, metres (the mantle is ~16 m tall).           4..16
+        public static float bodyHitRadius = 9f;
+        /// A raised arm's hit capsule radius, metres.                          1..6
+        public static float armHitRadius = 3f;
+        /// Clear water that counts as escaped, metres from its body, held for
+        /// `escapeSeconds`; then it sinks away with no loot.                  60..250
+        public static float escapeDistance = 120f;
+        public static float escapeSeconds = 4f;
+        /// Safety: a fight still going after this many seconds ends as an
+        /// escape (0 = never).                                                 0..900
+        public static float maxFightSeconds = 300f;
+
         /// The ripple sim splash at the slam: radius m, strength.
         public static float slamSplashRadius = 9f;
         public static float slamSplashStrength = 2.4f;

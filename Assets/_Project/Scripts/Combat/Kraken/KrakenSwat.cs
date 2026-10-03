@@ -59,6 +59,9 @@ namespace SeaSick.Combat
         KrakenArms arms;
         readonly Attack[] attacks = new Attack[KrakenArms.ArmCount];
         readonly KrakenTell[] tells = new KrakenTell[3];
+        // Step 3: each arm is a hit target only while it winds up.
+        readonly KrakenArmTarget[] armTargets = new KrakenArmTarget[KrakenArms.ArmCount];
+        readonly bool[] armRegistered = new bool[KrakenArms.ArmCount];
 
         ShipMotor motor;
         HullIntegrity hull;
@@ -73,6 +76,8 @@ namespace SeaSick.Combat
         /// Hits and misses this kraken has landed, for probes and step 3.
         public int Hits { get; private set; }
         public int Misses { get; private set; }
+        /// Windups cancelled by a hit on the raised arm (or a retreat).
+        public int Interrupts { get; private set; }
         /// Fired at each slam's resolve: (point, hit).
         public event System.Action<Vector3, bool> Slammed;
 
@@ -81,7 +86,30 @@ namespace SeaSick.Combat
             kraken = GetComponent<Kraken>();
             arms = GetComponent<KrakenArms>();
             for (int a = 0; a < attacks.Length; a++) attacks[a] = new Attack();
+            for (int a = 0; a < armTargets.Length; a++) armTargets[a] = new KrakenArmTarget(kraken, a);
         }
+
+        void OnDisable()
+        {
+            for (int a = 0; a < armTargets.Length; a++)
+                if (armRegistered[a]) { HitTargets.Unregister(armTargets[a]); armRegistered[a] = false; }
+        }
+
+        /// The arm targets in `HitTargets` are exactly the arms winding up.
+        void SyncTargets()
+        {
+            for (int a = 0; a < armTargets.Length; a++)
+            {
+                bool want = attacks[a].stage == Stage.Windup && kraken != null && !kraken.Retreating;
+                if (want == armRegistered[a]) continue;
+                if (want) HitTargets.Register(armTargets[a]); else HitTargets.Unregister(armTargets[a]);
+                armRegistered[a] = want;
+            }
+        }
+
+        /// The hit target for an arm (registered only while it winds up).
+        public IHittable ArmTarget(int arm) =>
+            arm >= 0 && arm < armTargets.Length ? armTargets[arm] : null;
 
         void OnDestroy()
         {
@@ -121,6 +149,9 @@ namespace SeaSick.Combat
             at.t = 0f;
             at.flinchFrom = arms != null ? arms.ArmTipPosition(arm) : at.coil;
             if (at.tell != null) at.tell.Cancel();
+            if (arms != null) arms.Writhe = 1f;
+            Interrupts++;
+            SyncTargets();
             return true;
         }
 
@@ -163,6 +194,7 @@ namespace SeaSick.Combat
             }
 
             for (int a = 0; a < attacks.Length; a++) TickAttack(a, dt);
+            SyncTargets();
         }
 
         static float Jittered() =>

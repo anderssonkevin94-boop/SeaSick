@@ -159,7 +159,15 @@ namespace SeaSick.World
         /// spear (`Economy.Techs.BowWear`, animals or raiders per bow).
         public const string Bow = "Bow";
 
-        /// What a hand can be told to go and GATHER — the things that are
+        /// **Won at sea, never gathered or made (2026-10-03, the kraken).** The
+        /// rare trophy a driven-off kraken leaves floating beside its meat
+        /// (`Combat.KrakenLoot`); what it is for is decided later. A raw good
+        /// with its own `ResSource.Salvaged`: nothing on an island grows it
+        /// and no recipe makes it, so it is neither gatherable nor in a hunt
+        /// drop, and `RecipeGraph.Validate` counts it as in hand from the start.
+        public const string KrakenInk = "KrakenInk";
+
+        /// What a hand can be told to GATHER — the things that are
         /// lying about on an island. The rest are made at a building by
         /// somebody assigned to it.
         public static readonly string[] Gatherable =
@@ -341,6 +349,9 @@ namespace SeaSick.World
             VegStew => new Color(0.60f, 0.42f, 0.22f),
             FishPie => new Color(0.84f, 0.66f, 0.38f),
             HuntersStew => new Color(0.52f, 0.30f, 0.20f),
+            // Near-black with a violet cast: the one thing here that is not
+            // brown, green or grey, so a crate of it reads on the water.
+            KrakenInk => new Color(0.17f, 0.10f, 0.27f),
             _ => new Color(0.5f, 0.5f, 0.5f),
         };
     }

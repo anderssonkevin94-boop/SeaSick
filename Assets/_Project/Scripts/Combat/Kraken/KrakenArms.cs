@@ -73,6 +73,10 @@ namespace SeaSick.Combat
 
         public bool Ready => ready;
 
+        /// Hit reaction, 0..1: set to 1 on a hit, decays in ~0.7 s; while up
+        /// every arm lashes faster and wider (SeaMonster's writhe).
+        public float Writhe { get; set; }
+
         /// One bone of one arm, 0 at the mantle to 9 at the tip. Read-only use:
         /// this component rewrites every bone's rotation each LateUpdate.
         public Transform ArmBone(int armIndex, int bone) =>
@@ -226,9 +230,11 @@ namespace SeaSick.Combat
             body.localRotation = Quaternion.Slerp(bodyRest, poseBody[surfaced], raise01)
                                  * Quaternion.Euler(breath, 0f, breath * 0.4f);
 
-            float amp = KrakenTuning.swayAmplitudeDeg;
-            float side = KrakenTuning.sideSwayDeg;
-            float omega = KrakenTuning.swaySpeed * Mathf.PI * 2f;
+            Writhe = Mathf.MoveTowards(Writhe, 0f, 1.4f * Time.deltaTime);
+            float lash = 1f + 1.6f * Writhe;
+            float amp = KrakenTuning.swayAmplitudeDeg * lash;
+            float side = KrakenTuning.sideSwayDeg * lash;
+            float omega = KrakenTuning.swaySpeed * Mathf.PI * 2f * (1f + 3f * Writhe);
             float k = Mathf.PI * 2f / Mathf.Max(1f, KrakenTuning.swayWavelength);
 
             for (int a = 0; a < ArmCount; a++)

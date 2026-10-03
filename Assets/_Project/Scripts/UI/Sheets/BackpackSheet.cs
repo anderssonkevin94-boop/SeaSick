@@ -499,6 +499,7 @@ namespace SeaSick.UI.Sheets
             ResSource.Gathered => "gathered",
             ResSource.Hunted => "hunted",
             ResSource.Drop => "from hunts",
+            ResSource.Salvaged => "from the deep",
             _ => "made",
         };
 

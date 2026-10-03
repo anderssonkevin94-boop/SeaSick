@@ -108,7 +108,7 @@ namespace SeaSick.Combat
         /// are refused.
         public bool LockOn(IHittable t)
         {
-            if (t == null || !t.Alive || t is PlayerHull || t is IFriendly
+            if (t == null || !t.Alive || t is PlayerHull || t is IFriendly || t is ILockExempt
                 || ReferenceEquals(t, self)) return false;
             Take(t);
             return true;
@@ -233,7 +233,7 @@ namespace SeaSick.Combat
             float bestSq = float.MaxValue;
             foreach (var t in HitTargets.All)
             {
-                if (t == null || !t.Alive || ReferenceEquals(t, self) || t is PlayerHull || t is IFriendly) continue;
+                if (t == null || !t.Alive || ReferenceEquals(t, self) || t is PlayerHull || t is IFriendly || t is ILockExempt) continue;
                 if (Distance(t) > breakRange) continue;
                 Vector3 sp = cam.WorldToScreenPoint(t.HitCentre);
                 if (sp.z <= 0f) continue;
@@ -288,7 +288,7 @@ namespace SeaSick.Combat
 
             foreach (var t in HitTargets.All)
             {
-                if (t == null || !t.Alive || ReferenceEquals(t, self) || t is PlayerHull || t is IFriendly) continue;
+                if (t == null || !t.Alive || ReferenceEquals(t, self) || t is PlayerHull || t is IFriendly || t is ILockExempt) continue;
                 Vector3 d = t.HitCentre - transform.position;
                 d.y = 0f;
                 float sq = d.sqrMagnitude;

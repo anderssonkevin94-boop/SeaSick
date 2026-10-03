@@ -257,11 +257,17 @@ namespace SeaSick.UI.Sheets
                     lockBtn.RemoveFromClassList("combat-lock--new");
                 }
 
+                // The kraken's head is the lock target (GDD §6): its chip
+                // also carries its health, so a hit re-texts the chip.
+                bool kraken = IsKraken(target);
+                int krakenHp = kraken ? Mathf.Clamp(Mathf.RoundToInt(Kraken.Active.Health01 * 20f), 0, 20) : 0;
                 int key = (locked ? 1 : 0) | (slip ? 2 : 0) | (target != null ? 4 : 0) | (guns ? 8 : 0)
                           | (portMan > 0 ? 16 : 0) | (stbdMan > 0 ? 32 : 0)
                           | (portReady > 0 ? 64 : 0) | (stbdReady > 0 ? 128 : 0)
                           | (portHas ? 256 : 0) | (stbdHas ? 512 : 0)
-                          | (Mathf.Min(archers, 99) << 10) | ((target is EnemyShip) ? 1 : (target is SeaMonster) ? 2 : 0) << 17;
+                          | (Mathf.Min(archers, 99) << 10)
+                          | (((target is EnemyShip) ? 1 : (target is SeaMonster) ? 2 : kraken ? 3 : 0) << 17)
+                          | (krakenHp << 19);
                 int roundDist = Mathf.RoundToInt(dist);
                 bool textDue = key != stateKey || (now >= nextText && roundDist != lastDist);
                 if (textDue)
@@ -320,7 +326,8 @@ namespace SeaSick.UI.Sheets
                 // The chip.
                 if (target != null)
                 {
-                    string kind = (target is EnemyShip) ? "RAIDER" : (target is SeaMonster) ? "SEA BEAST" : "TARGET";
+                    string kind = (target is EnemyShip) ? "RAIDER" : (target is SeaMonster) ? "SEA BEAST"
+                        : IsKraken(target) ? "KRAKEN " + Mathf.RoundToInt(Kraken.Active.Health01 * 100f) + "%" : "TARGET";
                     chip.text = locked ? kind + " · " + dist + " m · locked" : kind + " · " + dist + " m";
                 }
 
@@ -332,6 +339,14 @@ namespace SeaSick.UI.Sheets
                 if (archers > 0)
                     line += (line.Length > 0 ? " · " : "") + archers + (archers == 1 ? " archer" : " archers") + " shooting";
                 note.text = line;
+            }
+
+            /// Is this the kraken's head (`Kraken.BodyTarget`), the thing a
+            /// lock on the beast holds?
+            static bool IsKraken(IHittable t)
+            {
+                var k = Kraken.Active;
+                return t != null && k != null && ReferenceEquals(t, k.BodyTarget);
             }
 
             static void SetFire(Button b, bool present, bool manned, bool ready)

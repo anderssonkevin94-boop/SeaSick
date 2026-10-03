@@ -239,13 +239,27 @@ namespace SeaSick.UI
                 krakenNote = SeaSick.Combat.Kraken.DevSummon();
             if (GUI.Button(dismiss, "Dismiss kraken", UITheme.Button))
                 krakenNote = SeaSick.Combat.Kraken.DevDismiss();
+            y += rowH + u * 0.3f;
+            // The wild spawn's whole path (shadow, toast, chevron, rise) on
+            // demand, and the deep-water test for where she is now.
+            var wild = new Rect(body.x, y, body.width, rowH);
+            UIBlocker.Block(wild);
+            if (GUI.Button(wild, "Wild spawn now", SeaSick.Combat.KrakenDirector.Warning
+                    ? UITheme.ButtonPressed : UITheme.Button))
+                krakenNote = SeaSick.Combat.KrakenDirector.DevWarnNow();
             y += rowH + u * 0.15f;
-            GUI.Label(new Rect(body.x + u * 0.3f, y, body.width, u * 1.3f),
-                      string.IsNullOrEmpty(krakenNote)
-                          ? "rises off the bow; harmless for now"
-                          : krakenNote,
-                      UITheme.Small);
-            y += u * 1.6f;
+            if (Time.unscaledTime >= krakenStatusAt)
+            {
+                krakenStatusAt = Time.unscaledTime + 0.5f;
+                krakenStatus = SeaSick.Combat.KrakenDirector.DevStatus();
+            }
+            // Wrapped, never clipped (Kevin: no cut-off text, ever).
+            if (krakenWrap == null) krakenWrap = new GUIStyle(UITheme.Small) { wordWrap = true, clipping = TextClipping.Overflow };
+            string kline = (string.IsNullOrEmpty(krakenNote) ? "" : krakenNote + "\n") + krakenStatus;
+            var kw = body.width - u * 0.3f;
+            float kh = krakenWrap.CalcHeight(new GUIContent(kline), kw);
+            GUI.Label(new Rect(body.x + u * 0.3f, y, kw, kh), kline, krakenWrap);
+            y += kh + u * 0.4f;
 
             // The rest of the old floating LIFE panel (Kevin: "move the other
             // dev options to settings too"), as a page with its own scroll.
@@ -333,6 +347,9 @@ namespace SeaSick.UI
 
         string saveNote = "";
         string krakenNote = "";
+        string krakenStatus = "";
+        float krakenStatusAt;
+        static GUIStyle krakenWrap;
 
         /// Each row's two faces, { off, on }, built at load.
         ///
