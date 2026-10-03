@@ -286,7 +286,15 @@ namespace SeaSick.World
             id = "Storehouse",
             baseStoneCost = 4,
             label = "storehouse",
-            blurb = "keeps much more out of the weather",
+            // **Runner progression (2026-10-03, Kevin):** island stores are
+            // unlimited, so it no longer keeps "much more"; it posts runners
+            // (2 / 4 / 6 by level) and makes every runner on the island
+            // better (`OutpostLedger.RunnerPerks`). `storeCapacity` below
+            // only feeds the old `KeepsOfEach` sum, which nothing caps on.
+            blurb = "more runners, bigger barrows, quicker feet",
+            // A Work hand here is a runner, as at the store hut
+            // (`OutpostLedger.IsRunnerPost`); no recipes, so no station.
+            position = "runner",
             resource = Res.Timber,
             baseCost = 25,
             storeCapacity = 40,

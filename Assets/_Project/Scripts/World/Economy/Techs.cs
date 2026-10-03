@@ -112,9 +112,24 @@ namespace SeaSick.World.Economy
                 cost = Cost.Of(Cost.I(Res.Brick, 8), Cost.I(Res.FineBoards, 2)) },
             new UpgradeStep { planId = "Hut", toLevel = 2, campfireLevel = 2, rateMul = 1f, housesBonus = 1,
                 cost = Cost.Of(Cost.I(Res.Brick, 4), Cost.I(Res.FineBoards, 4)) },
-            new UpgradeStep { planId = "Storehouse", toLevel = 2, campfireLevel = 2, rateMul = 1f, storeBonus = 20,
+            // **The Storehouse is runner progression (2026-10-03, Kevin):**
+            // island stores are unlimited, so its old +20 store bonus is gone;
+            // each level adds 2 runner posts and a camp-wide runner perk
+            // (`OutpostLedger.StorehouseRunners` / `PerksAt`). L2 keeps its
+            // price. L3 is new and waits on fire III (which does not exist
+            // yet, `MaxCampfireLevel` 2): the sheet shows "Needs Campfire
+            // III" until it lands. Its price mirrors L2's goods at ~1.75x
+            // brick / 2x fine boards (14 + 8): the top runner perk is the
+            // whole camp's hauling, worth a fire-III-sized bill, and both
+            // goods already need the quarry, the saw blade and an ore island.
+            // PROVISIONAL, Kevin to tune.
+            new UpgradeStep { planId = "Storehouse", toLevel = 2, campfireLevel = 2, rateMul = 1f,
                 cost = Cost.Of(Cost.I(Res.Brick, 8), Cost.I(Res.FineBoards, 4)) },
-            new UpgradeStep { planId = "Storage", toLevel = 2, campfireLevel = 2, rateMul = 1f, storeBonus = 10,
+            new UpgradeStep { planId = "Storehouse", toLevel = 3, campfireLevel = 3, rateMul = 1f,
+                cost = Cost.Of(Cost.I(Res.Brick, 14), Cost.I(Res.FineBoards, 8)) },
+            // The store hut's level 2 is its 4 runner posts (2 at level 1);
+            // its old +10 store bonus died with the store caps (2026-10-03).
+            new UpgradeStep { planId = "Storage", toLevel = 2, campfireLevel = 2, rateMul = 1f,
                 cost = Cost.Of(Cost.I(Res.Brick, 6), Cost.I(Res.FineBoards, 2)) },
             // The level 2 watchtower (2026-10-01): the big gun deck, its own
             // model (`BuildingLevelLook`). Not a station, so no rate. A

@@ -105,7 +105,8 @@ namespace SeaSick.UI.Sheets
             hasMake = Recipes.StationHasRecipes(planId);
             hasUpgrade = Techs.MaxLevel(planId) > 1;
             hasWorker = BuildPlans.HasPosition(planId) && hasMake;
-            isStore = planId == BuildPlans.Storage.id;
+            // The Storehouse is a runner post too (2026-10-03): same pages.
+            isStore = OutpostLedger.IsRunnerPost(planId);
 
             var names = hasMake ? StationSpots.SpotsFor(planId) : null;
             spotNames = names != null && names.Count > 0 ? names : new string[] { null };
@@ -2144,6 +2145,9 @@ namespace SeaSick.UI.Sheets
                 var parts = new List<string>(3);
                 if (Mathf.Abs(step.rateMul - 1f) > 0.001f) parts.Add($"{step.rateMul:0.#}× faster");
                 if (step.storeBonus != 0) parts.Add($"+{step.storeBonus} stores");
+                // Runner posts and the Storehouse's runner perks (2026-10-03).
+                string runnerWords = OutpostLedger.RunnerUpgradeWords(step.planId, step.toLevel);
+                if (runnerWords != null) parts.Add(runnerWords);
                 if (step.housesBonus != 0) parts.Add(step.housesBonus == 1 ? "+1 bed" : $"+{step.housesBonus} beds");
                 // The level 2 tower's whole point (2026-10-01).
                 if (parts.Count == 0 && step.planId == OutpostLedger.WatchtowerId) return "bigger gun deck";

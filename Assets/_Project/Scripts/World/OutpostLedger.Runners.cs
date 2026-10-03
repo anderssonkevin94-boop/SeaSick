@@ -99,6 +99,23 @@ namespace SeaSick.World
         public int StorehouseLevel() =>
             CountBuilt(StorehouseId) > 0 ? Mathf.Max(1, LevelOf(StorehouseId)) : 0;
 
+        /// **What raising runner plan `planId` to `toLevel` adds**, for the
+        /// upgrade row and its goal ("+2 runner posts · jog 10% faster");
+        /// null for any other plan. Only what is NEW at that level.
+        public static string RunnerUpgradeWords(string planId, int toLevel)
+        {
+            if (planId == StorageId)
+                return toLevel == 2 ? $"+{RunnersPerStoreL2 - RunnersPerStoreL1} runner posts" : null;
+            if (planId != StorehouseId || toLevel < 2) return null;
+            int posts = StorehouseRunners(toLevel) - StorehouseRunners(toLevel - 1);
+            var (a0, s0) = PerksAt(toLevel - 1);
+            var (a1, s1) = PerksAt(toLevel);
+            string w = $"+{posts} runner posts";
+            if (a1 > a0) w += a1 == 1 ? " · barrow +1 armful" : $" · barrow +{a1} armfuls";
+            if (s1 > s0 + 0.001f) w += $" · jog {Mathf.RoundToInt((s1 - 1f) * 100f)}% faster";
+            return w;
+        }
+
         /// "barrow +1 armful · jog 10% faster" -- a perk for the UI, or "".
         public static string PerkWords(int level)
         {

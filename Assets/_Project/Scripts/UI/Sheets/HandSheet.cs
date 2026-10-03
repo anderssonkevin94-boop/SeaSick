@@ -727,14 +727,17 @@ namespace SeaSick.UI.Sheets
                 case JobKind.Post:
                 {
                     var plan = BuildPlans.Named(t.job.id);
-                    bool runner = t.job.id == BuildPlans.Storage.id;
+                    bool runner = OutpostLedger.IsRunnerPost(t.job.id);
                     // The store hut's post is the runner (2026-10-02): its
                     // tile says "Runner" and counts the store's own slots.
-                    name = runner ? "Runner" : StationPage.Cap(plan.label);
+                    // The Storehouse's (2026-10-03) is its own tile, "Storehouse
+                    // runner", counting its own posts.
+                    name = !runner ? StationPage.Cap(plan.label)
+                        : t.job.id == BuildPlans.Storehouse.id ? "Storehouse runner" : "Runner";
                     here = h.order == OutpostOrder.Work && h.target == t.job.id;
                     var other = FirstOn(l, h, t.job.id);
                     int filled = CountOn(l, h, t.job.id);
-                    int posts = runner ? Mathf.Max(1, l.RunnerSlots()) : Mathf.Max(1, outpost.CountOf(t.job.id));
+                    int posts = runner ? Mathf.Max(1, l.RunnerSlotsAt(t.job.id)) : Mathf.Max(1, outpost.CountOf(t.job.id));
                     string role = runner ? "runner" : string.IsNullOrEmpty(plan.position) ? "hand" : plan.position;
                     if (here) sub = "here now";
                     else if (other != null && filled >= posts)
@@ -843,7 +846,7 @@ namespace SeaSick.UI.Sheets
                 {
                     string planId = t.job.id;
                     var other = FirstOn(l, h, planId);
-                    int posts = planId == BuildPlans.Storage.id ? Mathf.Max(1, l.RunnerSlots())
+                    int posts = OutpostLedger.IsRunnerPost(planId) ? Mathf.Max(1, l.RunnerSlotsAt(planId))
                         : Mathf.Max(1, outpost.CountOf(planId));
                     bool swap = other != null && CountOn(l, h, planId) >= posts;
                     var oldOrder = h.order;
@@ -897,7 +900,7 @@ namespace SeaSick.UI.Sheets
         static string PostIcon(string planId)
         {
             var plan = BuildPlans.Named(planId);
-            if (planId == BuildPlans.Storage.id) return Res.Boards;   // the goods a runner moves
+            if (OutpostLedger.IsRunnerPost(planId)) return Res.Boards;   // the goods a runner moves
             if (!string.IsNullOrEmpty(plan.makes) && ItemIconSet.Get(plan.makes) != null) return plan.makes;
             var recipes = Recipes.At(planId);
             if (recipes.Count > 0 && recipes[0] != null && !string.IsNullOrEmpty(recipes[0].makes)) return recipes[0].makes;

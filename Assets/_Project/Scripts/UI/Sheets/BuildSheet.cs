@@ -93,7 +93,8 @@ namespace SeaSick.UI.Sheets
         {
             if (p.id == BuildPlans.Hut.id) return p.houses > 0 ? $"Beds for {p.houses}" : "Beds";
             if (p.id == BuildPlans.Storage.id) return "More storage";
-            if (p.id == BuildPlans.Storehouse.id) return "Much more storage";
+            // Runner progression since 2026-10-03 (stores are unlimited).
+            if (p.id == BuildPlans.Storehouse.id) return "More, better runners";
             if (p.id == BuildPlans.Farm.id) return "Grows food";
             if (p.id == BuildPlans.FishingHut.id) return "Fish for food";
             if (p.id == BuildPlans.Kitchen.id) return "Cooks dishes";

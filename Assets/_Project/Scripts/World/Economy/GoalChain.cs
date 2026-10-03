@@ -256,7 +256,9 @@ namespace SeaSick.World.Economy
             }
             g.HasGoal = true;
             g.title = $"{label} level {step.toLevel}";
-            g.why = step.storeBonus > 0 ? $"Keeps {step.storeBonus} more of each thing."
+            string runnerWords = OutpostLedger.RunnerUpgradeWords(planId, step.toLevel);
+            g.why = runnerWords != null ? $"More, better runners: {runnerWords}."
+                : step.storeBonus > 0 ? $"Keeps {step.storeBonus} more of each thing."
                 : step.housesBonus > 0 ? $"Sleeps {step.housesBonus} more."
                 : $"Works {step.rateMul:0.#}× as fast.";
             var w = new Walker(l, g);
