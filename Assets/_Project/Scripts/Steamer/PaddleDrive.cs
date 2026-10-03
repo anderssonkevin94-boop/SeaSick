@@ -591,8 +591,13 @@ namespace SeaSick.Steamer
             {
                 float inflow = Mathf.Clamp(RudderInflow, -topNow, topNow);
                 // Dead still, ahead: a hair of sternway from the sea must not
-                // flip which way the pivot goes under a held helm.
-                float dir = inflow < -0.05f ? -1f : (inflow > 0.05f ? 1f : (way < -0.05f ? -1f : 1f));
+                // flip which way the pivot goes under a held helm. Engine
+                // stopped (2026-10-03, the DREDGE stick pivots at rest): the
+                // sea's drift is ±1.5 m/s either way in a swell, so the helm
+                // alone says which way -- reading the drift flipped the pivot
+                // every second and she rocked on the spot instead of turning.
+                float dir = Mathf.Abs(order) < 0.05f ? 1f
+                    : inflow < -0.05f ? -1f : (inflow > 0.05f ? 1f : (way < -0.05f ? -1f : 1f));
                 // The at-rest share needs water on the blade: none with the
                 // engine stopped and no way on, all of it once the race runs.
                 float steer = Mathf.Clamp01(Mathf.Abs(inflow) / (steerageInflow01 * Mathf.Max(0.5f, topNow)));

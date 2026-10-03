@@ -47,9 +47,10 @@ namespace SeaSick.Ship
         // --- boost (the Haste-style button, Shift at a desk) ---
         /// Boost disarms after this long with no push ahead... Range 0.5..5.
         public static float boostIdleSeconds = 1.5f;
-        /// ...once she is also slower than this, m/s (near stopped).
+        /// ...once she is also slower than this, m/s (near stopped; a swell
+        /// alone drifts her up to ~1.5).
         /// Range 0..3.
-        public static float boostStopSpeed = 0.5f;
+        public static float boostStopSpeed = 1.5f;
 
         // --- steer toward (man overboard) ---
         /// Throttle the swimmer steer sails at while the player isn't
