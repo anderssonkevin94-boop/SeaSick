@@ -1225,12 +1225,21 @@ namespace SeaSick.World
             ledger?.hands.Add(new OutpostHand
             {
                 name = who,
-                // Whatever the camp is doing. A hand left at a half-built camp
-                // who defaulted to cutting would stand there filling a pile
-                // that does not exist yet.
-                order = Building ? OutpostOrder.Build : OutpostOrder.Gather,
-                target = Building ? "" : Res.Timber,
+                // **They land with no job (2026-10-03).** Kevin: *"land as
+                // idle."* The old default (Build at a half-built camp, else
+                // Gather timber) handed a dropped hand a job the player never
+                // gave -- and a permanent one: a "Gather timber" hand is
+                // skipped by `EnlistFree`, the hunger draft and the food
+                // emergency, so he cut timber for good. Idle (not reserve:
+                // `playerIdle` stays false) is the idle ladder -- site work,
+                // station hauling, the stock top-up -- and the food draft
+                // may take him. A standing blueprint still enlists him as a
+                // builder below (the same call `Step` makes), so he walks
+                // to the plot from the landing as before.
+                order = OutpostOrder.Idle,
+                target = "",
             });
+            if (Building) ledger?.EnlistFree();
             Life.Lives.Log(who, Life.LifeEvents.WentAshore, ledger?.CampLabel ?? "");
             // **Phase 7 (ferrying).** Landed somewhere other than the camp
             // they were first recruited/born at -- read BEFORE the log line

@@ -30,14 +30,28 @@ namespace SeaSick.World
     /// books waited for a body at the second site that never came, and the
     /// crew stood at the fire.
     ///
-    /// **With runners on the island (2026-10-02, OutpostLedger.Runners.cs)**
-    /// rung 1 is theirs -- the barrows stock the sites -- and rung 3 only
-    /// cuts/quarries a material nobody has in the store or on a rack.
+    /// **Runners do not take the builders' fetching away (2026-10-03).**
+    /// Kevin: *"builders fetch themselves."* On 2026-10-02 one runner on the
+    /// island switched rungs 1 and 3 off for every builder (the barrows were
+    /// to stock the sites), but runners rank sites low, so builders stood at
+    /// the fire while blueprints waited. Now a builder always fetches for
+    /// his sites, runners or not; the runners' `SiteChore` is an extra pair
+    /// of hands on the same job. They cannot both bring the same shortfall:
+    /// both read `NetShort`, which is net of every load already walking to a
+    /// site (`InFlightTo`), and a trip books its `haulCount` the moment it
+    /// starts. `MayHaul` still gates STATION hauling and transfers, which
+    /// stay runner-only.
     /// </summary>
     public partial class OutpostLedger
     {
         /// The plot each hand was sent to clear or hammer. Not saved: after a
         /// load the ladder simply chooses again.
+        /// The plot a builder just finished the plot work of (cleared, still
+        /// waiting on stock), so his next fetch is for THAT plot first
+        /// (2026-10-03). Not saved, like `workSite`.
+        [System.NonSerialized] readonly Dictionary<OutpostHand, PendingBuild> lastSite =
+            new Dictionary<OutpostHand, PendingBuild>();
+
         [System.NonSerialized] readonly Dictionary<OutpostHand, PendingBuild> workSite =
             new Dictionary<OutpostHand, PendingBuild>();
 
@@ -93,6 +107,7 @@ namespace SeaSick.World
         {
             if (h == null) return;
             workSite.Remove(h);
+            lastSite.Remove(h);
             clearStall.Remove(h);
             clearStallPos.Remove(h);
             stallSkip.Remove(h);
@@ -135,11 +150,14 @@ namespace SeaSick.World
             var site = StickySite(h);
             if (site == null)
             {
-                // 1. from the store -- not once the island has runners
-                // (2026-10-02): their barrows stock the sites.
-                if (MayHaul(h) && FetchForSites(h, false)) return true;
+                // 1. from the store or a rack. **Runners or not (2026-10-03,
+                // Kevin: "builders fetch themselves")**: the old
+                // `MayHaul(h) &&` gate left builders at the fire whenever a
+                // single runner existed. His own last plot comes first.
+                lastSite.TryGetValue(h, out var mine);
+                if (FetchForSites(h, false, mine)) return true;
                 site = PickPlot(h);                                // 2. clear / hammer
-                if (site == null) return FetchForSites(h, true);   // 3. off the island
+                if (site == null) return FetchForSites(h, true, mine);   // 3. off the island
                 workSite[h] = site;
             }
             if (!WalkToPlot(h, site, ref budget, scale))
@@ -192,6 +210,8 @@ namespace SeaSick.World
             }
             // Plot work done (raised, or cleared and still waiting on stock):
             // 3. "when it's complete, look for the next thing to do".
+            // A plot he cleared and left waiting is the first he fetches for.
+            if (!site.Complete) lastSite[h] = site; else lastSite.Remove(h);
             workSite.Remove(h);
             return budget > Eps;
         }
@@ -233,12 +253,18 @@ namespace SeaSick.World
         /// Start a fetch for the oldest site short of something: from the
         /// store or a station rack (`field` false), or cut/quarried off the
         /// island (`field` true).
-        bool FetchForSites(OutpostHand h, bool field)
+        ///
+        /// **`prefer`** (2026-10-03) is the plot this builder last worked:
+        /// he looks at it before the queue's oldest, so a builder who
+        /// cleared a plot stocks it rather than wandering to another.
+        bool FetchForSites(OutpostHand h, bool field, PendingBuild prefer = null)
         {
             if (sites == null) return false;
-            foreach (var site in sites)
+            for (int si = -1; si < sites.Count; si++)
             {
-                if (site == null || site.Complete || site.Stocked) continue;
+                var site = si < 0 ? prefer : sites[si];
+                if (si >= 0 && site == prefer) continue;   // already tried first
+                if (site == null || site.Complete || site.Stocked || !sites.Contains(site)) continue;
                 for (int k = 0; k < 3; k++)
                 {
                     string res = k == 0 ? Res.Timber : k == 1 ? Res.Stone : Res.Brick;
@@ -264,27 +290,16 @@ namespace SeaSick.World
                         continue;
                     }
                     if (res == Res.Brick) continue;   // nobody quarries a brick
-                    // **With runners, only what nobody has in store** or on
-                    // a rack (2026-10-02): that is gathering, a builder's to
-                    // do; anything a barrow can bring, a runner brings.
-                    if (!MayHaul(h) && SiteStockFree(res)) continue;
+                    // (2026-10-03: the 2026-10-02 "with runners, only what
+                    // nobody has in store" filter is gone -- a builder cuts
+                    // or quarries for his site exactly as on a runner-less
+                    // island; `NetShort` keeps him off what is in transit.)
                     int standing = FieldFree(res);
                     if (standing <= 0) continue;
                     StartTimedTrip(h, res, Mathf.Min(cap, standing), HaulPlace.Field, -1, HaulPlace.Site, -1, site);
                     return true;
                 }
             }
-            return false;
-        }
-
-        /// Any `res` in the store or on a station rack that nobody is
-        /// already walking to fetch.
-        bool SiteStockFree(string res)
-        {
-            if (StoreFree(res) > 0) return true;
-            if (stations != null)
-                for (int i = 0; i < stations.Count; i++)
-                    if (RowFree(i, stations[i]?.Rack(res), false) > 0) return true;
             return false;
         }
 
