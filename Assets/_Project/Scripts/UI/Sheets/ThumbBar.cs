@@ -307,7 +307,7 @@ namespace SeaSick.UI.Sheets
                 // Anchored mode's Landing party first: the bar's children are
                 // its left-to-right order, and it leads "Landing party ·
                 // Ship · Cast off" (a hidden button takes no room).
-                party = Btn(Glyph.Kind.Compass, "Landing party", PressParty, true, out _, "Landing party: explore, gather, hunt ashore");
+                party = Btn(Glyph.Kind.Compass, "Landing party", PressParty, true, out _, "Landing party: gather or hunt ashore");
                 camp = Btn(Glyph.Kind.Camp, "Camp", PressCamp, false, out _, "The camp: what needs you, the fire, the buildings, people, stores");
                 build = Btn(Glyph.Kind.Build, "Build", PressBuild, true, out _, "Build: put up a new building");
                 ship = Btn(Glyph.Kind.Ship, "Ship", PressShip, false, out _, "The ship: hold, crew, chart");

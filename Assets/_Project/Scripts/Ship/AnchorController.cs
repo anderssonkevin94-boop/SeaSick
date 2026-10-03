@@ -1125,9 +1125,9 @@ namespace SeaSick.Ship
         public void CallThemBack()
         {
             if (CurrentState != State.Ashore) return;
-            // Already turned for home: a second order would re-route
-            // explorers already on their straightest way back (the bar's
-            // hint says "Coming back aboard…" meanwhile).
+            // Already turned for home: a second order would only re-route
+            // hands already walking back (the bar's hint says "Coming back
+            // aboard…" meanwhile).
             if (Party.Out && party.Recalling) return;
             RecallCrew();
         }
@@ -1148,8 +1148,7 @@ namespace SeaSick.Ship
             if (partyOut) party.Recall("called back");
             // Parked camp hands are not ours to recall -- they live there now.
             // A landing party's hands were just turned for home by the party
-            // itself (explorers by the straightest walkable way, 2026-09-30);
-            // a second order here would overwrite theirs.
+            // itself; a second order here would overwrite theirs.
             foreach (var c in crew)
                 if (Ours(c) && !(partyOut && c.Party == party)) c.ReturnAboard();
         }

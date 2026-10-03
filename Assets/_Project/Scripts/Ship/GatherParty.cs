@@ -10,28 +10,20 @@ namespace SeaSick.Ship
     /// Kevin, on the phone at Island_3: *"what if i want to hunt, or
     /// explore? ... this whole interaction needs to be re worked."* Anchored
     /// off an island with no camp, the ship sends chosen hands ashore on ONE
-    /// of three orders (`Order`), picked on `UI.Sheets.LandingPartySheet`:
+    /// of two orders (`Order`), picked on `UI.Sheets.LandingPartySheet`.
+    /// **2026-10-03, Kevin: "remove the Explore card" -- Gather and Hunt
+    /// stay.** Explore was a 120 s walk inland (a fanned stop per hand, a
+    /// breadcrumb trail home, a boar-bite roll) whose whole yield was
+    /// opening the fog of war; the fog went the same day and the trip was
+    /// left with the risk and "Nothing new found". Its walk, trail, danger
+    /// roll, dials (`ExploreSeconds/Step/Reach`, `BoarDangerMetres`,
+    /// `HurtChance*`) and report line are deleted. What Gather and Hunt
+    /// still share stays: the hurt-never-dead hand (`HurtName`, the
+    /// `Kill` accident roll, `Boarded` rest) and the recall walk home. A
+    /// saved party never exists (the save writes the ship's crew by name
+    /// and the hold), so an old save made mid-Explore simply loads with
+    /// every hand aboard; nothing in the save names an order.
     ///
-    /// * **Explore** -- the party walks inland for `ExploreSeconds` of
-    ///   walking, each hand along his own fanned bearing, every stop a
-    ///   walkable straight line (`LineWalkable`), spread from the others'.
-    ///   They come home the way they went (a breadcrumb trail per hand),
-    ///   never in a straight line over a cliff. **2026-10-03, Kevin: "remove
-    ///   the fog of war."** Until then each stop led into the most
-    ///   unrevealed ground and every hand ashore opened the fog round
-    ///   himself (`IslandFog.RevealAround`); revealing was Explore's whole
-    ///   yield (it found resources, herds and finds only in the sense that
-    ///   they stood on newly open ground -- nothing is spawned or unlocked
-    ///   by exploring). With the island fully visible, Explore is now a walk
-    ///   with the boar risk below and no reward: KEPT pending Kevin's call
-    ///   (see GDD decision log 2026-10-03).
-    ///   **Mild risk:** the first time an explorer comes within
-    ///   `BoarDangerMetres` of a live boar it is rolled once --
-    ///   `HurtChanceUnarmed` for a party with no weapon among them,
-    ///   `HurtChanceArmed` when one of them carries a spear or bow. A hurt
-    ///   hand is never killed: the party turns for home and he comes aboard
-    ///   off station for `HurtRestSeconds` (`CrewAgent.ApplyRescueAftermath`,
-    ///   the ship's twin of the drag-to-hut recovery), logged `Downed`.
     /// * **Gather** -- the 2026-09-27 trip, unchanged in its dials and its
     ///   booking (below). (2026-09-30 to 2026-10-03 it was limited to
     ///   sources on revealed ground; with the fog gone, any source in reach.)
@@ -43,7 +35,10 @@ namespace SeaSick.Ship
     ///   (`BeastsPerHunter`). A bow kill spends one arrow from the hold;
     ///   spears and bows are carried, not spent (no fractional wear in the
     ///   hold). The kill rolls the camp's own `LifeTuning.HuntAccidentChance`
-    ///   (iron halves it) and an accident is the same hurt-not-dead as above.
+    ///   (iron halves it) and an accident is hurt-not-dead: he still carries it
+    ///   home, then comes aboard off station for `HurtRestSeconds`
+    ///   (`CrewAgent.ApplyRescueAftermath`, the ship's twin of the
+    ///   drag-to-hut recovery), logged `Downed`.
     ///
     /// **Weapons (`DealWeapons`).** A hand is armed by what the HOLD
     /// carries: iron spears, then stone spears, then bows while there are
@@ -139,20 +134,9 @@ namespace SeaSick.Ship
         public const int FillHold = -1;
 
         // --- the landing party's dials (2026-09-30, PROVISIONAL, unplayed) --
-        /// Seconds of walking an explore trip lasts before it turns home.
-        public const float ExploreSeconds = 120f;
-        /// How far one explore stop is from the last, metres.
-        public const float ExploreStep = 22f;
-        /// Explore stops are never chosen farther than this from the
-        /// landing, metres. (2026-09-30 a trip also ended early once no fog
-        /// was left in this reach; the fog went 2026-10-03, so a trip now
-        /// runs its `ExploreSeconds`.)
-        public const float ExploreReach = 180f;
-        /// A live boar this close to an explorer is an encounter (rolled once).
-        public const float BoarDangerMetres = 18f;
-        /// Chance an encounter hurts somebody: nobody in the party armed / armed.
-        public const float HurtChanceUnarmed = 0.35f;
-        public const float HurtChanceArmed = 0.05f;
+        // (The explore dials and the boar-encounter chances went with the
+        // Explore order, 2026-10-03; a hunt's own risk is
+        // `LifeTuning.HuntAccidentChance`.)
         /// Seconds a hurt hand is off station once aboard (never death).
         public const float HurtRestSeconds = 120f;
         /// Sickness a hurt hand comes back with (shaken).
@@ -169,7 +153,7 @@ namespace SeaSick.Ship
         /// Seconds the result toast stays up.
         public const float ReportSeconds = 8f;
 
-        public enum Order { Gather, Explore, Hunt }
+        public enum Order { Gather, Hunt }
 
         public struct Option
         {
@@ -213,10 +197,6 @@ namespace SeaSick.Ship
         public int Kills { get; private set; }
         public int MeatAboard { get; private set; }
         public int HideAboard { get; private set; }
-        /// Seconds since the party left (explore counts its trip on it).
-        public float Elapsed => Out ? Time.time - startedAt : 0f;
-        /// 0..1 of an explore trip's walking time.
-        public float Explore01 => Mathf.Clamp01(Elapsed / ExploreSeconds);
         /// A hand hurt this trip, or null.
         public string HurtName { get; private set; }
 
@@ -252,7 +232,7 @@ namespace SeaSick.Ship
 
         // --- per hand -------------------------------------------------------
 
-        enum Phase { Out, Home, Stalk, Jab, Flop, Carry, Done }
+        enum Phase { Out, Stalk, Jab, Flop, Carry, Done }
 
         sealed class Job
         {
@@ -261,16 +241,10 @@ namespace SeaSick.Ship
             public Animal target;
             public bool hurt;
             public int kills;
-            public Vector3 heading;
-            /// Explore stops reached, oldest first: the way home, reversed.
-            public readonly List<Vector3> trail = new List<Vector3>();
         }
 
         readonly Dictionary<CrewAgent, Job> jobs = new Dictionary<CrewAgent, Job>();
-        float startedAt, nextDanger, nextDoneLook;
-        readonly HashSet<Animal> metBoars = new HashSet<Animal>();
         FaunaLod fauna;
-        string wardedOffBy;
         string hurtCause;
 
         Job JobOf(CrewAgent who) => who != null && jobs.TryGetValue(who, out var j) ? j : null;
@@ -304,8 +278,8 @@ namespace SeaSick.Ship
 
         public string TargetLabel => Target == FillHold ? "hold" : Target.ToString();
 
-        /// "Stone 7/20 · 3 ashore" (gather), "Exploring · 1:12 left · 2
-        /// ashore", "Hunting goats · 0/1 · 1 ashore".
+        /// "Stone 7/20 · 3 ashore" (gather), "Hunting goats · 0/1 · 1
+        /// ashore".
         public string StatusLine
         {
             get
@@ -313,11 +287,6 @@ namespace SeaSick.Ship
                 string tail = $"  ·  {Ashore} ashore" + (Recalling ? "  ·  coming back" : "");
                 switch (Mode)
                 {
-                    case Order.Explore:
-                    {
-                        int left = Mathf.CeilToInt(Mathf.Max(0f, ExploreSeconds - Elapsed));
-                        return (Recalling ? "Exploring" : $"Exploring · {left / 60}:{left % 60:00} left") + tail;
-                    }
                     case Order.Hunt:
                         return $"Hunting {HerdWord(HuntKind, 2)} {Kills}/{Mathf.Max(1, HunterCount) * BeastsPerHunter}" + tail;
                     default:
@@ -446,17 +415,6 @@ namespace SeaSick.Ship
             return true;
         }
 
-        /// Explore: `who` walk inland for `ExploreSeconds` (no reward since
-        /// the fog went, 2026-10-03 -- see the class notes).
-        public bool SendExplore(List<CrewAgent> who, out string why)
-        {
-            if (!Ready(who, out why)) return false;
-            Resource = null;
-            Target = 0;
-            Begin(Order.Explore, who);
-            return true;
-        }
-
         /// Hunt: the ARMED hands of `who` each bring home one `kind`.
         public bool SendHunt(Animal.Kind kind, List<CrewAgent> who, out string why)
         {
@@ -507,13 +465,8 @@ namespace SeaSick.Ship
             StopReason = "";
             HurtName = null;
             hurtCause = null;
-            wardedOffBy = null;
             Recalling = false;
             Out = true;
-            startedAt = Time.time;
-            nextDanger = Time.time + 1f;
-            nextDoneLook = Time.time + 1f;
-            metBoars.Clear();
             FindFauna();
 
             hands.Clear();
@@ -535,7 +488,7 @@ namespace SeaSick.Ship
         }
 
         /// Everyone back to the ship. Loads in hand are delivered when they
-        /// come aboard; explorers walk their own trail home.
+        /// come aboard.
         public void Recall(string why)
         {
             if (!Out) return;
@@ -546,22 +499,14 @@ namespace SeaSick.Ship
                 if (h == null || h.Party != this) continue;
                 var j = JobOf(h);
                 if (j != null && j.target != null && !j.target.Dead) { j.target.Hunted = false; j.target = null; }
-                // Explorers turn round at once and take the straightest
-                // walkable way back (`HomeStep`), not the whole winding trail
-                // (2026-09-30: a recall took ~60 s and first walked on).
-                if (Mode == Order.Explore && j != null && h.OnErrand)
-                {
-                    j.phase = Phase.Home;
-                    if (HomeStep(h, j, out Vector3 back)) { h.RetargetErrand(back); continue; }
-                }
                 h.ReturnAboard();
             }
         }
 
         // --- the crew's side (CrewAgent calls these) ----------------------
 
-        /// A gather party works sources (`NextSource`); explore and hunt
-        /// parties walk errands (`NextErrand`).
+        /// A gather party works sources (`NextSource`); a hunt party walks
+        /// errands (`NextErrand`).
         public bool Gathers => Mode == Order.Gather;
 
         /// Units still wanted, counting what is already in arms.
@@ -609,22 +554,13 @@ namespace SeaSick.Ship
             return pick.TryClaim(who) ? pick : null;
         }
 
-        /// **The next place an explorer or hunter walks to**, or false (go
+        /// **The next place a hunter walks to**, or false (go
         /// aboard by the plank).
         public bool NextErrand(CrewAgent who, out Vector3 at)
         {
             at = default;
             var j = JobOf(who);
             if (!Out || j == null) return false;
-            if (Mode == Order.Explore)
-            {
-                if (Recalling || j.hurt || Elapsed >= ExploreSeconds) j.phase = Phase.Home;
-                if (j.phase == Phase.Home) return HomeStep(who, j, out at);
-                if (NextExploreStop(who, j, out at)) return true;
-                // Walled in on every side: turn for home.
-                j.phase = Phase.Home;
-                return HomeStep(who, j, out at);
-            }
             if (Mode == Order.Hunt)
             {
                 if (Recalling || j.weapon == null || j.kills >= BeastsPerHunter || Room <= 0) return false;
@@ -660,11 +596,6 @@ namespace SeaSick.Ship
         {
             var j = JobOf(who);
             if (j == null) return 0f;
-            if (Mode == Order.Explore)
-            {
-                if (j.phase == Phase.Out) j.trail.Add(who.transform.position);
-                return 0f;
-            }
             if (Mode == Order.Hunt && j.phase == Phase.Stalk && j.target != null && !j.target.Dead)
             {
                 j.phase = Phase.Jab;
@@ -821,22 +752,6 @@ namespace SeaSick.Ship
                 if (RaidersNear()) Recall("raiders! running for the ship");
             }
 
-            if (Mode == Order.Explore && !Recalling && Time.time >= nextDanger)
-            {
-                nextDanger = Time.time + 0.5f;
-                LookForTrouble();
-            }
-
-            // The trip ends when the time is up and everyone turns for the
-            // landing at once (2026-09-30; the fog-left-in-reach ending went
-            // with the fog, 2026-10-03).
-            if (Mode == Order.Explore && !Recalling && Time.time >= nextDoneLook)
-            {
-                nextDoneLook = Time.time + 1f;
-                string done = ExploreDone();
-                if (done != null) Recall(done);
-            }
-
             DriveHunters();
 
             // Done when everyone is back aboard.
@@ -869,51 +784,6 @@ namespace SeaSick.Ship
             }
         }
 
-        /// **Something could bite.** The first time an explorer comes within
-        /// `BoarDangerMetres` of a live boar, one roll: `HurtChanceArmed`
-        /// when any hand of the party carries a weapon (they ward it off),
-        /// else `HurtChanceUnarmed`. At most one hand hurt a trip; the party
-        /// then turns for home.
-        void LookForTrouble()
-        {
-            if (fauna == null || HurtName != null) return;
-            bool armed = false;
-            foreach (var h in hands) if (JobOf(h)?.weapon != null) { armed = true; break; }
-            float r2 = BoarDangerMetres * BoarDangerMetres;
-            foreach (var a in fauna.Animals)
-            {
-                if (a == null || a.Dead || a.kind != Animal.Kind.Boar || metBoars.Contains(a)) continue;
-                foreach (var h in hands)
-                {
-                    if (h == null || h.Party != this || !h.IsAshore) continue;
-                    Vector3 d = a.transform.position - h.transform.position; d.y = 0f;
-                    if (d.sqrMagnitude > r2) continue;
-                    metBoars.Add(a);
-                    if (Random.value < (armed ? HurtChanceArmed : HurtChanceUnarmed))
-                    {
-                        Hurt(h, "a boar");
-                        return;
-                    }
-                    if (armed && wardedOffBy == null)
-                    {
-                        foreach (var g in hands)
-                            if (JobOf(g)?.weapon != null) { wardedOffBy = g.DisplayName; break; }
-                    }
-                    break;
-                }
-            }
-        }
-
-        void Hurt(CrewAgent who, string cause)
-        {
-            var j = JobOf(who);
-            if (j == null || HurtName != null) return;
-            j.hurt = true;
-            HurtName = who.DisplayName;
-            hurtCause = cause;
-            Recall($"{HurtName} was hurt by {cause}");
-        }
-
         void Finish()
         {
             LastDelivered = DeliveredUnits;
@@ -935,15 +805,13 @@ namespace SeaSick.Ship
         // --- the report ---------------------------------------------------
 
         /// "6 timber aboard" / "2 goats · 6 meat and 2 hide aboard" / "Bo was
-        /// hurt by a boar -- resting aboard"; an explore trip "Nothing new found".
+        /// hurt by a boar -- resting aboard".
         void Report()
         {
             var parts = new List<string>();
             // 2026-09-30 to 2026-10-03 the report led with what the trip had
             // newly FOUND (resources, herds, finds on ground it opened). The
-            // fog is gone and everything is known up front, so there is no
-            // news to report; an explore trip says so plainly.
-            if (Mode == Order.Explore) parts.Add("Nothing new found");
+            // fog and the Explore order are gone, so there is no news line.
             if (Mode == Order.Gather && DeliveredUnits > 0)
                 parts.Add($"{DeliveredUnits} {World.Economy.ResDefs.Label(Resource).ToLowerInvariant()} aboard");
             if (Mode == Order.Hunt)
@@ -953,7 +821,6 @@ namespace SeaSick.Ship
                     : "No kill");
             }
             if (HurtName != null) parts.Add($"{HurtName} was hurt by {hurtCause}, resting aboard");
-            else if (wardedOffBy != null) parts.Add($"{wardedOffBy} drove off a boar");
             else if (StopReason.StartsWith("raiders")) parts.Add("ran from raiders");
 
             LastReport = string.Join(" · ", parts);
@@ -994,105 +861,6 @@ namespace SeaSick.Ship
         void OnDisable()
         {
             if (Out) Recall("the ship went away");
-        }
-
-        // --- explore --------------------------------------------------------
-
-        /// **The next explore stop.** Sixteen bearings round his last
-        /// heading at a full and a short step; a stop must be dry land and a
-        /// walkable straight line from where he stands. Scored by keeping on
-        /// the way he was going, less crowding the other hands' stops. (Until
-        /// 2026-10-03 also by the fog it looked into and a pull toward the
-        /// nearest cloud; both went with the fog.)
-        bool NextExploreStop(CrewAgent who, Job j, out Vector3 at)
-        {
-            at = default;
-            var h = Island.TerrainHeight;
-            Vector3 from = who.transform.position;
-            if (j.heading.sqrMagnitude < 0.01f)
-            {
-                Vector3 inland = (island != null ? island.transform.position : from) - landing;
-                inland.y = 0f;
-                if (inland.sqrMagnitude < 1f) inland = anchor != null ? anchor.transform.forward : Vector3.forward;
-                int i = hands.IndexOf(who), n = hands.Count;
-                float fan = n > 1 ? Mathf.Lerp(-55f, 55f, i / (float)(n - 1)) : 0f;
-                j.heading = Quaternion.Euler(0f, fan, 0f) * inland.normalized;
-            }
-
-            float bestScore = float.MinValue;
-            bool found = false;
-            Vector3 best = default;
-            for (int k = 0; k < 16; k++)
-            {
-                float ang = k * 22.5f;
-                Vector3 dir = Quaternion.Euler(0f, ang, 0f) * j.heading;
-                for (int s = 0; s < 2; s++)
-                {
-                    Vector3 p = from + dir * (s == 0 ? ExploreStep : ExploreStep * 0.55f);
-                    if (h != null)
-                    {
-                        p.y = h(p.x, p.z);
-                        if (p.y < 0.6f) continue;   // the sea, the surf, wet sand
-                    }
-                    Vector3 off = p - landing; off.y = 0f;
-                    if (off.sqrMagnitude > ExploreReach * ExploreReach) continue;
-                    if (!LineWalkable(from, p)) continue;
-                    float score = Mathf.Cos(ang * Mathf.Deg2Rad) * 2f;
-                    foreach (var kv in jobs)
-                    {
-                        if (kv.Key == who || kv.Value.trail.Count == 0) continue;
-                        Vector3 o = kv.Value.trail[kv.Value.trail.Count - 1] - p; o.y = 0f;
-                        float d = o.magnitude;
-                        if (d < 15f) score -= (15f - d) / 5f;
-                    }
-                    score += Random.value * 0.5f;
-                    if (score > bestScore) { bestScore = score; best = p; found = true; }
-                }
-            }
-            if (!found) return false;
-            Vector3 head = best - from; head.y = 0f;
-            if (head.sqrMagnitude > 0.01f) j.heading = head.normalized;
-            at = best;
-            return true;
-        }
-
-        /// Why the explore trip is over, or null while it runs. Only the
-        /// clock since 2026-10-03 (the fog-based endings -- "the whole island
-        /// is explored", "nothing left / nothing new in reach" -- went with
-        /// the fog).
-        string ExploreDone() => Elapsed >= ExploreSeconds ? "time to turn back" : null;
-
-        /// **The next step home (2026-09-30).** Straight to the landing when
-        /// that line is walkable (false: `CrewAgent` then walks the plank);
-        /// else the trail point nearest the landing that he can see from
-        /// here, dropping everything after it; else the old step back.
-        bool HomeStep(CrewAgent who, Job j, out Vector3 at)
-        {
-            at = default;
-            Vector3 from = who.transform.position;
-            if (j.trail.Count == 0 || LineWalkable(from, landing)) { j.trail.Clear(); return false; }
-            for (int i = 0; i < j.trail.Count; i++)
-            {
-                if (!LineWalkable(from, j.trail[i])) continue;
-                at = j.trail[i];
-                j.trail.RemoveRange(i, j.trail.Count - i);
-                return true;
-            }
-            at = PopHome(j, from);
-            return true;
-        }
-
-        /// The next stop home: the newest trail point more than 3 m off.
-        static Vector3 PopHome(Job j, Vector3 from)
-        {
-            while (j.trail.Count > 0)
-            {
-                Vector3 p = j.trail[j.trail.Count - 1];
-                j.trail.RemoveAt(j.trail.Count - 1);
-                Vector3 d = p - from; d.y = 0f;
-                if (d.sqrMagnitude > 9f || j.trail.Count == 0) return p;
-            }
-            return from;
         }
 
         // --- hunt -----------------------------------------------------------

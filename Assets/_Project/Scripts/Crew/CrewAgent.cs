@@ -232,7 +232,7 @@ namespace SeaSick.Crew
             JollyBoatDuty,
             // ashore
             GoingAshore, ToNode, Chopping, ToShip, Idling, Boarding,
-            // 2026-09-30: a landing party's walk (explore stop, hunt stalk)
+            // 2026-09-30: a landing party's walk (hunt stalk; explore stops until 2026-10-03)
             Errand
         }
         State state = State.Station;
@@ -278,12 +278,11 @@ namespace SeaSick.Crew
         Ship.GatherParty party;
         public Ship.GatherParty Party => party;
 
-        /// **A landing party's errand (2026-09-30).** Explore and hunt
-        /// parties (`GatherParty.Gathers` false) walk to places the party
+        /// **A landing party's errand (2026-09-30).** A hunt party
+        /// (`GatherParty.Gathers` false) walks to places the party
         /// names (`NextErrand`) instead of sources: on arrival the party says
         /// how long he stands there (`ErrandReached` / `ErrandDone`, a jab,
         /// a flop), then he asks again; nothing more means walk aboard.
-        public bool OnErrand => state == State.Errand;
         float errandWait;
 
         /// Move the errand's end point (a beast that walks on).
@@ -372,7 +371,7 @@ namespace SeaSick.Crew
         {
             if (party != null && !party.Gathers)
             {
-                // Explore / hunt: the party names the next place, or nothing
+                // Hunt: the party names the next place, or nothing
                 // -- and nothing means walk home over the plank.
                 if (!party.NextErrand(this, out Vector3 at))
                 {
@@ -1377,7 +1376,7 @@ namespace SeaSick.Crew
 
         /// **The landing party's way out to his source (2026-10-03)**, landing
         /// first, the source last (`GatherParty.RouteTo`). Empty off a party,
-        /// on explore/hunt errands, and once he is back aboard.
+        /// on hunt errands, and once he is back aboard.
         readonly List<Vector3> partyRoute = new List<Vector3>();
         readonly List<Vector3> pathBuild = new List<Vector3>();
 

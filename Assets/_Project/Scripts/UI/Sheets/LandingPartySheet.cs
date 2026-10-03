@@ -13,7 +13,8 @@ namespace SeaSick.UI.Sheets
     /// game and it's structured in a way that makes no sense. only room for
     /// two resources ... what if i want to hunt, or explore?"* He approved
     /// the mockups "7 · Landing party: Explore (fog)" and "7b · Landing
-    /// party: Gather". This replaces `GatherPartySheet` (its own panel, its
+    /// party: Gather" (the Explore card was removed 2026-10-03, below).
+    /// This replaces `GatherPartySheet` (its own panel, its
     /// own USS) with an ordinary framed sheet in the house look (`CardKit`,
     /// `.st` + Hand.uss + Lookout.uss), hugging its content on the phone so
     /// the island stays visible above it (`SheetHost.HugsContent`).
@@ -24,27 +25,28 @@ namespace SeaSick.UI.Sheets
     ///   menu, since the IMGUI Menu/Ledger chips stand down off a fresh
     ///   island) · ✕. (The "35% explored" pill went with the fog of war,
     ///   2026-10-03.)
-    /// * **three order cards** -- Explore · Gather · Hunt;
-    /// * **Explore** -- ON THIS ISLAND chips (`IslandInventory`), one line
-    ///   of what happens, WHO GOES portraits ("spear" / "bow · 8" /
-    ///   "unarmed" / "at the helm");
+    /// * **two order cards** -- Gather · Hunt (the sheet opens on Gather);
     /// * **Gather** -- every kind on the island as a 4-wide icon tile, HOW
     ///   MUCH "5 / 10 / All N" (N = what the hold and the reachable sources
     ///   allow), WHO GOES name pills;
     /// * **Hunt** -- the island's herds as tiles, WHO GOES portraits (only
     ///   the armed can be picked);
     /// * **thumb row** -- ONE primary that says exactly what happens ("Send
-    ///   Bo and Ma to explore", "Send 2 to gather 10 ore", "Send Pip to hunt
+    ///   2 to gather 10 ore", "Send Pip to hunt
     ///   goats"), or plain text when it cannot ("Nobody is armed ...").
     ///   Never a disabled primary.
     ///
-    /// **No fog (Kevin, 2026-10-03: "remove the fog of war").** 2026-09-30 to
-    /// 2026-10-03 the tiles listed only what a party had FOUND (stood on
-    /// ground explorers had opened) and an empty Gather/Hunt offered an
-    /// "Explore first" button. Every island is fully visible now: the tiles
-    /// are everything on the island, the "Explore first" buttons are plain
-    /// text, and the sheet opens on Gather (Explore no longer yields
-    /// anything -- kept pending Kevin's call, GDD decision log 2026-10-03).
+    /// **No fog, no Explore (Kevin, 2026-10-03: "remove the fog of war",
+    /// then "remove the Explore card").** 2026-09-30 to 2026-10-03 the tiles
+    /// listed only what a party had FOUND (stood on ground explorers had
+    /// opened) and an empty Gather/Hunt offered an "Explore first" button.
+    /// Every island is fully visible now: the tiles are everything on the
+    /// island and the "Explore first" buttons are plain text. Explore was
+    /// then a timed walk with a boar risk and no reward, so its card (the
+    /// ON THIS ISLAND chip row, its order, send button and progress page,
+    /// the compass glyph) is deleted; Gather and Hunt stay. `Tab3` keeps
+    /// its name for the two orders; a stale `lastOrder` can only be one of
+    /// them (it is a static reset on every play).
     ///
     /// While a party is ashore the page is its progress (what they are
     /// doing, a bar) and "Call them back". The
@@ -53,7 +55,7 @@ namespace SeaSick.UI.Sheets
     ///
     /// Opened from the anchor prompt's "Landing party" row
     /// (`AnchorController`), where "⛏ Send gather party" used to be.
-    /// The trip logic is `Ship.GatherParty` (explore, gather, hunt).
+    /// The trip logic is `Ship.GatherParty` (gather, hunt).
     public sealed class LandingPartySheet : ISheetFramed
     {
         public static bool IsOpen => Sheets.Current is LandingPartySheet;
@@ -72,7 +74,7 @@ namespace SeaSick.UI.Sheets
             && (a.CurrentState == AnchorController.State.Anchored || a.CurrentState == AnchorController.State.Ashore)
             && !Sheets.SuppressLegacy;
 
-        public enum Tab3 { Explore, Gather, Hunt }
+        public enum Tab3 { Gather, Hunt }
         static Tab3 lastOrder = Tab3.Gather;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -181,7 +183,7 @@ namespace SeaSick.UI.Sheets
             else
                 tail = $"{GatherParty.Company(anchor).Count} aboard";
             head.SetSub($"{island.name} · {tail}");
-            head.SetPill(null, StationPage.PillGood);   // no "% explored" since the fog went (2026-10-03)
+            head.SetPill(null, StationPage.PillGood);   // no pill since the fog went (2026-10-03)
         }
 
         // --- the page -----------------------------------------------------------
@@ -223,9 +225,7 @@ namespace SeaSick.UI.Sheets
             herds.Clear();
             IslandInventory.Herds(island, herds);
             sb.Append(herds.Count).Append(',');
-            finds.Clear();
-            IslandInventory.Finds(island, finds);
-            sb.Append(finds.Count).Append('|');
+            sb.Append('|');
             if (!PartyOut)
             {
                 foreach (var c in GatherParty.Company(anchor))
@@ -241,7 +241,6 @@ namespace SeaSick.UI.Sheets
 
         readonly Dictionary<string, int> found = new Dictionary<string, int>();
         readonly List<Animal> herds = new List<Animal>();
-        readonly List<IslandFind> finds = new List<IslandFind>();
         readonly Dictionary<CrewAgent, string> dealt = new Dictionary<CrewAgent, string>();
         List<GatherParty.Option> survey = new List<GatherParty.Option>();
 
@@ -267,7 +266,6 @@ namespace SeaSick.UI.Sheets
             note = null;
             switch (order)
             {
-                case Tab3.Explore: BuildExplore(); break;
                 case Tab3.Gather: BuildGather(); break;
                 default: BuildHunt(); break;
             }
@@ -283,10 +281,9 @@ namespace SeaSick.UI.Sheets
         }
 
         Tab3 PartyMode() => party == null ? order
-            : party.Mode == GatherParty.Order.Explore ? Tab3.Explore
             : party.Mode == GatherParty.Order.Hunt ? Tab3.Hunt : Tab3.Gather;
 
-        static string OrderGlyph(Tab3 t) => t == Tab3.Explore ? "explore" : t == Tab3.Gather ? "gather" : "hunt";
+        static string OrderGlyph(Tab3 t) => t == Tab3.Gather ? "gather" : "hunt";
 
         void Tap(System.Action change)
         {
@@ -295,18 +292,22 @@ namespace SeaSick.UI.Sheets
             Rebuild();
         }
 
-        // --- the three order cards ---------------------------------------------
+        // --- the two order cards ---------------------------------------------
 
         void BuildOrderCards()
         {
             var row = CardKit.Grid(col);
-            string[] names = { "Explore", "Gather", "Hunt" };
-            for (int i = 0; i < 3; i++)
+            string[] names = { "Gather", "Hunt" };
+            for (int i = 0; i < 2; i++)
             {
                 var t = (Tab3)i;
                 var b = new Button(() => Tap(() => { order = t; lastOrder = t; })) { text = "" };
                 b.AddToClassList("hs-tile");
-                if (i == 2) b.AddToClassList("hs-tile--col3");
+                // Two cards fill the row (2026-10-03, Kevin: no empty third
+                // slot): the grid's 32 % tiles become 49 % + 2 % gutter, the
+                // second one flush right (the grid's own col3 rule).
+                b.style.width = Length.Percent(49f);
+                if (i == 1) b.AddToClassList("hs-tile--col3");
                 if (t == order) b.AddToClassList("hs-tile--on");
                 b.style.flexDirection = FlexDirection.Column;
                 b.style.justifyContent = Justify.Center;
@@ -320,81 +321,6 @@ namespace SeaSick.UI.Sheets
                 b.Add(n);
                 row.Add(b);
             }
-        }
-
-        // --- explore -------------------------------------------------------------
-
-        void BuildExplore()
-        {
-            CardKit.Eye(col, "ON THIS ISLAND");
-            FoundChips(col);
-            var why = StationPage.Text(
-                $"The party walks inland for about {Mathf.RoundToInt(GatherParty.ExploreSeconds / 60f)} minutes and comes back. Something could bite; armed hands are safer.",
-                "hs-now-s");
-            why.style.whiteSpace = WhiteSpace.Normal;
-            why.style.marginTop = 6f;
-            col.Add(why);
-            WhoGoes(col, false);
-
-            var who = PickedInOrder();
-            if (!CanSendAtAll(out string fix)) { Thumb(null, fix); return; }
-            if (who.Count == 0) { Thumb(null, "Tap who goes."); return; }
-            Thumb($"Send {Names(who)} to explore", note, () =>
-            {
-                if (party.SendExplore(who, out string why2)) Sheets.Close();
-                else Tap(() => lastWhy = why2);
-            });
-        }
-
-        /// The island's resources, herds and finds, as small chips (only
-        /// those on explored ground until the fog went, 2026-10-03).
-        void FoundChips(VisualElement into)
-        {
-            var row = new VisualElement { pickingMode = PickingMode.Ignore };
-            row.style.flexDirection = FlexDirection.Row;
-            row.style.flexWrap = Wrap.Wrap;
-            row.style.flexShrink = 0f;
-            int n = 0;
-            foreach (var kv in found)
-            {
-                if (kv.Value <= 0) continue;
-                row.Add(Chip($"{World.Economy.ResDefs.Label(kv.Key)} · {kv.Value}", false)); n++;
-            }
-            int goats = 0, boar = 0;
-            foreach (var a in herds) if (a != null) { if (a.kind == Animal.Kind.Goat) goats++; else boar++; }
-            if (goats > 0) { row.Add(Chip($"Goats · {goats}", false)); n++; }
-            if (boar > 0) { row.Add(Chip($"Boar · {boar}", false)); n++; }
-            foreach (var f in finds)
-            {
-                if (f == null) continue;
-                row.Add(Chip(f.Kind == IslandFind.FindKind.Cairn ? "A cairn" : "A cache", true)); n++;
-            }
-            if (n == 0)
-            {
-                var none = StationPage.Text("Nothing to gather or hunt here.", "hs-now-s");
-                none.style.whiteSpace = WhiteSpace.Normal;
-                row.Add(none);
-            }
-            into.Add(row);
-        }
-
-        static Label Chip(string text, bool find)
-        {
-            var l = StationPage.Text(text, "hs-tile-s");
-            l.style.paddingLeft = 9f; l.style.paddingRight = 9f;
-            l.style.paddingTop = 4f; l.style.paddingBottom = 4f;
-            l.style.marginRight = 6f; l.style.marginBottom = 6f;
-            l.style.borderTopLeftRadius = 10f; l.style.borderTopRightRadius = 10f;
-            l.style.borderBottomLeftRadius = 10f; l.style.borderBottomRightRadius = 10f;
-            l.style.borderTopWidth = 1f; l.style.borderBottomWidth = 1f;
-            l.style.borderLeftWidth = 1f; l.style.borderRightWidth = 1f;
-            Color edge = find ? (Color)new Color32(242, 196, 109, 255) : StationPage.Edge;
-            l.style.borderTopColor = edge; l.style.borderBottomColor = edge;
-            l.style.borderLeftColor = edge; l.style.borderRightColor = edge;
-            l.style.backgroundColor = find ? new Color(242f / 255f, 196f / 255f, 109f / 255f, 0.14f) : (Color)new Color32(28, 52, 70, 255);
-            l.style.color = find ? (Color)new Color32(242, 196, 109, 255) : StationPage.Ink;
-            l.style.maxWidth = StyleKeyword.None;
-            return l;
         }
 
         // --- gather ----------------------------------------------------------------
@@ -706,8 +632,8 @@ namespace SeaSick.UI.Sheets
             progress.S.style.whiteSpace = WhiteSpace.Normal;
             bar = new CardKit.Bar(col);
             bar.Root.style.marginTop = 8f;
-            // (A FOUND SO FAR chip row stood here for explore and hunt
-            // trips until the fog went, 2026-10-03: nothing new is found.)
+            // (A FOUND SO FAR chip row stood here until the fog went,
+            // 2026-10-03: nothing new is found.)
             FillProgress();
             acts = CardKit.Acts(root);
             if (party.Recalling)
@@ -728,15 +654,6 @@ namespace SeaSick.UI.Sheets
             float t01;
             switch (party.Mode)
             {
-                case GatherParty.Order.Explore:
-                {
-                    int left = Mathf.CeilToInt(Mathf.Max(0f, GatherParty.ExploreSeconds - party.Elapsed));
-                    t = party.Recalling ? "Coming back" : left > 0 ? $"Exploring · {left / 60}:{left % 60:00} left" : "Walking back";
-                    s = party.HurtName != null ? $"{party.HurtName} is hurt; they are bringing him home"
-                        : $"{who} {(party.Hands.Count == 1 ? "is" : "are")} exploring";
-                    t01 = party.Explore01;
-                    break;
-                }
                 case GatherParty.Order.Hunt:
                 {
                     int target = Mathf.Max(1, party.Hands.Count) * GatherParty.BeastsPerHunter;
@@ -764,8 +681,8 @@ namespace SeaSick.UI.Sheets
 
         // --- drawn glyphs -------------------------------------------------------------------
 
-        /// **The order cards' and the header's drawn icons**: a compass
-        /// (explore), a pick (gather), a spear (hunt), a pennant on a post
+        /// **The order cards' and the header's drawn icons**: a pick
+        /// (gather), a spear (hunt), a pennant on a post
         /// (the party), a goat and a boar. Drawn, so no font glyph or
         /// texture is needed (the `StationPage.Glyph` approach).
         sealed class LandGlyph : VisualElement
@@ -799,11 +716,6 @@ namespace SeaSick.UI.Sheets
                 }
                 switch (kind)
                 {
-                    case "explore":
-                        p.BeginPath(); p.Arc(V(12, 12), 9f * s, 0f, 360f); p.Stroke();
-                        p.BeginPath(); p.MoveTo(V(15.5f, 8.5f)); p.LineTo(V(13.5f, 13.5f));
-                        p.LineTo(V(8.5f, 15.5f)); p.LineTo(V(10.5f, 10.5f)); p.ClosePath(); p.Stroke();
-                        break;
                     case "gather":
                         Line(4, 20, 11, 13);
                         p.BeginPath(); p.MoveTo(V(11, 13)); p.LineTo(V(14, 5)); p.LineTo(V(19, 10)); p.ClosePath(); p.Stroke();
