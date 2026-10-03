@@ -222,9 +222,11 @@ namespace SeaSick.Voyage
         /// `Start`. Public so a probe can trigger the same path the player
         /// does rather than setting the phase behind the game's back — see
         /// `SinkProbe`.
-        public void BeginVoyage()
+        public void BeginVoyage() => BeginVoyage(castOff: true);
+
+        void BeginVoyage(bool castOff)
         {
-            if (phase == Phase.Home && anchor != null) anchor.CastOff();
+            if (castOff && phase == Phase.Home && anchor != null) anchor.CastOff();
             phase = Phase.AtSea;
             TakeDeckCargo = false;
             hasLeftHome = false;
@@ -416,6 +418,22 @@ namespace SeaSick.Voyage
             }
             else
             {
+                // **Left home by another door (2026-10-03, Kevin: "I can't
+                // always land at a new island").** Casting off from the Ship
+                // sheet or the thumb bar goes through `AnchorController
+                // .CastOff` and never reached `BeginVoyage`, so the voyage
+                // stayed "at home": no island offered landing and the crew
+                // were rested every frame at sea, until a reload. Whatever
+                // took her off the pier -- weighing, under way -- the voyage
+                // has begun. `castOff: false`, because she is already going
+                // (calling `CastOff` again from here is harmless today, but
+                // `BeginVoyage` -> `CastOff` -> back here must never become a
+                // loop).
+                if (anchor != null && !anchor.AtHomeDock)
+                {
+                    BeginVoyage(castOff: false);
+                    return;
+                }
                 RestAboard();
                 // Spacebar is the only way to cast off now that there is no
                 // panel button for it (2026-09-26). Not while the shipyard is
