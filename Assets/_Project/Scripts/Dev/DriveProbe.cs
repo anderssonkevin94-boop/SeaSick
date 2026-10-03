@@ -26,7 +26,7 @@ public class DriveProbe : MonoBehaviour
         var helm = FindAnyObjectByType<HelmInput>();
         if (motor == null) { Debug.LogError("DriveProbe: no ShipMotor"); yield break; }
 
-        // HelmInput reasserts ThrottleOrder every frame from its own state --
+        // HelmInput reasserts Rudder and ThrottleOrder every frame from the live stick (a zero stick writes zero) --
         // the recorded trap in this project. Drive the OWNER, not the value.
         if (helm != null) helm.enabled = false;
 

@@ -98,7 +98,10 @@ namespace SeaSick.Ship
             float wantVol = motor.Anchored
                 ? 0f
                 : volume * Mathf.Lerp(idleShare, 1f, Mathf.Clamp01(thr)) * (1f + 0.15f * burn);
-            float wantPitch = basePitch * (1f + range * s01) + burnPitch * burn;
+            float wantPitch = basePitch * (1f + range * s01) + burnPitch * burn
+                // The boost engage "chugs up" on the surge envelope (BoostTuning).
+                + Mathf.Max(0f, BoostTuning.engageChugPitch) * Mathf.Max(0f, BoostTuning.punch)
+                  * Mathf.Clamp01(motor.BoostSurge01);
             if (dt > 0f)
             {
                 chug.volume = Mathf.Lerp(chug.volume, Mathf.Clamp01(wantVol), 1f - Mathf.Exp(-volumeResponse * dt));

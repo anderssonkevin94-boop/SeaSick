@@ -73,29 +73,13 @@ namespace SeaSick.UI
             /// safe area on purpose.
             RailPause,
 
-            // --- bottom-left, upward ---
-            Broadside,
-
-            // --- bottom-right, upward ---
-            /// The combat lock button (2026-09-27, Kevin: "the click to lock
-            /// button should appear somewhere better on the screen where
-            /// it's easier to press"). Declared FIRST in this column, so it
-            /// sits nearest the safe area's bottom edge and the point-of-sail
-            /// panel + oars/ease row stack ABOVE it -- the button a fight
-            /// asks you to press keeps the thumb's best real estate, rather
-            /// than sharing the shifting bottom-centre prompt slot the way
-            /// it did before this HUD had it.
-            Lock,
-            Helm,
-            HelmActions,
-
             // --- bottom-centre, upward ---
             /// The steering wheel and the engine lever, as one cluster.
             ///
             /// **A column of its own, and the reason is the thumb.** The
             /// wheel has to be where a hand holding the phone can reach it
             /// without letting go, which is the bottom MIDDLE -- not a corner,
-            /// where the old telegraph buttons were and where Kevin could not
+            /// where the old telegraph buttons (long gone) were and where Kevin could not
             /// use them. One slot holds both controls because they are one
             /// instrument: splitting them into two slots would have stacked
             /// the lever above the wheel, and the lever belongs beside it.
@@ -108,9 +92,11 @@ namespace SeaSick.UI
         {
             Slot.Ship or Slot.Hold or Slot.Perf or Slot.CampCrew => Column.TopRight,
             Slot.RailSettings or Slot.RailYard or Slot.RailHome or Slot.RailPause => Column.Rail,
-            Slot.Broadside => Column.BottomLeft,
-            Slot.Wheel => Column.BottomCentre,
-            _ => Column.BottomRight,
+            // Wheel is the only bottom slot left (Broadside, Lock, Helm and
+            // HelmActions went with the DREDGE controls, 2026-10-03); the
+            // BottomLeft / BottomRight columns stay in the enum so the
+            // layout code and `BottomClustersTop` keep working if one returns.
+            _ => Column.BottomCentre,
         };
 
         /// Is this a desk window or a phone held upright?

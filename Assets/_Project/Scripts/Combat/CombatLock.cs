@@ -24,7 +24,7 @@ namespace SeaSick.Combat
     /// the wrong home for it: it is ~126 px tall, shares real estate with
     /// "come alongside", and sits far enough from the thumb's rest position
     /// that Kevin still could not reliably press it in a fight. It now draws
-    /// itself at a fixed spot -- `HudLayout.Slot.Lock`, bottom-right, nearest
+    /// itself at a fixed spot -- the old `HudLayout.Slot.Lock` (deleted 2026-10-03), bottom-right, nearest
     /// the safe area's edge -- rather than bidding for the contested slot,
     /// and a tap locks the enemy ship anywhere on screen, not only the top
     /// half. Both the button and a tap still call `ToggleLock` / `LockOn`,
@@ -213,9 +213,9 @@ namespace SeaSick.Combat
         /// Whether a tap landing at this screen point (input space, the same
         /// convention `PickAt` and `Pointer.position` use) would lock an
         /// enemy — for `HelmInput`, so the SAME touch-up that locks a ship
-        /// does not also read as the helm's "tap = stop" (2026-09-27, Kevin:
-        /// tapping a ship in the lower half of the screen was locking it AND
-        /// ringing the telegraph to stop in the same gesture). Cheap: reuses
+        /// does not also start the boat stick (2026-09-27, Kevin: tapping a
+        /// ship in the lower half of the screen was locking it AND stopping
+        /// the ship in the same gesture, back when a tap on the helm meant stop). Cheap: reuses
         /// `PickAt`'s own hit test, no extra allocation or state.
         public bool WouldLock(Vector2 screen) => PickAt(screen) != null;
 
@@ -307,7 +307,7 @@ namespace SeaSick.Combat
         // ---- the lock button moved to `CombatHud` (2026-09-30) -------------
         //
         // Island UI phase 6 (mockup "8b · Sea: combat"): the round IMGUI
-        // button in `HudLayout.Slot.Lock` is gone. `CombatHud` draws Lock /
+        // button in the old `HudLayout.Slot.Lock` (slot since deleted) is gone. `CombatHud` draws Lock /
         // Release in the centre of the combat row above the helm row (UI
         // Toolkit; "Lock · 120 m" with a candidate, "Release" ember when
         // held, amber when slipping) and calls `ToggleLock`. What stays

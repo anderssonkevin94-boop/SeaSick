@@ -557,6 +557,21 @@ namespace SeaSick.Steamer
                 }
                 wantF = Mathf.Sign(e) * w * r01 * rb.mass * wheelF * sub;
             }
+            // Boost engage surge (BoostTuning, DREDGE step 3): a decaying
+            // extra push ahead while `motor.BoostSurge01` is up. Only ahead,
+            // only short of the ORDERED speed (vCmd already carries the burn
+            // tier and the turn bleed, and is <= topNow x Overdrive), fading
+            // out over the last 15% of it, so it shortens the climb and never
+            // lifts her past the burn ceiling. Same mass/wheel/sea gating as
+            // the assist, and eased through the same lerp (no jerk).
+            float surge01 = Mathf.Clamp01(motor.BoostSurge01);
+            if (surge01 > 0f && vCmd > 0.5f && !anchored)
+            {
+                float reach = Mathf.Clamp01(way / vCmd);
+                float room = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.85f, 1f, reach));
+                wantF += Mathf.Max(0f, BoostTuning.surgeAccel) * Mathf.Max(0f, BoostTuning.punch)
+                         * surge01 * room * rb.mass * wheelF * sub;
+            }
             surgeAssistN = Mathf.Lerp(surgeAssistN, wantF, ease);
 
             // --- yaw servo (HandlingTuning) -------------------------------

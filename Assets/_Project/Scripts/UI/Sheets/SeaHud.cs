@@ -43,7 +43,7 @@ namespace SeaSick.UI.Sheets
     ///   given all the UI below it", and "remove the ease and the oars from
     ///   the UI" -- the Oars and Ease toggles are gone (rowing stays on
     ///   desktop R; easing has no control left and stays off). Replaces the
-    ///   rest of `HelmInput.OnGUI` and `TouchHelm`'s readout; the floating
+    ///   rest of the old `HelmInput.OnGUI` readout (and the deleted `TouchHelm`'s); the floating
     ///   stick ring itself stays IMGUI.</item>
     /// <item>**The boost button** (2026-10-03): a 48 design-px round bolt at
     ///   the bottom-right, level with the order strip, which gives up its

@@ -622,7 +622,7 @@ Modified
 * `Assets/_Project/Scripts/Save/SaveData.cs` — `ShipSave.modular` (added field, no version bump).
 * `Assets/_Project/Scripts/Save/SaveGame.cs` — capture the field; null-guard on read; apply it as restore step 2a.
 * `Assets/_Project/Scripts/Crew/CrewAgent.cs` — read-only `HomeShip` (refit guard: hands ashore).
-* `Assets/_Project/Scripts/Ship/HelmInput.cs`, `CameraRig/ChaseCamera.cs`, `CameraRig/IslandInput.cs`, `Combat/CombatLock.cs`, `Ship/CannonBattery.cs` — one-line `ShipyardSession.WorldInputBlocked` gate each.
+* `Assets/_Project/Scripts/Ship/HelmInput.cs`, `CameraRig/ChaseCamera.cs`, `CameraRig/IslandInput.cs`, `Combat/CombatLock.cs`, `Ship/CannonBattery.cs` — one-line `ShipyardSession.WorldInputBlocked` gate each (since 2026-10-03 `HelmInput` gates the boat stick + boost, and `ChaseCamera` gates the look stick; the old pinch/wheel zoom is gone).
 * `Assets/_Project/Scripts/Ship/Modular/ModuleSchema.cs` — `SocketRole.HullStem`; `hydrostatics` and `lightship` blocks on a module.
 * `Assets/_Project/Scripts/Ship/Modular/ModuleLibrary.cs` — loads and hash-checks the hydrostatic tables (Resources in Unity, disk headless).
 * `Assets/_Project/Scripts/Steamer/HullFormBody.cs` — `waterDensity` default reads `HullFormData.SeaWaterDensity` (same 1025).

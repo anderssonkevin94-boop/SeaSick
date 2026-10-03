@@ -1,6 +1,13 @@
 # PLAN — DREDGE-style sailing movement + camera (2026-10-03)
 
-Status: **PLAN ONLY — nothing in the game changed.** Kevin's decisions in (§4, 2026-10-03); waiting on his go for phase 0/1.
+Status (2026-10-03): **steps 1-2 SHIPPED** (commits 806f4807, bce44e6b, fcd11abd, f213aa3b): phase 1 movement
+swap (`SeaStick`, rewritten `HelmInput`, `SailControlTuning`, `HoldAllowed` on `ShipMotor`, `TouchHelm`
+deleted) and phase 2 camera (`SeaCameraInput`, `SeaCameraTuning`, `SeaCameraPrefs`, look offset / follow /
+recenter on `ChaseCamera`, sea pinch + wheel zoom removed, Settings CAMERA group). **Step 3 in progress**:
+the boost punch (FOV kick, shake, haptic, surge: `Ship/BoostTuning.cs`) and this dead-code + docs sweep
+(`HudLayout` dead slots, stale comments, GDD §4 / §6 / §10, DEV-TOOLS "Sea controls"). Phase 5 (spec
+checklist on Kevin's real save, DREDGE side-by-side feel pass) is still to do. Removal-map rows below
+are ticked **[done]** when they have landed.
 Kevin: "I don't like how the movement and camera work when sailing. I want you to do exactly
 how DREDGE does their movement input and camera input … and plan how to remove the old."
 
@@ -198,17 +205,17 @@ through FeelLab.
 ### 5.1 Removal map
 | File | Fate |
 |---|---|
-| `S/Ship/TouchHelm.cs` | **Delete** (replaced by `SeaStick`) |
-| `S/Ship/HelmInput.cs` | **Gut + rewrite**, same class name and public seams |
+| `S/Ship/TouchHelm.cs` | **Delete** (replaced by `SeaStick`) **[done]** |
+| `S/Ship/HelmInput.cs` | **Gut + rewrite**, same class name and public seams **[done]** |
 | `S/Ship/HelmTuning.cs` | **Delete** the input knobs; the hold knobs move with the hold, or go too |
 | `S/Ship/HandlingTuning.cs` `HeadingHold` | Keep or delete per phase-1 play; drop its `HelmTuning` reads |
-| `S/Ship/ShipMotor.cs`, `S/Steamer/PaddleDrive.cs` | Keep; replace the `HoldAllowed` lookups (:990, :622) |
-| `S/CameraRig/ChaseCamera.cs` | Keep; replace `PlayerZoom`, add orbit/follow/recenter, relax caps |
+| `S/Ship/ShipMotor.cs`, `S/Steamer/PaddleDrive.cs` | Keep; replace the `HoldAllowed` lookups (:990, :622) **[done: `HoldAllowed` lives on `ShipMotor`]** |
+| `S/CameraRig/ChaseCamera.cs` | Keep; replace `PlayerZoom`, add orbit/follow/recenter, relax caps **[done: orbit/follow/recenter, zoom gone; caps relaxing is open]** |
 | `S/Ship/JuiceTuning.cs` | Keep; prune `cam*` knobs that no longer apply, add orbit knobs |
-| `S/UI/Sheets/SeaHud.cs` + `SeaHud.uss` | Keep; redo the order strip + hint; keep `HelmShowing`/`HelmRect` (edge markers, CombatHud read them) |
-| `S/UI/HudLayout.cs` | Delete the dead slots |
-| `S/UI/Sheets/GestureHints.cs` `Stick` | Reuse for the new hint |
-| `S/Dev/FeelLab.cs` | Swap rows, bump rebase |
+| `S/UI/Sheets/SeaHud.cs` + `SeaHud.uss` | Keep; redo the order strip + hint; keep `HelmShowing`/`HelmRect` (edge markers, CombatHud read them) **[done]** |
+| `S/UI/HudLayout.cs` | Delete the dead slots **[done in step 3: Helm, HelmActions, Lock, Broadside gone; Wheel kept, SeaHud uses it]** |
+| `S/UI/Sheets/GestureHints.cs` `Stick` | Reuse for the new hint **[done]** |
+| `S/Dev/FeelLab.cs` | Swap rows, bump rebase **[done]** |
 | `IslandCam`, `IslandInput`, `TwoFinger`, `GroundPick`, `CombatLock`, `RescueHud`, `AnchorController`, all probes | **Untouched** (beyond comments) |
 | Save files | Untouched (they store no helm/camera data) |
 

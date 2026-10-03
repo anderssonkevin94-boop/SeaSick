@@ -461,7 +461,8 @@ half not gated — it needs a real tap.
 ### Also
 
 `HelmInput` no longer touch-steers while the island view is engaged. The sheet
-covers the bottom 36% of the screen and the steer zone is the bottom 45%, so
+covers the bottom 36% of the screen and the steer zone was the bottom 45% (it is
+the lower 55% since the 2026-10-03 DREDGE boat stick, same stand-down rule), so
 there was a band where a tap meant for the ground — siting, or pressing on a
 crewman — also put the rudder over and left it there.
 

@@ -13,7 +13,7 @@ namespace SeaSick.UI
     /// water at 0.60 and 0.62 of screen height.
     ///
     /// **The lock moved out again (2026-09-27).** It has its own corner now
-    /// (`HudLayout.Slot.Lock`, bottom-right) because Kevin could not reliably
+    /// (the old `HudLayout.Slot.Lock`, since deleted; the lock is now `CombatHud`'s combat row) because Kevin could not reliably
     /// press it while it lived here — a thumb reaching for the shared slot
     /// was also reaching past the helm. `Rank.Combat` / `Rank.CombatEngaged`
     /// existed only so the lock could occasionally outrank "come alongside"
@@ -55,7 +55,7 @@ namespace SeaSick.UI
             /// Throw cargo over the side — always available, never urgent.
             public const int Jettison = 20;
             // Combat = 30 and CombatEngaged = 45 retired 2026-09-27: the lock
-            // button has its own slot now (`HudLayout.Slot.Lock`) and no
+            // button has its own button now (`CombatHud`'s combat row; the old `HudLayout.Slot.Lock` is deleted) and no
             // longer bids for this one. See the class doc.
             /// Land, come alongside, cast off, recall the crew. This is the
             /// one that moves the ship, so it outranks everything.

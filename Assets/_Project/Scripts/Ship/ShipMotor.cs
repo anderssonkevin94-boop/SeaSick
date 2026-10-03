@@ -308,6 +308,12 @@ namespace SeaSick.Ship
         public float Overdrive => overdrive;
         /// True while the telegraph is past full ahead. The HUD reads this.
         public bool Burning => ThrottleOrder > 1.001f;
+        /// The boost's engage surge envelope, 0..1 (1 at the engage, decaying
+        /// over `BoostTuning.surgeSeconds`, 0 when not boosting). Written by
+        /// `HelmInput` every Update; `PaddleDrive` (the steamer) and this
+        /// motor's own drive add `BoostTuning.surgeAccel` x it, below the
+        /// ordered speed only. AI hulls have no helm, so it stays 0.
+        public float BoostSurge01 { get; set; }
         /// False on a hull with no canvas: wind still exists in the world and
         /// still drives the sea state, it just does not act on this hull.
         public bool WindDriven => windDriven;
@@ -1075,7 +1081,12 @@ namespace SeaSick.Ship
             float pull = forwardWay > targetSpeed
                 ? acceleration * overspeedDrag
                     * (coasting ? Mathf.Max(0f, HandlingTuning.coastDownScale) : 1f)
-                : acceleration * burnMul * Mathf.Max(0f, HandlingTuning.accelScale);
+                : acceleration * burnMul * Mathf.Max(0f, HandlingTuning.accelScale)
+                  // Boost engage surge: more pull toward the SAME target, so
+                  // it only shortens the climb; the target and the hard
+                  // ceiling below are untouched.
+                  + Mathf.Max(0f, BoostTuning.surgeAccel) * Mathf.Max(0f, BoostTuning.punch)
+                    * Mathf.Clamp01(BoostSurge01);
             if (Anchored) pull = acceleration * 2.5f;
             float dv = Mathf.Clamp(targetSpeed - forwardWay,
                 -pull * heaviness * dt, pull * heaviness * dt);

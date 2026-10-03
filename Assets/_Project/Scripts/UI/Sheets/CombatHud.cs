@@ -9,7 +9,7 @@ namespace SeaSick.UI.Sheets
     /// Kevin approved mockup "8b · Sea: combat").** One red target chip under
     /// the sea top bar and ONE combat row above the order strip replace the
     /// IMGUI fire chips (`CannonBattery.OnGUI`, "◀ port 1/1 ready" / "stbd ▶")
-    /// and the round lock button (`CombatLock.OnGUI`, `HudLayout.Slot.Lock`).
+    /// and the round lock button (`CombatLock.OnGUI`, which sat in the since-deleted `HudLayout.Slot.Lock`).
     /// <list type="bullet">
     /// <item>**Chip** -- "RAIDER · 120 m · locked" (or "RAIDER · 140 m" with a
     ///   candidate only). Shown while a lock or a candidate exists.</item>

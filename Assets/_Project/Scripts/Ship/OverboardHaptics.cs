@@ -41,6 +41,17 @@ namespace SeaSick.Ship
 #endif
         }
 
+        /// The boost engaging (DREDGE step 3): one heavy tick. Reuses the
+        /// shim's impact call (no new native symbol). Gated on the same
+        /// native-haptics switch; the caller checks `BoostTuning.hapticOnEngage`.
+        public static void Boost()
+        {
+            if (!JuiceTuning.overboardHapticsOn) return;
+#if UNITY_IOS && !UNITY_EDITOR
+            SeaSick_HapticImpactHeavy();
+#endif
+        }
+
         /// Lost at sea -- the grim outcome.
         public static void Loss()
         {

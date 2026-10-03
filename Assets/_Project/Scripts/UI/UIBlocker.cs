@@ -15,7 +15,7 @@ namespace SeaSick.UI
         static readonly List<string> members = new List<string>();
         static readonly List<string> owners = new List<string>();
 
-        /// file → member → "HelmInput.OnGUI". Keyed on the literals themselves,
+        /// file → member → "SeaStick.Draw". Keyed on the literals themselves,
         /// which are compile-time constants from a fixed set of call sites, so
         /// after the first frame every label is a lookup and nothing is built.
         static readonly Dictionary<string, Dictionary<string, string>> labels =

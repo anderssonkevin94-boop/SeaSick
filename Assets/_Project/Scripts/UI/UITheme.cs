@@ -71,8 +71,8 @@ namespace SeaSick.UI
             // call site every frame: IMGUI keys its cached text meshes on the
             // style INSTANCE, so a style rebuilt per frame silently forces
             // every label and button drawn with it to regenerate its mesh.
-            // That is why HelmInput allocated 5.99 KB a frame while drawing
-            // almost nothing but two arrows and a fixed caption.
+            // That is why the old HelmInput.OnGUI (telegraph arrows, long gone)
+            // allocated 5.99 KB a frame while drawing almost nothing.
             buttonPressed = new GUIStyle(button) { normal = button.active };
 
             // The Ledger pill: #13222E, a 1.5 px ice rim, fully round ends.

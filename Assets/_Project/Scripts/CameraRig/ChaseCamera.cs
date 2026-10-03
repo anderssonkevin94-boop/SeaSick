@@ -343,6 +343,52 @@ namespace SeaSick.CameraRig
             if (shakeSeed == 0f) shakeSeed = Random.Range(1f, 100f);
         }
 
+        // ---- boost punch (2026-10-03, DREDGE step 3; BoostTuning) ----
+        // The engage kick and the sustained boost feel, all display-time like
+        // the juice: the lens term rides on `sailLens`, the rumble on the
+        // shake's apply path. Neither feeds `rigPos`/`sailFov`, and both are
+        // gated off whenever a higher shot owns the frame.
+        SeaSick.Ship.HelmInput helm;
+        float boostFov, boostRumble, lastEngageSeen = float.NegativeInfinity;
+        Quaternion appliedRumble = Quaternion.identity;
+        float rumbleSeed;
+
+        /// The boost lens (degrees on top of the juice FOV) and the rumble
+        /// level, eased. `gate` is 0 when the shot is not the plain sailing
+        /// chase or `BoostTuning.cameraFx` is off.
+        void UpdateBoostFx(float dt, float gate)
+        {
+            float punch = Mathf.Max(0f, SeaSick.Ship.BoostTuning.punch);
+            if (!SeaSick.Ship.BoostTuning.cameraFx) gate = 0f;
+            bool boosting = helm != null && helm.isActiveAndEnabled && helm.Boosting;
+            float engagedAt = helm != null ? helm.BoostEngagedAt : float.NegativeInfinity;
+            // A new engage: the jolt, through the kraken's own Shake (it only
+            // ADDS to what is left, so a slam in progress is not cut short).
+            if (engagedAt != lastEngageSeen)
+            {
+                lastEngageSeen = engagedAt;
+                if (gate > 0.5f && boosting)
+                    Shake(Mathf.Max(0f, SeaSick.Ship.BoostTuning.engageShake) * punch);
+            }
+
+            float since = Time.time - engagedAt;
+            float inS = Mathf.Max(0.01f, SeaSick.Ship.BoostTuning.engageFovInSeconds);
+            float kick = Mathf.Max(0f, SeaSick.Ship.BoostTuning.engageFovKickDeg) * punch;
+            float sustain = Mathf.Max(0f, SeaSick.Ship.BoostTuning.sustainFovDeg) * punch;
+            float want = !boosting || gate <= 0f ? 0f : since < inS ? kick : sustain;
+            want = Mathf.Min(want, Mathf.Max(0f, SeaSick.Ship.BoostTuning.boostFovCapDeg));
+            // "In over N s" = ~95% there: an exponential with tau = N/3.
+            float tau = want > boostFov + 1e-3f ? inS
+                : boosting && gate > 0f ? SeaSick.Ship.BoostTuning.engageFovSettleSeconds
+                : SeaSick.Ship.BoostTuning.fovOutSeconds;
+            boostFov = SeaSick.Ship.JuiceTuning.Ease(boostFov, want, Mathf.Max(0f, tau) / 3f, dt);
+
+            float wantRumble = boosting && gate > 0f
+                ? Mathf.Max(0f, SeaSick.Ship.BoostTuning.rumbleAmp) * punch : 0f;
+            boostRumble = SeaSick.Ship.JuiceTuning.Ease(boostRumble, wantRumble,
+                Mathf.Max(0f, SeaSick.Ship.BoostTuning.rumbleFadeSeconds) / 3f, dt);
+        }
+
         bool HasLockAim => LockTarget != null || SeaFocus.HasValue;
         Vector3 LockAimPos => LockTarget != null ? LockTarget.position : SeaFocus.GetValueOrDefault();
 
@@ -964,6 +1010,8 @@ namespace SeaSick.CameraRig
             motor = target != null
                 ? target.GetComponent<SeaSick.Ship.ShipMotor>() : null;
             targetBody = target != null ? target.GetComponent<Rigidbody>() : null;
+            helm = target != null ? target.GetComponent<SeaSick.Ship.HelmInput>() : null;
+            lastEngageSeen = helm != null ? helm.BoostEngagedAt : float.NegativeInfinity;
             combatLock = target != null ? target.GetComponent<SeaSick.Combat.CombatLock>() : null;
             detachedSeeded = false;
         }
@@ -1218,6 +1266,8 @@ namespace SeaSick.CameraRig
             // party's framing and the tuner's flown numbers stay exact, and
             // the island overview fades it out below with `overviewLevel`.
             UpdateJuice(dt, PointOfInterest.HasValue || SailOverride.HasValue ? 0f : 1f);
+            UpdateBoostFx(dt, PointOfInterest.HasValue || SailOverride.HasValue
+                              || Overview.HasValue || OverviewOverride.HasValue ? 0f : 1f);
             UpdateSeeing(dt, !PointOfInterest.HasValue && !SailOverride.HasValue
                              && !Overview.HasValue && !OverviewOverride.HasValue);
             bool styleV2 = SeaSick.Ship.JuiceTuning.camStyleV2;
@@ -1227,7 +1277,7 @@ namespace SeaSick.CameraRig
             // The lens actually drawn at sea. `sailFov` itself stays the
             // filter's own state, so the juice rides on top of it rather than
             // being low-passed a second time by `fovResponse`.
-            float sailLens = (sailFov > 0f ? sailFov : fovBase) + juiceFov;
+            float sailLens = (sailFov > 0f ? sailFov : fovBase) + juiceFov + boostFov;
 
             Vector3 shipFlat = new Vector3(target.position.x, 0f, target.position.z);
             Vector3 anchor, desired, lookPoint;
@@ -1511,7 +1561,9 @@ namespace SeaSick.CameraRig
                 if (seaLevel > 0f && haveSeaPos)
                 {
                     float aspect = cam != null ? Mathf.Max(0.2f, cam.aspect) : PortraitAspect;
-                    ComposeSeaFocus(shipFlat, target.forward, lastSeaPos, sailLens, aspect,
+                    // Composed WITHOUT the boost lens: its kick would otherwise
+                    // re-solve the seat; drawn wider, both still fit.
+                    ComposeSeaFocus(shipFlat, target.forward, lastSeaPos, sailLens - boostFov, aspect,
                         out Vector3 seaSeat, out Vector3 seaLook);
                     desired = Vector3.Lerp(desired, seaSeat, seaLevel);
                     lookPoint = Vector3.Lerp(lookPoint, seaLook + Vector3.up * seaY, seaLevel);
@@ -1821,7 +1873,8 @@ namespace SeaSick.CameraRig
             Quaternion desiredRot = Quaternion.LookRotation(lookPoint - transform.position, Vector3.up);
             // Last frame's juice roll comes off first, so the rotation filter
             // runs on the un-rolled pose and the roll never accumulates.
-            Quaternion unrolled = transform.rotation * Quaternion.Inverse(appliedShake)
+            Quaternion unrolled = transform.rotation * Quaternion.Inverse(appliedRumble)
+                                  * Quaternion.Inverse(appliedShake)
                                   * Quaternion.Euler(0f, 0f, -appliedRoll);
             // The rotation's leftover is carried the same way as the position's.
             Quaternion framed;
@@ -1936,6 +1989,7 @@ namespace SeaSick.CameraRig
             appliedRoll = sailingYard != null && sailingYard.IsCoaster ? 0f : juiceRoll * atSea;
             transform.rotation = framed * Quaternion.Euler(0f, 0f, appliedRoll);
             ApplyShake(dt);
+            ApplyRumble();
 
             OverviewDirect = direct && directOffset == Vector3.zero
                              && Quaternion.Angle(directTurn, Quaternion.identity) < 0.01f;
@@ -1963,6 +2017,22 @@ namespace SeaSick.CameraRig
             appliedShake = Quaternion.Euler(ny * 1.1f * k, nx * 1.1f * k, nz * 1.6f * k);
             transform.rotation *= appliedShake;
             if (dt > 0f) shake *= Mathf.Exp(-5.5f * dt);
+        }
+
+        /// The boost's sustained rumble, after the shake and taken off the same
+        /// way next frame (`unrolled`). Position plus a hair of pitch/yaw, NO
+        /// roll (a rolling horizon is the sick one), at `BoostTuning.rumbleHz`.
+        void ApplyRumble()
+        {
+            float r = boostRumble * (1f - overviewLevel);
+            if (r <= 0.0005f) { appliedRumble = Quaternion.identity; return; }
+            if (rumbleSeed == 0f) rumbleSeed = Random.Range(101f, 200f);
+            float t = Time.time * Mathf.Max(0.1f, SeaSick.Ship.BoostTuning.rumbleHz) + rumbleSeed;
+            float nx = Mathf.PerlinNoise(t, 0.7f) * 2f - 1f;
+            float ny = Mathf.PerlinNoise(1.9f, t) * 2f - 1f;
+            transform.position += (transform.right * nx + transform.up * ny) * (0.55f * r);
+            appliedRumble = Quaternion.Euler(ny * 1.1f * r, nx * 1.1f * r, 0f);
+            transform.rotation *= appliedRumble;
         }
 
         /// The SeaFocus shot: seat and look point (sea at y 0, no heave).

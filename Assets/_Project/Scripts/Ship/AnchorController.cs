@@ -422,7 +422,7 @@ namespace SeaSick.Ship
             ComeAlongside(d);
 
             // Ring down stop, or she arrives at her own pier under full
-            // ahead. The telegraph re-asserts itself every frame, so the
+            // ahead. HelmInput re-asserts the throttle every frame, so the
             // ORDER has to move — zeroing ThrottleOrder here would last
             // exactly until HelmInput's next Update.
             var helm = GetComponent<HelmInput>();

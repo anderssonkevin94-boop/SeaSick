@@ -1298,9 +1298,7 @@ udid from `xcrun devicectl list devices`.
 - **The steamer is a PlayerPrefs switch.** `SteamerBootstrap.Selected` defaulted
   to the ladder ship, so a fresh device sailed the brig. It now defaults ON
   outside the editor; the editor menu still opts in.
-- **Throttle on a phone is the telegraph arrows,** not a swipe. `HelmInput`
-  reads touch only for the tiller (bottom 45% of the screen, x = rudder); W/S
-  are keyboard. Kevin's first instinct was to swipe.
+- **Throttle on a phone is the boat stick** (2026-10-03, DREDGE controls; was the telegraph arrows, then a latched stick): up/down = speed, release = engine off. See "Sea controls (2026-10-03)" below.
 - **iOS kills an app whose main thread blocks for 10 s while it backgrounds**
   (0x8BADF00D "scene-update watchdog", 2026-09-25: the phone auto-locked
   during the one-frame world build). `TerrainWorldPopulator` now builds in
@@ -1526,24 +1524,15 @@ not. The rules that keep them from tripping each other:
   trees carry ~15 m trigger boxes); a building's tap sphere comes from
   `Pickable.EnsureAll`.
 
-### Tap-to-sail seam (2026-09-24)
+### Sea controls (2026-10-03)
 
-Tap-to-sail was prototyped (a7e53a7: SailingPilot, SailingCourse, a
-cinematic 45-degree camera) and REMOVED the same day (f858d54) at Kevin's
-phone verdict, *"the point and sail did not work"*. The thumb stick is the
-helm. What stays is the seam, for any future course-setting feature: one
-call on the player's `HelmInput` (`Ship/HelmInput.cs`):
-`SailTo(Vector3 worldPoint, bool stopThere = true, float cruise01 = 0.6f)`
--- the existing heading autopilot steers for the point; the throttle
-keeps its order (or takes `cruise01` if she was stopped); within 1.5 hull
-lengths (≥ 12 m) she rings down when `stopThere`. `CancelSailTo()`,
-`Sailing`, `SailTarget` for the camera/HUD. A thumb on the stick, a tap
-on the helm zone or a held A/D key cancels it -- the player always wins.
-If anything ever calls it from a tap again: it must be a WATER tap
-outside the helm zone (bottom half) and must not steal building/villager
-taps -- run it after `WorldPicker` finds no sheet. `HelmInput`,
-`ShipMotor`, `ChaseCamera`/`IslandCam` stay systems-owned -- ask for a
-getter rather than editing them.
+DREDGE-style sailing input (docs/PLAN-dredge-controls.md; the old tap-to-sail `SailTo` seam, the `TouchHelm` stick and the telegraph are all deleted).
+
+- **Where the knobs live** (all on the phone's FEEL panel): `Ship/SailControlTuning.cs` (boat stick: zone, ring radius, dead zone, lift grace, turn / throttle curves, reverse cap, key ramp, boost idle), `CameraRig/SeaCameraTuning.cs` (look rates, dead zone, pitch limits, recenter, follow lag, double-tap), `Ship/BoostTuning.cs` (boost punch: FOV kick, shake, haptic, surge).
+- **Settings → CAMERA** is PlayerPrefs, not the save: keys `seasick.seacam.follow`, `.sens`, `.invx`, `.invy` (`CameraRig/SeaCameraPrefs.cs`).
+- **Smoke-test trap (a): keyboard events from eval only land with Game-view focus.** `InputSystem.QueueStateEvent` on the Keyboard does nothing once the editor loses focus (the editor disables the Keyboard device on focus loss). Drive `HelmInput`'s `testRudder` field (or its stick state) and `ChaseCamera`'s `userYaw` / `userPitch` by reflection instead.
+- **Smoke-test trap (b): `capture_game_view` returns 1280x720 and has no IMGUI / UITK HUD in it.** To check that the ⚡ button and the order strip are where they should be, read `SeaHud.BoostRect` / `SeaHud.HelmRect` instead of the picture.
+- **Trap (c): git 2.23 + sparse worktrees.** Never run `git config core.sparseCheckout` (it writes the SHARED config and flips every worktree and the main checkout); use `git -c core.sparseCheckout=true ...` per command.
 
 ## 2026-09-27 — the economy tuning file and its FEEL dials
 

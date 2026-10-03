@@ -62,6 +62,8 @@ namespace SeaSick.Dev
         static readonly string[] TypeFullNames =
         {
             "SeaSick.Ship.SailControlTuning",
+            // The boost's punch (DREDGE step 3).
+            "SeaSick.Ship.BoostTuning",
             // The DREDGE sea camera's look stick, mouse and recenter (step 2).
             "SeaSick.CameraRig.SeaCameraTuning",
             "SeaSick.Ship.HelmTuning",
@@ -163,6 +165,22 @@ namespace SeaSick.Dev
             {"SeaCameraTuning.recenterSeconds",          (0.1f, 1.5f)},
             {"SeaCameraTuning.followSeconds",            (0f, 0.5f)},
             {"SeaCameraTuning.doubleTapSeconds",         (0.15f, 0.5f)},
+            // The boost's punch (DREDGE step 3), ranges from its docs.
+            {"BoostTuning.punch",                  (0f, 2f)},
+            {"BoostTuning.engageFovKickDeg",       (0f, 12f)},
+            {"BoostTuning.engageFovInSeconds",     (0.05f, 0.5f)},
+            {"BoostTuning.engageFovSettleSeconds", (0.1f, 2f)},
+            {"BoostTuning.sustainFovDeg",          (0f, 8f)},
+            {"BoostTuning.fovOutSeconds",          (0.1f, 2f)},
+            {"BoostTuning.boostFovCapDeg",         (2f, 15f)},
+            {"BoostTuning.engageShake",            (0f, 1.2f)},
+            {"BoostTuning.rumbleAmp",              (0f, 0.4f)},
+            {"BoostTuning.rumbleHz",               (2f, 20f)},
+            {"BoostTuning.rumbleFadeSeconds",      (0.05f, 1f)},
+            {"BoostTuning.surgeAccel",             (0f, 4f)},
+            {"BoostTuning.surgeSeconds",           (0.1f, 2f)},
+            {"BoostTuning.engageChugPitch",        (0f, 0.6f)},
+            {"BoostTuning.reengageGuardSeconds",   (0f, 2f)},
             {"SailControlTuning.zoneTopFrac",            (0.3f, 0.8f)},
             {"SailControlTuning.ringRadiusFrac",         (0.08f, 0.25f)},
             {"SailControlTuning.deadZone",               (0f, 0.3f)},

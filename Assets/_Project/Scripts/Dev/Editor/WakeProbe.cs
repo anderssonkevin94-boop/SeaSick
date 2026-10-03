@@ -33,7 +33,7 @@ public class WakeProbe : MonoBehaviour
             yield break;
         }
         Rigidbody rb = motor.GetComponent<Rigidbody>();
-        // HelmInput reasserts ThrottleOrder every frame (the recorded trap):
+        // HelmInput reasserts Rudder and ThrottleOrder every frame from the live stick (the recorded trap):
         // silence it while the probe owns the ship.
         var helm = FindAnyObjectByType<SeaSick.Ship.HelmInput>();
         if (helm != null) helm.enabled = false;

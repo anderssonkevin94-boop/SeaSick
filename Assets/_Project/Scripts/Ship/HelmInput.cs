@@ -76,6 +76,39 @@ namespace SeaSick.Ship
         /// the burn tier.
         public bool Boosting => BoostArmed && pushingAhead;
 
+        /// `Time.time` of the last boost ENGAGE (`Boosting` false -> true,
+        /// after at least `BoostTuning.reengageGuardSeconds` off), or
+        /// -infinity. The punch's camera reads this (compare to the last value
+        /// seen); the haptic tick and the surge fire from here.
+        public float BoostEngagedAt { get; private set; } = float.NegativeInfinity;
+        /// Fired once per engage, after `BoostEngagedAt` is stamped.
+        public event System.Action BoostEngaged;
+        bool wasBoosting;
+        float boostOffSince = float.NegativeInfinity; // Time.time boost last went off
+
+        /// The engage edge and the surge envelope. The envelope (1 -> 0 over
+        /// `BoostTuning.surgeSeconds`, cut the moment boost ends) goes to
+        /// `motor.BoostSurge01`, which `PaddleDrive`/`ShipMotor` turn into a
+        /// push and `PaddleSound` into a chug-up.
+        void UpdateBoostPunch()
+        {
+            bool now = Boosting;
+            float t = Time.time;
+            if (now && !wasBoosting
+                && t - boostOffSince >= System.Math.Max(0f, BoostTuning.reengageGuardSeconds))
+            {
+                BoostEngagedAt = t;
+                if (BoostTuning.hapticOnEngage && BoostTuning.punch > 0f) OverboardHaptics.Boost();
+                BoostEngaged?.Invoke();
+            }
+            if (!now && wasBoosting) boostOffSince = t;
+            wasBoosting = now;
+
+            float since = t - BoostEngagedAt;
+            float dur = Mathf.Max(0.05f, BoostTuning.surgeSeconds);
+            motor.BoostSurge01 = now && since < dur ? 1f - since / dur : 0f;
+        }
+
         // --- steer-toward (man overboard, phase 5b) --------------------------
         Transform steerTarget;
         string steerTargetName;
@@ -118,7 +151,8 @@ namespace SeaSick.Ship
             EnhancedTouchSupport.Disable();
             // Probes disable the helm and drive the motor themselves: no
             // stale "nobody is steering" left behind for the heading hold.
-            if (motor != null) motor.HoldAllowed = false;
+            if (motor != null) { motor.HoldAllowed = false; motor.BoostSurge01 = 0f; }
+            wasBoosting = false;
         }
 
         void Update()
@@ -172,6 +206,7 @@ namespace SeaSick.Ship
                     && motor.CurrentSpeed < SailControlTuning.boostStopSpeed)
                     boostArmed = false;
             }
+            UpdateBoostPunch();
             float aheadTop = BoostArmed ? Mathf.Max(1f, motor.Overdrive) : 1f;
             float throttle = shaped >= 0f
                 ? shaped * aheadTop
@@ -259,6 +294,7 @@ namespace SeaSick.Ship
             boostArmed = false;
             boostIdle = 0f;
             pushingAhead = false;
+            if (motor != null) motor.BoostSurge01 = 0f;
             rudder = 0f;
             throttleOut = 0f;
             if (motor != null) { motor.ThrottleOrder = 0f; motor.Rudder = 0f; }
