@@ -268,6 +268,14 @@ namespace SeaSick.UI.Sheets
                           | (Mathf.Min(archers, 99) << 10)
                           | (((target is EnemyShip) ? 1 : (target is SeaMonster) ? 2 : kraken ? 3 : 0) << 17)
                           | (krakenHp << 19);
+                // **Why the Land card is gone (2026-10-03, Kevin: "I can't
+                // always land at a new island", option b).** While this row is
+                // up SeaHud hides the action card, so a "Land here" offered
+                // under it vanished with no word -- and every guarded island
+                // has a raider patrolling ~78 m off its shore. The block stays;
+                // the row now says what is in the way and what to do.
+                bool landBlocked = SeaActions.HasOffer && SeaActions.Current.priority == SeaActions.PriorityLand;
+                key |= landBlocked ? 1 << 24 : 0;
                 int roundDist = Mathf.RoundToInt(dist);
                 bool textDue = key != stateKey || (now >= nextText && roundDist != lastDist);
                 if (textDue)
@@ -275,7 +283,7 @@ namespace SeaSick.UI.Sheets
                     nextText = now + 0.25f;
                     lastDist = roundDist;
                     Apply(key, target, locked, slip, roundDist, guns, portHas, stbdHas,
-                          portMan, stbdMan, portReady, stbdReady, archers);
+                          portMan, stbdMan, portReady, stbdReady, archers, landBlocked);
                 }
 
                 // Reload bars, quantised to 2 %.
@@ -302,7 +310,7 @@ namespace SeaSick.UI.Sheets
             /// distance did (at most 4 Hz).
             void Apply(int key, IHittable target, bool locked, bool slip, int dist, bool guns,
                        bool portHas, bool stbdHas, int portMan, int stbdMan, int portReady,
-                       int stbdReady, int archers)
+                       int stbdReady, int archers, bool landBlocked)
             {
                 stateKey = key;
 
@@ -338,6 +346,12 @@ namespace SeaSick.UI.Sheets
                     : target != null ? "Lock on and the guns fire by themselves" : "";
                 if (archers > 0)
                     line += (line.Length > 0 ? " · " : "") + archers + (archers == 1 ? " archer" : " archers") + " shooting";
+                if (landBlocked)
+                {
+                    string who = (target is EnemyShip) ? "Raider" : (target is SeaMonster) ? "Sea beast"
+                        : IsKraken(target) ? "Kraken" : "Enemy";
+                    line = who + " near · drive it off to land" + (line.Length > 0 ? " · " + line : "");
+                }
                 note.text = line;
             }
 
