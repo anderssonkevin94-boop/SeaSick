@@ -33,6 +33,8 @@ namespace SeaSick.Dev
 
         Transform ship, bowVis, mount, swivel, muzzle, barb, lineAttach, crate;
         LineRenderer rope;
+        SeaSick.Ship.Harpoon.HarpoonLine realLine;   // the game's own line (when the real gun is aboard)
+        bool realGun;
         Material ropeMat;
         Camera chase;
         float bearing = 15f, range = 22f;
@@ -250,24 +252,48 @@ namespace SeaSick.Dev
             if (bowVis == null) return report + "no bow visual under " + bowHost.name;
             report.AppendLine($"bow visual {bowHost.name}/{bowVis.name}, lossyScale {bowVis.lossyScale.x:F3}, fwd vs ship {Vector3.Angle(bowVis.forward, ship.forward):F1} deg, up vs ship {Vector3.Angle(bowVis.up, ship.up):F1} deg");
 
-            // The mount, CONTRACT placement.
+            // The mount: the REAL gun's when it is aboard (phase 1), else our own at the CONTRACT spot.
             var mountPrefab = Resources.Load<GameObject>("Harpoon/HarpoonMount");
             var barbPrefab = Resources.Load<GameObject>("Harpoon/HarpoonBarb");
             if (mountPrefab == null || barbPrefab == null) return report + "Resources/Harpoon prefabs missing (run HarpoonImport)";
-            mount = Instantiate(mountPrefab, bowVis, false).transform;
-            mount.name = "HarpoonMount (look shot)";
-            mount.localPosition = new Vector3(0f, 2.11f, 6.3f);
-            mount.localRotation = Quaternion.identity;
-            mount.localScale = Vector3.one / bowVis.lossyScale.x;
+            var gun = SeaSick.Ship.Harpoon.HarpoonGun.Player;
+            realGun = gun != null;
+            if (realGun)
+            {
+                var sv = SeaSick.Ship.Harpoon.HarpoonMount.Find(gun.transform, "Swivel");
+                if (sv == null) return report + "real HarpoonGun has no Swivel";
+                mount = sv;
+                while (mount.parent != null && mount.parent != gun.transform) mount = mount.parent;
+                report.AppendLine($"REAL HarpoonGun mount {mount.name}, bow-local {bowVis.InverseTransformPoint(mount.position):F2} u (CONTRACT (0, 2.11, 6.30))");
+            }
+            else
+            {
+                mount = Instantiate(mountPrefab, bowVis, false).transform;
+                mount.name = "HarpoonMount (look shot)";
+                mount.localPosition = new Vector3(0f, 2.11f, 6.3f);
+                mount.localRotation = Quaternion.identity;
+                mount.localScale = Vector3.one / bowVis.lossyScale.x;
+            }
             swivel = Find(mount, "Swivel");
             muzzle = Find(mount, "Barb_Muzzle");
             report.AppendLine($"mount lossyScale {mount.lossyScale.x:F3}, {Vector3.Distance(mount.position, ship.position):F2} m from the ship origin, " +
                               $"ship-local {ship.InverseTransformPoint(mount.position):F2}");
             DeckCheck();
 
-            // The crate: the real salvage cluster art.
-            crate = new GameObject("HarpoonLookCrate").transform;
-            var art = SeaSick.Ship.SeaLife.SeaKit.Spawn(SeaSick.Ship.SeaLife.SeaKit.SalvageCluster, crate, new Vector3(0f, -0.12f, 0f));
+            // The crate: with the real gun a REAL floating-cargo target (so the real hook button and
+            // marker come up on it); else the salvage cluster art.
+            GameObject art = null;
+            if (realGun)
+            {
+                Vector3 f0 = Vector3.ProjectOnPlane(mount.forward, Vector3.up).normalized;
+                var cargo = SeaSick.Ship.Overboard.FloatingCargo.Spawn(SeaSick.World.Res.Timber, 2, ship, mount.position + f0 * range);
+                if (cargo != null) { crate = cargo.transform; art = cargo.gameObject; }
+            }
+            if (crate == null)
+            {
+                crate = new GameObject("HarpoonLookCrate").transform;
+                art = SeaSick.Ship.SeaLife.SeaKit.Spawn(SeaSick.Ship.SeaLife.SeaKit.SalvageCluster, crate, new Vector3(0f, -0.12f, 0f));
+            }
             if (art == null)
             {
                 var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -306,7 +332,14 @@ namespace SeaSick.Dev
                 if (c.isActiveAndEnabled) { chase = c.GetComponent<Camera>(); break; }
             report.AppendLine("chase camera " + (chase ? chase.name : "MISSING"));
 
-            BuildUi();
+            if (realGun)
+            {
+                // The game's own line (its colours/widths from rope-look.json, lighting normals, _Ambient glow).
+                realLine = SeaSick.Ship.Harpoon.HarpoonLine.Create(transform);
+                rope.enabled = false;
+                report.AppendLine("real gun: HUD mocks dropped (the real hook button + marker), real HarpoonLine draws the rope");
+            }
+            else BuildUi();
             LateUpdate();
             report.AppendLine(LineCheck());
             return report.ToString();
@@ -421,6 +454,22 @@ namespace SeaSick.Dev
 
         void TickRope()
         {
+            if (realLine != null)
+            {
+                // slack / taut / strained through the game's own bands (HarpoonTuning: taut 0.25, strain 0.7).
+                float ten = state == "slack" ? 0.1f : state == "taut" ? 0.5f : 0.9f;
+                realLine.Draw(muzzle.position, lineAttach.position, ten, state == "slack" ? 1.2f : 0f);
+                var lr = realLine.GetComponent<LineRenderer>();
+                if (lr != null)
+                {
+                    var p = new Vector3[lr.positionCount];
+                    lr.GetPositions(p);
+                    rope.positionCount = p.Length;
+                    rope.SetPositions(p);   // hidden copy: LineCheck / LanternReport read it
+                    rope.widthMultiplier = lr.startWidth;
+                }
+                return;
+            }
             var s = state == "slack" ? look.states.slack : state == "taut" ? look.states.taut : look.states.strained;
             Vector3 a = muzzle.position, b = lineAttach.position;
             float span = Vector3.Distance(a, b);
@@ -554,7 +603,8 @@ namespace SeaSick.Dev
 
         void OnDestroy()
         {
-            if (mount != null) Destroy(mount.gameObject);
+            if (mount != null && !realGun) Destroy(mount.gameObject);
+            if (realLine != null) Destroy(realLine.gameObject);
             if (barb != null) Destroy(barb.gameObject);
             if (crate != null) Destroy(crate.gameObject);
             if (rope != null) Destroy(rope.gameObject);
