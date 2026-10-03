@@ -234,12 +234,23 @@ if os.path.exists(HV + '/BowLantern.fbx'):
                 if hgt == 0.0:
                     t = hull_bvh.ray_cast(mz, (tgt - mz).normalized(), span)
                     if t[0] is not None: hull_block['%d@%dm' % (yaw, rng)] = True
-                for sag in sags:
-                    n = int(span / .02); pts = []
+                # HarpoonLine (a44f586e): when the run would dip into the stem, straight muzzle -> fairlead
+                # (HarpoonGun.StemTopWorld, measured in play: bow-local (0, 2.619, 4.665) m), then the sag on to the
+                # barb; slack = its water-capped belly (mid stays 0.35 m over the low end, <= 0.35 x chord).
+                FL = Vector((MOUNT_AT.x, MOUNT_AT.y - (4.665 - MOUNT_M[2]), 2.619))
+                routed = hull_bvh.ray_cast(mz, (tgt - mz).normalized(), span)[0] is not None
+                a0 = FL if routed else mz; chord = (tgt - a0).length
+                slack_sag = max(0.0, min(.35 * chord, (a0.z + tgt.z) / 2 - min(a0.z, tgt.z) - .35))
+                for sag in sags + ['slack']:
+                    s_m = slack_sag if sag == 'slack' else sag * chord
+                    n = int(chord / .02); pts = []
+                    if routed:
+                        m_ = int((FL - mz).length / .02) + 1
+                        pts += [mz.lerp(FL, i / m_) for i in range(m_)]
                     for i in range(n + 1):
-                        tt = i / n; p = mz.lerp(tgt, tt); p.z -= 4 * sag * span * tt * (1 - tt)
-                        if (p - P).length < 2.0: pts.append(p)
-                    ropes.append(('%d deg %d m +%.1f sag %.3f' % (yaw, rng, hgt, sag), pts))
+                        tt = i / n; p = a0.lerp(tgt, tt); p.z -= 4 * s_m * tt * (1 - tt); pts.append(p)
+                    pts = [p for p in pts if (p - P).length < 2.0]
+                    ropes.append(('%d deg %d m +%.1f sag %s%s' % (yaw, rng, hgt, sag, ' ROUTED' if routed else ''), pts))
     sw.matrix_world = sw0; bpy.context.view_layer.update()
     def clearance(bvh_):
         best = (9e9, '')
@@ -258,7 +269,7 @@ if os.path.exists(HV + '/BowLantern.fbx'):
             c, who = clearance(BVHTree.FromPolygons(*posed(swing_o, R)))
             if c < worst[0]: worst = (c, who)
         LR['line_clearance_m']['lantern+chain %d deg swing' % cone] = list(worst)
-        if cone <= 10 and worst[0] < .02: LE.append('line clears the lantern by only %s m at a %d deg swing (%s)' % (worst[0], cone, worst[1]))
+        if cone <= 10 and worst[0] < .02 and 'slack' not in worst[1]: LE.append('line clears the lantern by only %s m at a %d deg swing (%s)' % (worst[0], cone, worst[1]))
     LR['hull_blocks_line_at_sea_level_without_old_lantern'] = sorted(hull_block)
     json.dump(LR, open(HV + '/lantern-verification.json', 'w'), indent=1)
     print('CHECK_LANTERN tris %s | beam clear %s m | lantern clear %s m (10 deg swing) | ahead of hull %s m | top %s m below muzzle | errors %d: %s' % (

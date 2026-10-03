@@ -91,24 +91,24 @@
  ],
  "line_clearance_m": {
   "beam": [
-   0.205,
-   "-3 deg 10 m +0.0 sag 0.035"
+   0.163,
+   "-6 deg 10 m +0.0 sag slack ROUTED"
   ],
   "lantern+chain 0 deg swing": [
-   0.468,
-   "0 deg 10 m +0.0 sag 0.035"
+   0.408,
+   "-10 deg 10 m +0.0 sag slack"
   ],
   "lantern+chain 10 deg swing": [
-   0.465,
-   "0 deg 10 m +0.0 sag 0.035"
+   0.406,
+   "10 deg 10 m +0.0 sag slack"
   ],
   "lantern+chain 20 deg swing": [
-   0.462,
-   "0 deg 10 m +0.0 sag 0.035"
+   0.334,
+   "-10 deg 10 m +0.0 sag slack"
   ],
   "lantern+chain 34 deg swing": [
-   0.459,
-   "0 deg 10 m +0.0 sag 0.035"
+   0.229,
+   "-10 deg 10 m +0.0 sag slack"
   ]
  },
  "hull_blocks_line_at_sea_level_without_old_lantern": [
