@@ -608,6 +608,15 @@ defensible views and none of them the wanted one; one round of Kevin flying it
 settled it. For a look-or-feel question, build the tuner and hand it over.
 
 ### Traps this session added to the pile
+- **(2026-10-03) A launch crash in `il2cpp_init` is a stale incremental Xcode build, not the code.**
+  The app died ~4 s after every launch (`il2cpp::vm::SetupGCDescriptor`,
+  `KERN_PROTECTION_FAILURE`, termination "Invalid Page") although `codesign --verify`
+  passed and only two IMGUI files had changed. `rm -rf Builds/DerivedData` plus a full
+  `xcodebuild` (~9 min) fixed it. It came on the third incremental build in a row, on a
+  near-full disk. `phone-build.sh` lists the `.ips`; if the top frames are il2cpp init,
+  rebuild clean before suspecting a commit. Also: `devicectl install` fails with "Failed
+  to allocate RSD device" while the phone sleeps; retry it once the phone shows as
+  `connected`. Launch fails while the phone is locked.
 - **Winding and normals are two separate decisions.** Every dock face drew
   correctly and was lit from behind — ambient-only near-black. `Cross(b-a,e-a)`
   on a deck top is X×Z = −Y. A screenshot only says "dark".
