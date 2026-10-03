@@ -79,7 +79,8 @@ namespace SeaSick.Ship
         /// (was a 2.4/s lag that started with a jolt).                 0.1..1.5
         public static float camLockSeconds = 0.45f;
         /// Locked on: most the seat may swing off dead astern, degrees. Under 90, so her
-        /// bow never points at the lens and the stick never reads mirrored; 30 lost a
+        /// bow never points at the lens (a framing choice: steering is boat-relative
+        /// since DREDGE step 1, so the stick can't read mirrored any more); 30 lost a
         /// raider on the beam off a portrait frame (smoke test 2026-10-02).  0..85
         public static float camLockSwingDeg = 70f;
         /// Locked on: farthest astern the seat backs off to hold both ships, metres. 25..80

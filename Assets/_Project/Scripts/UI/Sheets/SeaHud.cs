@@ -168,8 +168,12 @@ namespace SeaSick.UI.Sheets
             readonly SeaGlyph boostGlyph;
             // --- hint
             readonly VisualElement hint;
+            // The look hint (DREDGE controls step 2): text only, in the upper
+            // camera zone. Never a target (`PickingMode.Ignore`, and `Blocks`
+            // does not know it), so a drag that starts under it reaches the camera.
+            readonly VisualElement lookHint;
 
-            bool topShown = true, alertShown = true, cardShown = true, helmShown = true, hintShown = true, boostShown = true;
+            bool topShown = true, alertShown = true, cardShown = true, helmShown = true, hintShown = true, boostShown = true, lookHintShown = true;
             float nextRefresh;
 
             // Cached text keys (strings are rebuilt only when these move).
@@ -199,7 +203,7 @@ namespace SeaSick.UI.Sheets
 
             // The scale each root was last given (a root hidden when the
             // panel rescaled picks the new one up when it shows).
-            float kTop = -1f, kAlert = -1f, kHelm = -1f, kBoost = -1f, kCard = -1f, kHint = -1f;
+            float kTop = -1f, kAlert = -1f, kHelm = -1f, kBoost = -1f, kCard = -1f, kHint = -1f, kLookHint = -1f;
 
             static void SetScale(VisualElement e, ref float last, float k)
             {
@@ -312,6 +316,10 @@ namespace SeaSick.UI.Sheets
                 Text(hint, "sea-hint-text").text = "Drag to sail · let go to stop";
                 root.Add(hint);
 
+                lookHint = Box("sea-look-hint");
+                Text(lookHint, "sea-hint-text").text = "Drag up here to look around · double-tap to recenter";
+                root.Add(lookHint);
+
                 Hide();
             }
 
@@ -363,6 +371,7 @@ namespace SeaSick.UI.Sheets
                 Show(helmRow, ref helmShown, false);
                 Show(boostBtn, ref boostShown, false);
                 Show(hint, ref hintShown, false);
+                Show(lookHint, ref lookHintShown, false);
                 TopBarShowing = HelmShowing = cardTaps = false;
                 TopRect = AlertRect = HelmRect = BoostRect = Rect.zero;
                 ChartTopPanel = 0f;
@@ -579,6 +588,25 @@ namespace SeaSick.UI.Sheets
                     hint.style.left = (cx - 100f * ppd) * s;
                     hint.style.top = (cy - 60f * ppd) * s;
                     SetScale(hint, ref kHint, k);
+                }
+
+                // --- look hint, upper camera zone: only once the stick hint is
+                // done (the two never stand together), gone for good once the
+                // camera has been dragged (`SeaCameraInput.EverUsed`) or after
+                // `ShowSeconds` on screen like every other hint.
+                bool lookOn = helmOn && !hintOn && !CombatHud.Visible
+                              && GestureHints.IsDone(GestureHints.Stick)
+                              && GestureHints.ShowOnce(GestureHints.SeaLook, SeaSick.CameraRig.SeaCameraInput.EverUsed);
+                if (lookOn && GestureHints.Shown(GestureHints.SeaLook, Time.unscaledDeltaTime)) lookOn = false;
+                Show(lookHint, ref lookHintShown, lookOn);
+                if (lookOn)
+                {
+                    // ~30% down the screen, but never up under the top bar.
+                    float topY = Screen.height * .30f;
+                    if (TopRect.height > 0f) topY = Mathf.Max(topY, TopRect.yMax + 12f * ppd);
+                    lookHint.style.left = (safe.xMin + safe.width * .5f - 110f * ppd) * s;
+                    lookHint.style.top = topY * s;
+                    SetScale(lookHint, ref kLookHint, k);
                 }
 
                 // --- keep what is left of the IMGUI HUD above all of this

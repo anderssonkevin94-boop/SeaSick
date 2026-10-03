@@ -62,6 +62,8 @@ namespace SeaSick.Dev
         static readonly string[] TypeFullNames =
         {
             "SeaSick.Ship.SailControlTuning",
+            // The DREDGE sea camera's look stick, mouse and recenter (step 2).
+            "SeaSick.CameraRig.SeaCameraTuning",
             "SeaSick.Ship.HelmTuning",
             "SeaSick.Ship.HandlingTuning",
             "SeaSick.Ship.JuiceTuning",
@@ -150,6 +152,17 @@ namespace SeaSick.Dev
             {"KrakenTuning.maxFightSeconds",   (0f, 900f)},
 
             // 2026-10-03 DREDGE sea stick (SailControlTuning), ranges from its docs
+            // The sea camera (DREDGE step 2).
+            {"SeaCameraTuning.maxYawDegPerSec",          (30f, 300f)},
+            {"SeaCameraTuning.maxPitchDegPerSec",        (15f, 180f)},
+            {"SeaCameraTuning.deadZone",                 (0f, 0.3f)},
+            {"SeaCameraTuning.ringRadiusFrac",           (0.06f, 0.25f)},
+            {"SeaCameraTuning.mouseDegPerPixel",         (0.05f, 1f)},
+            {"SeaCameraTuning.pitchMinDeg",              (-30f, 0f)},
+            {"SeaCameraTuning.pitchMaxDeg",              (0f, 50f)},
+            {"SeaCameraTuning.recenterSeconds",          (0.1f, 1.5f)},
+            {"SeaCameraTuning.followSeconds",            (0f, 0.5f)},
+            {"SeaCameraTuning.doubleTapSeconds",         (0.15f, 0.5f)},
             {"SailControlTuning.zoneTopFrac",            (0.3f, 0.8f)},
             {"SailControlTuning.ringRadiusFrac",         (0.08f, 0.25f)},
             {"SailControlTuning.deadZone",               (0f, 0.3f)},

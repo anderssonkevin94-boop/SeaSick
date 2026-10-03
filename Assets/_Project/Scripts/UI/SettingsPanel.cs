@@ -179,7 +179,43 @@ namespace SeaSick.UI
         }
 
         /// The list: display options, then the tools.
-        void DrawList(Rect body, int u)
+        void DrawList(Rect view, int u)
+        {
+            // **Scrolls** (2026-10-03): the Camera group made the list taller
+            // than the drawer on a phone. Content height is last frame's; the
+            // rows are laid out in the scroll view's own space, so they must
+            // not claim `UIBlocker` rects (the drawer panel already claims the
+            // whole thing) -- `BlockRow` is silent while `inScroll`.
+            float sbw = u * 1.0f;
+            var content = new Rect(0f, 0f, view.width - sbw, Mathf.Max(listHeight, view.height));
+
+            // A thumb drags the list itself (IMGUI's scroll view only scrolls
+            // by its bar or a wheel). Past a few pixels the drag is a scroll,
+            // not a press: the row under the thumb lets go, so lifting off it
+            // does not flip a toggle.
+            var e = Event.current;
+            if (e.type == EventType.MouseDown && view.Contains(e.mousePosition)) dragTravel = 0f;
+            if (e.type == EventType.MouseDrag && view.Contains(e.mousePosition))
+            {
+                dragTravel += Mathf.Abs(e.delta.y);
+                if (dragTravel > u * 0.6f)
+                {
+                    scroll.y = Mathf.Clamp(scroll.y - e.delta.y, 0f, Mathf.Max(0f, content.height - view.height));
+                    GUIUtility.hotControl = 0;
+                    e.Use();
+                }
+            }
+            scroll = GUI.BeginScrollView(view, scroll, content, false, false,
+                                         GUIStyle.none, GUI.skin.verticalScrollbar);
+            inScroll = true;
+            float endY = DrawListBody(new Rect(0f, 0f, content.width, view.height), u);
+            inScroll = false;
+            GUI.EndScrollView();
+            listHeight = endY + u * 0.5f;
+        }
+
+        /// Draws the list rows; returns the y just below the last one.
+        float DrawListBody(Rect body, int u)
         {
             float y = body.y;
             float rowH = u * 2.2f;
@@ -199,11 +235,13 @@ namespace SeaSick.UI
             y = Toggle(body, y, rowH, RowTuningLab, HudVisibility.TuningLab,
                        v => HudVisibility.TuningLab = v);
 
+            y = DrawCameraGroup(body, y, rowH, u);
+
             // The playtest save. One button, one file; what it wrote is on
             // the console, and the next launch offers CONTINUE.
             y += u * 0.5f;
             var saveRow = new Rect(body.x, y, body.width, rowH);
-            UIBlocker.Block(saveRow);
+            BlockRow(saveRow);
             if (GUI.Button(saveRow, "SAVE", UITheme.Button))
                 saveNote = Save.SaveGame.Save("the settings drawer")
                     ? "saved  " + System.DateTime.Now.ToString("HH:mm:ss")
@@ -232,8 +270,8 @@ namespace SeaSick.UI
             float half = (body.width - u * 0.4f) * 0.5f;
             var summon = new Rect(body.x, y, half, rowH);
             var dismiss = new Rect(body.x + half + u * 0.4f, y, half, rowH);
-            UIBlocker.Block(summon);
-            UIBlocker.Block(dismiss);
+            BlockRow(summon);
+            BlockRow(dismiss);
             bool krakenUp = SeaSick.Combat.Kraken.Active != null;
             if (GUI.Button(summon, "Summon kraken", krakenUp ? UITheme.ButtonPressed : UITheme.Button))
                 krakenNote = SeaSick.Combat.Kraken.DevSummon();
@@ -243,7 +281,7 @@ namespace SeaSick.UI
             // The wild spawn's whole path (shadow, toast, chevron, rise) on
             // demand, and the deep-water test for where she is now.
             var wild = new Rect(body.x, y, body.width, rowH);
-            UIBlocker.Block(wild);
+            BlockRow(wild);
             if (GUI.Button(wild, "Wild spawn now", SeaSick.Combat.KrakenDirector.Warning
                     ? UITheme.ButtonPressed : UITheme.Button))
                 krakenNote = SeaSick.Combat.KrakenDirector.DevWarnNow();
@@ -267,7 +305,7 @@ namespace SeaSick.UI
             if (life != null)
             {
                 var lifeRow = new Rect(body.x, y, body.width, rowH);
-                UIBlocker.Block(lifeRow);
+                BlockRow(lifeRow);
                 if (GUI.Button(lifeRow, life.ToolName + "  ▶", UITheme.Button)) DevTools.Open = life;
                 y += rowH + u * 0.15f;
                 GUI.Label(new Rect(body.x + u * 0.3f, y, body.width, u * 1.3f),
@@ -308,7 +346,7 @@ namespace SeaSick.UI
             {
                 GUI.Label(new Rect(body.x, y, body.width, u * 1.4f),
                           "no tuners in this scene", UITheme.Small);
-                return;
+                return y + u * 1.8f;
             }
 
             for (int i = 0; i < tools.Count; i++)
@@ -316,8 +354,7 @@ namespace SeaSick.UI
                 var t = tools[i];
                 if (t == null) continue;
                 var r = new Rect(body.x, y, body.width, rowH);
-                if (y + rowH > body.yMax) break;   // the drawer does not scroll off its own panel
-                UIBlocker.Block(r);
+                BlockRow(r);
                 if (GUI.Button(r, t.ToolName, UITheme.Button)) DevTools.Open = t;
                 y += rowH + u * 0.15f;
                 GUI.Label(new Rect(body.x + u * 0.3f, y, body.width, u * 1.3f),
@@ -325,7 +362,67 @@ namespace SeaSick.UI
                 y += u * 1.6f;
             }
 #endif
+            return y;
         }
+
+        /// **Camera** (DREDGE controls step 2): the player's sea-camera
+        /// choices (`SeaCameraPrefs`), for everyone, outside the dev-only
+        /// TUNING block. Rows are at least ~44 pt tall (`touchH`), so a thumb
+        /// hits them; sub-lines wrap, never clip.
+        float DrawCameraGroup(Rect body, float y, float rowH, int u)
+        {
+            float touchH = Mathf.Max(rowH, Mathf.Min(Screen.dpi > 0f ? Screen.dpi * 0.27f : 0f, u * 4.4f));
+            y += u * 0.5f;
+            GUI.Label(new Rect(body.x, y, body.width, u * 1.4f), "CAMERA", UITheme.Small);
+            y += u * 1.8f;
+
+            y = Toggle(body, y, touchH, RowCamFollow, SeaSick.CameraRig.SeaCameraPrefs.Follow,
+                       v => SeaSick.CameraRig.SeaCameraPrefs.Follow = v);
+            y = Note(body, y, u, "Off: the view holds still while she turns");
+
+            // Look speed: three chips (the drawer has no slider for a list row).
+            GUI.Label(new Rect(body.x + u * 0.3f, y, body.width, u * 1.4f), "Look speed", UITheme.Body);
+            y += u * 1.8f;
+            float sens = SeaSick.CameraRig.SeaCameraPrefs.Sensitivity;
+            int cur = sens <= 0.8f ? 0 : (sens >= 1.3f ? 2 : 1);
+            float gap = u * 0.4f;
+            float cw = (body.width - gap * 2f) / 3f;
+            for (int i = 0; i < 3; i++)
+            {
+                var r = new Rect(body.x + i * (cw + gap), y, cw, touchH);
+                BlockRow(r);
+                if (GUI.Button(r, LookSpeedNames[i], i == cur ? UITheme.ButtonPressed : UITheme.Button))
+                    SeaSick.CameraRig.SeaCameraPrefs.Sensitivity = LookSpeedValues[i];
+            }
+            y += touchH + u * 0.5f;
+
+            y = Toggle(body, y, touchH, RowInvX, SeaSick.CameraRig.SeaCameraPrefs.InvertX,
+                       v => SeaSick.CameraRig.SeaCameraPrefs.InvertX = v);
+            y = Toggle(body, y, touchH, RowInvY, SeaSick.CameraRig.SeaCameraPrefs.InvertY,
+                       v => SeaSick.CameraRig.SeaCameraPrefs.InvertY = v);
+            return y + u * 0.3f;
+        }
+
+        /// A wrapped sub-line under a row. Never clipped.
+        static float Note(Rect body, float y, int u, string text)
+        {
+            if (noteWrap == null || noteWrapUnit != u)
+            {
+                noteWrapUnit = u;
+                noteWrap = new GUIStyle(UITheme.Small) { wordWrap = true, clipping = TextClipping.Overflow };
+            }
+            float w = body.width - u * 0.3f;
+            float h = noteWrap.CalcHeight(new GUIContent(text), w);
+            GUI.Label(new Rect(body.x + u * 0.3f, y, w, h), text, noteWrap);
+            return y + h + u * 0.5f;
+        }
+
+        static GUIStyle noteWrap;
+        static int noteWrapUnit;
+
+        /// `UIBlocker.Block` for list rows -- except inside the scroll view,
+        /// where rects are local and the panel already claims the whole drawer.
+        static void BlockRow(Rect r) { if (!inScroll) UIBlocker.Block(r); }
 
         /// One tool, with the way back out at the top where a thumb expects it.
         void DrawOpenTool(Rect body, int u)
@@ -345,6 +442,15 @@ namespace SeaSick.UI
             t.DrawTool(toolBody);
         }
 
+        Vector2 scroll;
+        float listHeight;
+        float dragTravel;
+        static bool inScroll;
+        static readonly string[] LookSpeedNames = { "Slow", "Normal", "Fast" };
+        static readonly float[] LookSpeedValues = { 0.6f, 1f, 1.6f };
+        static readonly string[] RowCamFollow = { "◎  camera follows the boat", "◉  camera follows the boat" };
+        static readonly string[] RowInvX = { "◎  invert look left/right", "◉  invert look left/right" };
+        static readonly string[] RowInvY = { "◎  invert look up/down", "◉  invert look up/down" };
         string saveNote = "";
         string krakenNote = "";
         string krakenStatus = "";
@@ -370,7 +476,7 @@ namespace SeaSick.UI
                             bool value, System.Action<bool> set)
         {
             var r = new Rect(body.x, y, body.width, rowH);
-            UIBlocker.Block(r);
+            BlockRow(r);
             var style = value ? UITheme.ButtonPressed : UITheme.Button;
             if (GUI.Button(r, faces[value ? 1 : 0], style)) set(!value);
             return y + rowH + HudLayout.Unit * 0.35f;

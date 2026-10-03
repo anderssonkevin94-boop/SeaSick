@@ -23,6 +23,10 @@ namespace SeaSick.UI.Sheets
 
         /// The stick at sea: "drag here to sail".
         public const string Stick = "stick";
+        /// At sea, after the stick hint: "Drag up here to look around ·
+        /// double-tap to recenter" in the upper camera zone (DREDGE controls
+        /// step 2). Retired by the first camera drag (`SeaCameraInput.EverUsed`).
+        public const string SeaLook = "sealook";
 
         // **The rest of phase 6's hints (2026-09-30)**, drawn by
         // `GestureHintPill` (camp and sea) and `BackpackSheet` (its info line).
@@ -48,7 +52,7 @@ namespace SeaSick.UI.Sheets
         /// six seconds.
         public const float ShowSeconds = 6f;
 
-        static readonly string[] All = { Stick, Look, Carry, FlyTo, Lock, Keep };
+        static readonly string[] All = { Stick, SeaLook, Look, Carry, FlyTo, Lock, Keep };
         static readonly Dictionary<string, float> shownFor = new Dictionary<string, float>();
 
         /// Count `dt` of on-screen time against `key`; true (and the flag

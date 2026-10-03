@@ -173,28 +173,20 @@ namespace SeaSick.CameraRig
         [Tooltip("How fast the seat pulls IN. Slow on purpose (~3 s): coming closer should be something you notice having happened.")]
         [SerializeField] float portraitPullInRate = 0.33f;
 
-        // The player's own zoom.
-        //
-        // A pinch while sailing, or the wheel on a desk. Deliberately
-        // temporary: it DECAYS back to the authored framing over about
-        // twenty seconds, so a look at something on the horizon is a look
-        // and not a new camera the player has to undo. The island view has
-        // its own pinch (`IslandInput`), so this stands down whenever
-        // `IslandCam.Engaged`.
-        [Header("Player zoom (pinch / wheel)")]
-        [Range(0.2f, 1f)] [SerializeField] float userZoomMin = 0.6f;
-        [Range(1f, 3f)] [SerializeField] float userZoomMax = 1.6f;
-        [Tooltip("Seconds for a held zoom to fade back to the authored framing.")]
-        [SerializeField] float userZoomDecay = 20f;
-        [Tooltip("How much one wheel notch zooms, as a fraction.")]
-        [SerializeField] float wheelZoomStep = 0.08f;
+        // The player's own zoom was removed 2026-10-03 (DREDGE controls step
+        // 2, Kevin): DREDGE sits at a fixed distance, and a sea pinch would
+        // collide with two-thumb play. The sea camera's player input is now
+        // the look offset (`SeaCameraInput`, see `UpdateLook`). The island
+        // view keeps its own pinch (`IslandInput`).
 
         // Lock framing.
         //
         // Frames you and the target together. The camera swings toward sitting
-        // opposite the enemy, but the swing is CLAMPED off dead-astern: a
-        // fully free orbit would invert the helm when a target crosses your
-        // stern, and losing the steering is worse than losing sight of them.
+        // opposite the enemy, but the swing is CLAMPED off dead-astern. The
+        // clamp used to protect the helm (a free orbit inverted it when a
+        // target crossed your stern); since DREDGE step 1 the stick is
+        // boat-relative and never reads the camera, so the cap is a framing
+        // choice only: she stays the readable subject of the shot.
         // Sea response.
         //
         // The rig used to be pinned to mean sea level — a fixed world height,
@@ -224,10 +216,9 @@ namespace SeaSick.CameraRig
         /// screen the lens sees only ±17° either side. The 78° clamp holds
         /// both hulls for a target on the beam (checked: ship +3.5°, target
         /// −3.1° at 60 m) but a target on the quarter or astern falls out of
-        /// the side of the frame (−34° at 60 m dead astern). The phone helm
-        /// is a heading stick whose basis freezes at touch-down
-        /// (`TouchHelm`), so a wider swing does not re-map a drag in
-        /// progress the way it re-mapped the old drag-to-steer. At 140° the
+        /// the side of the frame (−34° at 60 m dead astern). Steering is
+        /// boat-relative now (DREDGE step 1, `SeaStick`), so no swing can
+        /// re-map the stick; this cap is a framing choice only. At 140° the
         /// same astern target sits at ship +11.5° / target −10.6°.
         [SerializeField] float lockMaxSwingDegPortrait = 140f;
         [SerializeField] float lockPullPerMetre = 0.42f;
@@ -255,14 +246,30 @@ namespace SeaSick.CameraRig
         float portrait01 = -1f;
         /// The speed dolly, upright: multiplies distance and height together.
         float dolly = -1f;
-        /// The player's own zoom, 1 = the authored framing.
-        float userZoom = 1f;
+        // The player's look offset (DREDGE step 2). `userYaw`/`userPitch` are
+        // what the input built; `lookYaw`/`lookPitch` the drawn ones, sprung
+        // after them by `SeaCameraTuning.followSeconds`. Degrees: +yaw looks
+        // right, +pitch looks further down on her. They persist until a
+        // recenter (DREDGE has no auto-decay; that is what recenter is for).
+        readonly SeaCameraInput seaInput = new SeaCameraInput();
+        SeaSick.Combat.CombatLock combatLock;
+        float userYaw, userPitch, lookYaw, lookPitch, lookYawVel, lookPitchVel;
+        bool recentering;
+        float recenterT, recenterYaw0, recenterPitch0;
+        // Detached follow mode: the world azimuth the base seat holds while
+        // she turns under it. In Follow mode it just tracks her stern.
+        float detachedAz;
+        bool detachedSeeded, wasFollow = true;
 
         /// What the portrait blend is doing, for the tuner and the probe.
         public float Portrait01 => Mathf.Max(0f, portrait01);
-        /// The seat multiplier the dolly and the player's pinch are asking for.
-        public float ZoomScale => Mathf.Max(0f, userZoom)
-            * Mathf.Lerp(1f, Mathf.Max(0f, dolly), Mathf.Max(0f, portrait01));
+        /// The seat multiplier the dolly is asking for (the player's pinch is
+        /// gone, so nothing the player does moves it; `ShipyardUiProbe`
+        /// asserts exactly that).
+        public float ZoomScale => Mathf.Lerp(1f, Mathf.Max(0f, dolly), Mathf.Max(0f, portrait01));
+        /// The look offset actually drawn, degrees, for probes and hints.
+        public float LookYawDeg => lookYaw;
+        public float LookPitchDeg => lookPitch;
 
         float lockLevel;
         float heaveY;
@@ -292,7 +299,8 @@ namespace SeaSick.CameraRig
         /// of the phone empty sea. With `SeaFocus` alone (no `LockTarget`)
         /// the camera now sits on the ship's far side from the focus,
         /// looking over her at it (swing capped at `SeaFocusSwingDeg` off
-        /// her bow so the stick never inverts), and solves the seat
+        /// her bow, a framing choice: the stick is boat-relative since DREDGE
+        /// step 1 and never reads the view), and solves the seat
         /// distance and pitch so she sits at `SeaFocusShip01` of the screen
         /// height and the thing's full height (`SeaFocusHeight` metres over
         /// the focus point) and width (`SeaFocusRadius`) fit under
@@ -779,64 +787,169 @@ namespace SeaSick.CameraRig
 
         // `Touch.activeTouches` is empty until this is on, and it is
         // ref-counted, so enabling it here is safe alongside HelmInput's own.
-        void OnEnable() => ET.EnhancedTouchSupport.Enable();
+        // No GUILayout in `OnGUI`: skips IMGUI's layout pass every frame.
+        void OnEnable() { ET.EnhancedTouchSupport.Enable(); useGUILayout = false; }
         void OnDisable() => ET.EnhancedTouchSupport.Disable();
 
-        /// **The player's own zoom, and its decay.**
+        /// **The player's look offset** (DREDGE controls step 2, 2026-10-03,
+        /// docs/PLAN-dredge-controls.md §3.3). Samples `SeaCameraInput` and
+        /// keeps the offset; `ApplyLook` puts it on the plain sea chase.
         ///
-        /// A two-finger pinch while sailing, or the wheel on a desk. Both
-        /// stand down while the island view is up — that view has its own
-        /// pinch and a gesture must belong to exactly one camera.
+        /// Follow (`SeaCameraPrefs.Follow`, the default): the base seat is
+        /// behind her stern exactly as before, the offset rides on top, so
+        /// the view swings with the hull. Detached: the base holds the world
+        /// azimuth it had (`detachedAz`) while she turns under it; the shot
+        /// is rotated by her stern-to-held-bearing angle plus the offset, so
+        /// the offset absorbs nothing extra and switching modes is seamless
+        /// (the held angle is folded into the offset on the way back to
+        /// Follow). Recenter eases the offset home over `recenterSeconds`
+        /// and, detached, brings the base back behind her with it.
         ///
-        /// Touches that BEGAN on a HUD control are ignored: the sheet covers
-        /// a third of the screen and a two-finger scroll inside it is not a
-        /// request to move the camera. `UIBlocker.Blocked` wants Input System
-        /// screen space (origin bottom-left) and flips to GUI space itself,
-        /// so `startScreenPosition` goes in unmodified.
-        void PlayerZoom(float dt)
+        /// Stands down with everything else that reads world touches: the
+        /// island view, the shipyard, a menu, the shipyard modal. While a
+        /// higher shot (lock, SeaFocus, the island overview, a shore party,
+        /// the tuner) is fully in, look input is ignored but the offset kept.
+        void UpdateLook(float dt)
         {
-            float mul = 1f;
-            // Not under the tuner either: `SailCamTuner` reads the same wheel
-            // to fly the seat, and two things zooming one camera off one
-            // notch is a camera nobody is steering.
-            if (!IslandCam.Engaged && !SailOverride.HasValue
-                && !SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked)
-            {
-                var touches = ET.Touch.activeTouches;
-                if (touches.Count == 2)
-                {
-                    var a = touches[0];
-                    var b = touches[1];
-                    if (!SeaSick.UI.UIBlocker.Blocked(a.startScreenPosition)
-                        && !SeaSick.UI.UIBlocker.Blocked(b.startScreenPosition))
-                    {
-                        Vector2 a1 = a.screenPosition, b1 = b.screenPosition;
-                        // `zoomFactor` is old separation over new, so fingers
-                        // spreading give a factor under 1 — which is exactly
-                        // what a seat multiplier wants: spread = come closer.
-                        TwoFinger.Solve(a1 - a.delta, b1 - b.delta, a1, b1, Screen.height,
-                            out float zf, out _, out _, out _);
-                        mul *= zf;
-                    }
-                }
+            bool active = !IslandCam.Engaged
+                && !SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked
+                && SeaSick.UI.Menus.GameMenus.Current == SeaSick.UI.Menus.GameMenus.Mode.None
+                && !SeaSick.UI.ModularYard.ShipyardModal.IsOpen;
+            // Last frame's levels: this runs before the pose works them out.
+            float higher = Mathf.Max(Mathf.Max(lockLevel, seaLevel), overviewLevel);
+            bool lookLive = higher < 0.99f && !PointOfInterest.HasValue && !SailOverride.HasValue;
+            seaInput.Sample(active, lookLive, combatLock, dt);
 
-                var mouse = Mouse.current;
-                if (mouse != null)
+            float sternAz = SternAz(target.forward);
+            bool follow = SeaCameraPrefs.Follow;
+            if (!detachedSeeded) { detachedAz = sternAz; detachedSeeded = true; }
+            if (follow && !wasFollow)
+            {
+                float held = Mathf.DeltaAngle(sternAz, detachedAz);
+                userYaw += held;
+                lookYaw += held;
+                detachedAz = sternAz;
+            }
+            wasFollow = follow;
+
+            // The island view coming up (anchoring, ashore) homes everything,
+            // so casting off starts behind her. Eased while the overview
+            // still shows the sea under it; hard zero once it covers it.
+            if ((OverviewOverride ?? Overview).HasValue)
+            {
+                if (overviewLevel > 0.9f) ZeroLook(sternAz);
+                else if (!recentering && LookOff(sternAz)) StartRecenter(sternAz);
+            }
+            if (seaInput.RecenterRequested) StartRecenter(sternAz);
+
+            if (recentering)
+            {
+                if (seaInput.YawDeltaDeg != 0f || seaInput.PitchDeltaDeg != 0f)
+                    recentering = false;   // a real look takes the view back
+                else
                 {
-                    float w = mouse.scroll.ReadValue().y;
-                    if (Mathf.Abs(w) > 0.01f
-                        && !SeaSick.UI.UIBlocker.Blocked(mouse.position.ReadValue()))
-                        mul *= 1f - Mathf.Clamp(w / 120f, -1f, 1f) * wheelZoomStep;
+                    recenterT = Mathf.Min(1f, recenterT + dt / Mathf.Max(0.05f, SeaCameraTuning.recenterSeconds));
+                    float k = 1f - Mathf.SmoothStep(0f, 1f, recenterT);
+                    // The recenter is its own ease: no follow spring on top.
+                    lookYaw = userYaw = recenterYaw0 * k;
+                    lookPitch = userPitch = recenterPitch0 * k;
+                    lookYawVel = lookPitchVel = 0f;
+                    if (recenterT >= 1f) recentering = false;
                 }
             }
+            // Follow, or mid-recenter: the base rides behind her.
+            if (follow || recentering) detachedAz = sternAz;
 
-            if (Mathf.Abs(mul - 1f) > 1e-4f)
-                userZoom = Mathf.Clamp(userZoom * mul, userZoomMin, userZoomMax);
-            else
-                // Four time constants is 98 % of the way home, so "twenty
-                // seconds" is twenty seconds and not an asymptote.
-                userZoom = Mathf.Lerp(userZoom, 1f,
-                    1f - Mathf.Exp(-(4f / Mathf.Max(0.5f, userZoomDecay)) * dt));
+            userYaw += seaInput.YawDeltaDeg;
+            userPitch = Mathf.Clamp(userPitch + seaInput.PitchDeltaDeg,
+                Mathf.Min(0f, SeaCameraTuning.pitchMinDeg), Mathf.Max(0f, SeaCameraTuning.pitchMaxDeg));
+            // Held in -180..180; the drawn value shifts with it, so the
+            // spring never sees the wrap.
+            if (userYaw > 180f) { userYaw -= 360f; lookYaw -= 360f; }
+            else if (userYaw < -180f) { userYaw += 360f; lookYaw += 360f; }
+            if (!recentering)
+            {
+                float ft = Mathf.Max(0f, SeaCameraTuning.followSeconds);
+                lookYaw = SeaSick.Ship.JuiceTuning.Spring(lookYaw, userYaw, ref lookYawVel, ft, dt);
+                lookPitch = SeaSick.Ship.JuiceTuning.Spring(lookPitch, userPitch, ref lookPitchVel, ft, dt);
+            }
+        }
+
+        static float SternAz(Vector3 forward)
+        {
+            forward.y = 0f;
+            return forward.sqrMagnitude > 1e-6f ? Mathf.Atan2(-forward.x, -forward.z) * Mathf.Rad2Deg : 180f;
+        }
+
+        bool LookOff(float sternAz) => Mathf.Abs(lookYaw) > 0.01f || Mathf.Abs(lookPitch) > 0.01f
+            || Mathf.Abs(Mathf.DeltaAngle(sternAz, detachedAz)) > 0.01f;
+
+        /// Start easing home from what is DRAWN (so nothing jumps). Detached,
+        /// the held bearing joins the offset and comes home with it.
+        void StartRecenter(float sternAz)
+        {
+            userYaw = Mathf.DeltaAngle(0f, lookYaw + Mathf.DeltaAngle(sternAz, detachedAz));
+            userPitch = lookPitch;
+            detachedAz = sternAz;
+            lookYaw = recenterYaw0 = userYaw;
+            lookPitch = recenterPitch0 = userPitch;
+            lookYawVel = lookPitchVel = 0f;
+            recenterT = 0f;
+            recentering = Mathf.Abs(userYaw) > 0.01f || Mathf.Abs(userPitch) > 0.01f;
+        }
+
+        void ZeroLook(float sternAz)
+        {
+            userYaw = userPitch = lookYaw = lookPitch = lookYawVel = lookPitchVel = 0f;
+            recentering = false;
+            detachedAz = sternAz;
+        }
+
+        /// Puts the look offset on the plain sea chase (or lock) pose: the
+        /// seat and the look point turn about her by the yaw, then the seat
+        /// climbs or drops about the look point by the pitch (distance
+        /// kept). Weighted by `1 - lockLevel`, so the lock framing blends it
+        /// out and is exactly its old self when fully in; the SeaFocus and
+        /// overview blends lerp over the result, which does the same for
+        /// them. The tuner's flown numbers never carry it.
+        void ApplyLook(ref Vector3 seat, ref Vector3 look, Vector3 shipFlat, Vector3 flatForward, float seaY)
+        {
+            float w = SailOverride.HasValue ? 0f : 1f - Mathf.Clamp01(lockLevel);
+            float yaw = (Mathf.DeltaAngle(SternAz(flatForward), detachedAz) + lookYaw) * w;
+            float pitch = lookPitch * w;
+            if (Mathf.Abs(yaw) > 1e-3f)
+            {
+                Quaternion q = Quaternion.AngleAxis(yaw, Vector3.up);
+                seat = shipFlat + q * (seat - shipFlat);
+                look = shipFlat + q * (look - shipFlat);
+            }
+            if (Mathf.Abs(pitch) > 1e-3f)
+            {
+                // `look` carries the heave, the seat does not (it is added
+                // after the position filter): take it off for the pivot.
+                Vector3 pivot = look - Vector3.up * seaY;
+                Vector3 s = seat - pivot;
+                Vector3 h = new Vector3(s.x, 0f, s.z);
+                float hm = h.magnitude, len = s.magnitude;
+                if (len > 0.1f)
+                {
+                    Vector3 hd = hm > 1e-3f ? h / hm : -flatForward;
+                    float elev = Mathf.Atan2(s.y, hm) * Mathf.Rad2Deg;
+                    // Never under the water, never past vertical.
+                    float e = Mathf.Clamp(elev + pitch, Mathf.Min(elev, 3f), Mathf.Max(elev, 80f)) * Mathf.Deg2Rad;
+                    seat = pivot + hd * (Mathf.Cos(e) * len) + Vector3.up * (Mathf.Sin(e) * len);
+                }
+            }
+        }
+
+        /// The camera stick's ring. Same suppression as `HelmInput.OnGUI`.
+        void OnGUI()
+        {
+            if (IslandCam.Engaged) return;
+            if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen
+                || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
+            if (Event.current.type != EventType.Repaint) return;
+            seaInput.Draw();
         }
 
         /// The motor was fetched once in Start, which was fine while there was
@@ -851,6 +964,8 @@ namespace SeaSick.CameraRig
             motor = target != null
                 ? target.GetComponent<SeaSick.Ship.ShipMotor>() : null;
             targetBody = target != null ? target.GetComponent<Rigidbody>() : null;
+            combatLock = target != null ? target.GetComponent<SeaSick.Combat.CombatLock>() : null;
+            detachedSeeded = false;
         }
 
         /// The three juice terms, eased toward what speed and yaw ask for.
@@ -1042,7 +1157,7 @@ namespace SeaSick.CameraRig
             float dollyRate = wantDolly < dolly ? portraitPullInRate : framingResponse;
             dolly = Mathf.Lerp(dolly, wantDolly, 1f - Mathf.Exp(-dollyRate * dt));
 
-            PlayerZoom(dt);
+            UpdateLook(dt);
 
             // How much bigger she is than the hull the framing was written
             // for. Clamped only as a guard against a garbage length — at
@@ -1215,11 +1330,10 @@ namespace SeaSick.CameraRig
                 // backed off and lifted, and easing further out from there
                 // puts her at the bottom of a tall frame with nothing in it.
                 float cruise = cruiseLevel * (1f - portrait01);
-                // The dolly and the player's pinch scale the SEAT only —
-                // distance and height together, so the tilt barely moves and
-                // the horizon stays where it was put.
-                float zoomK = Mathf.Max(0.05f, userZoom)
-                            * Mathf.Lerp(1f, dolly, portrait01);
+                // The dolly scales the SEAT only — distance and height
+                // together, so the tilt barely moves and the horizon stays
+                // where it was put.
+                float zoomK = Mathf.Lerp(1f, dolly, portrait01);
 
                 float calmBack = (bDist + cruiseDistance * cruise) * frameK * zoomK;
                 float calmUp = (bHeight + cruiseHeight * cruise) * frameK * zoomK;
@@ -1277,9 +1391,10 @@ namespace SeaSick.CameraRig
                     lockBlend = lockLevel;
 
                     // V2: stay behind her. The old swing (up to 140 deg
-                    // upright) could put the lens ahead of her bow, and the
-                    // stick's X is her rudder, so left on the stick went
-                    // right on the screen. A small swing toward sitting
+                    // upright) could put the lens ahead of her bow. That
+                    // once mirrored the stick; steering is boat-relative now
+                    // (DREDGE step 1), so keeping behind her is a framing
+                    // choice: she stays the subject. A small swing toward sitting
                     // opposite the target turns the view toward its side and
                     // keeps it within camLockSwingDeg of her bow. Scaled by
                     // how far off her side the target is: dead ahead needs no
@@ -1324,8 +1439,9 @@ namespace SeaSick.CameraRig
                     float sep = toTarget.magnitude;
                     Vector3 dirToTarget = sep < 0.5f ? flatForward : toTarget / sep;
 
-                    // Swing toward sitting opposite the target, clamped so the
-                    // helm never fully inverts.
+                    // Swing toward sitting opposite the target, clamped so she
+                    // stays the subject (a framing cap; the boat-relative
+                    // stick no longer cares where the camera sits).
                     float sternAz = Mathf.Atan2(sternDir.x, sternDir.z) * Mathf.Rad2Deg;
                     float awayAz = Mathf.Atan2(-dirToTarget.x, -dirToTarget.z) * Mathf.Rad2Deg;
                     float swingMax = Mathf.Lerp(lockMaxSwingDeg, lockMaxSwingDegPortrait,
@@ -1371,6 +1487,9 @@ namespace SeaSick.CameraRig
                 else
                     lookPoint = anchor + lookAheadDir * (ahead * (1f - lockLevel))
                               + Vector3.up * (bLookH * frameK + seaY);
+
+                // The player's look offset, on top of all of the above.
+                ApplyLook(ref desired, ref lookPoint, shipFlat, flatForward, seaY);
             }
 
             // --- the SeaFocus composition, over the chase/lock shot ----------

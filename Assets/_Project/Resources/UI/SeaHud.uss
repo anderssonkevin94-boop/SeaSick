@@ -160,6 +160,12 @@
     align-items: center; margin: 0; padding: 0;
     transform-origin: left top;
 }
+.sea-look-hint {
+    position: absolute; left: 0; top: 0; width: 220px;
+    align-items: center; margin: 0; padding: 0;
+    transform-origin: left top;
+}
+.sea-look-hint .sea-hint-text { margin: 0; max-width: 220px; }
 .sea-hint-ring { width: 120px; height: 120px; }
 .sea-hint-text {
     margin: 8px 0 0 0; padding: 0; font-size: 11px; color: rgba(232, 242, 246, 0.75); white-space: normal; max-width: 200px;
