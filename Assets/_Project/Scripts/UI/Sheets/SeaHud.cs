@@ -18,8 +18,10 @@ namespace SeaSick.UI.Sheets
     ///   hold "12/34" with the bag (amber from 80 %, ember overloaded; tap =
     ///   the Backpack, ship side, or its ship-only page with no camp) · the
     ///   aboard count (tap = the Ship sheet) · the sea-state word (calm ...
-    ///   wild, "BREAKERS" / "broaching" in ember; off a fresh island "Island_7
-    ///   · 20%" instead (2026-09-30: the word "explored" cut off), and no day) · Day N · ☰ (the pause menu).
+    ///   wild, "BREAKERS" / "broaching" in ember; off a fresh island "Island_7"
+    ///   instead -- until 2026-10-03 "Island_7 · 20%", the share the
+    ///   landing party had explored, gone with the fog of war -- and no
+    ///   day) · Day N · ☰ (the pause menu).
     ///   Replaces `HoldChip`, `PauseChip`'s Ledger/Menu rail and the sea
     ///   line of `HelmInput`'s panel.</item>
     /// <item>**One alert chip + "+N"** under it: "MAN OVERBOARD · Bo" (tap =
@@ -177,7 +179,7 @@ namespace SeaSick.UI.Sheets
             float nextRefresh;
 
             // Cached text keys (strings are rebuilt only when these move).
-            int holdKey = int.MinValue, crewKey = int.MinValue, dayKey = int.MinValue, placeKey = int.MinValue;
+            int holdKey = int.MinValue, crewKey = int.MinValue, dayKey = int.MinValue;
             Island placeIsland;
             int holdTone = -1;
             string seaWord;
@@ -668,11 +670,11 @@ namespace SeaSick.UI.Sheets
                 }
                 if (aboard != crewKey) { crewKey = aboard; crewText.text = aboard.ToString(); }
 
-                // Off an island with no camp: where she is and how much of it
-                // the party has opened, in place of the sea and the day
-                // (mockup 8c).
+                // Off an island with no camp: where she is, in place of the
+                // sea and the day (mockup 8c). (Until 2026-10-03 also how much
+                // of it the party had opened: the fog of war is gone.)
                 var isle = lying ? anchor.CurrentIsland : null;
-                bool place = isle != null && !IslandFog.Settled(isle);
+                bool place = isle != null && !Outpost.IsSettled(isle);
                 if (place != placeMode)
                 {
                     placeMode = place;
@@ -680,17 +682,14 @@ namespace SeaSick.UI.Sheets
                     seaText.style.display = place ? DisplayStyle.None : DisplayStyle.Flex;
                     placeText.style.display = place ? DisplayStyle.Flex : DisplayStyle.None;
                     dayItem.style.display = place ? DisplayStyle.None : DisplayStyle.Flex;
-                    placeKey = int.MinValue;
+                    placeIsland = null;
                 }
                 if (place)
                 {
-                    var fog = IslandFog.Existing(isle);
-                    int pct = fog != null ? Mathf.RoundToInt(fog.Revealed01 * 100f) : 0;
-                    if (pct != placeKey || isle != placeIsland)
+                    if (isle != placeIsland)
                     {
-                        placeKey = pct;
                         placeIsland = isle;
-                        placeText.text = isle.name + " · " + pct + "%";
+                        placeText.text = isle.name;
                     }
                     return;
                 }
