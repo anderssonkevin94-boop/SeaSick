@@ -125,7 +125,7 @@ namespace SeaSick.UI
             if (voyage != null)
             {
                 foreach (var res in SeaSick.Ship.ShipPrices.Priced)
-                    k = k * 31 + voyage.Banked(res);
+                    k = k * 31 + voyage.HomeStoreOf(res);
                 k = k * 31 + (voyage.AtHome ? 1 : 0);
             }
             // The yard's outlook, tacked onto the price line below. `TargetLine`

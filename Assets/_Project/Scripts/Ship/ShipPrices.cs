@@ -85,7 +85,7 @@ namespace SeaSick.Ship
 
         /// Every resource that appears anywhere in the two tables below.
         ///
-        /// The yard panel folds the banked count of each of these into its
+        /// The yard panel folds the home store's count of each of these into its
         /// text cache key: without that the afford state goes stale the moment
         /// a voyage lands, which is a bug this project has already had once
         /// and written into the trap log.
@@ -181,8 +181,10 @@ namespace SeaSick.Ship
         {
             if (!p.Has) return null;
             if (v == null) return null;
-            // Stores are ashore, in a pile, at home. You cannot re-loft a hull
-            // from the middle of the sea however full the hold is.
+            // Stores are ashore, in the home camp's store. You cannot re-loft
+            // a hull from the middle of the sea however full the hold is --
+            // and cargo still aboard at the home pier is not paid with until
+            // the home camp's hands have carried it ashore (2026-10-04).
             if (!v.AtHome) return "she has to be at her own pier";
             return Shortfall(p.a, p.na, v) ?? Shortfall(p.b, p.nb, v);
         }
@@ -190,7 +192,10 @@ namespace SeaSick.Ship
         static string Shortfall(string res, int n, Voyage.VoyageManager v)
         {
             if (n <= 0 || string.IsNullOrEmpty(res)) return null;
-            int have = v.Banked(res);
+            // The HOME CAMP's store (2026-10-04; was the retired `banked`).
+            // No home camp = 0, but there is no home pier then either, so
+            // `AtHome` above has already refused.
+            int have = v.HomeStoreOf(res);
             if (have >= n) return null;
             return $"needs {n} {res.ToLowerInvariant()} — home has {have}";
         }
@@ -198,17 +203,16 @@ namespace SeaSick.Ship
         /// Pay for it. Re-checks first: the panel's answer is cached, and a
         /// cached answer must never be what takes the stores down.
         ///
-        /// Spent through `VoyageManager.SpendBanked`, which also withdraws
-        /// from the visible `Stockpile` — otherwise the number in the panel
-        /// falls and the pile of logs two metres away does not, which is the
-        /// same lie the build button was fixed for.
+        /// Spent through `VoyageManager.SpendFromHome`, out of the home camp's
+        /// store (`OutpostLedger.Take`), so the store's containers and every
+        /// sheet that reads the camp fall with the panel's number.
         public static bool TrySpend(Price p, Voyage.VoyageManager v, out string why)
         {
             why = CannotAfford(p, v);
             if (why != null) return false;
             if (!p.Has || v == null) return true;
-            v.SpendBanked(p.a, p.na);
-            if (p.HasSecond) v.SpendBanked(p.b, p.nb);
+            v.SpendFromHome(p.a, p.na);
+            if (p.HasSecond) v.SpendFromHome(p.b, p.nb);
             return true;
         }
 
@@ -218,9 +222,9 @@ namespace SeaSick.Ship
         public static string InStore(Price p, Voyage.VoyageManager v)
         {
             if (!p.Has || v == null) return null;
-            string one = $"{v.Banked(p.a)} {p.a.ToLowerInvariant()}";
+            string one = $"{v.HomeStoreOf(p.a)} {p.a.ToLowerInvariant()}";
             return p.HasSecond
-                ? $"home has {one}, {v.Banked(p.b)} {p.b.ToLowerInvariant()}"
+                ? $"home has {one}, {v.HomeStoreOf(p.b)} {p.b.ToLowerInvariant()}"
                 : $"home has {one}";
         }
     }

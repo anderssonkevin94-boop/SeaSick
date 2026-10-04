@@ -9,8 +9,8 @@ namespace SeaSick.Ship
     ///
     /// The yard panel already says what the next hull costs and what home has
     /// in store (`ShipPrices.InStore`); this adds the piece neither of those
-    /// know about — what is sitting made-but-not-banked (aboard the ship, or
-    /// piled in a camp waiting on a voyage) and how fast the camps still owe
+    /// know about — what is sitting made but not yet in the home camp's store
+    /// (aboard the ship, or piled in another camp waiting on a voyage) and how fast the camps still owe
     /// are closing that gap. A tail, not a replacement.
     public static class TargetLine
     {
@@ -116,8 +116,8 @@ namespace SeaSick.Ship
         static bool Covered(VoyageManager v, ShipPrices.Price price)
         {
             if (!price.Has) return true;
-            if (v.Banked(price.a) < price.na) return false;
-            if (price.HasSecond && v.Banked(price.b) < price.nb) return false;
+            if (v.HomeStoreOf(price.a) < price.na) return false;
+            if (price.HasSecond && v.HomeStoreOf(price.b) < price.nb) return false;
             return true;
         }
 
@@ -140,7 +140,9 @@ namespace SeaSick.Ship
             if (n <= 0 || string.IsNullOrEmpty(res)) return;
 
             int aboard = v.AmountOf(res);
-            int inHand = v.Banked(res) + aboard + Outpost.PiledAcrossCamps(res);
+            // The home camp's store is one of the camps (2026-10-04: the old
+            // home bank is retired), so it is not added a second time.
+            int inHand = aboard + Outpost.PiledAcrossCamps(res);
             int toMake = System.Math.Max(0, n - inHand);
             if (toMake <= 0) return;
 
@@ -177,16 +179,16 @@ namespace SeaSick.Ship
         static long KeyFor(VoyageManager v, Shipyard yard, ShipPrices.Price price)
         {
             long k = yard.Node.node;
-            // A free price has a null resource, and `Banked`/`AmountOf` are
-            // dictionary lookups that throw on null rather than answer 0.
+            // A free price has a null resource, and `AmountOf` is a
+            // dictionary lookup that throws on null rather than answer 0.
             if (!price.Has) return k;
-            k = k * 31 + v.Banked(price.a);
+            k = k * 31 + v.HomeStoreOf(price.a);
             k = k * 31 + v.AmountOf(price.a);
             k = k * 31 + Outpost.PiledAcrossCamps(price.a);
             k = k * 31 + (int)(Outpost.MakeRateAcrossCamps(price.a) * 10f);
             if (price.HasSecond)
             {
-                k = k * 31 + v.Banked(price.b);
+                k = k * 31 + v.HomeStoreOf(price.b);
                 k = k * 31 + v.AmountOf(price.b);
                 k = k * 31 + Outpost.PiledAcrossCamps(price.b);
                 k = k * 31 + (int)(Outpost.MakeRateAcrossCamps(price.b) * 10f);
