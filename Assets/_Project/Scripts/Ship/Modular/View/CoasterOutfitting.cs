@@ -23,7 +23,9 @@ namespace SeaSick.Ship.Modular
             for(int i=0;i<hulls.Count;i++)
             {
                 var p=hulls[i];Transform host=null;
-                foreach(Transform t in view.transform)if(t.name.StartsWith(p.instanceKey+" (")){host=t;break;}
+                // The LAST match: a rebuild (ModularShipView.Clear) Destroy()s the old modules, which stay children until the
+                // end of the frame, ahead of the new ones in sibling order. The first match would outfit the dying module.
+                foreach(Transform t in view.transform)if(t.gameObject.activeSelf&&t.name.StartsWith(p.instanceKey+" (")){host=t;}
                 if(host==null)continue;
                 bool raised=CoasterFamily.Raised(p.moduleId), stern=p.kind==ModuleKind.Stern,bow=p.kind==ModuleKind.Bow;
                 float length=stern?4.9f:bow?3.55f:3f,top=stern?(raised?3.68f:1.48f):3.08f;
