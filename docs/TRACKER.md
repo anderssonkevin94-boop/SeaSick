@@ -20,6 +20,7 @@ Sessions end every report with a **"loose ends:"** line. The orchestrator copies
 | Harpoon phase 0: art (bow mount, barb, rope look, 🪝 + marker mock) | in progress; Blender scripts being written in art-staging/harpoon-v1 | Blender window from sailing, then shots → Kevin's approval | Villager |
 | Harpoon harpooner crew role (IHarpoonCrewSource on the gun-shift map) | queued after phase 0 shots; seam agreed (HarpoonCrew / IHarpoonCrewSource / BowPost) | phase 0 | Villager |
 | Farm-sheet bugs: half-picked field reports full yield; crop change relabels ripe harvest | Kevin: FIX (2026-10-04) | after harpooner role | Villager |
+| Stall lines name every missing input/tool + worn tools show life ("saw blade · 90% left") + multi-spot benches | LANDED c77f1f60/5d31cc42, MissingWordsSelfTest 10/10 | next build (held for the lamp approval) → Kevin | Villager |
 | Remove the sand spit at Kevin's home island (his island only; a capsule terrain edit in TerrainHeight.Evaluate keyed to his island; buildings/pier untouched) + check the "Sawmill · out of boards" alert wording | queued after the current build | before/after shots → Kevin's OK → the next build | Villager |
 | Harpoon gun-lamp (Kevin's final lantern design): a hooded lamp on the side of the gun, a forward spot light that follows the aim; it replaces the nose block + hanging lantern (removed, no dangling art/code) | spec sent | sailing's placement fix lands → art + light → in-engine shots → Kevin's OK → the NEXT build | Sailing |
 | Harpoon phase 1: hook & reel salvage, markers, 90° arc, snap + 5 s reload, captain-fallback crew seam | ON PHONE f581a046 (+ placement fix cc81ff52, new app icon) | Kevin's OK on the art shots → phone build → Kevin plays | Sailing |
@@ -44,7 +45,9 @@ Sessions end every report with a **"loose ends:"** line. The orchestrator copies
 
 - Harpoon phase 1 (only the phone can verify): real thumb taps on the markers and button; castaway, kraken-loot and wreckage hooks untested in play; the miss path unexercised; default snap tuning is a guess (does it snap often enough?); SmoothnessMeter during a reel unmeasured.
 - Harpoon placement fix cc81ff52: on the phone now; Kevin's play is the in-engine check.
-- Cargo: the unload waits while every hand is busy; out-of-date probes (SaveProbe, Loop/Sink banking) being fixed in the spit change.
+- Cargo: the unload waits while every hand is busy. Probes SaveProbe/Loop/Sink updated (5abe3f90).
+- StationStockSelfTest: 19 of ~90 fail (walking trips/timing: legs never start in the edit-mode sim). Age unproven. Villager runs the baseline at f581a046 after the spit shots, then fixes the harness or the regression to green.
+- IngredientLine floors worn tools in fire-cost lines (harmless: costs spend whole units).
 - Ship repair timber also unloads at home unless cancelled in the Backpack. Kevin to say whether that's OK.
 - Raised bow: the kit post-lantern sits in the rope's path until the gun-lamp build removes all bow lanterns.
 - CoasterOutfitting may match the outgoing module during an in-play rebuild (unconfirmed). Sailing confirms/fixes it with the gun-lamp.
