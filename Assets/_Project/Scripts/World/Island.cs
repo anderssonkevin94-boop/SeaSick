@@ -323,7 +323,7 @@ namespace SeaSick.World
                     float h0 = height(p.x, p.z);
                     if (h0 <= -0.3f) continue;
                     if (t < nearest) nearest = t;
-                    if (t < bestT && UphillRise(height, p, dir, h0) / 12f < maxSlope)
+                    if (t < bestT && BeachOk(height, p, dir, h0, maxSlope))
                     {
                         bestT = t;
                         beach = new Vector3(p.x, h0, p.z);
@@ -346,13 +346,41 @@ namespace SeaSick.World
             float gx = height(c.x + 2f, c.z) - height(c.x - 2f, c.z);
             float gz = height(c.x, c.z + 2f) - height(c.x, c.z - 2f);
             Vector3 up = new Vector3(gx, 0f, gz);
-            if (up.sqrMagnitude < 1e-6f || Vector3.Dot(up, dir) <= 0f) up = dir;
+            // The TRUE uphill, whichever way the ray came in (2026-10-04,
+            // Island_28): falling back to the ray when the gradient faced
+            // away from it measured a ray running ALONG a cliff foot (0.14
+            // a metre) and passed a sand strip under a 23 m face.
+            if (up.sqrMagnitude < 1e-6f) up = dir;
             else up.Normalize();
             Vector3 q = p + up * 12f;
             // From the waterline (sea level), not from `h0`: a 2 m step can
             // land past a narrow cliff face onto its flat top, and the rise
             // from there was ~0 -- a cliff top passed as a beach.
             return height(q.x, q.z) - Mathf.Min(h0, 0f);
+        }
+
+        /// Radii (m) and directions of the local slope check.
+        static readonly float[] NearR = { 2f, 4f, 6f };
+        const int NearDirs = 8;
+
+        /// **Is the waterline point `p` a beach a man can walk inland
+        /// from?** The 12 m rise along the true uphill (`UphillRise`) under
+        /// `maxSlope`, AND no direction within 6 m of it climbing steeper
+        /// than `maxSlope`: a strip of sand at a cliff foot is flat along
+        /// itself and sheer inland -- not a landing. The card and the
+        /// landing step both come from this (via `FindBeach`).
+        static bool BeachOk(System.Func<float, float, float> height, Vector3 p, Vector3 dir, float h0, float maxSlope)
+        {
+            if (UphillRise(height, p, dir, h0) / 12f >= maxSlope) return false;
+            float from = Mathf.Max(h0, 0f);
+            for (int k = 0; k < NearDirs; k++)
+            {
+                float a = k * (Mathf.PI * 2f / NearDirs);
+                float sx = Mathf.Sin(a), sz = Mathf.Cos(a);
+                foreach (float r in NearR)
+                    if ((height(p.x + sx * r, p.z + sz * r) - from) / r >= maxSlope) return false;
+            }
+            return true;
         }
 
         // ---- self-test (pure, no scene) ----------------------------------
@@ -375,8 +403,8 @@ namespace SeaSick.World
             float Cliff(float z) => z < 0f ? Deep : Mathf.Min(20f, z * 10f);
             float Sand(float z) => z < 0f ? Deep : z * 0.1f;
             Check("straight cliff coast: sheer cliff", false, (x, z) => Cliff(z), new Vector3(0f, 0f, -15f));
-            Check("cliff here, sand 25 m along (within the walk): beach", true,
-                  (x, z) => x > 25f ? Sand(z) : Cliff(z), new Vector3(0f, 0f, -15f));
+            Check("cliff here, sand from 15 m along (within the walk): beach", true,
+                  (x, z) => x > 15f ? Sand(z) : Cliff(z), new Vector3(0f, 0f, -15f));
             Check("cliff here, sand 200 m along: sheer cliff", false,
                   (x, z) => x > 200f ? Sand(z) : Cliff(z), new Vector3(0f, 0f, -15f));
             // A bay 40 m wide: cliff walls at |x| >= 20, sand at its head
@@ -420,6 +448,16 @@ namespace SeaSick.World
             Check("steep coast at a grazing angle: sheer cliff", false,
                   (x, z) => z < 0f ? Deep : z * 0.8f, new Vector3(0f, 0f, -10f));
             Check("open water: nothing", false, (x, z) => Deep, Vector3.zero);
+            // Island_28's sliver: a 3 m sand strip (0.2 m up) under a 23 m
+            // face, the ship off it on a slant -- the ray runs along the
+            // strip, the gradient faces away from it. Not a landing.
+            {
+                total++;
+                System.Func<float, float, float> foot = (x, z) => z < 0f ? Deep
+                    : z < 3f ? 0.07f * z : Mathf.Min(23f, 0.2f + (z - 3f) * 8f);
+                bool got = FindBeach(foot, new Vector3(-40f, 0f, -6f), 1000f, LandingSlope, out Vector3 at);
+                if (!got) pass++; else sb.Append($"FAIL cliff-foot strip: want refused, got beach at ({at.x:F0},{at.y:F1},{at.z:F0})\n");
+            }
             // A 0.6 slope (31 deg): steeper than the 0.5 knob, walkable by a
             // man (33 deg) -- a beach at the landing slope.
             {
@@ -433,15 +471,15 @@ namespace SeaSick.World
                 if (!got) pass++; else sb.Append("FAIL 0.8 slope at the landing slope: want false got true\n");
             }
             // The landing step is the found sand, not the cliff in front of
-            // her: cliff coast here, sand from x = 25 along it.
+            // her: cliff coast here, sand from x = 15 along it.
             {
-                System.Func<float, float, float> hl = (x, z) => x > 25f ? Sand(z) : Cliff(z);
+                System.Func<float, float, float> hl = (x, z) => x > 15f ? Sand(z) : Cliff(z);
                 Vector3 from = new Vector3(0f, 0f, -15f);
                 total++;
                 if (FindBeach(hl, from, 1000f, 0.5f, out Vector3 b))
                 {
                     Vector3 st = LandingStep(hl, from, b);
-                    bool onSand = st.x > 25f && st.z >= 0f && st.y >= 0f && st.y < 1f
+                    bool onSand = st.x > 15f && st.z >= 0f && st.y >= 0f && st.y < 1f
                                   && (st - b).magnitude <= LandingInland + 0.5f;
                     if (onSand) pass++;
                     else sb.Append($"FAIL landing step off the sand: ({st.x:F1},{st.y:F1},{st.z:F1})\n");
