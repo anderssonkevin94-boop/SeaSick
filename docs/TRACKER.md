@@ -16,17 +16,17 @@ Sessions end every report with a **"loose ends:"** line. The orchestrator copies
 
 | Feature | State | Waiting on | Owner |
 |---|---|---|---|
-| **URGENT BUG: cargo vanishes when docking home.** Cause: CompleteVoyage still banks into the pre-camp `banked` dict (since 6a136c5e); the home camp never reads it. Goods are safe in his save (T27 S26 O20) | fix (1)-(5) GO'd: unload by hands/runners at home, BeginVoyage keeps cargo, shipyard spends the home store, no `banked` piles, one-time save repair | fix lands → rides the harpoon build → Kevin confirms T45/S26/O20 at home | Villager |
+| ~~URGENT BUG~~ ON PHONE f581a046: cargo vanishes when docking home. Cause: CompleteVoyage still banks into the pre-camp `banked` dict (since 6a136c5e); the home camp never reads it. Goods are safe in his save (T27 S26 O20) | fix (1)-(5) GO'd: unload by hands/runners at home, BeginVoyage keeps cargo, shipyard spends the home store, no `banked` piles, one-time save repair | fix lands → rides the harpoon build → Kevin confirms T45/S26/O20 at home | Villager |
 | Harpoon phase 0: art (bow mount, barb, rope look, 🪝 + marker mock) | in progress; Blender scripts being written in art-staging/harpoon-v1 | Blender window from sailing, then shots → Kevin's approval | Villager |
 | Harpoon harpooner crew role (IHarpoonCrewSource on the gun-shift map) | queued after phase 0 shots; seam agreed (HarpoonCrew / IHarpoonCrewSource / BowPost) | phase 0 | Villager |
 | Farm-sheet bugs: half-picked field reports full yield; crop change relabels ripe harvest | Kevin: FIX (2026-10-04) | after harpooner role | Villager |
 | Remove the sand spit at Kevin's home island (his island only; a capsule terrain edit in TerrainHeight.Evaluate keyed to his island; buildings/pier untouched) + check the "Sawmill · out of boards" alert wording | queued after the current build | before/after shots → Kevin's OK → the next build | Villager |
 | Harpoon gun-lamp (Kevin's final lantern design): a hooded lamp on the side of the gun, a forward spot light that follows the aim; it replaces the nose block + hanging lantern (removed, no dangling art/code) | spec sent | sailing's placement fix lands → art + light → in-engine shots → Kevin's OK → the NEXT build | Sailing |
-| Harpoon phase 1: hook & reel salvage, markers, 90° arc, snap + 5 s reload, captain-fallback crew seam | LANDED 17d4b95b (with phase-0 art b479be1f), editor-tested | Kevin's OK on the art shots → phone build → Kevin plays | Sailing |
+| Harpoon phase 1: hook & reel salvage, markers, 90° arc, snap + 5 s reload, captain-fallback crew seam | ON PHONE f581a046 (+ placement fix cc81ff52, new app icon) | Kevin's OK on the art shots → phone build → Kevin plays | Sailing |
 
 | App icon (Kevin's ship-at-sunset art) | committed bc7fd04a, set as the default icon | the next phone build | Orchestrator |
 
-## On the phone, awaiting Kevin's verdict (build 74116cd7)
+## On the phone, awaiting Kevin's verdict (build f581a046, pushed; earlier items from 74116cd7)
 
 | Feature | Checklist lives in | Owner |
 |---|---|---|
@@ -43,7 +43,9 @@ Sessions end every report with a **"loose ends:"** line. The orchestrator copies
 ## Known loose ends (each needs a fix or Kevin's "park it")
 
 - Harpoon phase 1 (only the phone can verify): real thumb taps on the markers and button; castaway, kraken-loot and wreckage hooks untested in play; the miss path unexercised; default snap tuning is a guess (does it snap often enough?); SmoothnessMeter during a reel unmeasured.
-- Harpoon placement fix cc81ff52 (stem fairlead, raised-bow mount): verified numerically only. In-engine check: the villager's re-shoot or Kevin's phone.
+- Harpoon placement fix cc81ff52: on the phone now; Kevin's play is the in-engine check.
+- Cargo: the unload waits while every hand is busy; out-of-date probes (SaveProbe, Loop/Sink banking) being fixed in the spit change.
+- Ship repair timber also unloads at home unless cancelled in the Backpack. Kevin to say whether that's OK.
 - Raised bow: the kit post-lantern sits in the rope's path until the gun-lamp build removes all bow lanterns.
 - CoasterOutfitting may match the outgoing module during an in-play rebuild (unconfirmed). Sailing confirms/fixes it with the gun-lamp.
 
