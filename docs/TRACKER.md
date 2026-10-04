@@ -18,7 +18,7 @@ Last on the phone and pushed: **0053f72f** (2026-10-04, 14:20): the fire-button 
 
 - ~~Lamp at noon~~: it was the firing arcs, FIXED 0053f72f, on the phone.
 - **NEW BUG (Kevin):** villagers path into buildings and get stuck. Probe: stuck 32→19, longest pin 3.6→1.0 s, 0 overlaps. Follow-up: wall-line clearance (the watchtower OutputSpot), then land.
-- Kraken/harpoon SweepCheck: 7 pass. Fixing: the ship framed above the combat row, edge markers clamped above the reserve, loot crates scaled up (branch + shot). arm_hit (a gun can't reach a raised arm): Kevin is choosing.
+- Kraken/harpoon SweepCheck: 7 pass. Fixing: the ship framed above the combat row, edge markers clamped above the reserve, loot crates scaled up (branch + shot). arm_hit: Kevin decided "swats can't be cancelled, the shots land where they land", so the cancel mechanic is removed.
 - **NEW BUG (Kevin):** L2 walls look shattered. Cause: 310 inside-out faces in the L2 kit FBX. Fix: recalc normals + re-export; sweep every kit for winding; add a winding check to the export scripts.
 0. **Kevin's phone bug (harpoon phase 1):** the fire button is unreliable, and taps hit the ship. Fire only from ONE FIXED on-screen button (≥64 pt, above ⚡); marker taps REMOVED (indicator only); every tap reader gated on the button rect; HarpoonTapCheck. In progress. Ships with the lamp build.
 1. Harpoon gun-lamp: code + art on HEAD (b8f6fb12, 3e1aeeda). **Kevin APPROVED with tweaks** (one continuous beam; warmer yellow-orange) → re-shoot check → land the beam (lamp-beam). CoasterOutfitting stale-module: CONFIRMED + FIXED (on the phone). Stale renders cleaned. **The next phone build waits on this.**
@@ -32,7 +32,7 @@ Last on the phone and pushed: **0053f72f** (2026-10-04, 14:20): the fire-button 
 
 - ~~Castaway/docking fix + un-kill Bo/Pip/Ola + spit (C)~~: ON PHONE 0053f72f.
 - ~~Station walk-around~~: LANDED 02b3fe1e (next build).
-- **STOREHOUSE MERGED INTO THE STORE HUT (Kevin 2026-10-04)**, save-copy test running (his home Storehouse is L1, refund +25 timber +4 stone). Store hut L1/L2/L3 carry runner posts + perks; the Storehouse is removed (build list, code); one-time save repair removes his Storehouse with a refund and reassigns its runners. The "Storehouse look" task is CANCELLED.
+- ~~STOREHOUSE MERGED INTO THE STORE HUT~~: LANDED 0ac21313..7929870a, StorehouseMergeSelfTest 56/56, refund +25 timber +4 stone (next build). Store hut L1/L2/L3 carry runner posts + perks; the Storehouse is removed (build list, code); one-time save repair removes his Storehouse with a refund and reassigns its runners. The "Storehouse look" task is CANCELLED.
 - Sweep additions: HOME BERTH eyebrow; smoke shot in play; flour auto-pause proposal (ask Kevin).
 1. Spit removal at Kevin's home island (branch spit-edit): before/after shots on a COPY of his save → Kevin's OK → land.
 2. StationStockSelfTest: GREEN 93/93 on branch stationstock-green (old failures: day/night harness gap since 8099268f + stale timings; no regression) -- awaiting landing. Minor ordering note (top-up vs hammering) in DEV-TOOLS.
