@@ -1358,6 +1358,14 @@ last stone lands, because his "anything left to fetch for the site?" check runs
 before that delivery. The site is then hammered by one builder while he walks.
 Watch for it if Kevin reports builders wandering off a just-stocked site.
 
+### `CastawayFixSelfTest.Run()` (`SeaSick.World.Life`, plain C#, no scene, 2026-10-04)
+Gate for Kevin's "IN THE WATER · No free berth" at his home pier: modular berth
+capacity (`CrewBerths`), the castaway card's priority at a pier
+(`CastawayHud.CardPriority`), identity-based castaway verdicts
+(`CastawayRepair.Decide`/`Plan`) on his save's own Mara/Mabel/Dorrit, and the
+load repair's idempotency. `tools/selftest-outside-editor/run.sh
+SeaSick.World.Life.CastawayFixSelfTest.Run` -> `PASS 23/23`.
+
 ### `StationStockSelfTest.Run()` (`SeaSick.World`, plain C#, edit mode, no scene)
 Gate for the storage-hub rules in `OutpostLedger.Stations.cs`'s doc block,
 `StationStock.cs`, and — since the same day's later phone session — the
