@@ -20,7 +20,7 @@ namespace SeaSick.Dev
     /// NOT game code: nothing references it. Play mode, at sea, under way,
     /// the sea HUD up (the harpoon button shows whenever the gun is fitted).
     ///
-    /// * `Run()` -- the gates, synchronously. Takes the button rect's centre
+    /// * `Run()` -- the gates, in the next player frame (read `Report()`). Takes the button rect's centre
     ///   and four inner points and asserts every tap consumer's own
     ///   press-down gate REFUSES each one: the boat stick
     ///   (`SeaStick.CanStartAt`), the camera stick
@@ -47,7 +47,7 @@ namespace SeaSick.Dev
     ///   centre is shown to hit her, then `Run()` + `Press()`. The camera's
     ///   pose and `enabled` are put back when the press is done.
     ///
-    /// Eval: `return SeaSick.Dev.HarpoonTapCheck.Run();`, or `Press()` /
+    /// Eval: `return SeaSick.Dev.HarpoonTapCheck.Run();` then `Report()`, or `Press()` /
     /// `ShipBehindButton()` then `Result()`.
     public static class HarpoonTapCheck
     {
@@ -71,6 +71,23 @@ namespace SeaSick.Dev
         static HelmInput helm;
         static CombatLock combat;
         static ChaseCamera chase;
+
+        /// The game view's size. An editor eval runs outside the player loop,
+        /// where `Screen` is the editor window (1531x931 here) -- not the
+        /// 1080x2340 game -- so screen<->GUI flips must use the game camera.
+        static float GameH
+        {
+            get { var c = GameCam(); return c != null ? c.pixelHeight : Screen.height; }
+        }
+        static float GameW
+        {
+            get { var c = GameCam(); return c != null ? c.pixelWidth : Screen.width; }
+        }
+        static Camera GameCam()
+        {
+            if (chase == null) chase = Object.FindFirstObjectByType<ChaseCamera>();
+            return chase != null ? chase.GetComponent<Camera>() : null;
+        }
         static int tapsBefore;
         static HarpoonState stateBefore;
         static bool hadTarget, steerBefore, sawStick, sawShot, cancelledShot;
@@ -114,7 +131,42 @@ namespace SeaSick.Dev
         // Run: every consumer's own gate, at five points inside the button
         // =====================================================================
 
-        public static string Run()
+        /// **The gates, in the next player frame.** An eval runs outside the
+        /// player loop, where `Screen` is the editor window, and every gate
+        /// under test flips screen<->GUI with `Screen.height`: called from the
+        /// eval they would answer for the wrong pixel. Read `Report()` after.
+        public static string Run() => Deferred(RunNow, "Run");
+
+        /// Same for the framed case.
+        public static string ShipBehindButton() => Deferred(ShipBehindButtonNow, "ShipBehindButton");
+
+        /// The last deferred `Run()` / `ShipBehindButton()` report.
+        public static string Report() => deferredReport;
+
+        static string deferredReport = "not run";
+        static System.Func<string> deferredJob;
+
+        static string Deferred(System.Func<string> job, string name)
+        {
+            if (!Application.isPlaying) return "FAIL: play mode only";
+            deferredJob = job;
+            deferredReport = "pending";
+            InputSystem.onAfterUpdate -= RunDeferred;
+            InputSystem.onAfterUpdate += RunDeferred;
+            return name + " queued for the next player frame: read HarpoonTapCheck.Report()";
+        }
+
+        static void RunDeferred()
+        {
+            if (InputState.currentUpdateType != InputUpdateType.Dynamic || deferredJob == null) return;
+            InputSystem.onAfterUpdate -= RunDeferred;
+            var job = deferredJob;
+            deferredJob = null;
+            try { deferredReport = job(); }
+            catch (System.Exception e) { deferredReport = "FAIL: " + e.GetType().Name + ": " + e.Message; }
+        }
+
+        static string RunNow()
         {
             if (!Application.isPlaying) return "FAIL: play mode only";
             var r = SeaHud.HarpoonRect;
@@ -153,7 +205,7 @@ namespace SeaSick.Dev
             for (int i = 0; i < 5; i++)
             {
                 Vector2 gui = Point(r, i);
-                Vector2 screen = new Vector2(gui.x, Screen.height - gui.y);
+                Vector2 screen = new Vector2(gui.x, GameH - gui.y);
                 bool stick = SeaStick.CanStartAt(screen);
                 bool look = SeaCameraInput.CanBeginAt(screen);
                 bool lockTap = CombatLock.TapAllowedAt(screen);
@@ -176,13 +228,13 @@ namespace SeaSick.Dev
             // A control: just left of the button, at its middle. Not judged
             // (other HUD may own it); it shows the gates are not simply shut.
             var ctrl = new Vector2(r.xMin - SeaHud.PtPx(12f), r.center.y);
-            var ctrlScreen = new Vector2(ctrl.x, Screen.height - ctrl.y);
+            var ctrlScreen = new Vector2(ctrl.x, GameH - ctrl.y);
             sb.Append("control ").Append(V(ctrl)).Append(" (left of the button, not judged): stick ")
               .Append(Word(SeaStick.CanStartAt(ctrlScreen))).Append(", world tap ")
               .Append(Word(WorldPicker.TapAllowedAt(ctrlScreen))).Append('\n');
 
             string head = (fails == 0 ? "PASS" : "FAIL (" + fails + ")") + " HarpoonTapCheck.Run, "
-                          + checks + " checks, screen " + Screen.width + "x" + Screen.height + "\n";
+                          + checks + " checks, screen " + GameW + "x" + GameH + "\n";
             return head + sb;
         }
 
@@ -216,7 +268,7 @@ namespace SeaSick.Dev
             if (ownMouse) mouse = InputSystem.AddDevice<Mouse>("HarpoonTapCheckMouse");
 
             log = into;
-            pressAt = new Vector2(r.center.x, Screen.height - r.center.y);
+            pressAt = new Vector2(r.center.x, GameH - r.center.y);
             tapsBefore = SeaHud.HarpoonTaps;
             stateBefore = gun.State;
             hadTarget = gun.Target != null;
@@ -316,7 +368,7 @@ namespace SeaSick.Dev
         // ShipBehindButton: her own hull under the button, then Run + Press
         // =====================================================================
 
-        public static string ShipBehindButton()
+        static string ShipBehindButtonNow()
         {
             if (!Application.isPlaying) return "FAIL: play mode only";
             if (running) return "already running: read Result()";
@@ -337,7 +389,7 @@ namespace SeaSick.Dev
             chase.enabled = false;
             framed = true;
             Vector3 aim = HullCentre(gun.gameObject);
-            Vector2 centre = new Vector2(r.center.x, Screen.height - r.center.y);
+            Vector2 centre = new Vector2(r.center.x, GameH - r.center.y);
             Vector3 rayDir = cam.ScreenPointToRay(centre).direction;
             camT.rotation = Quaternion.FromToRotation(rayDir, (aim - camPos).normalized) * camRot;
 
@@ -351,7 +403,7 @@ namespace SeaSick.Dev
                 sb.Append("info: an own-ship tap here locks nothing (WouldLock ").Append(combat.WouldLock(centre))
                   .Append("; CombatLock refuses PlayerHull); without the gate WorldPicker would open ")
                   .Append(SheetBehind(cam, centre)).Append('\n');
-            string run = Run();
+            string run = RunNow();
             sb.Append(run).Append('\n');
             bool runOk = onHull && run.StartsWith("PASS");
             preFails = runOk ? 0 : 1;
