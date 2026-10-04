@@ -202,6 +202,34 @@ namespace SeaSick.Ship.Harpoon
             Check("grace: a new release starts a new grace",
                   !c.Due(22f, ReleaseGraceSeconds) && c.Due(23.01f, ReleaseGraceSeconds));
 
+            // Bail order (CrewRoster.BailOrder): bail outranks the harpoon
+            // when the buckets NEED him, never for merely having no gun.
+            // Hands: 0 gunner z 2, 1 gunner z -2, 2 idle spare, 3 the
+            // harpooner (a borrowed gunner: no gun while posted).
+            var order = new int[4];
+            bool[] here = { true, true, true, true };
+            float[] gz = { 2f, -2f, 0f, 0f };
+            int bn = Crew.CrewRoster.BailOrder(4, here, new[] { true, true, false, false },
+                new[] { false, false, false, true }, gz, order);
+            Check("bail: idle spare, then the harpooner, then gunners aft-first",
+                  bn == 4 && order[0] == 2 && order[1] == 3 && order[2] == 1 && order[3] == 0);
+            Check("bail: one bucket wanted takes the idle spare, not the harpooner",
+                  System.Array.IndexOf(order, 3) >= 1);
+            bn = Crew.CrewRoster.BailOrder(4, here, new[] { true, true, false, true },
+                new[] { false, false, false, true }, new[] { 2f, -2f, 0f, 9f }, order);
+            Check("bail: a harpooner still holding a gun is not sorted in with the gunners",
+                  bn == 4 && order[0] == 2 && order[1] == 3 && order[2] == 1 && order[3] == 0);
+            bn = Crew.CrewRoster.BailOrder(3, new[] { true, true, true }, new[] { true, true, false },
+                new[] { false, false, true }, gz, order);
+            Check("bail: no idle spare -- the harpooner goes before any gun falls silent",
+                  bn == 3 && order[0] == 2 && order[1] == 1 && order[2] == 0);
+            var o5 = new int[5];
+            bn = Crew.CrewRoster.BailOrder(5, new[] { true, true, true, true, true },
+                new[] { true, true, true, true, false }, new[] { false, false, false, false, false },
+                new[] { 4.8f, -1.2f, 4.8f, -1.2f, 0f }, o5);
+            Check("bail: authored four + spare keeps the old table {4,3,1,2,0}",
+                  bn == 5 && o5[0] == 4 && o5[1] == 3 && o5[2] == 1 && o5[3] == 2 && o5[4] == 0);
+
             sb.Insert(0, $"{(pass == total ? "PASS" : "FAIL")} {pass}/{total}\n");
             return sb.ToString().TrimEnd();
         }

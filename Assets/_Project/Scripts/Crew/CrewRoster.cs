@@ -175,30 +175,30 @@ namespace SeaSick.Crew
         /// four. One change on purpose: a big crew's extra spares used to
         /// come after every gunner (the table only knew berth 4); they are
         /// spare, so they now go before the guns, as the rule above says.
+        /// 2026-10-04: a hand posted at the bow harpoon is NOT an idle spare
+        /// (a borrowed gunner has no gun while posted): he goes after the
+        /// idle spares and before the gunners (`BailOrder`).
         public int AssignBailers(int wanted)
         {
             var all = All;
             if (all.Length == 0) return 0;
 
-            if (bailOrder.Length != all.Length) bailOrder = new int[all.Length];
-            int n = 0;
-            for (int i = 0; i < all.Length; i++)
-                if (all[i] != null && all[i].Gun == null) bailOrder[n++] = i;
-            int spares = n;
-            for (int i = 0; i < all.Length; i++)
-                if (all[i] != null && all[i].Gun != null) bailOrder[n++] = i;
-            // Insertion sort of the gunners (a handful; no garbage).
-            for (int a = spares + 1; a < n; a++)
+            int len = all.Length;
+            if (bailOrder.Length != len)
             {
-                int v = bailOrder[a];
-                int b = a - 1;
-                while (b >= spares && BailsBefore(all, v, bailOrder[b]))
-                {
-                    bailOrder[b + 1] = bailOrder[b];
-                    b--;
-                }
-                bailOrder[b + 1] = v;
+                bailOrder = new int[len];
+                bailPresent = new bool[len]; bailHasGun = new bool[len];
+                bailAtHarpoon = new bool[len]; bailGunZ = new float[len];
             }
+            for (int i = 0; i < len; i++)
+            {
+                var c = all[i];
+                bailPresent[i] = c != null;
+                bailHasGun[i] = c != null && c.Gun != null;
+                bailAtHarpoon[i] = c != null && c.HarpoonPosted;
+                bailGunZ[i] = bailHasGun[i] ? c.Gun.transform.localPosition.z : 0f;
+            }
+            int n = BailOrder(len, bailPresent, bailHasGun, bailAtHarpoon, bailGunZ, bailOrder);
 
             int placed = 0;
             for (int k = 0; k < n; k++) Consider(all[bailOrder[k]], wanted, ref placed);
@@ -206,13 +206,59 @@ namespace SeaSick.Crew
         }
 
         int[] bailOrder = System.Array.Empty<int>();
+        bool[] bailPresent = System.Array.Empty<bool>(), bailHasGun = System.Array.Empty<bool>(),
+               bailAtHarpoon = System.Array.Empty<bool>();
+        float[] bailGunZ = System.Array.Empty<float>();
+
+        /// **Who goes to the buckets first** -- the pure half of
+        /// `AssignBailers`, so it can be checked outside the editor
+        /// (`Ship.Harpoon.HarpoonCrewRules.SelfTest`). Writes the roster
+        /// indices into `order` and returns how many; only the first
+        /// `wanted` are ever sent, and `Bilge` wants none on a dry bilge,
+        /// so nobody leaves his post for the buckets unless water is coming
+        /// in.
+        ///
+        /// Three tiers. (1) **Idle spares**: no gun, not at the harpoon --
+        /// they have nothing else to do. (2) **The harpooner**
+        /// (`atHarpoon`, 2026-10-04): bailing outranks the harpoon
+        /// (PLAN-harpoon §5: rescue -> bail -> engaged guns / harpoon ->
+        /// sails/oars), so he goes when the buckets need more hands than the
+        /// idle spares -- but never just for having no gun of his own (a
+        /// borrowed gunner has none while posted), and before any gun goes
+        /// silent. (`HarpoonCrewSource` drops him from the harpoon the
+        /// moment he is bailing.) (3) **Gunners** by their CURRENT gun's
+        /// ship-local z, aftmost first, ties to the higher index.
+        public static int BailOrder(int count, bool[] present, bool[] hasGun, bool[] atHarpoon,
+            float[] gunZ, int[] order)
+        {
+            int n = 0;
+            for (int i = 0; i < count; i++)
+                if (present[i] && !atHarpoon[i] && !hasGun[i]) order[n++] = i;
+            for (int i = 0; i < count; i++)
+                if (present[i] && atHarpoon[i]) order[n++] = i;
+            int gunnersFrom = n;
+            for (int i = 0; i < count; i++)
+                if (present[i] && !atHarpoon[i] && hasGun[i]) order[n++] = i;
+            // Insertion sort of the gunners (a handful; no garbage).
+            for (int a = gunnersFrom + 1; a < n; a++)
+            {
+                int v = order[a];
+                int b = a - 1;
+                while (b >= gunnersFrom && BailsBefore(gunZ, v, order[b]))
+                {
+                    order[b + 1] = order[b];
+                    b--;
+                }
+                order[b + 1] = v;
+            }
+            return n;
+        }
 
         /// Gunner `x` goes to the buckets before gunner `y`: his gun is
         /// further aft, or level with `y`'s and he is the higher index.
-        static bool BailsBefore(CrewAgent[] all, int x, int y)
+        static bool BailsBefore(float[] gunZ, int x, int y)
         {
-            float zx = all[x].Gun.transform.localPosition.z;
-            float zy = all[y].Gun.transform.localPosition.z;
+            float zx = gunZ[x], zy = gunZ[y];
             if (!Mathf.Approximately(zx, zy)) return zx < zy;
             return x > y;
         }
