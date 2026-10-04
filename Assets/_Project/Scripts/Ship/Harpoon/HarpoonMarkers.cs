@@ -120,6 +120,9 @@ namespace SeaSick.Ship.Harpoon
             {
                 var t = arc[i];
                 if (t == null || (t is Object o && o == null)) continue;
+                // No ring on the kraken's haul (Kevin 2026-10-04): the rings
+                // covered the crates. The 🪝 button still picks it and names it.
+                if (t is SeaSick.Ship.Overboard.FloatingCargo fc && fc.HarpoonKind == "loot") continue;
                 Vector3 sp = cam.WorldToScreenPoint(t.HookPoint);
                 if (sp.z <= 0f) continue;
                 float gx = sp.x, gy = Screen.height - sp.y;

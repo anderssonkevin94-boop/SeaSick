@@ -41,6 +41,14 @@ namespace SeaSick.CameraRig
         /// down on her). Never past vertical: capped at 80 degrees of
         /// elevation. Range 0..50.
         public static float pitchMaxDeg = 30f;
+        /// How far the camera backs off as the view tilts down toward her
+        /// (Kevin 2026-10-04, like DREDGE: looking straight down zooms out a
+        /// bit): the seat's distance multiplier at `pitchMaxDeg`, 1 = none.
+        /// Range 1..2.
+        public static float topDownZoom = 1.4f;
+        /// Shape of that zoom over the tilt: 1 = even, above 1 = it grows
+        /// mostly in the last part of the tilt. Range 0.5..3.
+        public static float topDownZoomCurve = 1.5f;
         /// s for a recenter to ease both offsets home (and, detached, the
         /// base back behind her). Range 0.1..1.5.
         public static float recenterSeconds = 0.4f;

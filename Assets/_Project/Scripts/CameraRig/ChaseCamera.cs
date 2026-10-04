@@ -954,7 +954,10 @@ namespace SeaSick.CameraRig
         /// Puts the look offset on the plain sea chase (or lock) pose: the
         /// seat and the look point turn about her by the yaw, then the seat
         /// climbs or drops about the look point by the pitch (distance
-        /// kept). Weighted by `1 - lockLevel`, so the lock framing blends it
+        /// kept, except that tilting DOWN toward her backs the seat off, up to
+        /// `SeaCameraTuning.topDownZoom` at `pitchMaxDeg`: the drawn pitch is
+        /// already sprung, so the zoom eases with it). Weighted by
+        /// `1 - lockLevel`, so the lock framing blends it
         /// out and is exactly its old self when fully in; the SeaFocus and
         /// overview blends lerp over the result, which does the same for
         /// them. The tuner's flown numbers never carry it.
@@ -983,9 +986,22 @@ namespace SeaSick.CameraRig
                     float elev = Mathf.Atan2(s.y, hm) * Mathf.Rad2Deg;
                     // Never under the water, never past vertical.
                     float e = Mathf.Clamp(elev + pitch, Mathf.Min(elev, 3f), Mathf.Max(elev, 80f)) * Mathf.Deg2Rad;
+                    len *= TopDownZoom(pitch);
                     seat = pivot + hd * (Mathf.Cos(e) * len) + Vector3.up * (Mathf.Sin(e) * len);
                 }
             }
+        }
+
+        /// Seat distance multiplier for a downward look offset of `pitch`
+        /// degrees (already weighted): 1 at level or looking up, rising to
+        /// `topDownZoom` at `pitchMaxDeg` along `topDownZoomCurve`.
+        static float TopDownZoom(float pitch)
+        {
+            float max = SeaCameraTuning.pitchMaxDeg;
+            if (pitch <= 0f || max <= 0.01f) return 1f;
+            float t = Mathf.Clamp01(pitch / max);
+            float k = Mathf.Pow(t, Mathf.Max(0.1f, SeaCameraTuning.topDownZoomCurve));
+            return 1f + (Mathf.Max(1f, SeaCameraTuning.topDownZoom) - 1f) * k;
         }
 
         /// The camera stick's ring. Same suppression as `HelmInput.OnGUI`.

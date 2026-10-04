@@ -1274,8 +1274,15 @@ namespace SeaSick.Dev
                     Check(a >= 0.8f && a <= 3f, "loot crate (" + what + ") is 0.8..3 m across",
                           F(a) + " m across x " + F(h) + " m tall = " + F(a / Mathf.Max(0.1f, hullL) * 100f, "F0") + " % of her length; "
                           + (OnScreen(vp) ? "on screen at " + V(vp) : "off screen (viewport " + V(vp) + ")"));
-                    Check(a >= refAcross * 0.98f, "loot crate (" + what + ") is at least as big as a normal crate",
-                          F(a) + " m vs " + F(refAcross) + " m");
+                    // Kevin 2026-10-04: meat ~1.6 m (a big haul reads as one),
+                    // the ink a smaller trophy ~0.9 m.
+                    bool ink = c.Resource == SeaSick.World.Res.KrakenInk;
+                    if (ink)
+                        Check(Mathf.Abs(a - KrakenSpawnTuning.lootInkSpan) <= 0.15f, "the ink trophy is ~" + F(KrakenSpawnTuning.lootInkSpan) + " m across (Kevin)",
+                              F(a) + " m");
+                    else
+                        Check(a >= refAcross * 0.98f, "loot crate (" + what + ") is at least as big as a normal crate",
+                              F(a) + " m vs " + F(refAcross) + " m");
                 }
                 Shot("loot");
             }

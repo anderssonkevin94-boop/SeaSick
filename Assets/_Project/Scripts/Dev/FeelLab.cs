@@ -168,6 +168,8 @@ namespace SeaSick.Dev
             {"SeaCameraTuning.mouseDegPerPixel",         (0.05f, 1f)},
             {"SeaCameraTuning.pitchMinDeg",              (-30f, 0f)},
             {"SeaCameraTuning.pitchMaxDeg",              (0f, 50f)},
+            {"SeaCameraTuning.topDownZoom",              (1f, 2f)},
+            {"SeaCameraTuning.topDownZoomCurve",         (0.5f, 3f)},
             {"SeaCameraTuning.recenterSeconds",          (0.1f, 1.5f)},
             {"SeaCameraTuning.followSeconds",            (0f, 0.5f)},
             {"SeaCameraTuning.doubleTapSeconds",         (0.15f, 0.5f)},
