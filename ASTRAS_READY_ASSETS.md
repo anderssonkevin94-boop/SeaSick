@@ -19,7 +19,6 @@ Approved art waiting for Claude to implement in SeaSick. This is the active hand
 | [Worker tools](#worker-tools) | worker-tools-v1 | 2026-09-30 | Approved art — awaiting import and animation checks |
 | [Resource kit](#resource-kit) | resource-kit-v1 | 2026-09-30 | Approved art — awaiting import and gameplay checks |
 | [Bow harpoon + gun lamp](#bow-harpoon--gun-lamp) | art-staging/harpoon-v1 | 2026-10-04 | Mount + barb in game (b479be1f), awaiting Kevin's look approval. Gun lamp: art in progress (sailing session), awaiting Kevin's look; code lane done (spot light + glowing lens, `HarpoonLamp`) |
-| [Storage containers L1](#storage-containers-l1) | storage-slots-preview/export (kit mode) | 2026-10-03 | Imported + in game (f60bf054), edit-mode shots OK — awaiting Kevin's phone check on a real camp |
 | [Ship with one rear module F18](#ship-with-one-rear-module-f18) | f-coaster-v18/timber-top-band | 2026-09-29 | Approved rear-module boat; F19 rear + middle also approved |
 
 _Watch Tower Lvl 1 (V5) and Lumber Mill Lvl 1 (Timber Fan) were implemented 2026-09-28 (commit 415ff63); Kitchen Lvl 1 (V6, `art-staging/kitchen-grill-lvl1-v6`) on 2026-10-01 (`KitchenL1Import`); follow-ups are with Kevin._
@@ -33,16 +32,6 @@ _Watch Tower Lvl 1 (V5) and Lumber Mill Lvl 1 (Timber Fan) were implemented 2026
 Source: `art-staging/harpoon-v1/` (`build.py` modes for the mount/barb and `-- lantern`; `check.py` → `export-verification.json` / `lantern-verification.json`; `render.py`; `CONTRACT.md`; `RUN.md`; `rope-look.json`). In game: `Resources/Harpoon/HarpoonMount` (Swivel, Barb_Muzzle, Winch_Drum, Harpooner_Stand; 1,728 tris), `HarpoonBarb` (Line_Attach; 192 tris), `BowLantern` (nose block + chain + Lantern_Bow_Frame/_Glass under LanternBow_Pivot; 516 tris), `SS_Harpoon_*` materials, `rope-look.json` (slack #D2B48C / taut #FFFFFF / strained #FF6A30; widths .085/.075/.070). FBX in `Art/Harpoon/Models`. Importer `Dev/Editor/HarpoonImport`, shot tool `Dev/HarpoonLookShot`. (Superseded: `CoasterOutfitting` no longer hangs `BowLantern`; the gun lamp is the bow light.) The rope clears the nose block by 0.205 m and the swinging lantern by ≥0.465 m across ±45° (check.py).
 
 Remaining: Kevin's look approval of the mount, barb and gun lamp; dead ahead at 10–12 m the line passes through the hull's stem cap (line routing, sailing session); the gun lamp art. Then the phone check, then remove this entry.
-
-## Storage containers L1
-
-**Approved 2026-10-03** (Kevin, via the orchestrator): the storage-slot containers preview, with the tarp moved back (open stall front) and the fire-cache groundsheet at 3.2 × 2.3 m. Design: no ground piles; island stores are UNLIMITED (Kevin 2026-10-03, "infinite stacking"), so the containers are the visual only: each slot shows one bundle of one resource (logs 5, stone 10, boards 10, sacks 12, pegs 4, dish trays 12, gear per item) and stays shown full past that.
-
-Source: `art-staging/storage-slots-preview/export/` (`build.py -- hut kit`, `-- cache kit`, `-- fillkit`; `check.py`; `CONTRACT.md`; `RUN.md`). Exports: `StorageHutL1.fbx` (structure + 30 `Stock_<Family>_NN` anchors + `Marker_Pickup`, 5.2k tris), `FireCache.fbx` (structure + 10 anchors, 1.3k tris), `StorageFillKit.fbx` (167 shared fill steps `<Family>__Fill_[<Res>_]<k>`, 41k tris in total, worst case visible ≈28k hut / 8k fire). Previews: `review-hut-phone-high50.png`, `review-firecache-phone.png`; in-engine edit-mode shots via `StorageShot.Run`. Materials `SS_StorageL1_Wood/_Hemp/_Canvas_Endgrain_Stone` + food GameColor; the real food models are reused unchanged.
-
-In game: `StorageL1Import.Run()` → `Art/StorageL1/`, `Resources/Settlement/storage_l1` + `firecache_l1`, `Resources/Kits/StorageL1/StorageFillKit`; `StorageSlotView` spawns steps lazily from the kit; the store hut falls back to the old model if the prefab is missing; the fire cache sits on the first clear bearing outside the supper ring (saved, footprint reserved), or is not drawn on a cramped camp.
-
-Remaining: Kevin's phone check on his real save (hut readable from the camp camera, slots fill and stay full, fire cache placed clear of buildings and the supper ring, no ground piles), then remove this entry. Storehouse has no art yet (its new role = more/better runners, proposal with Kevin).
 
 ## Ship with one rear module F18
 
