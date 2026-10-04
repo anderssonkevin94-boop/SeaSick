@@ -12,7 +12,7 @@ A feature is **CLOSED** only when every one of these holds:
 
 Unapproved visuals stay on a branch until Kevin OKs the shots. Sessions end every report with **"loose ends:"**.
 
-Last on the phone and pushed: **0053f72f** (2026-10-04, 14:20): the fire-button fix, the gun lamp, the docking/castaway fix + un-killed Bo/Pip/Ola, the spit (C), the firing arcs hidden at berth, stall lines + worn tools, the smoke texture, the app icon.
+Last on the phone and pushed: **c08ee639** (2026-10-04, 19:23): the farm rework + glyph sweep, the Storehouse merged into the store hut, the harpooner role, station work in place, L2 walls + kitchen/tower/mill winding fixed, pathing, kraken no-cancel + HUD framing/chevron. Before it: 0053f72f (fire button, gun lamp, docking/castaways, spit, arcs, stall lines, icon).
 
 ## Sailing session: queue (in order)
 
@@ -52,6 +52,14 @@ Landed, not on the phone yet (rides the next build): the stall lines name every 
 Its kraken steps 1-4 are on the phone. Its unverified items moved to the Sailing sweep above.
 
 ## Waiting on KEVIN
+
+**Open questions:**
+- Kraken loot: bigger crates (branch kraken-loot-scale) + smaller markers floating ABOVE targets?
+- Kraken surfacing astern pulls the camera out to ~140 m (pre-existing). Does it bother him in play?
+
+**Sailing next:** the winding sweep (~470 FBX incl. Astra's; needs Unity closed or restarted, swap), then stop.
+**Villager next:** its sweep (crop icons fill the card, chart subtitle/labels truncation, desk header under Move, cannon-shift cue, 44 pt chips, sheer cliff, IngredientLine, repair timber stays aboard, HOME BERTH, smoke shot, flour auto-pause proposal, station-anim polish, harpooner in rough sea).
+
 
 **Play verdicts** (on the phone):
 - Kraken 1-4.
