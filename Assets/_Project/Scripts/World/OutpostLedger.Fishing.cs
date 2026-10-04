@@ -244,6 +244,10 @@ namespace SeaSick.World
             return CatchSeconds(si);
         }
 
+        /// Seconds one dig takes at mine `si` now (its level, the feel, the
+        /// camp's priority): what the sheet's ring runs down from.
+        public float MineTripSecondsAt(int si) => CatchSeconds(si);
+
         /// Why a fisher with an order is not fishing, or null.
         string CatchStallCause(StationStock s)
         {

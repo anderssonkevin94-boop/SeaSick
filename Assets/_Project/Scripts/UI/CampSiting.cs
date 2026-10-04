@@ -151,7 +151,7 @@ namespace SeaSick.UI
         /// watchtower snapped onto the wall is the same idea (2026-09-27):
         /// it is part of the wall now, so it squares to the run rather than
         /// to whatever `R` last left it at -- see `Outpost.WallTowerYaw`.
-        public float Yaw => (IsPier || IsDryDock) ? snappedYaw
+        public float Yaw => (IsPier || IsDryDock || IsMine) ? snappedYaw
             : onWall ? outpost.WallTowerYaw(at)
             : heldYaw + turns * TurnStep;
 
@@ -162,6 +162,11 @@ namespace SeaSick.UI
         /// `SnapPier` does, but refuses anything too far from `Dock.Home` --
         /// see `BuildPlans.DryDockMaxFromHome`.
         bool IsDryDock => plan.kind == BuildKind.DryDock;
+
+        /// **A mine is sited by the hill (2026-10-05).** `Outpost.SnapMine`
+        /// finds the foot of the nearest face and turns the ghost out of
+        /// it, the way the pier's snap turns it out to sea; R does not turn it.
+        bool IsMine => plan.kind == BuildKind.Mine;
 
         /// **A pier is sited by the beach, not by the thumb.** The pointer
         /// picks a stretch of shore; `Outpost.SnapPier` walks to the
@@ -262,6 +267,7 @@ namespace SeaSick.UI
 
         const string BuildingHint = "Drag it to move · tap the ground to jump there";
         const string ShoreHint = "Drag it along the shore · tap the beach to jump there";
+        const string CliffHint = "Drag it along a hillside · it turns to face out of the slope";
 
         /// **The first fire on an island** -- the "Make camp" verb. A
         /// campfire that is not a MOVE of its own blueprint can only be that:
@@ -281,10 +287,11 @@ namespace SeaSick.UI
                 string name = plan.id == BuildPlans.Campfire.id ? "campfire" : plan.label;
                 title = (moving ? "Move the " : "Place the ") + name;
                 bool shore = IsPier || IsDryDock;
-                hint = shore ? ShoreHint : BuildingHint;
+                hint = shore ? ShoreHint : IsMine ? CliffHint : BuildingHint;
                 confirm = moving ? "Move here" : "Build here";
-                // A pier or a dry dock faces the sea whatever R says.
-                if (!shore) turn = TurnAction;
+                // A pier or a dry dock faces the sea whatever R says; a mine
+                // faces out of its hill.
+                if (!shore && !IsMine) turn = TurnAction;
             }
             Sheets.ThumbBar.ShowPlacement(title, hint, CancelAction, turn, ConfirmAction, confirm);
             barShown = true;
@@ -894,6 +901,20 @@ namespace SeaSick.UI
                     // a red ghost THERE explains the refusal better than one
                     // out on the grass.
                     at = centre;
+                    if (snapped) valid = outpost.CanPlace(sited, at, snappedYaw, out why);
+                }
+            }
+            else if (IsMine)
+            {
+                // The ring rule first, about the point the player picked,
+                // then the snap -- the pier's order. A refused snap leaves
+                // the red ghost where the player is pointing, saying why
+                // ("needs a cliff face to dig into").
+                valid = false;
+                if (!outpost.TooFarFromTown(plan, want, out why))
+                {
+                    bool snapped = outpost.SnapMine(want, out Vector3 pivot, out snappedYaw, out why);
+                    at = pivot;
                     if (snapped) valid = outpost.CanPlace(sited, at, snappedYaw, out why);
                 }
             }
