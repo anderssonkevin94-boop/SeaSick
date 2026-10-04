@@ -515,8 +515,8 @@ namespace SeaSick.Voyage
             RepairLegacyBank();
         }
 
-        /// One TransferAll ship -> store order per kind aboard, on the home
-        /// camp. Refused (she is not alongside after all, no camp) = nothing
+        /// One TransferAll ship -> store order per CARGO kind aboard, on the home
+        /// camp (the repair stock of Timber stays aboard, `HomeUnload`). Refused (she is not alongside after all, no camp) = nothing
         /// moves and nothing is lost: the cargo stays aboard and the
         /// Backpack sheet can order it later.
         void OrderHomeUnload()
@@ -525,9 +525,9 @@ namespace SeaSick.Voyage
             var l = home != null ? home.Ledger : null;
             if (l == null || held.Count == 0) return;
             World.ShipCargoSide.BindTo(home);
+            // Cargo only: the repair stock of Timber stays aboard (`HomeUnload`).
             var kinds = new List<string>(InOrder(held));
-            foreach (var res in kinds)
-                l.OrderTransfer(res, World.OutpostLedger.TransferAll, toShip: false);
+            HomeUnload.OrderAll(kinds, held, l);
         }
 
         // --- The stores, and what they buy ----------------------------------
