@@ -85,6 +85,9 @@ Its kraken steps 1-4 are on the phone. Its unverified items moved to the Sailing
 
 ## Parked by Kevin (not loose ends; revisit deliberately)
 
+- Chart label placement (names drift from small islands; leader lines), 2026-10-04. The chart rework lands as is.
+- Island raids (hostile camps, a Raid order, gear, loot): design discussed 2026-10-04, ON HOLD.
+
 - Full shipboard crew priority list (rescue → bail → engaged guns / harpoon → sails/oars). Only the cannon shift is built.
 - Boost fuel cost, once a fuel system exists.
 - Harpoon barb ammo (iron); ammo is unlimited for now.
