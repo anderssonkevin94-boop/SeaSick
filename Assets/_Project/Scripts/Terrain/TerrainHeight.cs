@@ -47,6 +47,11 @@ namespace SeaSick.Terrain
         public float homeIsleCoveHalfBasin, homeIsleCoveBasin;
         public float homeIsleCoveBank, homeIsleCoveFloor;
 
+        /// Hand edits (Kevin's home spit, 2026-10-04), applied last in
+        /// `TerrainHeight.Evaluate`. Filled by `From` for the one world they
+        /// belong to; `default` (count 0) everywhere else. See `TerrainEdits`.
+        public TerrainEdits edits;
+
         public const int MaskSeedOffset = 7919, DetailSeedOffset = 104729,
                          MassifSeedOffset = 15485863, RidgeSeedOffset = 4241,
                          ShoreSeedOffset = 611953, UplandSeedOffset = 2750159,
@@ -137,6 +142,7 @@ namespace SeaSick.Terrain
                 homeIsleCoveBank = math.max(1f, s.homeIsleCoveBank),
                 homeIsleCoveFloor = s.homeIsleCoveFloor,
             };
+            p.edits = TerrainEdits.For(p.seed, p.worldOffset);
             return p;
         }
     }
@@ -1118,6 +1124,14 @@ namespace SeaSick.Terrain
             // The streamed grid stays submerged under the separate authored mesh.
             if (!includeAuthoredGround && HomePlateauSurface.Enabled(prm))
                 s.height = math.lerp(s.height, prm.seaLevel + prm.seabedDepth, home);
+            // Hand edits LAST, over everything above, so mesh, collider,
+            // shore grid, populator and horizon all read the same ground.
+            if (prm.edits.count > 0)
+            {
+                s.height = TerrainEdits.Apply(prm.edits, p, s.height, prm.seaLevel);
+                s.terraced = TerrainEdits.Apply(prm.edits, p, s.terraced, prm.seaLevel);
+                s.smooth = TerrainEdits.Apply(prm.edits, p, s.smooth, prm.seaLevel);
+            }
             return s;
         }
 
