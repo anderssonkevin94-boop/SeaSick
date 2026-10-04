@@ -80,6 +80,11 @@ namespace SeaSick.Ship.Modular
         /// True once she is drawn from modules (a refit, or a save that
         /// carried a configuration). False = the untouched standard steamer.
         public bool ModularActive => modularActive;
+        /// Hammocks aboard: her plan's crew stations, or the reference
+        /// steamer's while she is untouched. What `Outpost.BerthRefusal`
+        /// checks a carry-aboard or a castaway pickup against (2026-10-04).
+        public int CrewBerths => CrewBerthsOf(modularActive ? currentPlan : null);
+        static int CrewBerthsOf(ShipyardPlan plan) => SeaSick.Ship.CrewBerths.OfPlan(plan);
         /// The hull form she is sailing on now (read-only use).
         public HullFormData ActiveData => currentPlan != null ? currentPlan.data : reference;
         /// The assembly she is drawn from, or null while not ModularActive.

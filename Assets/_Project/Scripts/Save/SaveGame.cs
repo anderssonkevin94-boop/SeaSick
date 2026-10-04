@@ -539,6 +539,19 @@ namespace SeaSick.Save
             // names; the rest are re-drawn from the pool.
             CrewNames.Deduplicate();
 
+            // 5a2. **Castaways of his own, and names the dead hold**
+            // (2026-10-04, Kevin's "No free berth" at his own pier). After the
+            // camps (5) and the names (5a), so a castaway is judged against
+            // every row and every body: a stale copy of somebody living
+            // elsewhere goes, and one of his own beside a camp of his walks
+            // up to it (`CastawayRepair`, idempotent). THEN no body aboard
+            // keeps a name a grave or a castaway still holds -- the step the
+            // steamer's scene-load build cannot take, its lives being the
+            // last session's (`SteamerBootstrap.Man`).
+            string castawayFix = SeaSick.World.Life.CastawayRepair.RunOnLoad(motor.transform);
+            if (!string.IsNullOrEmpty(castawayFix)) Debug.Log("SaveGame: castaway repair -- " + castawayFix);
+            CrewNames.RetireTakenNames(motor.transform);
+
             var roster = motor.GetComponent<CrewRoster>();
             if (roster != null) roster.Refresh();
 

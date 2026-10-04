@@ -96,6 +96,12 @@ namespace SeaSick.World.Life
 
         static readonly List<string> stale = new List<string>();
 
+        /// The beach figures this class stood up. They wear the castaway's
+        /// name but are nobody's body -- `CastawayRepair` must not read one
+        /// as the castaway living elsewhere (2026-10-04).
+        static readonly HashSet<CrewAgent> figures = new HashSet<CrewAgent>();
+        public static bool IsFigure(CrewAgent a) => a != null && figures.Contains(a);
+
         // ---------------------------------------------------------- strangers --
 
         void TryRollStranger(Island isle, Vector3 shipPos)
@@ -153,6 +159,8 @@ namespace SeaSick.World.Life
             var body = SpawnBody(c.name, root.transform);
             if (body != null)
             {
+                figures.RemoveWhere(f => f == null);
+                figures.Add(body);
                 body.transform.localPosition = Vector3.zero;
                 body.transform.localRotation = Quaternion.identity;
             }

@@ -59,6 +59,10 @@ namespace SeaSick.World.Life
         public string name = "";
         public string island = "";
         public float x, z;
+        /// **Went over the side of the player's own ship** (2026-10-04),
+        /// written by `Swimmer.WashAshore`. Older records read false and
+        /// `CastawayRepair.IsOneOfOurs` falls back to the person's life log.
+        public bool exCrew;
     }
 
     /// **One dead person**, as much as the tombstone/graveyard flow needs.

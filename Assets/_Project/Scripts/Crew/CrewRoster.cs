@@ -58,6 +58,28 @@ namespace SeaSick.Crew
 
         public int CrewCount => All.Length;
 
+        /// **The one count of who is aboard** (2026-10-04, Kevin's phone:
+        /// the top bar said 6 while the berth card said "she carries 5").
+        /// The two had their own loops: the top bar counted every body in an
+        /// aboard STATE, switched off or not, and `Outpost.BerthRefusal`
+        /// counted every body switched ON, whatever its state. A body
+        /// `SteamerBootstrap.Man` stands down (the steamer posts 4 of the 5
+        /// authored hands; the 5th keeps its default `Station` state) was a
+        /// person to one and nobody to the other. Aboard = switched on AND in
+        /// an aboard state; the top bar and the berth check both read this.
+        public int AboardCount
+        {
+            get
+            {
+                int n = 0;
+                foreach (var c in All) if (CountsAboard(c)) n++;
+                return n;
+            }
+        }
+
+        public static bool CountsAboard(CrewAgent c) =>
+            c != null && c.gameObject.activeSelf && c.IsAboard;
+
         /// Forget the cached roster and count again.
         ///
         /// `All` caches on first access and never looked again, which was right

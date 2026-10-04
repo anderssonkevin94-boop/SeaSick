@@ -263,12 +263,27 @@ namespace SeaSick.Ship.Overboard
         void WashAshore(World.Island isle)
         {
             Lives.Log(CrewName, LifeEvents.WashedAshore, isle.gameObject.name);
+            // **Washed up beside one of his camps: they walk up to it**
+            // (2026-10-04). A swimmer is always one of the ship's own, so on
+            // an island with his camp they join it instead of waiting on the
+            // beach for the ship -- Kevin's home pier showed "IN THE WATER ·
+            // No free berth" for two crew filed as castaways 36-52 m from it.
+            var camp = World.Outpost.Of(isle);
+            if (camp != null && (camp.HasCamp || camp.Building)
+                && camp.TakeInCastaway(CrewName, transform.position))
+            {
+                Banner.Show(CrewName + " washed ashore and walked up to the camp");
+                FinishScriptedIfNeeded();
+                EndBodyForGood();
+                return;
+            }
             Lives.MarkCastaway(new CastawayRecord
             {
                 name = CrewName,
                 island = isle.gameObject.name,
                 x = transform.position.x,
                 z = transform.position.z,
+                exCrew = true,
             });
             Banner.Show(CrewName + " washed ashore on " + isle.gameObject.name);
             FinishScriptedIfNeeded();

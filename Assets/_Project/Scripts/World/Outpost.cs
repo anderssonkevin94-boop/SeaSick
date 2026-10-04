@@ -1296,6 +1296,61 @@ namespace SeaSick.World
             return true;
         }
 
+        /// **One of his own washed up on this island: they walk up to the
+        /// camp** (2026-10-04). Kevin's home pier kept showing "IN THE WATER
+        /// · No free berth" for two of his crew filed as castaways a stone's
+        /// throw from his own fire, waiting for the ship to fetch them from
+        /// her own pier. A person of his on an island with his camp on it
+        /// joins that camp like a hand dropped off there: an Idle row (the
+        /// idle ladder and the food draft may take them), `WentAshore` /
+        /// `Ferried` in the life log, a body stood at the shore toward where
+        /// they washed up that walks in (`walkingIn`).
+        ///
+        /// The row is `born` -- "the row owns its body, no berth waiting
+        /// aboard": `EnsureBornBodies` re-grows the body on every load, and
+        /// carrying them back aboard is the berth-checked `CarryAboard`, the
+        /// same as a villager raised here (their hammock went with them).
+        /// The CALLER decides they are his (`CastawayRepair`); this only
+        /// refuses a name a row here already holds, or no camp.
+        public bool TakeInCastaway(string who, Vector3 washedUpAt)
+        {
+            if (ledger == null || string.IsNullOrEmpty(who) || !(HasCamp || Building)) return false;
+            if (HandNamed(who) != null) return false;
+
+            ledger.hands.Add(new OutpostHand
+            {
+                name = who,
+                order = OutpostOrder.Idle,
+                target = "",
+                born = true,
+            });
+            if (Building) ledger.EnlistFree();
+            {
+                // Read BEFORE the WentAshore line, same as `Station`.
+                var record = Life.Lives.Record(who);
+                string home = record != null ? record.homeCamp : "";
+                string here = ledger.CampLabel ?? "";
+                Life.Lives.Log(who, Life.LifeEvents.WentAshore, here);
+                if (!string.IsNullOrEmpty(home) && !string.IsNullOrEmpty(here) && home != here)
+                    Life.Lives.Log(who, Life.LifeEvents.Ferried, here, other: home);
+            }
+
+            var body = BodyNamed(who) ?? Crew.BornVillager.Make(who, transform);
+            if (body == null) { ArrangeHands(); return true; }   // EnsureBornBodies retries
+            Vector3 landing = Island != null ? Island.ShorePoint(0, 1, washedUpAt) : CampCentre;
+            if (height != null) landing.y = Mathf.Max(height(landing.x, landing.z), 0f);
+            body.transform.position = landing;
+            body.gameObject.SetActive(Watched);
+            if (Watched)
+            {
+                var fresh = HandNamed(who);
+                if (fresh != null) fresh.walkingIn = true;
+                PuppetsToWork();
+            }
+            ArrangeHands();
+            return true;
+        }
+
         /// **Where a hand leaving the ship first stands on this island.**
         /// Already ashore: where they are. Aboard: the foot of the gangway if
         /// it is run out (the point `AnchorController.SendAshore` lands a
@@ -1446,7 +1501,7 @@ namespace SeaSick.World
         /// given up, so taking him back costs nothing. A villager born at the
         /// camp is a new mouth on a fixed number of hammocks, so this is the
         /// one crossing that can be refused -- and it is refused with the
-        /// number, because "she carries five" is the sentence that tells the
+        /// number, because "all ten taken" is the sentence that tells the
         /// player to go and buy quarters.
         ///
         /// On success the row goes (he left the island) and the body becomes
@@ -1469,14 +1524,25 @@ namespace SeaSick.World
         {
             if (ship == null) return "no ship alongside";
             var roster = RosterOn(ship);
+            // The same head count as the top bar (`CrewRoster.AboardCount`):
+            // switched on and in an aboard state (2026-10-04).
+            int aboard = roster != null ? roster.AboardCount : 0;
+            return SeaSick.Ship.CrewBerths.Refusal(aboard, BerthsOn(ship));
+        }
+
+        /// **Her hammocks** (2026-10-04). The steamer's come from her modular
+        /// plan (`ShipyardService.CrewBerths`); only the ladder brig, which
+        /// has no `ShipyardService`, counts its quarters cells. Reading the
+        /// stood-down brig yard on the steamer gave 0 -> 1 and refused every
+        /// carry-aboard and castaway pickup (Kevin's "she carries 5").
+        static int BerthsOn(Transform ship)
+        {
+            var service = ship.GetComponentInParent<SeaSick.Ship.Modular.ShipyardService>()
+                          ?? ship.GetComponentInChildren<SeaSick.Ship.Modular.ShipyardService>(true);
+            if (service != null) return service.CrewBerths;
             var yard = ship.GetComponentInParent<SeaSick.Ship.Shipyard>()
                        ?? ship.GetComponentInChildren<SeaSick.Ship.Shipyard>(true);
-            int aboard = 0;
-            if (roster != null)
-                foreach (var c in roster.All)
-                    if (c != null && c.gameObject.activeSelf) aboard++;
-            int berths = yard != null ? Mathf.Max(1, yard.Berths) : int.MaxValue;
-            return aboard >= berths ? "no berth aboard — she carries " + aboard : null;
+            return yard != null ? SeaSick.Ship.CrewBerths.OfRung(yard.Berths) : int.MaxValue;
         }
 
         public bool CarryAboard(Crew.CrewAgent hand, Transform ship, out string why)

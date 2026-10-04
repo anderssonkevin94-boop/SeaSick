@@ -80,6 +80,34 @@ namespace SeaSick.Crew
             return used;
         }
 
+        /// **A dead or castaway name does not walk the deck** (phase 5a's
+        /// rule, `Shipyard.ManCrew`; for the steamer 2026-10-04). The authored
+        /// cast are fixed bodies in the scene, so every load brings back a
+        /// body wearing a name a grave or a beach castaway holds -- the ladder
+        /// brig re-christened them in `ManCrew`, the steamer never did, which
+        /// is how Kevin's save had Mara aboard AND on a beach. Every body
+        /// under `ship` (active or not) wearing such a name draws a free one.
+        /// Returns how many were renamed.
+        public static int RetireTakenNames(Transform ship)
+        {
+            if (ship == null) return 0;
+            HashSet<string> taken = null;
+            int renamed = 0, i = 0;
+            foreach (var c in ship.GetComponentsInChildren<CrewAgent>(true))
+            {
+                i++;
+                if (c == null) continue;
+                if (c.GetComponent<SeaSick.Combat.RaidWalker>() != null) continue;
+                string dn = c.DisplayName;
+                if (string.IsNullOrEmpty(dn) || !World.Life.Lives.IsTaken(dn)) continue;
+                if (taken == null) taken = InUse();
+                string now = Christen(c, i + 1000, taken);
+                renamed++;
+                Debug.Log("CrewNames: \"" + dn + "\" is a grave or a castaway; the body aboard is now " + now);
+            }
+            return renamed;
+        }
+
         /// The first free name in the pool, starting the walk at `seed`.
         ///
         /// Deterministic in `seed` and `taken`: the same berth on the same

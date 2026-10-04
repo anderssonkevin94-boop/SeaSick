@@ -34,7 +34,9 @@ namespace SeaSick.Ship.Overboard
         }
 
         HelmInput helm;
+        AnchorController anchor;
         float nextHelmLookup;
+        bool atPier;            // coming alongside a pier, or lying at one
 
         // --- state advanced once a frame in Update, read by Offer() ----------
         string targetName;      // nearest castaway in pickup range, or null
@@ -48,6 +50,7 @@ namespace SeaSick.Ship.Overboard
             if (Time.time >= nextHelmLookup)
             {
                 if (helm == null) helm = FindAnyObjectByType<HelmInput>();
+                if (anchor == null && helm != null) anchor = helm.GetComponent<AnchorController>();
                 nextHelmLookup = Time.time + 1f;
             }
             if (helm == null) { targetName = null; return; }
@@ -67,8 +70,10 @@ namespace SeaSick.Ship.Overboard
             targetName = nearest;
             targetTooFast = motor.CurrentSpeed > OverboardTuning.ThrowMaxSpeed;
             berthWhy = targetName != null ? Outpost.BerthRefusal(motor.transform) : null;
+            atPier = targetName != null && anchor != null
+                     && (anchor.CurrentDock != null || anchor.DockInRange() != null);
 
-            bool canProgress = targetName != null && !targetTooFast && string.IsNullOrEmpty(berthWhy);
+            bool canProgress = targetName != null && !targetTooFast && string.IsNullOrEmpty(berthWhy) && !atPier;
             if (pickingName != null && (pickingName != targetName || !canProgress))
             {
                 // Moved off, sped up, or lost the berth mid-fetch -- no
@@ -96,11 +101,29 @@ namespace SeaSick.Ship.Overboard
         readonly SeaSick.UI.Sheets.SeaActions.Joined fetchTitle = new SeaSick.UI.Sheets.SeaActions.Joined();
         System.Action startPick;
 
+        /// **Which card, at what priority** (2026-10-04, Kevin's phone: the
+        /// no-berth card hid "Come alongside" at his own home pier). -1 = no
+        /// card. Coming alongside a pier or lying at one: none at all -- the
+        /// dock card is what that moment is for, and a castaway near a pier
+        /// is on an island the ship has a camp on. No free berth: an
+        /// information line at `PriorityOther`, under the dock and land
+        /// cards, never over them. Otherwise "Take X aboard" at
+        /// `PriorityRescue` + 5, as before. Plain C# for
+        /// `CastawayFixSelfTest`.
+        public static int CardPriority(bool atPier, bool noBerth)
+        {
+            if (atPier) return -1;
+            if (noBerth) return SeaSick.UI.Sheets.SeaActions.PriorityOther;
+            return SeaSick.UI.Sheets.SeaActions.PriorityRescue + 5;
+        }
+
         void Offer()
         {
             if (string.IsNullOrEmpty(targetName)) return;
             if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
-            const int P = SeaSick.UI.Sheets.SeaActions.PriorityRescue + 5;
+            bool noBerth = !string.IsNullOrEmpty(berthWhy);
+            int P = CardPriority(atPier, noBerth);
+            if (P < 0) return;
             if (startPick == null) startPick = StartPick;
             if (pickingName == targetName)
             {
@@ -109,7 +132,7 @@ namespace SeaSick.Ship.Overboard
                     "Hold her steady alongside", null, false, t);
                 return;
             }
-            if (!string.IsNullOrEmpty(berthWhy))
+            if (noBerth)
             {
                 SeaSick.UI.Sheets.SeaActions.Offer(P, "IN THE WATER", "No free berth", berthWhy, null, false);
                 return;
@@ -121,7 +144,7 @@ namespace SeaSick.Ship.Overboard
 
         void StartPick()
         {
-            if (string.IsNullOrEmpty(targetName) || targetTooFast || !string.IsNullOrEmpty(berthWhy)) return;
+            if (string.IsNullOrEmpty(targetName) || targetTooFast || !string.IsNullOrEmpty(berthWhy) || atPier) return;
             pickingName = targetName;
             pickupElapsed = 0f;
         }

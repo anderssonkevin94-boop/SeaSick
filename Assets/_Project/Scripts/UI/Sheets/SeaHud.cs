@@ -820,14 +820,7 @@ namespace SeaSick.UI.Sheets
                 }
                 else if (holdKey != -1) { holdKey = -1; holdText.text = "--"; }
 
-                var roster = SheetBits.Roster;
-                int aboard = 0;
-                if (roster != null)
-                {
-                    var all = roster.All;
-                    for (int i = 0; i < all.Length; i++)
-                        if (all[i] != null && all[i].IsAboard) aboard++;
-                }
+                int aboard = SheetBits.Roster != null ? SheetBits.Roster.AboardCount : 0;
                 if (aboard != crewKey) { crewKey = aboard; crewText.text = aboard.ToString(); }
 
                 // Off an island with no camp: where she is, in place of the
