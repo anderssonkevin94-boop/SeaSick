@@ -1700,9 +1700,24 @@ count, every polygon `same` or `reversed` (none `other`), no normal/UV/colour/ma
 object types, and the same LIVE animation curves (constant curves are dropped by the round trip and are
 harmless; the grain mill 261 -> 1 and the L2 sawmill 432 -> 2 curves keep every live one). The 2026-10-04
 sweep (469 FBXs, 8 faulty) hit one real failure kind: the Astra-scale files (`gull.fbx`, SettlementKitV1
-`sawmill`/`blacksmith`) moved the 100x import scale onto the root (`Lcl Scaling 1 -> 100`), which would
-resize them in game. Those stay unfixed (1, 108 and 4 faces; the SettlementKitV1 sawmill is unused); a raw
-FBX patch (reverse `PolygonVertexIndex` + the ByPolygonVertex layers in place) is the clean route if they
-ever matter. Clean fixes, staged in `art-staging/winding-fixed/`: the runner `Wheelbarrow` (146 faces), the
-L2 sawmill (11), plus unused `AstraPlaytest/Kitchen`, `Ship/player_ship_hull`/`_sail` (only in
-`_Recovery` scenes).
+`sawmill`/`blacksmith`) come back with the 100x import scale moved onto the root (`Lcl Scaling 1 -> 100`),
+which would resize them in game.
+
+**So prefer the in-place patch** for any file already in the game:
+
+    Blender -b --factory-startup --python tools/blender/winding_patch.py -- <in.fbx> <out.fbx>
+
+It decides the faces in Blender (`check_winding.analyse_mesh`, the same rule as `--fix`) but rewrites the
+ORIGINAL file's bytes itself: only the flipped polygons' `PolygonVertexIndex` corners, their
+`ByPolygonVertex` normals/UVs/colours (normals negated) and `Edges` change; transforms, animation, materials
+and every other byte are copied (a no-change load/save is byte-identical). It refuses ASCII FBX, per-vertex
+normals on a mesh that needs a flip, and tangent/binormal layers. Still diff the result (`DIFF_BAD 0`) and
+re-run `check_winding.py` (OK). Patched and landed this way: the runner `Wheelbarrow` (146 faces), the L2
+sawmill (11), Astra's blacksmith (4) and the gull (1). **Left unfixed on purpose (unused in game):**
+`AstraPlaytest/Kitchen` utensils (replaced by the V6 kitchen), `Ship/player_ship_hull`/`_sail` (only in
+`_Recovery` scenes), SettlementKitV1 `sawmill` (only `SettlementAssetReview.unity`); originals of every
+provided file touched are in `art-staging/winding-originals/`. **Kitchen V6 generator:** the winding fix
+(`art-staging/kitchen-grill-lvl1-v6/build.py`: outward `lathe`, `orient_outward` on the Input_Food meshes;
+`check.py` checks the in-session objects) is written but cannot run, because its V4 source
+`kitchen-chunky-lvl1-v4/kitchen-worker-review.blend` is gone; the shipped kit FBX is fixed (562ac008), so this
+only matters if the kitchen is ever regenerated from scratch.
