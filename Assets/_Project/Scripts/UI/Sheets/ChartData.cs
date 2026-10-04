@@ -407,7 +407,7 @@ namespace SeaSick.UI.Sheets
             {
                 var c = course.CampCentre;
                 target = new Vector2(c.x, c.z);
-                label = course.Island != null ? PrettyName(course.Island) : "the camp";
+                label = course.Island != null ? PlaceName(course.Island) : "the camp";
                 distance = Vector2.Distance(from, target);
                 return true;
             }
@@ -421,7 +421,7 @@ namespace SeaSick.UI.Sheets
             var b = dock.Berth;
             target = new Vector2(b.x, b.z);
             var isle = dock.GetComponentInParent<Island>();
-            label = dock.IsHome ? "home" : (isle != null ? PrettyName(isle) : "the pier");
+            label = dock.IsHome ? "Home" : (isle != null ? PlaceName(isle) : "the pier");
             distance = Vector2.Distance(from, target);
             return true;
         }
