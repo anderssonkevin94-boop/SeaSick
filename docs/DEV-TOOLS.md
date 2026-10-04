@@ -1320,6 +1320,44 @@ udid from `xcrun devicectl list devices`.
 
 ## 2026-09-23 — station stock: bays, benches, racks, orders, armful hauling
 
+### Plain-C# self-tests without the editor: `tools/selftest-outside-editor/run.sh` (2026-10-04)
+
+When another session holds the editor, or to find WHEN a gate broke:
+
+```
+tools/selftest-outside-editor/run.sh SeaSick.World.StationStockSelfTest.Run SeaSick.Ship.GunCrewShift.SelfTest
+tools/selftest-outside-editor/run.sh -c 0edd86c9 SeaSick.World.StationStockSelfTest.Run   # any commit
+```
+
+It compiles Assembly-CSharp with Unity's Roslyn, the editor build's defines and
+the Library reference DLLs (the `compilecheck.sh` recipe) from the working tree
+or from `git archive <commit>` (`.cs` files only), then runs each named static,
+argument-less method on Unity's bundled .NET (`Host.cs`). Pass = `true`, or a
+string starting `PASS` / ending `ALL PASS`; exit code = failed methods, 2 = the
+build failed. ~10 s per run. Works from a worktree (borrows the main Library).
+Static state is fresh each run, like a domain reload.
+
+Limits: managed code only. `JsonUtility` is replaced by the managed stand-in
+`tools/modular-selftest/JsonShim.cs`; `Debug.Log` prints to stdout;
+`Resources.Load` throws and the `*Tuning` getters fall back to code defaults
+(the same numbers when the asset is missing). Anything needing a scene, a
+ScriptableObject instance or a native module reports `THREW` -- run that one in
+the editor. `-c` builds old sources against TODAY's package DLLs, so commits far
+back can fail to build.
+
+Used 2026-10-04 to bisect StationStockSelfTest: green at 0edd86c9, 17 fails
+from 8099268f (the day/night ladder: ledgers ticked from second 0 slept until
+01:00, then worked at 1.2x), plus stale expectations from c6e38515 (store
+top-up), 734b3dc1 (0.75 m/s off-screen walk), 3485b85c (hunger floor 0.8).
+Fixed to 93/93 on branch stationstock-green; the run now holds the camp awake
+at scale 1 (`CampLifeTuning.OverrideForTest`, test-only).
+
+Seen while tracing it, not changed (no rule broken): the builder processed first in a
+quantum can start a ~50 s store top-up trip in the same quantum his partner's
+last stone lands, because his "anything left to fetch for the site?" check runs
+before that delivery. The site is then hammered by one builder while he walks.
+Watch for it if Kevin reports builders wandering off a just-stocked site.
+
 ### `StationStockSelfTest.Run()` (`SeaSick.World`, plain C#, edit mode, no scene)
 Gate for the storage-hub rules in `OutpostLedger.Stations.cs`'s doc block,
 `StationStock.cs`, and — since the same day's later phone session — the

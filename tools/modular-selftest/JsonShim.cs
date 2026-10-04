@@ -46,6 +46,17 @@ namespace UnityEngine
             return Bind(d, type, Activator.CreateInstance(type));
         }
 
+        /// Fills only the fields present in `json` on an existing object
+        /// (game save code uses it; tools/selftest-outside-editor shares this shim).
+        public static void FromJsonOverwrite(string json, object target)
+        {
+            if (string.IsNullOrEmpty(json) || target == null) return;
+            int i = 0;
+            var tree = Parse(json, ref i);
+            if (!(tree is Dictionary<string, object> d)) throw new ArgumentException("JSON must represent an object type.");
+            Bind(d, target.GetType(), target);
+        }
+
         // ---- reflection ---------------------------------------------------
 
         static IEnumerable<FieldInfo> Fields(Type t)
