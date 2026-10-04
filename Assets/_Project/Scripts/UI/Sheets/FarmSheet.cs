@@ -92,7 +92,12 @@ namespace SeaSick.UI.Sheets
 
         public VisualElement BuildHeader()
         {
-            header = new StationPage.Header(Title, true, () => StationPage.OpenLedgerFor(outpost));
+            // The pill only in the hugging frame, where it sits on the sub
+            // line. On the desk it is inline beside the title, Move and close,
+            // and squeezed "Farm plot" to a letter a line, which pushed the
+            // picker's buttons out of the side third (2026-10-04, 1920x1080).
+            // There the plots page's "No farmer" card says the same.
+            header = new StationPage.Header(Title, StationPage.Hugging, () => StationPage.OpenLedgerFor(outpost));
             // Move / turn the farm, field and all (Kevin, 2026-09-30).
             MoveButton.AddTo(header.Root, outpost, building);
             return header.Root;
