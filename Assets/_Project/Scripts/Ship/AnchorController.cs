@@ -1277,6 +1277,8 @@ namespace SeaSick.Ship
         Object offerAt;
         int offerKey = int.MinValue;
         string offerEyebrow = "", offerTitle = "", offerDetail = "";
+        // The island a pier in range stands on, found once per pier (`Island.Nearest` walks every island).
+        Dock offerDockOf; Island offerDockIsle;
 
         const string TitleLand = "Land here";
         const string TitleCliff = "Sheer cliff";
@@ -1343,12 +1345,16 @@ namespace SeaSick.Ship
             var dock = DockInRange();
             if (dock != null)
             {
-                if (OfferStale(dock, 3 | (slow ? 4 : 0) | desk))
+                // Any pier on the home island is the home berth to the player, not just the
+                // dock `Dock.Home` names; other piers read the place name, not "ISLAND_6".
+                // Home is part of the cache key: on a freshly loaded save the first cast-off
+                // offer was built before the home island was known and kept "ISLAND 6 · PIER".
+                if (dock != offerDockOf) { offerDockOf = dock; offerDockIsle = Island.Nearest(dock.Berth); }
+                var at = offerDockIsle;
+                bool home = dock.IsHome || (at != null && at.IsHome);
+                if (OfferStale(dock, 3 | (slow ? 4 : 0) | desk | (home ? 16 : 0)))
                 {
-                    var at = Island.Nearest(dock.Berth);
-                    // Any pier on the home island is the home berth to the player, not just the
-                    // dock `Dock.Home` names; other piers read the place name, not "ISLAND_6".
-                    offerEyebrow = dock.IsHome || (at != null && at.IsHome) ? "HOME BERTH"
+                    offerEyebrow = home ? "HOME BERTH"
                         : (at != null ? SeaSick.UI.Sheets.ChartData.PrettyName(at).ToUpperInvariant() + " · PIER" : "PIER");
                     offerTitle = TitleAlongside;
                     offerDetail = slow ? "Tie up at the pier" + KeyHint("  ·  space") : SlowText;
