@@ -20,6 +20,7 @@ Sessions end every report with a **"loose ends:"** line. The orchestrator copies
 | Harpoon phase 0: art (bow mount, barb, rope look, 🪝 + marker mock) | in progress; Blender scripts being written in art-staging/harpoon-v1 | Blender window from sailing, then shots → Kevin's approval | Villager |
 | Harpoon harpooner crew role (IHarpoonCrewSource on the gun-shift map) | queued after phase 0 shots; seam agreed (HarpoonCrew / IHarpoonCrewSource / BowPost) | phase 0 | Villager |
 | Farm-sheet bugs: half-picked field reports full yield; crop change relabels ripe harvest | Kevin: FIX (2026-10-04) | after harpooner role | Villager |
+| Remove the sand spit at Kevin's home island (his island only; a capsule terrain edit in TerrainHeight.Evaluate keyed to his island; buildings/pier untouched) + check the "Sawmill · out of boards" alert wording | queued after the current build | before/after shots → Kevin's OK → the next build | Villager |
 | Harpoon gun-lamp (Kevin's final lantern design): a hooded lamp on the side of the gun, a forward spot light that follows the aim; it replaces the nose block + hanging lantern (removed, no dangling art/code) | spec sent | sailing's placement fix lands → art + light → in-engine shots → Kevin's OK → the NEXT build | Sailing |
 | Harpoon phase 1: hook & reel salvage, markers, 90° arc, snap + 5 s reload, captain-fallback crew seam | LANDED 17d4b95b (with phase-0 art b479be1f), editor-tested | Kevin's OK on the art shots → phone build → Kevin plays | Sailing |
 
