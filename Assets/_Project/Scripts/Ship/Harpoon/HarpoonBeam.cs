@@ -49,7 +49,7 @@ namespace SeaSick.Ship.Harpoon
         readonly HarpoonGun gun;
         readonly SeaSick.Ocean.BuoyantBody buoyancy;
         readonly SeaSick.Steamer.HullFormBody hullForm;
-        readonly GameObject poolRoot;
+        readonly GameObject poolRoot, coneRoot;
         readonly MeshRenderer poolRenderer, coneRenderer;
         readonly Mesh poolMesh, coneMesh;
         readonly Material material;
@@ -91,9 +91,11 @@ namespace SeaSick.Ship.Harpoon
             coneColours = new Color[coneVerts.Length];
             coneMesh = new Mesh { name = "HarpoonLampCone" };
             coneMesh.MarkDynamic();
-            var coneGo = new GameObject("Lamp_Cone");
-            coneGo.transform.SetParent(lamp, false);
-            coneRenderer = MakeRenderer(coneGo, coneMesh, mat);
+            // Unparented, posed from the lens each frame like the pool: the art's
+            // `Lamp` casing node carries a 100x import scale (its mesh undoes
+            // it), and a child cone inherited it -- a 900 m beam over the sky.
+            coneRoot = new GameObject("HarpoonLampCone");
+            coneRenderer = MakeRenderer(coneRoot, coneMesh, mat);
             BuildGrid(coneMesh, ConeRingAt.Length, coneCols, ConeSides);
 
             Hide();
@@ -242,6 +244,7 @@ namespace SeaSick.Ship.Harpoon
             float length = Mathf.Max(0.5f, HarpoonTuning.lampConeLength);
             float coneHalfDeg = Mathf.Clamp(spotHalf * HarpoonTuning.lampConeWiden, 0.5f, 80f);
             if (length != coneLength || coneHalfDeg != coneHalf) ShapeCone(length, coneHalfDeg);
+            coneRoot.transform.SetPositionAndRotation(lampT.position, lampT.rotation);
             c.a = HarpoonTuning.lampConeAlpha * night;
             block.SetColor(BaseColorId, c);
             coneRenderer.SetPropertyBlock(block);
@@ -258,6 +261,7 @@ namespace SeaSick.Ship.Harpoon
         public void Destroy()
         {
             if (poolRoot != null) Object.Destroy(poolRoot);
+            if (coneRoot != null) Object.Destroy(coneRoot);
             if (coneRenderer != null) Object.Destroy(coneRenderer.gameObject);
             if (poolMesh != null) Object.Destroy(poolMesh);
             if (coneMesh != null) Object.Destroy(coneMesh);
