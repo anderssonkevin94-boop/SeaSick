@@ -474,6 +474,58 @@ namespace SeaSick.World
             return map != null ? map.FreeSpot(p) : p;
         }
 
+        /// **A roomier spot beside a cramped one** (2026-10-04, Kevin: the
+        /// kitchen runner "walks into this, steps back and walks in again";
+        /// `CampWorker.RoomySpot` for a hauler's bay spot). On rings 0.5 / 0.7 / 0.9 m round
+        /// `target`, 16 bearings each: a spot well clear of every box
+        /// (`AltClearance`), reachable from the camp, within arm's reach of
+        /// the target (no box and no standing wall on the line between them)
+        /// and more than 0.5 m from `failedAt` (pass a far point to skip that). The `nth` such spot,
+        /// nearest ring first and the roomiest of a ring first, so a second
+        /// try is a different spot.
+        public static bool AltSpot(Outpost camp, Vector3 target, Vector3 failedAt, int nth, out Vector3 alt)
+            => AltSpot(camp, target, failedAt, nth, out alt, null);
+
+        /// The same, never closer to `outsideOf` (a building's middle) than
+        /// `target` is: the spot beside a bay stays on the yard side and never
+        /// steps in through a door (the store hut's open front, 2026-10-04).
+        public static bool AltSpot(Outpost camp, Vector3 target, Vector3 failedAt, int nth, out Vector3 alt, Vector3? outsideOf)
+        {
+            alt = target;
+            var map = camp != null ? For(camp) : null;
+            if (map == null) return false;
+            var found = new List<(float r, float clear, Vector3 p)>();
+            for (int ring = 0; ring < AltRings.Length; ring++)
+            {
+                float r = AltRings[ring];
+                for (int k = 0; k < 16; k++)
+                {
+                    float a = k * Mathf.PI / 8f;
+                    var c = new Vector3(target.x + Mathf.Cos(a) * r, target.y, target.z + Mathf.Sin(a) * r);
+                    float clear = map.SolidDistance(c);
+                    if (clear < AltClearance) continue;
+                    if (FlatLen(c - failedAt) < 0.5f) continue;
+                    if (outsideOf.HasValue && FlatLen(c - outsideOf.Value) < FlatLen(target - outsideOf.Value) - 0.05f) continue;
+                    if (!map.Reachable(c)) continue;
+                    if (SolidBetween(camp, c, target, target) || Crosses(camp, c, target, Walker.Hand)) continue;
+                    found.Add((r, clear, c));
+                }
+            }
+            if (found.Count == 0) return false;
+            found.Sort((x, y) => x.r != y.r ? x.r.CompareTo(y.r) : y.clear.CompareTo(x.clear));
+            if (nth >= found.Count) return false;
+            alt = found[nth].p;
+            return true;
+        }
+
+        // Inside a metre: arm's reach of a bay, and inside `CampWorker`'s
+        // `Near(home, 1f)` so a gatherer coming home still counts as in.
+        static readonly float[] AltRings = { 0.5f, 0.7f, 0.9f };
+        /// Metres an alternative spot keeps off every box: more than a free
+        /// spot's, so the last step in has room.
+        const float AltClearance = 0.45f;
+        static float FlatLen(Vector3 d) { d.y = 0f; return d.magnitude; }
+
         /// Is `p` in the clearance of a box or a wall?
         bool TooClose(IReadOnlyList<WallSegment> walls, Vector3 p)
             => DistToSolids(p.x, p.z) < SolidClearance + FreeMargin

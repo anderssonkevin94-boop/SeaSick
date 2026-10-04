@@ -40,6 +40,43 @@ namespace SeaSick.Dev
             return best;
         }
 
+        /// **Can every station marker be walked to?** (2026-10-04, after
+        /// Kevin's kitchen runner.) For every building of the camp in view and
+        /// every access marker (`BuildingSolids.AccessStems`): its free spot
+        /// (`CampPath.FreeSpot`, where a walker really goes) must be in the
+        /// camp's walkable region (the walk-grid flood from the camp,
+        /// `CampPath.Reachable`) and at least `minClear` m off every box.
+        /// One line per failure; the first line PASS / FAIL with the count.
+        /// Play mode, camp in view. Read-only.
+        public static string MarkerReach(float minClear = 0.2f)
+        {
+            var camp = Camp();
+            if (camp == null) return "FAIL: no camp";
+            int markers = 0, bad = 0;
+            var sb = new StringBuilder();
+            foreach (var b in camp.Built)
+            {
+                if (b == null) continue;
+                foreach (var t in b.GetComponentsInChildren<Transform>(true))
+                {
+                    // The kit name without the FBX import's `.001` suffix
+                    // (as `BuildingFactory.Stem`, which is internal to the game).
+                    int dot = t.name.LastIndexOf('.');
+                    string stem = dot > 0 ? t.name.Substring(0, dot) : t.name;
+                    if (System.Array.IndexOf(BuildingSolids.AccessStems, stem) < 0) continue;
+                    markers++;
+                    Vector3 spot = CampPath.FreeSpot(camp, t.position);
+                    bool reach = CampPath.Reachable(camp, spot);
+                    float clear = CampPath.SolidDistance(camp, spot);
+                    if (reach && clear >= minClear - 1e-3f) continue;
+                    bad++;
+                    sb.Append($"\n  {b.Id}@({b.transform.position.x:F1},{b.transform.position.z:F1}) {stem}: free spot ({spot.x:F1},{spot.z:F1}) "
+                              + (reach ? "" : "NOT REACHABLE ") + $"clear {clear:F2} m");
+                }
+            }
+            return $"{(bad == 0 ? "PASS" : "FAIL")} marker reach: {bad} of {markers} access markers fail (reachable from the camp, {minClear:F2} m+ off every box)" + sb;
+        }
+
         static Outpost CampOf(CampWorker w) => (Outpost)typeof(CampWorker).GetField("camp", Any).GetValue(w);
 
         public static string Snapshot()

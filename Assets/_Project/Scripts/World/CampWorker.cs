@@ -2270,6 +2270,11 @@ namespace SeaSick.World
         sealed class Marks
         {
             public Transform inPick, inGroup, outDrop, outGroup, stand, bench;
+            /// `RoomySpot`'s answers for the input / output marker: what it
+            /// was asked (the marker as it stood), what it said, and when.
+            public Vector3 inAsk = Far, inRoomy, outAsk = Far, outRoomy;
+            public float inAt = -99f, outAt = -99f;
+            static readonly Vector3 Far = new Vector3(1e9f, 0f, 1e9f);
             public bool Stale =>
                 Dead(inPick) || Dead(inGroup) || Dead(outDrop) || Dead(outGroup) || Dead(stand) || Dead(bench);
             static bool Dead(Transform t) => !ReferenceEquals(t, null) && t == null;
@@ -2331,7 +2336,7 @@ namespace SeaSick.World
         {
             var m = MarksOf(b);
             face = m.inGroup != null ? m.inGroup.position : b.transform.position;
-            if (m.inPick != null) return Grounded(m.inPick.position);
+            if (m.inPick != null) return RoomySpot(b, Grounded(m.inPick.position), ref m.inAsk, ref m.inRoomy, ref m.inAt);
             if (m.inGroup != null) return EdgeBeyond(b, m.inGroup.position);
             return EdgeBeyond(b, b.transform.position + Flat(b.transform.right));
         }
@@ -2342,10 +2347,43 @@ namespace SeaSick.World
         {
             var m = MarksOf(b);
             face = m.outGroup != null ? m.outGroup.position : b.transform.position;
-            if (m.outDrop != null) return Grounded(m.outDrop.position);
+            if (m.outDrop != null) return RoomySpot(b, Grounded(m.outDrop.position), ref m.outAsk, ref m.outRoomy, ref m.outAt);
             if (m.outGroup != null) return EdgeBeyond(b, m.outGroup.position);
             return EdgeBeyond(b, b.transform.position - Flat(b.transform.right));
         }
+
+        /// **A hauler's spot at a bay, with room for his body** (2026-10-04,
+        /// Kevin: the kitchen runner "walks into this, steps back and walks in
+        /// again"). A walker's centre keeps only `CampPath.SolidClearance`
+        /// (0.15 m) off a box while his body is `BodyRadius` (0.36 m) wide, so
+        /// a bay marker in a pocket -- the kitchen's `Input_Pickup`, boxed in
+        /// by the input crate, a post and the prep table -- stood him pressed
+        /// into the counter, and the last steps in were refused and retried.
+        /// A marker closer than `RoomyClear` to a box is swapped for the
+        /// nearest roomy, reachable spot within arm's reach of it
+        /// (`CampPath.AltSpot`, 0.5-0.9 m, nothing between, no nearer the
+        /// building's middle than the marker); cached per marker
+        /// position and re-asked every few seconds, since a neighbour can be
+        /// raised beside it. No roomy spot: the marker, as before.
+        Vector3 RoomySpot(Building b, Vector3 marker, ref Vector3 ask, ref Vector3 roomy, ref float at)
+        {
+            if (camp == null) return marker;
+            if (FlatDistance(marker, ask) < 0.05f && Time.time - at < RoomyRecheck) return roomy;
+            ask = marker;
+            at = Time.time;
+            roomy = marker;
+            if (CampPath.SolidDistance(camp, CampPath.FreeSpot(camp, marker)) >= RoomyClear) return roomy;
+            // Never toward the building: the store hut's front is open, and a
+            // roomy spot inside it walked a hauler in through the door, where
+            // he could not turn back out (242 pin recoveries in a day).
+            if (CampPath.AltSpot(camp, marker, new Vector3(1e9f, 0f, 1e9f), 0, out Vector3 alt, b.transform.position)) roomy = alt;
+            return roomy;
+        }
+
+        /// A bay spot needs this much room off every box for a body to stand
+        /// on it clear (just over `BodyRadius`).
+        const float RoomyClear = 0.4f;
+        const float RoomyRecheck = 5f;
 
         /// **What a worker at his stand turns to for a hand-off**
         /// (`BenchHandOff`): the output rack's slot group, the input bay's;
