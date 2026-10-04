@@ -1321,6 +1321,8 @@ udid from `xcrun devicectl list devices`.
 
 ## 2026-09-23 — station stock: bays, benches, racks, orders, armful hauling
 
+**The worker stays at his stand (2026-10-04).** A station worker's body never walks to `Output_Dropoff` / `Input_Pickup`: those marks are the RUNNERS' (and a self-fetching worker's when no runners exist). Bench hand-offs are mimed in place from `Worker_Stand` (`CampWorker.BenchHandOff`: `SetDown` toward `Output_Container`/`Output_Anchor`, `PickUp` toward `Input_Container`/`Input_Anchor`). Check: his max distance from `CampWorker.WorkSpot` while his spot runs stays <= 0.5 m.
+
 ### Plain-C# self-tests without the editor: `tools/selftest-outside-editor/run.sh` (2026-10-04)
 
 When another session holds the editor, or to find WHEN a gate broke:

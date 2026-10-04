@@ -357,11 +357,11 @@ namespace SeaSick.World
         /// `fieldOnly` (2026-10-02, runners on the island): the store is the
         /// runners' to bring from -- he only goes for a gatherable raw the
         /// store has none of, which no runner would fetch.
-        bool StartInputFetch(OutpostHand h, StationStock st, int si, bool fieldOnly = false)
+        bool StartInputFetch(OutpostHand h, StationStock st, int si, ref float budget, bool fieldOnly = false)
         {
             // His own rack first, jammed or not, runners or not: it stands
             // at his bench (`OwnRackFeed`).
-            if (OwnRackFeed(h, st, si)) return true;
+            if (OwnRackFeed(h, st, si, ref budget)) return true;
             if (RackJam(st) != null) return false;
             foreach (var sp in st.spots)
             {
@@ -409,11 +409,20 @@ namespace SeaSick.World
         /// bench, and every feed (`StartInputFetch`, the runners'
         /// `BayChore`) refused a jammed station -- so nobody moved the
         /// boards the two feet from his rack to his bay, the one load that
-        /// both feeds the bench and frees the rack. The worker carries it
-        /// himself (it is at his bench, so the runner rule does not apply),
-        /// a real trip rack -> bay, delivered on arrival. True when he
-        /// set off.
-        bool OwnRackFeed(OutpostHand h, StationStock st, int si)
+        /// both feeds the bench and frees the rack. The worker moves it
+        /// himself (it is at his bench, so the runner rule does not apply).
+        ///
+        /// **In place, no trip (2026-10-04).** Kevin: the worker should "get
+        /// the raw resource and place the finished product without leaving
+        /// [his] station". As a trip it walked him from `Output_Dropoff` to
+        /// `Input_Pickup`, round the front of the building. Now, once he is
+        /// at his bench (a ledger walk there first, if he is not), the books
+        /// move what is not already promised to a hauler (`RowFree`) from the
+        /// rack row to the bay row in this step; the body's picture is the
+        /// pick-up off the bay as the bench loads (`CampWorker.BenchHandOff`).
+        /// True when he moved goods or is walking to his bench to do it
+        /// (`budget` 0 then: this step's work is done).
+        bool OwnRackFeed(OutpostHand h, StationStock st, int si, ref float budget)
         {
             if (h == null || st == null || st.rack == null || FishesAtShore(st)) return false;
             st.EnsureSpotRows();
@@ -429,11 +438,19 @@ namespace SeaSick.World
                     int have = st.BayCount(line.res) + InFlightTo(HaulPlace.Station, si, line.res);
                     if (have >= line.n) continue;
                     int space = st.InputCap - have;
-                    int free = RowFree(si, st.Rack(line.res), false);
+                    var row = st.Rack(line.res);
+                    int free = RowFree(si, row, false);
                     if (space <= 0 || free <= 0) continue;
-                    int n = Mathf.Min(CarryArmful(h, line.res), Mathf.Min(space, free));
-                    if (n <= 0) continue;
-                    StartTimedTrip(h, line.res, n, HaulPlace.Station, si, HaulPlace.Station, si);
+                    // At the bench first: the move is made where he stands.
+                    if (StationPlace(si, out var benchAt) && !WalkTo(h, benchAt, ref budget, WorkFactor(h)))
+                    {
+                        budget = 0f;
+                        return true;
+                    }
+                    int n = Mathf.Min(space, free);
+                    row.whole -= n;
+                    st.Bay(line.res, true).whole += n;
+                    st.SyncLegacy();
                     return true;
                 }
             }

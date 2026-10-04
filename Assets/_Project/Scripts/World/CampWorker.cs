@@ -67,9 +67,9 @@ namespace SeaSick.World
     /// before the books put the load down. The body now works out WHEN the
     /// ledger will deposit (`SecondsToDeposit`) and leaves the pickup its
     /// own walk-back before that; the station worker mimes only while his
-    /// bench is Loaded/Working and walks each finished job to the station's
-    /// own output rack, timed to the step that puts it there
-    /// (`TickWork`). Station ends of a trip use Astra's markers
+    /// bench is Loaded/Working and hands each finished job onto the
+    /// station's own output rack (and takes each batch off its bay) from
+    /// his stand, never stepping off it (`TickWork`, 2026-10-04). Station ends of a trip use Astra's markers
     /// (`Input_Pickup`, `Output_Dropoff`, `Worker_Stand`; see `MarksOf`).
     ///
     /// It READS the ledger and writes it in none: the row's order and target
@@ -1432,11 +1432,18 @@ namespace SeaSick.World
         ///   now sets the raw down at that step (`TickHaul`), so the swing
         ///   visibly starts after the logs land.
         /// - A finished job goes on the station's own RACK in the books
-        ///   (`FinishJob` -> `UnloadBench`), so he carries it a few steps to
-        ///   the rack (`OutputSpot`) and puts it there -- timed so the set-down
-        ///   lands on the step that fills the rack (`SecondsToJobDone`). The
-        ///   walk to the store is a real `HaulOf` trip (rack -> store) and
-        ///   `TickHaul` draws it; nothing here goes near the fire.
+        ///   (`FinishJob` -> `UnloadBench`). **He hands it over FROM THE
+        ///   STAND (2026-10-04)**: a turn and a stoop toward the rack, no
+        ///   step taken; the rack's own view shows it there. Kevin: *"they
+        ///   leave their station with a product, walk around to the front,
+        ///   place it, and walk back. ... They should be able to get the raw
+        ///   resource and place the finished product without leaving their
+        ///   station."* The old carry walked to `Output_Dropoff` -- the
+        ///   RUNNERS' mark at the front -- out the sawmill's rear pad gate
+        ///   and round, ~8 m each way. Likewise a batch loading off the bay
+        ///   is a turn and a pick-up toward the bay, from the stand. The
+        ///   walk to the store is a runner's real `HaulOf` trip (rack ->
+        ///   store) and `TickHaul` draws it; nothing here goes near the fire.
         ///
         /// Anything that employs somebody but is not a station (the farm,
         /// the watchtower) keeps the old shift loop, `TickWorkAt`.
@@ -1454,22 +1461,6 @@ namespace SeaSick.World
             // turns him the 90 degrees along the saw table itself (README:
             // the marker has no facing).
             if (Cranks(post)) face = stand + Flat(post.transform.forward);
-
-            // A job came off the bench a moment ago and nobody walked it to
-            // the rack ahead of time (see the paced carry below): walk it
-            // there now, from wherever he is. A stale one (he was out on a
-            // trip when it finished) is let go -- a man arriving back with
-            // arrows made half a minute ago would be a second lie.
-            if (owedCarry)
-            {
-                owedCarry = false;
-                if (post != null && Time.time - owedAt <= OwedCarrySeconds)
-                {
-                    Vector3 outAt = OutputSpot(post, out Vector3 outFace);
-                    StartDelivery(outAt, outFace, owedRes, owedCount, 0f);
-                    return;
-                }
-            }
 
             if (!Walk(stand, dt))
             {
@@ -1492,6 +1483,11 @@ namespace SeaSick.World
             // whose bench cannot load until the books start paying him must
             // not wait out `WalkInLimit` for a swing that needs him paid.
             phase = Phase.Working;
+            // **Hands at the bench, from the stand (2026-10-04).** A batch
+            // just went onto the rack, or the next one just came off the
+            // bay: he turns to it and sets down / picks up without a step
+            // (`BenchHandOff`). The books moved it already.
+            if (post != null && BenchHandOff(post)) return;
             Face(face - transform.position, dt);
 
             bool busy = st.benchState == BenchState.Loaded || st.benchState == BenchState.Working;
@@ -1507,24 +1503,6 @@ namespace SeaSick.World
             // The tool's stroke lands on the bench's own work spot (the
             // forge's anvil, the sawhorse), not a guess in front of him.
             acting?.WorkAt(face);
-
-            // **The rack carry, paced to the books.** The job comes off the
-            // bench on a ledger step (`SecondsToJobDone` says which, in real
-            // seconds from now); leave the bench one short walk before it so
-            // the set-down and the rack filling are the same moment. Only
-            // when the rack has room for the yield -- otherwise `UnloadBench`
-            // leaves it on the bench and there is nothing to carry.
-            if (post == null || jobCarried) return;
-            var rec = st.BenchRecipe;
-            if (rec == null) return;
-            int yield = Mathf.Max(1, rec.yield);
-            if (st.RackRoom < yield) return;
-            Vector3 rackAt = OutputSpot(post, out Vector3 rackFace);
-            float walk = FlatDistance(transform.position, rackAt) / CarrySpeed;
-            float due = SecondsToJobDone(r, st);
-            if (due > walk + LeaveLead) return;
-            jobCarried = true;
-            StartDelivery(rackAt, rackFace, rec.makes, yield, due);
         }
 
         /// **The old shift loop**, for a building that employs somebody but
@@ -1748,10 +1726,6 @@ namespace SeaSick.World
 
         // --- pacing the mime to the books (2026-09-24) ---------------------
 
-        /// Seconds early a body leaves the bench: a job's end is SEEN a
-        /// little after its ledger step (`Outpost.CatchUp` runs four times a
-        /// second).
-        const float LeaveLead = 0.15f;
         /// Longest a body stands at the drop-off holding a load the books
         /// have not put down yet. Kevin's rule: then set it down anyway.
         const float MaxHoldSeconds = 1f;
@@ -1761,13 +1735,12 @@ namespace SeaSick.World
         /// from the drop-off is walked the rest of the way and set down; any
         /// further and it is let go where he is (he was hopelessly behind).
         const float TailMetres = 10f;
-        /// A job that came off the bench more than this long ago is not
-        /// carried to the rack after the fact (he was away on a trip).
-        const float OwedCarrySeconds = 1f;
-        /// Mean latency between a ledger step and a `CatchUp` seeing it
-        /// (every 0.25 s unscaled): added to every "due" so the aim is the
-        /// moment the books are SEEN to change.
-        const float CatchUpLag = 0.1f;
+        /// A bench hand-off (`BenchHandOff`) the body saw more than this
+        /// long ago is not played (he was away on a trip when it happened).
+        const float HandOffSeconds = 1.5f;
+        /// How long the pick-up off the bay lasts (the v15 `PickUp` grabs
+        /// on frame 26 of 30 fps; he is back at the bench before the lift).
+        const float TakeSeconds = 1.0f;
 
         // The trip being drawn (`mimedTrip` is its serial).
         int haulTickFrame = -10;  // last frame `TickHaul` drew an active trip (2026-10-03)
@@ -1942,44 +1915,6 @@ namespace SeaSick.World
             return PileSpot(res);
         }
 
-        /// Real seconds until the bench's current job comes off it (the step
-        /// in which `WorkerDay` calls `FinishJob`), or +infinity. Same step
-        /// arithmetic as the haul, over bench progress: `WorkerDay` advances
-        /// a Working bench by `rate / yield x days x WorkFactor` a step,
-        /// `rate = ratePerDay x Techs.RateMul x PriorityMultiplier(makes)`.
-        float SecondsToJobDone(OutpostHand r, StationStock st)
-        {
-            var rec = st != null ? st.BenchRecipe : null;
-            var ledger = camp.Ledger;
-            if (rec == null || ledger == null) return float.PositiveInfinity;
-            float rate = rec.ratePerDay * Economy.Techs.RateMul(st.planId, ledger.LevelOf(st.planId, st.ordinal))
-                         * ledger.PriorityMultiplier(rec.makes);
-            float perStep = rate / Mathf.Max(1, rec.yield)
-                            * OutpostLedger.QuantumDays * OutpostLedger.WorkFactor(r);
-            return SecondsUntilSpent(1f - st.benchProgress, perStep);
-        }
-
-        /// **The ledger's step grid on the real clock.** `left` units that
-        /// are spent `perStep` a step run out in `ceil(left / perStep)`
-        /// steps; step k lands at game time `lastTicked + k x quantum`
-        /// (`OutpostLedger.Tick` keeps `lastTicked` on the grid), which is
-        /// `(that - TimeOfDay.Seconds) / clockRate` real seconds from now,
-        /// plus the mean `CatchUp` latency.
-        float SecondsUntilSpent(float left, float perStep)
-        {
-            var ledger = camp.Ledger;
-            if (ledger == null || perStep <= 1e-7f) return float.PositiveInfinity;
-            float rate = ClockRate();
-            if (rate <= 0.01f) return float.PositiveInfinity;          // time stopped
-            float steps = Mathf.Ceil((left - 1e-5f) / perStep);
-            if (steps > 10000f) return float.PositiveInfinity;
-            steps = Mathf.Max(1f, steps);
-            double quantum = OutpostLedger.QuantumDays * (double)TimeOfDay.WorkDaySeconds;
-            double landsAt = ledger.lastTicked + steps * quantum;
-            float gameLeft = (float)(landsAt - TimeOfDay.Seconds);
-            return Mathf.Max(0f, gameLeft / rate) + CatchUpLag;
-        }
-
         /// Game seconds per real (scaled) second: `TimeOfDay` is advanced by
         /// `SkyDirector` at its own time scale, which nothing here should
         /// hard-code. Measured once a frame for every worker, smoothed, and
@@ -2057,16 +1992,32 @@ namespace SeaSick.World
         {
             delivering = false;
             placeLeft = PlaceSeconds;
+            placeMode = VillagerActing.Mode.SetDown;
             placeFace = face;
             placeRes = res;
             placeCount = Mathf.Max(1, count);
             // The v15 `SetDown` one-shot: he lets go on frame 3 and the load
             // lands 0.68 m ahead on frame 16 (0.53 s), inside the stoop.
-            acting?.Set(VillagerActing.Mode.SetDown, placeRes, placeCount);
+            acting?.Set(placeMode, placeRes, placeCount);
+        }
+
+        /// **A batch's input taken off the bay where he stands** (2026-10-04,
+        /// `BenchHandOff`): a turn toward the bay and the v15 `PickUp`
+        /// one-shot, played out by `TickDelivery` like a set-down. No step.
+        void StartTake(Vector3 face, string res, int count)
+        {
+            delivering = false;
+            placeLeft = TakeSeconds;
+            placeMode = VillagerActing.Mode.PickUp;
+            placeFace = face;
+            placeRes = res;
+            placeCount = Mathf.Max(1, count);
+            acting?.Set(placeMode, placeRes, placeCount);
         }
 
         string placeRes;
         int placeCount = 1;
+        VillagerActing.Mode placeMode = VillagerActing.Mode.SetDown;
 
         /// **Eating the meal he just took** (2026-10-01): stands where he
         /// took it, the dish at his chest, `VillagerActing.EatSeconds` of
@@ -2111,7 +2062,7 @@ namespace SeaSick.World
             {
                 placeLeft -= dt;
                 Face(placeFace - transform.position, dt);
-                if (placeLeft > 0f) { acting?.Set(VillagerActing.Mode.SetDown, placeRes, placeCount); return true; }
+                if (placeLeft > 0f) { acting?.Set(placeMode, placeRes, placeCount); return true; }
                 acting?.Set(VillagerActing.Mode.None);
                 return true;
             }
@@ -2139,60 +2090,99 @@ namespace SeaSick.World
         int benchMadeWas;         // rack + finished bench, last frame
         string benchMakes;        // what the job on the bench makes
         int benchYield = 1;
-        bool jobCarried;          // this job's output already walked to the rack, ahead of the step
-        bool owedCarry;           // a job came off unannounced: carry it (TickWork)
-        float owedAt;
-        string owedRes;
-        int owedCount;
+        // A batch the body saw go onto the rack / come off the bay, still to
+        // be handed over from the stand (`BenchHandOff`).
+        bool handOverOwed, takeOwed;
+        float handOverAt, takeAt;
+        string handOverRes, takeRes;
+        int handOverCount = 1, takeCount = 1;
 
-        /// **Did a job just come off the bench?** Read off the books every
-        /// frame: the bench was busy and is not any more, or its progress
-        /// went backwards (finished and the next batch loaded in the same
-        /// step), or the rack grew. A carry already paced ahead of it
-        /// (`jobCarried`) is consumed; otherwise one is owed, provided the
-        /// job actually went onto the rack (a full rack leaves it on the
-        /// bench, `BenchState.Finished`, and there is nothing to carry).
+        /// **Did a job just come off the bench, or a batch go on?** Read off
+        /// the books every frame. Off: the bench was busy and is not any
+        /// more, or its progress went backwards (finished and the next batch
+        /// loaded in the same step), or the rack grew -- owed as a hand-over
+        /// to the rack, provided the job actually went onto it (a full rack
+        /// leaves it on the bench, `BenchState.Finished`, and there is
+        /// nothing to hand over). On: the bench went busy, or its progress
+        /// went backwards -- owed as a pick-up off the bay. Both are played
+        /// from the stand (`BenchHandOff`); neither moves him a step.
         void WatchBench(OutpostHand r)
         {
             var ledger = camp.Ledger;
             var st = ledger != null && r.order == OutpostOrder.Work ? ledger.StationOfHand(r) : null;
             // The fisher has no bench to watch (2026-09-30): every catch is a
-            // walked trip into the box (`TickHaul`), never a bench carry.
+            // walked trip into the box (`TickHaul`), never a bench hand-over.
             if (st == null || st.removed || OutpostLedger.FishesAtShore(st))
             {
                 benchRow = null;
-                jobCarried = owedCarry = false;
+                handOverOwed = takeOwed = false;
                 return;
             }
 
             bool busy = st.benchState == BenchState.Loaded || st.benchState == BenchState.Working;
             int made = st.RackTotal + (st.benchState == BenchState.Finished ? st.benchOut : 0);
+            var rec = st.BenchRecipe;
             if (!ReferenceEquals(st, benchRow))
             {
                 benchRow = st;
-                jobCarried = owedCarry = false;
+                handOverOwed = takeOwed = false;
             }
             else
             {
-                bool done = made > benchMadeWas
-                    || (benchBusy && (!busy || st.benchProgress + 1e-4f < benchProgressWas));
-                if (done)
+                bool reloaded = benchBusy && busy && st.benchProgress + 1e-4f < benchProgressWas;
+                bool done = made > benchMadeWas || (benchBusy && !busy) || reloaded;
+                if (done && st.benchState != BenchState.Finished && !string.IsNullOrEmpty(benchMakes))
                 {
-                    if (jobCarried) jobCarried = false;
-                    else if (st.benchState != BenchState.Finished && !string.IsNullOrEmpty(benchMakes))
-                    {
-                        owedCarry = true;
-                        owedAt = Time.time;
-                        owedRes = benchMakes;
-                        owedCount = benchYield;
-                    }
+                    handOverOwed = true;
+                    handOverAt = Time.time;
+                    handOverRes = benchMakes;
+                    handOverCount = benchYield;
+                }
+                if (busy && rec != null && (!benchBusy || reloaded))
+                {
+                    takeRes = null;
+                    takeCount = 1;
+                    if (rec.takes != null)
+                        foreach (var line in rec.takes)
+                            if (line.n > 0) { takeRes = line.res; takeCount = line.n; break; }
+                    takeOwed = takeRes != null;
+                    takeAt = Time.time;
                 }
             }
             benchBusy = busy;
             benchProgressWas = st.benchProgress;
             benchMadeWas = made;
-            var rec = st.BenchRecipe;
             if (busy && rec != null) { benchMakes = rec.makes; benchYield = Mathf.Max(1, rec.yield); }
+        }
+
+        /// **The bench's hand-offs, played from the stand (2026-10-04).**
+        /// The finished batch first -- a turn and the `SetDown` stoop toward
+        /// the output rack -- then the next batch's input, a turn and the
+        /// `PickUp` toward the input bay. No locomotion: the rack and bay
+        /// views show the goods where the books put them. A hand-off seen
+        /// more than `HandOffSeconds` ago (he was away) is let go. True
+        /// while one was started this frame (`TickDelivery` plays it out).
+        bool BenchHandOff(Building post)
+        {
+            if (handOverOwed)
+            {
+                handOverOwed = false;
+                if (Time.time - handOverAt <= HandOffSeconds)
+                {
+                    StartPlace(RackPoint(post), handOverRes, handOverCount);
+                    return true;
+                }
+            }
+            if (takeOwed)
+            {
+                takeOwed = false;
+                if (Time.time - takeAt <= HandOffSeconds)
+                {
+                    StartTake(BayPoint(post), takeRes, takeCount);
+                    return true;
+                }
+            }
+            return false;
         }
 
         // --- stations on the ground: markers ------------------------------------
@@ -2343,6 +2333,21 @@ namespace SeaSick.World
             if (m.outDrop != null) return Grounded(m.outDrop.position);
             if (m.outGroup != null) return EdgeBeyond(b, m.outGroup.position);
             return EdgeBeyond(b, b.transform.position - Flat(b.transform.right));
+        }
+
+        /// **What a worker at his stand turns to for a hand-off**
+        /// (`BenchHandOff`): the output rack's slot group, the input bay's;
+        /// else the model's -X / +X side (Astra's convention).
+        static Vector3 RackPoint(Building b)
+        {
+            var m = MarksOf(b);
+            return m.outGroup != null ? m.outGroup.position : b.transform.position - Flat(b.transform.right) * 2f;
+        }
+
+        static Vector3 BayPoint(Building b)
+        {
+            var m = MarksOf(b);
+            return m.inGroup != null ? m.inGroup.position : b.transform.position + Flat(b.transform.right) * 2f;
         }
 
         /// What a worker at his stand faces: the bench anchor, else the

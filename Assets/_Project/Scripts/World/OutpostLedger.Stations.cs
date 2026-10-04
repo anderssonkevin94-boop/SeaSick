@@ -1830,13 +1830,13 @@ namespace SeaSick.World
 
                 if (!AnySpotBusy(s))
                 {
-                    if (!StartWorkerChore(h, s, si)) break;
+                    if (!StartWorkerChore(h, s, si, ref budget)) break;
                     continue;
                 }
                 // A spot starved of an input: fetch it before working on.
                 // (With runners on the island the busy spots go on; a
                 // runner brings the starved one's input, 2026-10-02.)
-                if (StartInputFetch(h, s, si, !WorkerFetches(s))) continue;
+                if (StartInputFetch(h, s, si, ref budget, !WorkerFetches(s))) continue;
 
                 // **At the bench to work it** (2026-09-27): the job's timer
                 // runs only while he stands there.
@@ -1881,7 +1881,7 @@ namespace SeaSick.World
         /// himself for a raw the store has none of (runners do not cut), or
         /// once his bench has stood idle `RunnerFallbackQuanta` with no
         /// runner on the way.
-        bool StartWorkerChore(OutpostHand h, StationStock s, int si)
+        bool StartWorkerChore(OutpostHand h, StationStock s, int si, ref float budget)
         {
             bool self = WorkerFetches(s);
             // A bench is blocked by a full rack: carry the rack home.
@@ -1893,7 +1893,7 @@ namespace SeaSick.World
                         break;
                     }
 
-            if (StartInputFetch(h, s, si, !self)) return true;
+            if (StartInputFetch(h, s, si, ref budget, !self)) return true;
             if (!self) return false;
 
             // No more raw (no order, no tool, an input nobody can fetch), or
