@@ -70,7 +70,7 @@ namespace SeaSick.UI.Sheets
         {
             if (sub == null) return;
             var isle = outpost != null ? outpost.Island : null;
-            sub.text = isle != null ? (isle.IsHome ? "home island" : isle.gameObject.name) : "";
+            sub.text = isle != null ? (isle.IsHome ? "home island" : ChartData.PrettyName(isle)) : "";
         }
     }
 }

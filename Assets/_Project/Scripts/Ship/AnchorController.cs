@@ -1346,7 +1346,10 @@ namespace SeaSick.Ship
                 if (OfferStale(dock, 3 | (slow ? 4 : 0) | desk))
                 {
                     var at = Island.Nearest(dock.Berth);
-                    offerEyebrow = dock.IsHome ? "HOME BERTH" : (at != null ? Upper(at) + " · PIER" : "PIER");
+                    // Any pier on the home island is the home berth to the player, not just the
+                    // dock `Dock.Home` names; other piers read the place name, not "ISLAND_6".
+                    offerEyebrow = dock.IsHome || (at != null && at.IsHome) ? "HOME BERTH"
+                        : (at != null ? SeaSick.UI.Sheets.ChartData.PrettyName(at).ToUpperInvariant() + " · PIER" : "PIER");
                     offerTitle = TitleAlongside;
                     offerDetail = slow ? "Tie up at the pier" + KeyHint("  ·  space") : SlowText;
                 }
