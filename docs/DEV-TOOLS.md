@@ -1364,9 +1364,9 @@ capacity (`CrewBerths`), the castaway card's priority at a pier
 (`CastawayHud.CardPriority`), identity-based castaway verdicts
 (`CastawayRepair.Decide`/`Plan`) on his save's own Mara/Mabel/Dorrit, and the
 load repair's idempotency, and the one-time death repair (`DeathRepair`: Bo
-un-killed, Ola stays dead and uncounted, Pip at a camp untouched).
+and Pip un-killed, Ola stays dead and uncounted, the brig's load order).
 `tools/selftest-outside-editor/run.sh SeaSick.World.Life.CastawayFixSelfTest.Run`
--> `PASS 31/31`.
+-> `PASS 37/37`.
 
 ### `StationStockSelfTest.Run()` (`SeaSick.World`, plain C#, edit mode, no scene)
 Gate for the storage-hub rules in `OutpostLedger.Stations.cs`'s doc block,

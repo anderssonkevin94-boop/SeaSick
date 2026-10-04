@@ -918,23 +918,15 @@ namespace SeaSick.Ship
             int want = Mathf.Max(1, Berths);       // she always has a helmsman
             var live = new List<Crew.CrewAgent>(have);
 
-            // **Phase 5a: a dead or castaway name does not regenerate.**
-            // The authored cast are fixed bodies in the scene, so unlike a
-            // camp-born villager there is nothing to skip creating -- the
-            // body is already here. What we CAN do is take the name away:
-            // re-christen him out of the pool, same as a fresh clone gets,
-            // so the ship never sails with a name that belongs to a grave
-            // or a man waiting on an island.
-            System.Collections.Generic.HashSet<string> renameTaken = null;
-            for (int i = 0; i < live.Count; i++)
-            {
-                var c = live[i];
-                if (c == null) continue;
-                string dn = c.DisplayName;
-                if (string.IsNullOrEmpty(dn) || !SeaSick.World.Life.Lives.IsTaken(dn)) continue;
-                if (renameTaken == null) renameTaken = global::SeaSick.Crew.CrewNames.InUse();
-                global::SeaSick.Crew.CrewNames.Christen(c, i + 1000, renameTaken);
-            }
+            // **Phase 5a: a dead or castaway name does not walk the deck.**
+            // Until 2026-10-04 the body was re-christened here, at once, off
+            // whatever the life registry held -- on a load that is BEFORE
+            // `DeathRepair` can take back a false death, so Kevin's living Bo
+            // lost his name on the brig path while keeping it on the steamer.
+            // One rule for both ships now: `CrewNames.RetireTakenNames`
+            // stands such a body DOWN (no stranger appears in his place),
+            // after the post below -- and not during a load, whose step 5a2
+            // runs the death repair first and then the same call.
 
             // **A clone is a different person.** The body is copied; the name
             // is NOT. Instantiate brings the serialised `CrewMemberDef` field
@@ -961,6 +953,8 @@ namespace SeaSick.Ship
             }
             for (int i = 0; i < live.Count; i++)
                 if (live[i] != null) live[i].gameObject.SetActive(i < want);
+            if (global::SeaSick.Crew.CrewNames.RetireDuringMan(SeaSick.Save.SaveGame.Restoring))
+                global::SeaSick.Crew.CrewNames.RetireTakenNames(transform);
 
             roster.Refresh();
 

@@ -126,8 +126,12 @@ namespace SeaSick.World.Life
                   DeathRepair.IsFalseDeath(boGrave, bo, true));
             Check("Ola: her log runs past 503 but her body is switched off -> stays dead",
                   !DeathRepair.IsFalseDeath(olaGrave, ola, false));
-            Check("Pip: lives on at a camp, not aboard -> not this rule's business",
-                  !DeathRepair.IsFalseDeath(pipGrave, pip, false));
+            Check("Pip: a home hand whose log goes on after day 19 -> death taken back",
+                  DeathRepair.IsFalseDeath(pipGrave, pip, false, true));
+            Check("a ledger hand with nothing logged since the death -> still dead",
+                  !DeathRepair.IsFalseDeath(tamDead, tam, false, true));
+            Check("a genuinely dead person (no body, no row) is untouched",
+                  !DeathRepair.IsFalseDeath(olaGrave, ola, false, false));
             Check("a body aboard with nothing logged since the death -> still dead",
                   !DeathRepair.IsFalseDeath(tamDead, tam, true));
             Check("a different person's record never un-kills (identity)",
@@ -139,13 +143,42 @@ namespace SeaSick.World.Life
             var graves = new List<GraveRecord> { olaGrave, pipGrave, boGrave };
             var livesNow = new Dictionary<string, LifeRecord> { { "Bo", bo }, { "Ola", ola }, { "Pip", pip } };
             var onDeck = new HashSet<string> { "Bo", "Mara", "Tam", "Cass", "Ursa" };
+            var homeRows = new HashSet<string> { "Yara", "Nye", "Edda", "Finch", "Pip", "Gale" };
             LifeRecord LifeOf(string n) => livesNow.TryGetValue(n, out var r) ? r : null;
-            var first = DeathRepair.FalseDeaths(graves, LifeOf, onDeck.Contains);
+            var first = DeathRepair.FalseDeaths(graves, LifeOf, onDeck.Contains, homeRows.Contains);
             foreach (var g in first) graves.Remove(g);
-            Check("first pass on his save: only Bo comes back",
-                  first.Count == 1 && first[0].name == "Bo" && graves.Count == 2, "took " + first.Count);
-            var second = DeathRepair.FalseDeaths(graves, LifeOf, onDeck.Contains);
+            Check("first pass on his save: Bo and Pip come back, Ola stays",
+                  first.Count == 2 && graves.Count == 1 && graves[0].name == "Ola", "took " + first.Count);
+            var second = DeathRepair.FalseDeaths(graves, LifeOf, onDeck.Contains, homeRows.Contains);
             Check("second pass takes nothing (idempotent)", second.Count == 0, "took " + second.Count);
+
+            // ---- the brig path keeps Bo's name too ---------------------------
+            // On a load the brig's ManCrew posts hands at step 2, before the
+            // death repair (5a2). It must not stand anybody down (or rename
+            // them) then, or Bo is gone before the repair can see him.
+            Check("brig ManCrew during a restore leaves names alone",
+                  !SeaSick.Crew.CrewNames.RetireDuringMan(true));
+            Check("brig ManCrew mid-voyage (a refit) does stand dead names down",
+                  SeaSick.Crew.CrewNames.RetireDuringMan(false));
+            {
+                // Model the brig load of HIS save: no quarters cells, so
+                // ManCrew's want is 1 and only the first scene body (Bo) is
+                // switched on at step 2; 5a2 repair, then stand-down.
+                var on = new Dictionary<string, bool> { { "Bo", true }, { "Mara", false }, { "Tam", false }, { "Ola", false } };
+                var brigGraves = new List<GraveRecord> { olaGrave, boGrave };
+                bool restoring = true;
+                if (SeaSick.Crew.CrewNames.RetireDuringMan(restoring))
+                    foreach (var g in brigGraves) on[g.name] = false;
+                foreach (var g in DeathRepair.FalseDeaths(brigGraves, LifeOf,
+                             n => on.TryGetValue(n, out var a) && a, homeRows.Contains))
+                    brigGraves.Remove(g);
+                foreach (var g in brigGraves)
+                    if (SeaSick.Crew.CrewNames.StandsDown(on.TryGetValue(g.name, out var a) && a, true)) on[g.name] = false;
+                Check("brig load: Bo keeps his name and stays on deck",
+                      on["Bo"] && brigGraves.Count == 1 && brigGraves[0].name == "Ola");
+            }
+            Check("a switched-off body is never stood down again (Ola untouched)",
+                  !SeaSick.Crew.CrewNames.StandsDown(false, true));
 
             string head = "PASS " + pass + "/" + total;
             return pass == total ? head : head + "\n" + sb;

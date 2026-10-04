@@ -100,6 +100,16 @@ namespace SeaSick.Crew
         /// are left exactly as they are (Ola). Runs after
         /// `DeathRepair`/`CastawayRepair` on load, so a death or a castaway
         /// copy those take back keeps its living body. Returns how many.
+        /// May a crew post stand dead/castaway names down right now? Not
+        /// while a save is being restored: its step 5a2 runs `DeathRepair`
+        /// FIRST and then `RetireTakenNames`, so a false death (Kevin's Bo)
+        /// is taken back before anybody is stood down, on either ship.
+        public static bool RetireDuringMan(bool restoring) => !restoring;
+
+        /// The rule, plain: a switched-on body wearing a taken name stands
+        /// down; a switched-off one is left alone (Ola).
+        public static bool StandsDown(bool switchedOn, bool nameTaken) => switchedOn && nameTaken;
+
         public static int RetireTakenNames(Transform ship)
         {
             if (ship == null) return 0;
@@ -109,7 +119,7 @@ namespace SeaSick.Crew
                 if (c == null || !c.gameObject.activeSelf) continue;
                 if (c.GetComponent<SeaSick.Combat.RaidWalker>() != null) continue;
                 string dn = c.DisplayName;
-                if (string.IsNullOrEmpty(dn) || !World.Life.Lives.IsTaken(dn)) continue;
+                if (string.IsNullOrEmpty(dn) || !StandsDown(c.gameObject.activeSelf, World.Life.Lives.IsTaken(dn))) continue;
                 c.gameObject.SetActive(false);
                 retired++;
                 Debug.Log("CrewNames: \"" + dn + "\" is dead or a castaway; the body aboard is stood down");

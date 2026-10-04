@@ -385,15 +385,11 @@ namespace SeaSick.Steamer
         static void Man(GameObject ship, HullFormData data, BuildOptions o)
         {
             int Hands = o.hands;
-            // No body whose life has ended is posted (2026-10-04; the steamer
-            // never checked, and Kevin's ship sailed with a "Bo" beside Bo's
-            // grave): `CrewNames.RetireTakenNames` stands it down. On a refit
-            // only: at the scene-load build the life registry is still the
-            // LAST session's (`Lives` clears once per launch), so a Continue
-            // into another slot would stand down that slot's living cast off
-            // another save's graves. `SaveGame.Restore` runs the same call
-            // once the save's own lives are in (step 5a2).
-            if (o.refit) SeaSick.Crew.CrewNames.RetireTakenNames(ship.transform);
+            // A body whose life has ended is stood down by
+            // `CrewNames.RetireTakenNames` in `SaveGame.Restore` step 5a2,
+            // after `DeathRepair` (2026-10-04), not here: this runs at the
+            // scene-load conversion (the life registry is still the LAST
+            // session's) and at a refit, which never switches anybody on.
             var hands = ship.GetComponentsInChildren<SeaSick.Crew.CrewAgent>(true);
             if (!o.cloneHands)
             {
