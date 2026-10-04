@@ -2,15 +2,13 @@ using UnityEngine;
 
 namespace SeaSick.Combat
 {
-    /// **One raised arm as a hit target, the skill shot** (GDD §6 "The
-    /// Kraken", step 3). Registered in `HitTargets` only while that arm is
-    /// winding up (`KrakenSwat` adds and removes it); a capsule along the
-    /// outer six bones. A hit cancels the swat (`KrakenSwat.TryInterrupt`:
-    /// the arm flinches back, the ring fades) and wears the beast down a
-    /// little (`KrakenTuning.armHitDamage` of a body hit). Never locked
-    /// (`ILockExempt`): the lock stays on the head and the guns hit the arm
-    /// because it is in the line of fire, or because the player turned to
-    /// put it there.
+    /// **One raised arm as a hit target** (GDD §6 "The Kraken"). Registered
+    /// in `HitTargets` only while that arm is winding up (`KrakenSwat` adds
+    /// and removes it); a capsule along the outer six bones, the arm's own
+    /// thickness. A ball that physically hits it wears the beast down a
+    /// little (`KrakenTuning.armHitDamage` of a body hit) and does nothing
+    /// else: the swat is never cancelled. Never locked (`ILockExempt`): the
+    /// lock stays on the head.
     public class KrakenArmTarget : IHittable, ILockExempt
     {
         readonly Kraken kraken;
@@ -44,9 +42,7 @@ namespace SeaSick.Combat
             }
         }
 
-        /// Thicker than the arm itself (~1.5 m at scale 49): a ball that
-        /// grazes the raised arm should count, this is the one shot the
-        /// player is rewarded for taking.
+        /// The arm's own thickness, no padding: the shots land where they land.
         public float HitRadius => KrakenTuning.armHitRadius;
 
         public bool Alive => kraken != null && kraken.Swat != null && kraken.Swat.IsWindingUp(arm)
@@ -59,7 +55,6 @@ namespace SeaSick.Combat
         public bool TakeHit(Vector3 point, float damage)
         {
             if (!Alive) return false;
-            kraken.Swat.TryInterrupt(arm);
             kraken.TakeDamage(point, damage * KrakenTuning.armHitDamage);
             return true;
         }

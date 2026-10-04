@@ -128,7 +128,7 @@ namespace SeaSick.Dev
             bool cleanupPending;
             readonly float[] windStart = NewWind();
             Kraken guardOf;
-            int guardCancels;
+            int guardDiverts;
 
             // smoothness sampling
             Vector3 prevPos;
@@ -183,10 +183,12 @@ namespace SeaSick.Dev
             }
 
             /// The guard: a windup still up `windupSeconds - 0.25` s after it
-            /// began is called off (`KrakenSwat.TryInterrupt`), so no check
-            /// ever lands a slam on the ship (hull, knockdown, a hand over the
-            /// side). Runs after every Update, so a check's own reading of a
-            /// ball's hit in the same frame comes first.
+            /// began has its ring moved 70 m past the kraken, away from the
+            /// ship (`DivertRing`, reflection on `KrakenSwat`'s attack), so no
+            /// check ever lands a slam on the ship (hull, knockdown, a hand
+            /// over the side). The game never cancels a swat, so the guard
+            /// does not either: the windup runs out and the slam happens, just
+            /// elsewhere. Runs after every Update.
             void LateUpdate()
             {
                 if (cleanupPending)
@@ -205,9 +207,31 @@ namespace SeaSick.Dev
                     if (!k.Swat.IsWindingUp(a)) { windStart[a] = -1f; continue; }
                     if (windStart[a] < 0f) { windStart[a] = Time.time; continue; }
                     if (Time.time - windStart[a] < limit) continue;
-                    if (k.Swat.TryInterrupt(a)) guardCancels++;
+                    if (DivertRing(k, a)) guardDiverts++;
                     windStart[a] = -1f;
                 }
+            }
+
+            /// Move an arm's slam ring far from the ship: 70 m beyond the
+            /// kraken on the side away from her. The slam resolves there (a
+            /// miss: `Misses`, the `Slammed` event, a splash), nowhere near
+            /// the hull and past the near-miss rocking range.
+            bool DivertRing(Kraken k, int arm)
+            {
+                const BindingFlags f = BindingFlags.Instance | BindingFlags.NonPublic;
+                var field = typeof(KrakenSwat).GetField("attacks", f);
+                var list = field != null ? field.GetValue(k.Swat) as Array : null;
+                if (list == null || arm < 0 || arm >= list.Length || motor == null) return false;
+                var at = list.GetValue(arm);
+                var ring = at.GetType().GetField("ring");
+                if (ring == null) return false;
+                Vector3 away = k.transform.position - motor.transform.position;
+                away.y = 0f;
+                if (away.sqrMagnitude < 1f) away = motor.transform.right;
+                Vector3 p = k.transform.position + away.normalized * 70f;
+                p.y = 0f;
+                ring.SetValue(at, p);
+                return true;
             }
 
             // ---------------------------------------------------------- driver
@@ -291,7 +315,7 @@ namespace SeaSick.Dev
                 undo.Clear();
                 timeScale0 = Time.timeScale > 0f ? Time.timeScale : 1f;
                 guardSwats = false;
-                guardCancels = 0;
+                guardDiverts = 0;
                 kraken = null;
                 prevValid = false;
                 string shape = ShapeName();
@@ -318,8 +342,8 @@ namespace SeaSick.Dev
                 }
                 startedWarning = false;
                 Time.timeScale = timeScale0;
-                if (guardCancels > 0)
-                    Line("NOTE the swat guard called off " + guardCancels + " windup(s) so no slam reached the ship.");
+                if (guardDiverts > 0)
+                    Line("NOTE the swat guard moved " + guardDiverts + " slam ring(s) away from the ship (the game cancels nothing).");
                 string verdict = (fail == 0 ? "PASS " : "FAIL ") + current + " (" + pass + " pass, " + fail + " fail)";
                 verdicts.Add(verdict);
                 if (fail == 0) sweepPass++; else sweepFail++;
@@ -677,10 +701,26 @@ namespace SeaSick.Dev
                 return s.Length > 0 ? s.ToString() : " (no guns on that side)";
             }
 
+            /// The game never cancels a swat: the windup ran its full length
+            /// (`windEnd`, seconds from its start, within 0.2 s of
+            /// `windupSeconds`) and the slam happened (`slamsSeen` = 1). The
+            /// swat guard only moves the ring, so `hitsSeen` (slams that
+            /// landed on the ship) is 0 while the guard is on.
+            void CheckSwatCompletes(float windEnd, float windFull, int slamsSeen, int hitsSeen)
+            {
+                Check(windEnd >= windFull - 0.2f,
+                      "the raised arm's windup is not cancelled: it runs its full length",
+                      "windup lasted " + (windEnd < 0f ? "past the end of the watch" : F(windEnd, "F2") + " s") + " (windupSeconds " + F(windFull, "F2") + ")");
+                Check(slamsSeen == 1,
+                      "the slam still happens", "slams " + slamsSeen + " (want 1), landed on the ship " + hitsSeen
+                      + " (the guard moved the ring away from her)");
+            }
+
             IEnumerator ArmHit()
             {
-                Gdd("§6 The Kraken, Three answers / Fight: \"Hitting the raised arm during its windup cancels that swat\"; "
-                    + "build step 3: \"a raised-arm hit cancels that swat and counts 0.35\" (KrakenTuning.armHitDamage).");
+                Gdd("§6 The Kraken, Fight: \"A swat cannot be cancelled\" (Kevin 2026-10-04: \"Swats can't be cancelled. The shots land where they land.\"); "
+                    + "a ball that physically hits a raised arm costs it KrakenTuning.armHitDamage (0.35 of a body hit) and does nothing else; "
+                    + "the swat always completes.");
                 if (!World() || !KrakenFree()) yield break;
                 var battery = motor.GetComponent<CannonBattery>();
                 var lockC = motor.GetComponent<CombatLock>();
@@ -725,7 +765,8 @@ namespace SeaSick.Dev
                 }
                 Undo(() => { if (battery != null) battery.AutoFireTarget = null; });
                 float dmg0 = Dmg(kraken);
-                int int0 = swat.Interrupts, hits0 = swat.Hits, slam0 = slams, guard0 = guardCancels, auto0 = battery.AutoShots;
+                int hits0 = swat.Hits, slam0 = slams, guard0 = guardDiverts, auto0 = battery.AutoShots;
+                float windEnd = -1f;
                 var balls = new Balls();
                 balls.Prime();
                 bool hit = false;
@@ -736,7 +777,8 @@ namespace SeaSick.Dev
                 {
                     battery.AutoFireTarget = armT;
                     balls.Track(armT);
-                    if (!hit && swat.Interrupts > int0 && guardCancels == guard0)
+                    if (windEnd < 0f && !swat.IsWindingUp(arm)) windEnd = Time.time - wStart;
+                    if (!hit && Dmg(kraken) - dmg0 > 0.01f)
                     {
                         hit = true;
                         dmgHit = Dmg(kraken) - dmg0;
@@ -750,7 +792,9 @@ namespace SeaSick.Dev
                 if (lockWas && lockC != null) lockC.enabled = true;
                 yield return Wait(Mathf.Max(0.05f, KrakenTuning.slamSeconds) + 0.6f);
                 int shots = battery.AutoShots - auto0;
-                bool guarded = guardCancels > guard0;
+                if (windEnd < 0f && !swat.IsWindingUp(arm)) windEnd = Time.time - wStart;
+                float windFull = Mathf.Max(0.3f, KrakenTuning.windupSeconds);
+                int slamsNow = slams - slam0;
 
                 Line("     arm " + arm + " wound up; gates at windup +1.0 s:" + (gates ?? " (windup ended before 1 s)"));
                 Check(shots > 0, "a real gun fires at the raised arm (CannonBattery.AutoFire, AutoFireTarget = the arm)",
@@ -760,19 +804,19 @@ namespace SeaSick.Dev
                     string near = float.IsPositiveInfinity(balls.MinClear) ? "never tracked"
                         : F(balls.MinClear, "F1") + " m outside the arm capsule (" + F(balls.DyAtMin, "F1")
                           + " m " + (balls.DyAtMin < 0f ? "below" : "above") + " its axis)";
-                    Check(hit, "the ball collides with the raised arm (HitTargets.SweepFirst -> KrakenArmTarget.TakeHit -> KrakenSwat.TryInterrupt)",
-                          hit ? "hit " + F(hitAt) + " s into the windup" : "missed; closest pass " + near);
+                    // Not a gate: the guns are not asked to reach the arm, a ball
+                    // lands where it lands (shot 2 is the gate on the hit path).
+                    Info(hit ? "the guns' ball hit the raised arm " + F(hitAt) + " s into the windup (HitTargets.SweepFirst -> KrakenArmTarget.TakeHit)"
+                             : "the guns' balls did not reach the raised arm; closest pass " + near + " (by design: the shots land where they land)");
                 }
                 if (hit)
                 {
-                    Check(slams == slam0 && swat.Hits == hits0 && !guarded, "the swat is cancelled (no slam on the ship)",
-                          "slams " + (slams - slam0) + ", hits " + (swat.Hits - hits0) + ", guard cancels " + (guardCancels - guard0));
+                    CheckSwatCompletes(windEnd, windFull, slamsNow, swat.Hits - hits0);
                     float want = 1f * KrakenTuning.armHitDamage;
                     Check(Mathf.Abs(dmgHit - want) < 0.02f, "health drops by the raised-arm amount",
                           "damage +" + F(dmgHit, "F3") + " hit points (want " + F(want, "F3") + " = 1 ball x armHitDamage "
                           + F(KrakenTuning.armHitDamage) + "; 1.35 would mean a head hit too), Health01 " + F(kraken != null ? kraken.Health01 : 0f, "F3"));
                 }
-                else if (guarded) Info("the guard called that windup off at " + F(KrakenTuning.windupSeconds - 0.25f) + " s (protective, not a result)");
 
                 // ---- shot 2: the hit path itself, one ball solved onto the arm
                 if (kraken == null) { Fail("kraken still up for shot 2", "it went away"); yield break; }
@@ -793,7 +837,8 @@ namespace SeaSick.Dev
                     if (d > best) { best = d; bestGun = c; }
                 }
                 dmg0 = Dmg(kraken);
-                int0 = swat.Interrupts; hits0 = swat.Hits; slam0 = slams; guard0 = guardCancels;
+                hits0 = swat.Hits; slam0 = slams; guard0 = guardDiverts;
+                windEnd = -1f;
                 balls = new Balls();
                 balls.Prime();
                 Vector3 aim = armT.HitCentre;
@@ -806,9 +851,16 @@ namespace SeaSick.Dev
                 while (kraken != null && Time.time - shot2 < 3f)
                 {
                     balls.Track(armT);
-                    if (!hit && swat.Interrupts > int0 && guardCancels == guard0) { hit = true; dmgHit = Dmg(kraken) - dmg0; hitAt = Time.time - shot2; }
+                    if (windEnd < 0f && !swat.IsWindingUp(arm)) windEnd = Time.time - wStart;
+                    if (!hit && Dmg(kraken) - dmg0 > 0.01f) { hit = true; dmgHit = Dmg(kraken) - dmg0; hitAt = Time.time - shot2; }
                     if (balls.AllDone && Time.time - shot2 > 0.1f) break;
                     yield return null;
+                }
+                // Watch the windup out: it must run its full length, then slam.
+                while (kraken != null && windEnd < 0f && Time.time - wStart < windFull + 1f)
+                {
+                    if (!swat.IsWindingUp(arm)) windEnd = Time.time - wStart;
+                    else yield return null;
                 }
                 yield return Wait(Mathf.Max(0.05f, KrakenTuning.slamSeconds) + 0.6f);
                 Check(hit, "a ball laid on the raised arm collides with it (the hit path works)",
@@ -816,8 +868,7 @@ namespace SeaSick.Dev
                             + F(balls.DyAtMin, "F1") + " m " + (balls.DyAtMin < 0f ? "below" : "above") + " its axis)");
                 if (hit)
                 {
-                    Check(slams == slam0 && swat.Hits == hits0 && guardCancels == guard0, "that swat is cancelled (no slam)",
-                          "slams " + (slams - slam0) + ", hits " + (swat.Hits - hits0) + ", flinch via TryInterrupt, Interrupts " + swat.Interrupts);
+                    CheckSwatCompletes(windEnd, windFull, slams - slam0, swat.Hits - hits0);
                     float want = KrakenTuning.armHitDamage;
                     Check(Mathf.Abs(dmgHit - want) < 0.02f, "health drops by the raised-arm amount (0.35)",
                           "damage +" + F(dmgHit, "F3") + " (want " + F(want, "F3") + ")");

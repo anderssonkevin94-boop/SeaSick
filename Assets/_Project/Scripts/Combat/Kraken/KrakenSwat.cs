@@ -33,13 +33,17 @@ namespace SeaSick.Combat
     /// Meanwhile the kraken drifts toward the ship at `driftSpeed` (well
     /// under her half ahead) and stops `driftStopAt` metres off.
     ///
-    /// **For step 3:** `TryInterrupt(arm)` cancels a windup (the arm flinches
-    /// back up, the ring fades), `IsWindingUp(arm)` and `ArmTipPosition(arm)`
-    /// tell the guns what to aim at.
+    /// **A swat cannot be cancelled** (Kevin, 2026-10-04: "Swats can't be
+    /// cancelled. The shots land where they land."). Once a windup starts it
+    /// always ends in the slam; nothing a ball hits changes that, and the
+    /// dodge (steering out of the ring) is the only answer. The one thing
+    /// that calls a windup off is the kraken itself leaving (`CancelAll`).
+    /// `IsWindingUp(arm)` and `ArmTipPosition(arm)` tell the guns what to
+    /// aim at.
     [DefaultExecutionOrder(90)]
     public class KrakenSwat : MonoBehaviour
     {
-        enum Stage { None, Windup, Slam, Hold, Recover, Flinch }
+        enum Stage { None, Windup, Slam, Hold, Recover, Release }
 
         class Attack
         {
@@ -47,19 +51,19 @@ namespace SeaSick.Combat
             public float t;
             public Vector3 ring;      // centre on the water, y = 0
             public Vector3 coil;      // where the tip hangs during the windup
-            public Vector3 flinchFrom;
+            public Vector3 releaseFrom;
             public KrakenTell tell;
         }
 
         const float HoldSeconds = 0.55f;
         const float RecoverSeconds = 1.3f;
-        const float FlinchSeconds = 1.0f;
+        const float ReleaseSeconds = 1.0f;
 
         Kraken kraken;
         KrakenArms arms;
         readonly Attack[] attacks = new Attack[KrakenArms.ArmCount];
         readonly KrakenTell[] tells = new KrakenTell[3];
-        // Step 3: each arm is a hit target only while it winds up.
+        // Each arm is a hit target (it wears the beast down, nothing more) only while it winds up.
         readonly KrakenArmTarget[] armTargets = new KrakenArmTarget[KrakenArms.ArmCount];
         readonly bool[] armRegistered = new bool[KrakenArms.ArmCount];
 
@@ -76,8 +80,6 @@ namespace SeaSick.Combat
         /// Hits and misses this kraken has landed, for probes and step 3.
         public int Hits { get; private set; }
         public int Misses { get; private set; }
-        /// Windups cancelled by a hit on the raised arm (or a retreat).
-        public int Interrupts { get; private set; }
         /// Fired at each slam's resolve: (point, hit).
         public event System.Action<Vector3, bool> Slammed;
 
@@ -138,38 +140,35 @@ namespace SeaSick.Combat
             return r;
         }
 
-        /// Step 3's skill shot: cancel this arm's windup. The arm flinches
-        /// back up toward the body and the ring fades. True if it was
-        /// winding up (and is now cancelled), false otherwise.
-        public bool TryInterrupt(int arm)
-        {
-            if (!IsWindingUp(arm)) return false;
-            var at = attacks[arm];
-            at.stage = Stage.Flinch;
-            at.t = 0f;
-            at.flinchFrom = arms != null ? arms.ArmTipPosition(arm) : at.coil;
-            if (at.tell != null) at.tell.Cancel();
-            if (arms != null) arms.Writhe = 1f;
-            Interrupts++;
-            SyncTargets();
-            return true;
-        }
-
-        /// Call everything off (the kraken is going down): every windup
-        /// flinches back, every ring fades, nothing more starts.
+        /// Call everything off because the kraken itself is leaving (driven
+        /// off, escaped, dismissed): every windup is let go and pulled back
+        /// up, every ring fades, nothing more starts. Never called by a hit.
         public void CancelAll()
         {
             cancelled = true;
             for (int a = 0; a < attacks.Length; a++)
             {
                 var at = attacks[a];
-                if (at.stage == Stage.Windup) TryInterrupt(a);
+                if (at.stage == Stage.Windup) Release(a);
                 else if (at.stage == Stage.Slam || at.stage == Stage.Hold)
                 {
                     at.stage = Stage.Recover;
                     at.t = 0f;
                 }
             }
+        }
+
+        /// The kraken is leaving: this arm's windup is let go (the ring
+        /// fades, the arm is pulled back up over the body).
+        void Release(int arm)
+        {
+            var at = attacks[arm];
+            at.stage = Stage.Release;
+            at.t = 0f;
+            at.releaseFrom = arms != null ? arms.ArmTipPosition(arm) : at.coil;
+            if (at.tell != null) at.tell.Cancel();
+            if (arms != null) arms.Writhe = 1f;
+            SyncTargets();
         }
 
         // ------------------------------------------------------------- update
@@ -394,12 +393,12 @@ namespace SeaSick.Combat
                     if (k >= 1f) Finish(a);
                     break;
                 }
-                case Stage.Flinch:
+                case Stage.Release:
                 {
-                    float k = Mathf.Clamp01(at.t / FlinchSeconds);
+                    float k = Mathf.Clamp01(at.t / ReleaseSeconds);
                     // Yanked back up and in over the body, then let go.
                     Vector3 body = transform.position + Vector3.up * 26f;
-                    Vector3 tip = Vector3.Lerp(at.flinchFrom, body, Mathf.SmoothStep(0f, 1f, Mathf.Min(1f, k * 2f)));
+                    Vector3 tip = Vector3.Lerp(at.releaseFrom, body, Mathf.SmoothStep(0f, 1f, Mathf.Min(1f, k * 2f)));
                     float w = 1f - Mathf.SmoothStep(0.4f, 1f, k);
                     arms.SetArmAim(a, tip, w, 90f * w);
                     arms.SetArmLife(a, 1f - w);

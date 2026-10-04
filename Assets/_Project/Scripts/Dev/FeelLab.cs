@@ -151,7 +151,7 @@ namespace SeaSick.Dev
             {"KrakenTuning.hitPoints",         (3f, 40f)},
             {"KrakenTuning.armHitDamage",      (0f, 1f)},
             {"KrakenTuning.bodyHitRadius",     (4f, 16f)},
-            {"KrakenTuning.armHitRadius",      (1f, 6f)},
+            {"KrakenTuning.armHitRadius",      (0.5f, 3f)},
             {"KrakenTuning.escapeDistance",    (60f, 250f)},
             {"KrakenTuning.escapeSeconds",     (1f, 15f)},
             {"KrakenTuning.maxFightSeconds",   (0f, 900f)},

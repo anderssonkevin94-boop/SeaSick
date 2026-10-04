@@ -134,12 +134,12 @@ namespace SeaSick.Combat
         /// Body hits (one cannonball = 1) that drive it off.                   3..40
         public static float hitPoints = 12f;
         /// What a hit on a raised arm costs it, as a share of a body hit (the
-        /// arm hit's real reward is the cancelled swat).                       0..1
+        /// arm hit never cancels the swat).                                    0..1
         public static float armHitDamage = 0.35f;
         /// The head's hit sphere, metres (the mantle is ~16 m tall).           4..16
         public static float bodyHitRadius = 9f;
-        /// A raised arm's hit capsule radius, metres.                          1..6
-        public static float armHitRadius = 3f;
+        /// A raised arm's hit capsule radius, metres: the arm's own thickness. 0.5..3
+        public static float armHitRadius = 1.5f;
         /// Clear water that counts as escaped, metres from its body, held for
         /// `escapeSeconds`; then it sinks away with no loot.                  60..250
         public static float escapeDistance = 120f;
