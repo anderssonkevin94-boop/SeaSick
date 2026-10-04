@@ -206,18 +206,12 @@ namespace SeaSick.World.Life
             var go = new GameObject("SignalSmoke");
             go.transform.SetParent(parent, false);
             go.transform.localPosition = new Vector3(0.8f, 0f, 0.8f);
-            // **Up, not sideways (2026-10-04).** A cone emits along its
-            // local +Z, and this one was never turned: the puffs drifted
-            // along +Z at ~1.1 m/s and rose 0.4 m in their 3 s. Pointed at
-            // the sky in WORLD space (the parent may be yawed), the column
-            // rises ~5 m (1.4 m/s x 3.5 s) and leans a little downwind.
-            go.transform.rotation = Quaternion.LookRotation(Vector3.up, Vector3.forward);
 
             var ps = go.AddComponent<ParticleSystem>();
             var main = ps.main;
             main.loop = true;
             main.startLifetime = 3.5f;
-            main.startSpeed = 1.4f;
+            main.startSpeed = 1.1f;
             main.startSize = new ParticleSystem.MinMaxCurve(0.6f, 1.6f);
             main.startColor = new Color(0.75f, 0.74f, 0.72f, 0.55f);
             main.simulationSpace = ParticleSystemSimulationSpace.World;
@@ -230,13 +224,6 @@ namespace SeaSick.World.Life
             shape.shapeType = ParticleSystemShapeType.Cone;
             shape.angle = 8f;
             shape.radius = 0.15f;
-
-            var drift = ps.velocityOverLifetime;
-            drift.enabled = true;
-            drift.space = ParticleSystemSimulationSpace.World;
-            drift.x = new ParticleSystem.MinMaxCurve(0.25f);
-            drift.y = new ParticleSystem.MinMaxCurve(0f);
-            drift.z = new ParticleSystem.MinMaxCurve(0.1f);
 
             var col = ps.colorOverLifetime;
             col.enabled = true;
