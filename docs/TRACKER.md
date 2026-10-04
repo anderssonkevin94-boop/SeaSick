@@ -59,7 +59,7 @@ Its kraken steps 1-4 are on the phone. Its unverified items moved to the Sailing
 - Kraken loot: bigger crates (branch kraken-loot-scale) + smaller markers floating ABOVE targets?
 - Kraken surfacing astern pulls the camera out to ~140 m (pre-existing). Does it bother him in play?
 
-**Sailing next:** the winding sweep (~470 FBX incl. Astra's; needs Unity closed or restarted, swap), then stop.
+**Sailing: QUEUE DONE (54d4fef8)**, landed for the next build: kraken loot bigger + no marker, top-down zoom 1.4x (FEEL), the HUD reserve race fix, winding sweep closed (469 FBX; wheelbarrow, L2 sawmill, blacksmith, gull patched in place). Idle. Harpoon phase 2 waits on Kevin's phase-1 verdict.
 **Villager next:** its sweep (crop icons fill the card, chart subtitle/labels truncation, desk header under Move, cannon-shift cue, 44 pt chips, sheer cliff, IngredientLine, repair timber stays aboard, HOME BERTH, smoke shot, flour auto-pause proposal, station-anim polish, harpooner in rough sea).
 
 
