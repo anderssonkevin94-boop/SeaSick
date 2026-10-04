@@ -40,6 +40,24 @@ namespace SeaSick.Terrain
         /// (core radius, falloff width, target height above sea, unused).
         public float4 shape0, shape1, shape2, shape3;
 
+        /// **One sandy point** (2026-10-04, Kevin: the arm must not end
+        /// squared off at the dry dock). Where a capsule cuts across a beach
+        /// it leaves a straight cliff; this instead lowers the ground toward a
+        /// rounded point. In a frame at `tipAt` facing `tipDir` (along, lat),
+        /// the target height falls with the elliptical distance
+        /// d = knee * length(along / A, lat / B): gently above water
+        /// (`top - s1 * d` down to the waterline at d = knee), then at `s2`
+        /// like the natural flank, floored at the target. It only acts ahead
+        /// of `tipAt` (fading in over `alongFade`), out to `alongMax` and
+        /// within `latMax` either side, so nothing behind the point (Kevin's
+        /// dry dock) or beside it (the island's own beaches) is touched.
+        public int tipCount;
+        public float2 tipAt, tipDir;
+        /// (top, s1, knee, s2) and (A, B, alongFade, target).
+        public float4 tipProfile, tipShape;
+        /// (alongMax, alongMaxFade, latMax, latFade).
+        public float4 tipReach;
+
         /// The world the spit edit belongs to: terrain seed and world offset
         /// of `Materials/GraphicArt/TerrainSettings.asset`. Any other world
         /// (another seed, a moved offset) gets no edits at all.
@@ -68,11 +86,33 @@ namespace SeaSick.Terrain
             // stub left at x < -600 (it carries Kevin's dry dock's land end and
             // joins the island's dry south-east corner), then east along
             // z ~ 216-220 and up the hook to its awash fan at (-400, 252).
-            e.Add(new float2(-588f, 219f), new float2(-480f, 216f), 14f, 6f, SpitTarget);
+            // The beach keeps going to x ~ -606 and ends there as a rounded
+            // sandy point (shaped and checked on a 1 m grid against the dry
+            // dock's footprint + 2 m: zero delta); the first capsule starts
+            // where the point's slope has already reached the target.
+            e.Tip(new float2(-606f, 223f), new float2(0.986f, -0.164f),
+                  new float4(0.3f, 0.03f, 10f, 0.35f), new float4(14f, 10f, 4f, SpitTarget),
+                  new float4(50f, 8f, 20f, 6f));
+            e.Add(new float2(-555f, 219f), new float2(-480f, 216f), 14f, 6f, SpitTarget);
             e.Add(new float2(-480f, 216f), new float2(-445f, 232f), 18f, 8f, SpitTarget);
             e.Add(new float2(-445f, 232f), new float2(-398f, 255f), 30f, 10f, SpitTarget);
             return e;
         }
+
+        void Tip(float2 at, float2 dir, float4 profile, float4 shape, float4 reach)
+        {
+            tipCount = 1;
+            tipAt = at; tipDir = math.normalize(dir);
+            tipProfile = profile; tipShape = shape; tipReach = reach;
+            // A generous box round the strip it can touch.
+            float r = math.max(reach.x + reach.y, reach.z + reach.w);
+            float4 bb = new float4(at - r, at + r);
+            bounds = count == 0 ? bb : new float4(math.min(bounds.xy, bb.xy), math.max(bounds.zw, bb.zw));
+            hasAny = 1;
+        }
+
+        /// 1 once anything (a capsule or the point) is set.
+        public int hasAny;
 
         void Add(float2 a, float2 b, float radius, float falloff, float target)
         {
@@ -88,15 +128,19 @@ namespace SeaSick.Terrain
             }
             float reach = radius + falloff;
             float4 bb = new float4(math.min(a, b) - reach, math.max(a, b) + reach);
-            bounds = count == 0 ? bb : new float4(math.min(bounds.xy, bb.xy), math.max(bounds.zw, bb.zw));
+            bounds = hasAny == 0 ? bb : new float4(math.min(bounds.xy, bb.xy), math.max(bounds.zw, bb.zw));
             count++;
+            hasAny = 1;
         }
 
         /// Height `h` (absolute, sea level `seaLevel`) at `p` after the edits.
         public static float Apply(in TerrainEdits e, float2 p, float h, float seaLevel)
         {
-            if (e.count == 0 || p.x < e.bounds.x || p.y < e.bounds.y || p.x > e.bounds.z || p.y > e.bounds.w)
+            if (e.hasAny == 0 || p.x < e.bounds.x || p.y < e.bounds.y || p.x > e.bounds.z || p.y > e.bounds.w)
                 return h;
+            if (h - seaLevel >= GateHigh) return h;
+            if (e.tipCount > 0) h = Point(e, p, h, seaLevel);
+            if (e.count == 0) return h;
             float above = h - seaLevel;
             if (above >= GateHigh) return h;
             float gate = 1f - math.smoothstep(GateLow, GateHigh, above);
@@ -105,6 +149,27 @@ namespace SeaSick.Terrain
             if (e.count > 2) h = One(e.seg2, e.shape2, p, h, seaLevel, gate);
             if (e.count > 3) h = One(e.seg3, e.shape3, p, h, seaLevel, gate);
             return h;
+        }
+
+        /// The sandy point: see `tipAt`.
+        static float Point(in TerrainEdits e, float2 p, float h, float seaLevel)
+        {
+            float above = h - seaLevel;
+            float2 r = p - e.tipAt;
+            float along = math.dot(r, e.tipDir);
+            if (along <= 0f) return h;
+            float lat = e.tipDir.x * r.y - e.tipDir.y * r.x;
+            float4 pr = e.tipProfile, sh = e.tipShape, re = e.tipReach;
+            float w = math.smoothstep(0f, sh.z, along)
+                    * (1f - math.smoothstep(re.x, re.x + re.y, along))
+                    * (1f - math.smoothstep(re.z, re.z + re.w, math.abs(lat)));
+            if (w <= 0f) return h;
+            float d = pr.z * math.length(new float2(along / sh.x, lat / sh.y));
+            float t = d < pr.z ? pr.x - pr.y * d : pr.x - pr.y * pr.z - pr.w * (d - pr.z);
+            t = seaLevel + math.max(t, sh.w);
+            if (h <= t) return h;
+            float gate = 1f - math.smoothstep(GateLow, GateHigh, above);
+            return h + (t - h) * w * gate;
         }
 
         /// Pull `h` toward `min(h, target)` by the capsule's weight. Where two

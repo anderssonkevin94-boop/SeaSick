@@ -13,8 +13,9 @@ using SeaSick.Terrain;
 ///   1. keyed: only seed 1337 + the asset's world offset get edits;
 ///   2. the spit was where the capsules say (crest -1.2..+0.5 m before) and is
 ///      now at or below the target;
-///   3. a 38 m-radius turning circle (16 m ship, 2.3-length turn + beam) at
-///      (-550, 225) is all at or below -3.4 m;
+///   3. a 30 m-radius turning circle at (-548, 226) is all at or below
+///      -3.4 m (measured turn r15.1 m), and the kept beach ends as a rounded
+///      sandy point with no cliff;
 ///   4. ZERO delta under every saved structure of the home outpost in the save
 ///      at `savePath` (buildings 14 m squares, pier deck + berth + pile bed,
 ///      dry dock + 2 m, walls and roads +-2 m) -- or, with no save, under
@@ -54,13 +55,13 @@ public static class TerrainEditSelfTest
             float T = edited.seaLevel + TerrainEdits.SpitTarget;
 
             // 1. keyed
-            Gate("keyed-to-this-world", edited.edits.count == 3
-                    && TerrainEdits.For(edited.seed + 1, edited.worldOffset).count == 0
-                    && TerrainEdits.For(edited.seed, edited.worldOffset + 1f).count == 0,
-                 "capsules " + edited.edits.count + " seed " + edited.seed);
+            Gate("keyed-to-this-world", edited.edits.count == 3 && edited.edits.tipCount == 1
+                    && TerrainEdits.For(edited.seed + 1, edited.worldOffset).hasAny == 0
+                    && TerrainEdits.For(edited.seed, edited.worldOffset + 1f).hasAny == 0,
+                 "capsules " + edited.edits.count + " + point " + edited.edits.tipCount + " seed " + edited.seed);
 
             // 2. spit crest
-            var crest = new[] { new float2(-590, 220), new float2(-570, 218), new float2(-550, 216), new float2(-520, 216),
+            var crest = new[] { new float2(-575, 219), new float2(-560, 218), new float2(-550, 216), new float2(-520, 216),
                                 new float2(-490, 216), new float2(-460, 226), new float2(-440, 234), new float2(-420, 244),
                                 new float2(-400, 250) };
             float worstBefore = 99f, worstAfter = -99f, highBefore = -99f;
@@ -76,11 +77,41 @@ public static class TerrainEditSelfTest
 
             // 3. turning circle
             float circleMax = -99f;
-            var cc = new float2(-550, 225);
-            for (float x = -38; x <= 38; x += 2)
-                for (float z = -38; z <= 38; z += 2)
-                    if (x * x + z * z <= 38 * 38) circleMax = math.max(circleMax, After(cc + new float2(x, z)));
-            Gate("turning-circle-clear", circleMax <= T + 0.1f, "max " + circleMax.ToString("F2") + " m in r38 at " + cc);
+            // Her measured turn (play test 2026-10-04): r 15.1 m at 4 m/s,
+            // so a 30 m circle is the circle plus her own length.
+            var cc = new float2(-548, 226);
+            for (float x = -30; x <= 30; x += 2)
+                for (float z = -30; z <= 30; z += 2)
+                    if (x * x + z * z <= 30 * 30) circleMax = math.max(circleMax, After(cc + new float2(x, z)));
+            Gate("turning-circle-clear", circleMax <= T + 0.1f, "max " + circleMax.ToString("F2") + " m in r30 at " + cc);
+
+            // The kept beach ends as a rounded sandy POINT, not a cut (Kevin:
+            // no squared-off arm at the dry dock). Steepest 1 m step anywhere
+            // the edit changed the ground, vs the natural flanks' own (~1.2 m;
+            // the first capsule-only cut made 1.7 m), and the crest falling
+            // steadily from the beach into the water.
+            float steepest = 0f;
+            for (float x = -618; x <= -540; x += 1f)
+                for (float z = 198; z <= 250; z += 1f)
+                {
+                    var p = new float2(x, z);
+                    float a0 = After(p), b0 = Before(p);
+                    foreach (var q in new[] { p + new float2(1, 0), p + new float2(0, 1) })
+                    {
+                        float a1 = After(q);
+                        if (a0 != b0 || a1 != Before(q)) steepest = math.max(steepest, math.abs(a1 - a0));
+                    }
+                }
+            bool falling = true; float prevH = 99f; var prof = new StringBuilder();
+            for (float x = -606; x <= -576; x += 2f)
+            {
+                float a = After(new float2(x, 222));
+                if (a > prevH + 0.01f) falling = false;
+                prevH = a;
+                if ((int)x % 6 == 0) prof.Append((int)x).Append(':').Append(a.ToString("F2")).Append(' ');
+            }
+            Gate("sandy-point-no-cliff", steepest <= 1.3f && falling,
+                 "steepest step " + steepest.ToString("F2") + " m/m, crest " + prof);
 
             // 4 + 6. structures and other islands
             var points = new List<(string, float2)>();

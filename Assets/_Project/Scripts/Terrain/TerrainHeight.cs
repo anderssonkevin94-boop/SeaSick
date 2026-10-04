@@ -1126,7 +1126,7 @@ namespace SeaSick.Terrain
                 s.height = math.lerp(s.height, prm.seaLevel + prm.seabedDepth, home);
             // Hand edits LAST, over everything above, so mesh, collider,
             // shore grid, populator and horizon all read the same ground.
-            if (prm.edits.count > 0)
+            if (prm.edits.hasAny != 0)
             {
                 s.height = TerrainEdits.Apply(prm.edits, p, s.height, prm.seaLevel);
                 s.terraced = TerrainEdits.Apply(prm.edits, p, s.terraced, prm.seaLevel);
