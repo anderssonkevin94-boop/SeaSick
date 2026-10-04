@@ -30,9 +30,9 @@ namespace SeaSick.World
             var whole = new FarmPlot { crop = Res.Wheat, state = PlotState.Ripe };
             string partLine = part.StateLine(name, "0:00"), wholeLine = whole.StateLine(name, "0:00");
             Gate(sb, ref fails, "part-harvested-shows-remaining",
-                part.RipeUnits == 3 && partLine == "ripe · 3", $"'{partLine}' (yield {FoodBook.Crop(Res.Wheat).yield})");
+                part.RipeUnits == 3 && partLine == "ripe · 3 to pick", $"'{partLine}' (yield {FoodBook.Crop(Res.Wheat).yield})");
             Gate(sb, ref fails, "untouched-ripe-shows-full-yield",
-                wholeLine == $"ripe · {FoodBook.Crop(Res.Wheat).yield}", $"'{wholeLine}'");
+                wholeLine == $"ripe · {FoodBook.Crop(Res.Wheat).yield} to pick", $"'{wholeLine}'");
 
             // --- bug 2: a ripe plot keeps its harvest, the pick is queued ------
             var p = new FarmPlot { crop = Res.Wheat, state = PlotState.Ripe, left = 6, repeat = true };
@@ -42,7 +42,7 @@ namespace SeaSick.World
                 ok && p.crop == Res.Wheat && p.state == PlotState.Ripe && p.RipeUnits == 6 && p.nextCrop == Res.Potato,
                 $"crop {p.crop}, {p.RipeUnits} ripe, next '{p.nextCrop}'");
             Gate(sb, ref fails, "tile-says-next",
-                p.StateLine(name, "").EndsWith("next: " + Res.Potato) && p.StateLine(name, "").StartsWith("ripe · 6"),
+                p.StateLine(name, "").EndsWith("next: " + Res.Potato) && p.StateLine(name, "").StartsWith("ripe · 6 to pick"),
                 $"'{p.StateLine(name, "").Replace("\n", " / ")}'");
 
             // save round-trip of the queued crop (and a part-ripe count)

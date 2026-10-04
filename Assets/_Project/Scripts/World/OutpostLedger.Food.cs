@@ -75,8 +75,8 @@ namespace SeaSick.World
         /// the crop's full yield; a queued crop adds "next: potato".
         public string StateLine(System.Func<string, string> label, string growClock)
         {
-            string s = state == PlotState.Ripe ? $"ripe · {RipeUnits}"
-                : state == PlotState.Growing ? growClock
+            string s = state == PlotState.Ripe ? $"ripe · {RipeUnits} to pick"
+                : state == PlotState.Growing ? $"{growClock} left"
                 : string.IsNullOrEmpty(crop) ? "tap to plant" : "to plant";
             if (HasNext && label != null) s += $"\nnext: {label(nextCrop)}";
             return s;

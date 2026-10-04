@@ -438,3 +438,94 @@
 .st .st-tone--good { color: rgb(156, 210, 122); }
 .st .st-tone--wait { color: rgb(242, 196, 109); }
 .st .st-tone--bad { color: rgb(246, 146, 128); }
+
+/* ------------------------------------------------------------------
+ * The farm (rework 2026-10-04, Kevin's phone verdict "Farm plot UI is
+ * broken"). Plots page: a "No farmer · Assign" card when nobody works
+ * the field, then plot cards three a row (crop icon | name, state,
+ * "next: X"), then one summary line. Tap a plot: its detail takes the
+ * grid's place -- "‹ Plots" + the plot's state, the crop cards (icon,
+ * name, a harvest, time · per hour), one wrapping info line and ONE row
+ * of real buttons (Replant toggle · Clear plot). Every height here is
+ * summed into `FarmSheet.PlotRowPx` / `FarmerRowPx` -- change together.
+ * Nothing has a fixed height: text wraps, the card grows.
+ * ------------------------------------------------------------------ */
+
+.st-pgrid { flex-direction: row; flex-wrap: wrap; flex-shrink: 0; }
+.st .st-ptile {
+    width: 32%; min-height: 56px; margin: 0 2% 0 0; padding: 7px 6px 7px 8px;
+    flex-direction: row; align-items: center; justify-content: flex-start; flex-shrink: 0;
+    border-radius: 12px; border-width: 1.5px; border-color: rgb(44, 74, 94);
+    background-color: rgb(28, 52, 70);
+}
+.st .st-ptile:hover, .st .st-ptile:hover:active { background-color: rgb(34, 60, 80); }
+.st .st-ptile--end { margin-right: 0; }
+.st .st-ptile--row2 { margin-top: 7px; }
+.st .st-ptile--ripe { border-color: rgb(156, 210, 122); }
+/* an empty plot: the ice edge says "tap me", its line says what for */
+.st .st-ptile--empty { border-color: rgb(164, 210, 232); background-color: rgb(22, 41, 58); }
+.st .st-ptile--locked { background-color: rgb(22, 41, 58); border-color: rgb(30, 51, 68); }
+.st .st-ptile--on { border-width: 2.5px; border-color: rgb(164, 210, 232); background-color: rgb(36, 62, 82); }
+.st-ptile-icon { width: 30px; height: 30px; flex-shrink: 0; margin-right: 7px; -unity-background-scale-mode: scale-to-fit; }
+.st-ptile-glyph { width: 26px; height: 26px; flex-shrink: 0; margin: 2px 9px 2px 2px; }
+.st .st-ptile--locked .st-ptile-icon { opacity: 0.35; }
+.st-ptile-words { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-width: 0; }
+.st .st-ptile-name {
+    font-size: 15px; white-space: normal;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.st .st-ptile--locked .st-ptile-name { color: rgb(166, 186, 198); }
+.st .st-ptile-state {
+    font-size: 13px; margin-top: 1px; color: rgb(166, 186, 198); white-space: normal;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.st .st-ptile-sub { font-size: 12px; margin-top: 1px; color: rgb(166, 186, 198); white-space: normal; }
+.st .st-ptile-next { font-size: 12px; margin-top: 1px; color: rgb(164, 210, 232); white-space: normal; }
+.st .st-ptile-act { color: rgb(164, 210, 232); }
+.st-ptile-bar {
+    position: absolute; left: 8px; right: 8px; bottom: 3px; height: 3px;
+    border-radius: 2px; background-color: rgb(44, 74, 94); overflow: hidden;
+}
+.st-ptile-fill { height: 3px; width: 0; background-color: rgb(242, 196, 109); }
+.st .st-psum { font-size: 14px; color: rgb(166, 186, 198); margin-top: 8px; white-space: normal; flex-shrink: 0; }
+
+/* --- no farmer: the line and its fix ----------------------------------- */
+
+.st-farmer { border-color: rgb(110, 52, 46); margin-bottom: 8px; padding: 6px 8px 6px 14px; }
+.st-farmer-words { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-width: 0; }
+.st .st-farmer-title {
+    font-size: 16px; color: rgb(246, 146, 128); white-space: normal;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.st .st-farmer-sub { font-size: 14px; color: rgb(166, 186, 198); margin-top: 1px; white-space: normal; }
+.st .st-farmer-btn { min-height: 48px; padding: 0 18px; flex-shrink: 0; }
+
+/* --- the picked plot ------------------------------------------------------ */
+
+.st-pdetail { flex-direction: column; flex-shrink: 0; }
+.st-pdetail-head { flex-direction: row; align-items: center; margin-bottom: 8px; flex-shrink: 0; }
+.st .st-pback { margin: 0 10px 0 0; padding: 0 14px; min-height: 48px; font-size: 16px; }
+.st-pdetail-words { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-width: 0; }
+.st .st-pdetail-title {
+    font-size: 18px; white-space: normal;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.st .st-pdetail-state { font-size: 14px; color: rgb(166, 186, 198); margin-top: 1px; white-space: normal; }
+.st .st-pinfo { font-size: 14px; color: rgb(166, 186, 198); margin-top: 8px; white-space: normal; flex-shrink: 0; }
+.st-pactions { flex-direction: row; align-items: stretch; margin-top: 8px; flex-shrink: 0; }
+.st .st-pact {
+    flex-grow: 1; flex-basis: 0; flex-shrink: 1; min-width: 0;
+    margin: 0 0 0 8px; padding: 4px 10px; min-height: 50px; font-size: 16px;
+}
+.st .st-pact--first { margin-left: 0; }
+.st .st-pact--on { background-color: rgb(31, 74, 60); border-color: rgb(156, 210, 122); color: rgb(159, 224, 194); }
+.st .st-pact--on:hover { background-color: rgb(38, 88, 70); }
+/* the plot card's state takes the tones (after the card's own muted colour) */
+.st .st-ptile .st-tone--good { color: rgb(156, 210, 122); }
+.st .st-ptile .st-tone--wait { color: rgb(242, 196, 109); }
+.st .st-ptile .st-tone--bad { color: rgb(246, 146, 128); }
+.st .st-ptile .st-ptile-act { color: rgb(164, 210, 232); }
+/* the crop cards in a picked plot: a smaller icon, so "10 in 20 min" fits a third of the phone */
+.st .st-ptile--crop { padding: 6px 4px 6px 6px; }
+.st .st-ptile--crop .st-ptile-icon { width: 22px; height: 22px; margin-right: 5px; }
+.st .st-pinfo { font-size: 13px; }

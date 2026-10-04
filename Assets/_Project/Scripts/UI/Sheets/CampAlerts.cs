@@ -207,6 +207,8 @@ namespace SeaSick.UI.Sheets
                         tone = Tone.Warn, fixLabel = "Runners", open = () => StoreHut(camp),
                     });
                 }
+            FarmAlerts(camp, l, into);
+            FlourAlert(camp, l, into);
             // **A post the station cap took (2026-10-03,
             // `OutpostLedger.EnforceStationCaps`)**: never silently -- named
             // until the player taps it, which opens the hand to re-assign.
@@ -259,6 +261,113 @@ namespace SeaSick.UI.Sheets
             int angry = l.AngryCount;
             if (angry > 0)
                 into.Add(new Alert { text = $"{angry} hand{(angry == 1 ? "" : "s")} angry", tone = Tone.Warn, open = () => People(camp, WorkersSheet.Filter.Unhappy), fixLabel = "Open" });
+        }
+
+        /// **The farm's lines (2026-10-04, Kevin's phone: nine ripe plots
+        /// and "no worker", with nothing saying so or offering the fix).**
+        /// Per farm: "Farm · 9 plots ripe, nobody picking" (Assign) while no
+        /// farmhand works it -- or "Farm · 3 plots to plant, no farmer" --
+        /// and "Farm · 2 plots empty" (Choose crop) for plots left with no
+        /// crop at all. Each opens that farm's sheet, whose plots page has
+        /// the Assign button and the crop picker.
+        static void FarmAlerts(Outpost camp, OutpostLedger l, List<Alert> into)
+        {
+            string farmId = BuildPlans.Farm.id;
+            int farms = l.CountBuilt(farmId);
+            if (farms <= 0) return;
+            foreach (var b in camp.Built)
+            {
+                if (b == null || b.Id != farmId) continue;
+                int ord = camp.OrdinalOf(b);
+                if (ord < 0) continue;
+                int ripe = 0, toPlant = 0, bare = 0;
+                foreach (var p in l.PlotsOf(ord))
+                {
+                    if (p == null) continue;
+                    if (p.state == PlotState.Ripe) ripe++;
+                    else if (p.state == PlotState.Empty)
+                    {
+                        if (string.IsNullOrEmpty(p.crop)) bare++;
+                        else toPlant++;
+                    }
+                }
+                bool farmer = false;
+                foreach (var h in l.hands)
+                    if (h != null && h.order == OutpostOrder.Work && h.target == farmId && l.OrdinalOfHand(h) == ord)
+                    { farmer = true; break; }
+                string name = farms > 1 ? $"Farm {ord + 1}" : "Farm";
+                var farm = b;
+                Func<ISheet> open = () => Sheets.TryCreateFor(farm) ?? new FarmSheet(camp, farm);
+                if (!farmer && ripe > 0)
+                    into.Add(new Alert
+                    {
+                        text = $"{name} · {ripe} plot{(ripe == 1 ? "" : "s")} ripe, nobody picking",
+                        tone = Tone.Warn, fixLabel = "Assign", open = open,
+                    });
+                else if (!farmer && toPlant > 0)
+                    into.Add(new Alert
+                    {
+                        text = $"{name} · {toPlant} plot{(toPlant == 1 ? "" : "s")} to plant, no farmer",
+                        tone = Tone.Warn, fixLabel = "Assign", open = open,
+                    });
+                if (bare > 0)
+                    into.Add(new Alert
+                    {
+                        text = $"{name} · {bare} plot{(bare == 1 ? "" : "s")} empty",
+                        tone = Tone.Warn, fixLabel = "Choose crop", open = open,
+                    });
+            }
+        }
+
+        /// Flour in the store before this the line is worth a word: one batch.
+        const int FlourWaitingAt = 2;
+
+        /// **"Flour waiting · Kitchen II bakes bread" (2026-10-04).** The
+        /// mill runs from fire II, but everything that takes flour (bread,
+        /// ship's biscuit, fish pie) wants a Kitchen at level II or more, so
+        /// flour piled up in Kevin's store with nothing able to use it and
+        /// nothing saying why. Shown while flour is in the store and NO
+        /// recipe that takes it can run here (`RecipeAvailable` and its
+        /// station standing); names the cheapest one that would, and opens
+        /// that station (its level page) or the build list.
+        static void FlourAlert(Outpost camp, OutpostLedger l, List<Alert> into)
+        {
+            if (l.StoreCountOf(Res.Flour) < FlourWaitingAt) return;
+            Recipe best = null;
+            foreach (var r in Recipes.All)
+            {
+                if (r == null || !Takes(r, Res.Flour)) continue;
+                if (l.CountBuilt(r.station) > 0 && l.RecipeAvailable(r, out _)) return;   // something can use it
+                if (best == null || r.stationLevel < best.stationLevel) best = r;
+            }
+            if (best == null) return;
+            string station = BuildPlans.Named(best.station).label;
+            if (string.IsNullOrEmpty(station)) station = best.station;
+            station = char.ToUpperInvariant(station[0]) + station.Substring(1);
+            string lv = best.stationLevel > 1 ? " " + RecipeGraph.Roman(best.stationLevel) : "";
+            bool standing = l.CountBuilt(best.station) > 0;
+            string stationId = best.station;
+            into.Add(new Alert
+            {
+                text = $"Flour waiting · {station}{lv} bakes {ResDefs.Label(best.makes)}",
+                tone = Tone.Warn,
+                fixLabel = standing ? $"Raise {station}" : $"Build {station.ToLowerInvariant()}",
+                open = () =>
+                {
+                    if (camp != null)
+                        foreach (var b in camp.Built)
+                            if (b != null && b.Id == stationId)
+                                return Sheets.TryCreateFor(b) ?? new StationSheet(camp, b);
+                    return BuildList(camp, stationId);
+                },
+            });
+        }
+
+        static bool Takes(Recipe r, string res)
+        {
+            if (r.takes == null) return false;
+            foreach (var line in r.takes) if (line.res == res) return true;
+            return false;
         }
 
         /// Living hands past the camp's beds (`HousingCapacity`); 0 when
