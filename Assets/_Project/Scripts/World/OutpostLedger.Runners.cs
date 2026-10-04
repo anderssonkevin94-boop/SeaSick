@@ -589,7 +589,7 @@ namespace SeaSick.World
             foreach (var sp in s.spots)
             {
                 var r = sp != null && sp.Selected ? sp.Recipe : null;
-                if (r == null || LockOf(s, r) != null) continue;
+                if (r == null || LockOf(s, r) != null || HoldOf(r) != null) continue;
                 if (r.tool != null && HeldOf(r.tool) <= 0f) continue;
                 foreach (var line in r.takes)
                 {

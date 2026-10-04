@@ -1506,7 +1506,8 @@ namespace SeaSick.World
             foreach (var sp in s.spots)
             {
                 var r = sp != null && sp.Selected ? sp.Recipe : null;
-                if (r == null || LockOf(s, r) != null) continue;
+                // Nobody feeds a held mill's bay (the flour hold, 2026-10-04).
+                if (r == null || LockOf(s, r) != null || HoldOf(r) != null) continue;
                 if (r.tool != null && HeldOf(r.tool) <= 0f) continue;
                 foreach (var line in r.takes)
                 {
@@ -1731,7 +1732,7 @@ namespace SeaSick.World
             foreach (var sp in d.spots)
             {
                 var r = sp != null && sp.Selected ? sp.Recipe : null;
-                if (r == null || LockOf(d, r) != null) continue;
+                if (r == null || LockOf(d, r) != null || HoldOf(r) != null) continue;
                 if (r.tool != null && HeldOf(r.tool) <= 0f) continue;
                 foreach (var line in r.takes)
                     if (line.n > 0 && line.res == res && have < line.n) return true;
@@ -2161,6 +2162,10 @@ namespace SeaSick.World
         {
             rank = int.MaxValue;
             if (r == null) return "no order given";
+            // The flour hold (2026-10-04): held on purpose, said as such --
+            // the miller waits at his bench as he would for an input.
+            string hold = HoldOf(r);
+            if (hold != null) { rank = 0; return hold; }
             string line = MissingLine(s, r, out bool blocking, out rank);
             return blocking ? line : null;
         }

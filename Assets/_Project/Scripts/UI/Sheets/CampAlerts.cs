@@ -138,6 +138,10 @@ namespace SeaSick.UI.Sheets
                 if (string.IsNullOrEmpty(h.bodyBlocked) && l.StoreFullFor(h) != null) continue;   // the store chip
                 string why = l.StallReason(h);
                 if (string.IsNullOrEmpty(why)) continue;
+                // **The held mill (2026-10-04)** is not a problem of the
+                // miller's: "Flour waiting · Kitchen II bakes bread"
+                // (`FlourAlert`, the same test) is its one chip, with the fix.
+                if (why == OutpostLedger.FlourHoldWords) continue;
                 string who = h.name;
                 // **No recipe chosen (2026-10-02):** "Edda · no recipe chosen
                 // · open the hunting lodge and pick one" -- the fix is at the
@@ -330,14 +334,20 @@ namespace SeaSick.UI.Sheets
         /// recipe that takes it can run here (`RecipeAvailable` and its
         /// station standing); names the cheapest one that would, and opens
         /// that station (its level page) or the build list.
+        ///
+        /// **With the flour hold (2026-10-04)** "nothing can use it" is
+        /// `OutpostLedger.FlourHasUse`, the one test the mill's hold reads
+        /// too: from `FlourHoldAt` flour this chip stands beside a mill that
+        /// says "Mill paused · nothing bakes flour yet", and is the fix-it
+        /// pointer for both (the miller's own stall chip stands aside).
         static void FlourAlert(Outpost camp, OutpostLedger l, List<Alert> into)
         {
             if (l.StoreCountOf(Res.Flour) < FlourWaitingAt) return;
+            if (l.FlourHasUse()) return;   // something can use it
             Recipe best = null;
             foreach (var r in Recipes.All)
             {
                 if (r == null || !Takes(r, Res.Flour)) continue;
-                if (l.CountBuilt(r.station) > 0 && l.RecipeAvailable(r, out _)) return;   // something can use it
                 if (best == null || r.stationLevel < best.stationLevel) best = r;
             }
             if (best == null) return;

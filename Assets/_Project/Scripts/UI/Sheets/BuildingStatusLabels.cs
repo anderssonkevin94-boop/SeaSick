@@ -26,6 +26,8 @@ namespace SeaSick.UI.Sheets
             if (!station.HasOrder || station.benchState != BenchState.Empty || worker.Hauling) return null;
             // Use the economy's actual blocker, not an empty bay that is being supplied.
             string reason = ledger.StallReason(worker);
+            // The held mill (2026-10-04): paused on purpose, not short.
+            if (reason == OutpostLedger.FlourHoldWords) return "Paused";
             // `MissingWords`' "fine boards need a saw blade (...) and boards
             // (...)" (2026-10-04) joined the old "waiting for X" shapes.
             return reason != null && (reason.StartsWith("waiting for ", System.StringComparison.Ordinal)

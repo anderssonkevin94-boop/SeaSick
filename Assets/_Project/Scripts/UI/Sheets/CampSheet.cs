@@ -737,6 +737,7 @@ namespace SeaSick.UI.Sheets
             string status = BuildingStatusLabels.Status(l, st);
             if (status == "Output full") { text = "output full"; tone = "bad"; return; }
             if (status == "Needs supplies") { text = "needs supplies"; tone = "bad"; return; }
+            if (status == "Paused") { text = "paused"; tone = "info"; return; }   // the flour hold
             if (!st.HasOrder && st.benchState == BenchState.Empty) { text = "no order"; tone = "bad"; return; }
             text = "working";
             tone = "ok";

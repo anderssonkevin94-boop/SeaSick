@@ -1493,6 +1493,8 @@ namespace SeaSick.UI.Sheets
                 var all = allSpotLines;
                 string why = l.StallReasonAll(hand, all);
                 if (string.IsNullOrEmpty(why)) return "";
+                // The held mill (2026-10-04) has not stopped, it is holding.
+                if (why == OutpostLedger.FlourHoldWords) return why;
                 if (all.Count < 2) return "stopped · " + why;
                 var sb = new System.Text.StringBuilder(160);
                 for (int i = 0; i < all.Count; i++)

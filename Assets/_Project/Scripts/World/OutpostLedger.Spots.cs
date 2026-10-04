@@ -106,6 +106,49 @@ namespace SeaSick.World
             return null;
         }
 
+        // --- the flour hold (Kevin, 2026-10-04) ------------------------------------
+
+        /// Flour in the store from which a mill with nothing to bake it for
+        /// holds: three loaves' worth, so a fresh Kitchen II has bread at once.
+        public const int FlourHoldAt = 6;
+
+        /// The held mill's pause reason, everywhere it is shown (spot tile,
+        /// station status, the miller's line). Lower case like every pause
+        /// reason; the sheets capitalise it ("Mill paused · ...").
+        public const string FlourHoldWords = "mill paused · nothing bakes flour yet";
+
+        /// **Can anything here use flour?** A recipe that takes flour whose
+        /// station stands and which `RecipeAvailable` allows (fire, the
+        /// station's level, its tool). The one test, shared by the mill's
+        /// hold and the "Flour waiting · Kitchen II bakes bread" alert
+        /// (`CampAlerts.FlourAlert`), so the two can never disagree.
+        public bool FlourHasUse()
+        {
+            foreach (var r in Economy.Recipes.All)
+                if (r != null && Wants(r, Res.Flour) && CountBuilt(r.station) > 0 && RecipeAvailable(r, out _))
+                    return true;
+            return false;
+        }
+
+        /// **The flour auto-pause (Kevin, 2026-10-04): why a NEW batch of `r`
+        /// is held, or null.** Every recipe that takes flour wants a Kitchen
+        /// II or more, so a mill beside a Kitchen I piled flour up with
+        /// nothing to use it (Kevin's camp: 583). Now a recipe that makes
+        /// flour does not load a new batch while the store holds
+        /// `FlourHoldAt` or more AND nothing here can use flour
+        /// (`FlourHasUse`). Derived from state every time it is asked --
+        /// nothing saved, no player action: it lifts by itself when a Kitchen
+        /// II stands (or a flour recipe unlocks) or the store drops below
+        /// `FlourHoldAt`. A batch already on the bench finishes; the miller
+        /// stays posted and waits at his bench as a station waiting on
+        /// inputs does; nobody feeds the held bay.
+        public string HoldOf(Economy.Recipe r)
+        {
+            if (r == null || r.makes != Res.Flour) return null;
+            if (StoreCountOf(Res.Flour) < FlourHoldAt) return null;
+            return FlourHasUse() ? null : FlourHoldWords;
+        }
+
         /// Bench progress a day for one batch of `r` here at full pace: the
         /// recipe's rate at this building's level and the camp's priority,
         /// over its yield -- exactly what the single bench was paid.
@@ -156,6 +199,9 @@ namespace SeaSick.World
             string jam = RackJam(st);
             if (jam != null) return $"store full of {Word(jam)}";
             if (sp.benchState == BenchState.Finished) return null;   // unloading this step
+            // The flour hold: not short of anything, held on purpose.
+            string hold = HoldOf(r);
+            if (hold != null) return hold;
             if (FishesAtShore(st)) return CatchStallCause(st);
             // The tool AND every input, most blocking first, each with where
             // to get it ("fine boards need a saw blade (make one at the
@@ -314,6 +360,10 @@ namespace SeaSick.World
             var r = sp.Recipe;
             if (r == null) { sp.Stop(); return false; }
             if (LockOf(st, r) != null) return false;
+            // **The flour hold (2026-10-04)**: the one door every new batch
+            // goes through, live play and the time-away catch-up alike
+            // (`Step` -> `StepStations` -> `WorkerDay` -> here).
+            if (HoldOf(r) != null) return false;
             if (r.tool != null && HeldOf(r.tool) <= 0f) return false;
             if (RackJam(st) != null) return false;
             foreach (var line in r.takes)
@@ -367,7 +417,7 @@ namespace SeaSick.World
             {
                 if (sp == null || !sp.Selected || sp.benchState != BenchState.Empty) continue;
                 var r = sp.Recipe;
-                if (r == null || LockOf(st, r) != null) continue;
+                if (r == null || LockOf(st, r) != null || HoldOf(r) != null) continue;
                 if (r.tool != null && HeldOf(r.tool) <= 0f) continue;
                 foreach (var line in r.takes)
                 {
@@ -430,7 +480,7 @@ namespace SeaSick.World
             {
                 if (sp == null || !sp.Selected || sp.benchState != BenchState.Empty) continue;
                 var r = sp.Recipe;
-                if (r == null || LockOf(st, r) != null) continue;
+                if (r == null || LockOf(st, r) != null || HoldOf(r) != null) continue;
                 if (r.tool != null && HeldOf(r.tool) <= 0f) continue;
                 foreach (var line in r.takes)
                 {
