@@ -325,6 +325,39 @@ namespace SeaSick.Dev
             if (running && frames > MaxFrames) Finish("FAIL: timed out");
         }
 
+        /// The panel's topmost element at six points inside the harpoon
+        /// button's drawn rect (panel space: no screen flip, so it holds in
+        /// an eval too). True when every one is the button or inside it.
+        static string PickReport(out bool ok)
+        {
+            ok = false;
+            UnityEngine.UIElements.Button btn = null;
+            foreach (var d in Object.FindObjectsByType<UnityEngine.UIElements.UIDocument>(FindObjectsInactive.Exclude))
+            {
+                var root = d.rootVisualElement;
+                if (root == null) continue;
+                btn = UnityEngine.UIElements.UQueryExtensions.Q<UnityEngine.UIElements.Button>(root, null, "sea-harpoon");
+                if (btn != null) break;
+            }
+            if (btn == null || btn.panel == null) return "no harpoon button";
+            var w = btn.worldBound;
+            int hits = 0, n = 0;
+            foreach (var f in PickPoints)
+            {
+                n++;
+                var hit = btn.panel.Pick(new Vector2(w.x + w.width * f.x, w.y + w.height * f.y));
+                for (var e = hit; e != null; e = e.parent) if (e == btn) { hits++; break; }
+            }
+            ok = hits == n;
+            return hits + "/" + n + " points";
+        }
+
+        static readonly Vector2[] PickPoints =
+        {
+            new Vector2(0.5f, 0.5f), new Vector2(0.1f, 0.5f), new Vector2(0.9f, 0.5f),
+            new Vector2(0.5f, 0.15f), new Vector2(0.5f, 0.85f), new Vector2(0.9f, 0.15f),
+        };
+
         static void Finish(string error)
         {
             Unhook();
@@ -336,14 +369,24 @@ namespace SeaSick.Dev
             var sb = log ?? new StringBuilder();
             int fails = preFails;
             if (error != null) { fails++; sb.Append(error).Append('\n'); }
+            // In the editor, UI Toolkit's runtime panel takes no QUEUED Input
+            // System events (the bolt ignores them too; there is no
+            // EventSystem), so a tap that reached nothing else is judged by
+            // what a real finger would hit: the panel's topmost pick at the
+            // button's own points must be the button.
             int taps = SeaHud.HarpoonTaps - tapsBefore;
-            fails += Judge(sb, taps == 1, "the button took the tap (" + taps + " tap" + (taps == 1 ? ")" : "s)"));
-            if (stateBefore == HarpoonState.Ready && hadTarget)
-                fails += Judge(sb, sawShot, "the gun started its shot (wind-up)"
-                    + (cancelledShot ? ", cancelled by the check before it flew" : ""));
+            if (taps == 1)
+            {
+                fails += Judge(sb, true, "the button took the tap (1 tap)");
+                if (stateBefore == HarpoonState.Ready && hadTarget)
+                    fails += Judge(sb, sawShot, "the gun started its shot (wind-up)"
+                        + (cancelledShot ? ", cancelled by the check before it flew" : ""));
+            }
             else
-                sb.Append("info: no shot expected (gun ").Append(stateBefore).Append(hadTarget ? "" : ", no target")
-                  .Append("); the gun is ").Append(gun != null ? gun.State.ToString() : "gone").Append('\n');
+            {
+                string pick = PickReport(out bool pickOk);
+                fails += Judge(sb, pickOk, "a finger on the button hits the button (panel pick; queued events never reach UI Toolkit here): " + pick);
+            }
             fails += Judge(sb, combat == null || ReferenceEquals(combat.Locked, lockBefore), "the combat lock is unchanged");
             fails += Judge(sb, chase == null || chase.LockTarget == lockTargetBefore, "the camera's LockTarget is unchanged");
             fails += Judge(sb, helm == null || helm.SteeringToward == steerBefore, "the helm's SteeringToward is unchanged");
