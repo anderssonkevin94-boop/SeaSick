@@ -16,6 +16,7 @@ Last on the phone and pushed: **f581a046** (2026-10-04).
 
 ## Sailing session: queue (in order)
 
+0. **Kevin's phone bug (harpoon phase 1):** the fire button is unreliable, and taps hit the ship. Fire only from ONE FIXED on-screen button (≥64 pt, above ⚡); the world marker is an indicator only; button taps never pass through to the world. Ships with the lamp build.
 1. Harpoon gun-lamp: code + art on HEAD (b8f6fb12, 3e1aeeda), beam on branch lamp-beam. 4 shots → Kevin's OK → land the beam. The CoasterOutfitting stale-module question is confirmed or fixed with evidence. Stale renders cleaned. **The next phone build waits on this.**
 2. Loose-ends sweep:
    - RescueHud tap marker overlaps the bottom reserve (168×37 px, portrait).
