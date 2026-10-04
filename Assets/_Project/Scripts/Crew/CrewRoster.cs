@@ -78,7 +78,12 @@ namespace SeaSick.Crew
         }
 
         public static bool CountsAboard(CrewAgent c) =>
-            c != null && c.gameObject.activeSelf && c.IsAboard;
+            c != null && CountsAboard(c.gameObject.activeSelf, c.IsAboard);
+
+        /// The rule itself, plain: Ola, switched off in a `Station` state, is
+        /// nobody (`CastawayFixSelfTest`).
+        public static bool CountsAboard(bool switchedOn, bool inAboardState) =>
+            switchedOn && inAboardState;
 
         /// Forget the cached roster and count again.
         ///

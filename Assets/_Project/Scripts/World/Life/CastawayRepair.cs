@@ -144,12 +144,12 @@ namespace SeaSick.World.Life
                         var camp = CampOn(c.island);
                         if (camp == null) break;
                         // A body aboard wearing the name with no life since
-                        // she washed up is an authored body the steamer never
-                        // re-christened, not her: it takes a free name first,
-                        // so the camp's new row is the only one answering.
+                        // she washed up is a scene body the steamer switched
+                        // on before the save was read, not her: it stands
+                        // down (`CrewNames.RetireTakenNames`' rule), so the
+                        // camp's new row is the only one answering.
                         var impostor = world.BodyAboardNamed(c.name);
-                        if (impostor != null)
-                            Crew.CrewNames.Christen(impostor, (int)LifeStory.Fnv32(c.name), Crew.CrewNames.InUse());
+                        if (impostor != null) impostor.gameObject.SetActive(false);
                         if (camp.TakeInCastaway(c.name, new Vector3(c.x, 0f, c.z)))
                         {
                             Lives.RemoveCastaway(c.name);

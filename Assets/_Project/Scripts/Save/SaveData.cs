@@ -142,6 +142,11 @@ namespace SeaSick.Save
         /// grip is even ticked down. False (absent) in an old save is
         /// exactly right: the scripted event still has to happen for them.
         public bool firstOverboardDone;
+
+        /// **2026-10-04 (un-kill Bo).** `World.Life.DeathRepair` has had its
+        /// one pass over this save. False (absent) in an old save: it runs
+        /// once on the next load.
+        public bool deathRepairDone;
     }
 
     [System.Serializable]

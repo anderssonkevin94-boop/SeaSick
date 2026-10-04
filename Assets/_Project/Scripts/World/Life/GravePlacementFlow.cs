@@ -369,6 +369,16 @@ namespace SeaSick.World.Life
             }
         }
 
+        /// **A tombstone for a death `DeathRepair` took back** (2026-10-04):
+        /// pulled down if it was raised this session. Its ground reservation
+        /// is runtime-only and goes with the next load.
+        public static void RemoveStone(string name)
+        {
+            if (string.IsNullOrEmpty(name) || !stones.TryGetValue(name, out var stone)) return;
+            stones.Remove(name);
+            if (stone != null) Object.Destroy(stone);
+        }
+
         // --- the story card (tap-to-reopen) ------------------------------------
 
         /// Called by `IslandInput.RegisterTap` (not blocking) before it

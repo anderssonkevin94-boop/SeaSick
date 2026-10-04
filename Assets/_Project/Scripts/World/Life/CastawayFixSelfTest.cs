@@ -11,7 +11,9 @@ namespace SeaSick.World.Life
     /// Fixtures are his save's own people (seasick-save-a2.json, day 795):
     /// Mara (washed up on Island_6 day 650, lived on aboard to day 708),
     /// Mabel (washed up on Island_6 day 649, nobody since), Dorrit (a
-    /// stranger CastawayField made up). Returns "PASS n/n" or the failures.
+    /// stranger CastawayField made up), Bo (lost at sea day 649, alive on
+    /// deck since), Ola (dead day 503, body switched off), Pip (dead day 19,
+    /// a home hand). Returns "PASS n/n" or the failures.
     public static class CastawayFixSelfTest
     {
         public static string Run()
@@ -107,6 +109,43 @@ namespace SeaSick.World.Life
             int changed3 = ApplyOnce(list3, world);
             Check("a record left beside its own row is dropped, not walked twice",
                   changed3 == 1 && list3.Count == 0 && CountRows(world, "Mabel") == 1);
+
+            // ---- un-kill Bo; Ola stays dead (Kevin, 2026-10-04) -------------
+            var boGrave = new GraveRecord { name = "Bo", diedDay = 649, cause = LifeEvents.LostAtSea };
+            var olaGrave = new GraveRecord { name = "Ola", diedDay = 503, cause = LifeEvents.LostAtSea };
+            var pipGrave = new GraveRecord { name = "Pip", diedDay = 19, cause = LifeEvents.LostAtSea };
+            // His save's own logs: Bo's record re-made by day 708; Ola's runs
+            // to 708 too, but her body is switched off today.
+            var bo = Life("Bo", Ev(LifeEvents.WentAshore, "Island_3", 708), Ev(LifeEvents.WentAboard, "Island_3", 708));
+            var ola = Life("Ola", Ev(LifeEvents.Hungry, "Island_3", 507), Ev(LifeEvents.WentAboard, "Island_3", 708));
+            var pip = Life("Pip", Ev(LifeEvents.WentAshore, "Island_6", 332));
+            var tamDead = new GraveRecord { name = "Tam", diedDay = 700, cause = LifeEvents.LostAtSea };
+            var tam = Life("Tam", Ev(LifeEvents.Hungry, "Island_2", 650));
+
+            Check("Bo: switched on aboard, life goes on after day 649 -> death taken back",
+                  DeathRepair.IsFalseDeath(boGrave, bo, true));
+            Check("Ola: her log runs past 503 but her body is switched off -> stays dead",
+                  !DeathRepair.IsFalseDeath(olaGrave, ola, false));
+            Check("Pip: lives on at a camp, not aboard -> not this rule's business",
+                  !DeathRepair.IsFalseDeath(pipGrave, pip, false));
+            Check("a body aboard with nothing logged since the death -> still dead",
+                  !DeathRepair.IsFalseDeath(tamDead, tam, true));
+            Check("a different person's record never un-kills (identity)",
+                  !DeathRepair.IsFalseDeath(boGrave, ola, true));
+            Check("Ola's switched-off body in a Station state is not counted aboard",
+                  !SeaSick.Crew.CrewRoster.CountsAboard(false, true)
+                  && SeaSick.Crew.CrewRoster.CountsAboard(true, true));
+
+            var graves = new List<GraveRecord> { olaGrave, pipGrave, boGrave };
+            var livesNow = new Dictionary<string, LifeRecord> { { "Bo", bo }, { "Ola", ola }, { "Pip", pip } };
+            var onDeck = new HashSet<string> { "Bo", "Mara", "Tam", "Cass", "Ursa" };
+            LifeRecord LifeOf(string n) => livesNow.TryGetValue(n, out var r) ? r : null;
+            var first = DeathRepair.FalseDeaths(graves, LifeOf, onDeck.Contains);
+            foreach (var g in first) graves.Remove(g);
+            Check("first pass on his save: only Bo comes back",
+                  first.Count == 1 && first[0].name == "Bo" && graves.Count == 2, "took " + first.Count);
+            var second = DeathRepair.FalseDeaths(graves, LifeOf, onDeck.Contains);
+            Check("second pass takes nothing (idempotent)", second.Count == 0, "took " + second.Count);
 
             string head = "PASS " + pass + "/" + total;
             return pass == total ? head : head + "\n" + sb;

@@ -1363,8 +1363,10 @@ Gate for Kevin's "IN THE WATER · No free berth" at his home pier: modular berth
 capacity (`CrewBerths`), the castaway card's priority at a pier
 (`CastawayHud.CardPriority`), identity-based castaway verdicts
 (`CastawayRepair.Decide`/`Plan`) on his save's own Mara/Mabel/Dorrit, and the
-load repair's idempotency. `tools/selftest-outside-editor/run.sh
-SeaSick.World.Life.CastawayFixSelfTest.Run` -> `PASS 23/23`.
+load repair's idempotency, and the one-time death repair (`DeathRepair`: Bo
+un-killed, Ola stays dead and uncounted, Pip at a camp untouched).
+`tools/selftest-outside-editor/run.sh SeaSick.World.Life.CastawayFixSelfTest.Run`
+-> `PASS 31/31`.
 
 ### `StationStockSelfTest.Run()` (`SeaSick.World`, plain C#, edit mode, no scene)
 Gate for the storage-hub rules in `OutpostLedger.Stations.cs`'s doc block,

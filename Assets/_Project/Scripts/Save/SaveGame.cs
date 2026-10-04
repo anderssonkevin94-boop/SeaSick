@@ -211,6 +211,7 @@ namespace SeaSick.Save
             // crew.
             Lives.SyncStrangersTo(d.strangerIslandsRolled, d.strangerNames);
             d.firstOverboardDone = SeaSick.Ship.Overboard.FirstOverboard.Done;
+            d.deathRepairDone = SeaSick.World.Life.DeathRepair.Done;
 
             // --- the ship -------------------------------------------------
             var s = d.ship;
@@ -387,6 +388,7 @@ namespace SeaSick.Save
                 if (d.strangerNames == null) d.strangerNames = new List<string>();
                 Lives.SyncStrangersFrom(d.strangerIslandsRolled, d.strangerNames);
                 SeaSick.Ship.Overboard.FirstOverboard.Done = d.firstOverboardDone;
+                SeaSick.World.Life.DeathRepair.Done = d.deathRepairDone;
                 return d;
             }
             catch (System.Exception e)
@@ -544,12 +546,16 @@ namespace SeaSick.Save
             // camps (5) and the names (5a), so a castaway is judged against
             // every row and every body: a stale copy of somebody living
             // elsewhere goes, and one of his own beside a camp of his walks
-            // up to it (`CastawayRepair`, idempotent). THEN no body aboard
-            // keeps a name a grave or a castaway still holds -- the step the
-            // steamer's scene-load build cannot take, its lives being the
-            // last session's (`SteamerBootstrap.Man`).
+            // up to it (`CastawayRepair`, idempotent). A death whose person
+            // demonstrably lives on aboard is taken back (`DeathRepair`,
+            // idempotent; Kevin's Bo). THEN no switched-on body aboard keeps
+            // a name a grave or a castaway still holds: it stands down -- the
+            // step the steamer's scene-load build cannot take, its lives
+            // being the last session's (`SteamerBootstrap.Man`).
             string castawayFix = SeaSick.World.Life.CastawayRepair.RunOnLoad(motor.transform);
             if (!string.IsNullOrEmpty(castawayFix)) Debug.Log("SaveGame: castaway repair -- " + castawayFix);
+            string deathFix = SeaSick.World.Life.DeathRepair.RunOnLoad(motor.transform);
+            if (!string.IsNullOrEmpty(deathFix)) Debug.Log("SaveGame: death repair -- " + deathFix);
             CrewNames.RetireTakenNames(motor.transform);
 
             var roster = motor.GetComponent<CrewRoster>();

@@ -265,6 +265,12 @@ namespace SeaSick.World.Life
             Died?.Invoke(grave);
         }
 
+        /// **Take back a death that never happened** (2026-10-04, Kevin: "un-kill
+        /// Bo"). Only `DeathRepair` calls this, and only for a grave whose
+        /// person demonstrably lives on. Removes that one grave record; the
+        /// living person's record (re-made by their later events) stays.
+        public static bool Unbury(GraveRecord grave) => grave != null && graveyard.Remove(grave);
+
         // --- save/load -------------------------------------------------------
 
         /// Copy the live registry into a save's lists. Call right before
