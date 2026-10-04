@@ -2113,34 +2113,22 @@ namespace SeaSick.World
         }
 
         /// One spot's recipe: why it cannot start, in the worker's words.
+        ///
+        /// **Names everything it lacks (2026-10-04, Kevin: 'it's set to fine
+        /// boards but I don't have a saw blade').** It used to stop at the
+        /// first gap -- a lock, else the tool, else ONE input ("out of boards
+        /// · pick boards here to make more") -- so a sawmill short of a saw
+        /// blade AND of boards read as short of boards only. Now the line is
+        /// `MissingWords`' whole sentence: locks, tool, every input, most
+        /// blocking first, each with where to get it ("fine boards need a saw
+        /// blade (make one at the forge) and boards (switch to Boards here)").
+        /// Null when the only gap is a gatherable standing in the ground
+        /// (a gatherer fetches it: not a stall).
         string SpotInputCause(StationStock s, int si, Economy.Recipe r)
         {
             if (r == null) return "no order given";
-            string locked = LockOf(s, r);
-            if (locked != null) return locked;
-            if (r.tool != null && HeldOf(r.tool) <= 0f) return $"needs a {Friendly(r.tool)} in the pile";
-            foreach (var line in r.takes)
-            {
-                if (line.n <= 0) continue;
-                if (s.BayCount(line.res) + InFlightTo(HaulPlace.Station, si, line.res) >= line.n) continue;
-                if (StoreCountOf(line.res) > 0) return null;
-                if (Res.IsGatherable(line.res))
-                {
-                    var stock = Stock(line.res);
-                    if (stock != null && stock.standing >= 1f) return null;
-                    return $"waiting for {Friendly(line.res)}: none left here";
-                }
-                var makers = Economy.Recipes.Making(line.res);
-                // Made right here (the sawmill's fine boards eat its own
-                // boards): say what to pick, not "made at the sawmill" to the
-                // sawyer standing in it (Kevin's camp, 2026-10-02).
-                if (makers.Count > 0 && makers[0].station == s.planId)
-                    return $"out of {Friendly(line.res)} · pick {makers[0].label} here to make more";
-                if (makers.Count > 0)
-                    return $"waiting for {Friendly(line.res)} (made at the {BuildPlans.Named(makers[0].station).label})";
-                return $"waiting for {Friendly(line.res)}";
-            }
-            return null;
+            string line = MissingLine(s, r, out bool blocking);
+            return blocking ? line : null;
         }
     }
 }

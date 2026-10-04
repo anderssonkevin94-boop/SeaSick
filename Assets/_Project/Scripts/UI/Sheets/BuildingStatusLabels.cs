@@ -26,8 +26,11 @@ namespace SeaSick.UI.Sheets
             if (!station.HasOrder || station.benchState != BenchState.Empty || worker.Hauling) return null;
             // Use the economy's actual blocker, not an empty bay that is being supplied.
             string reason = ledger.StallReason(worker);
+            // `MissingWords`' "fine boards need a saw blade (...) and boards
+            // (...)" (2026-10-04) joined the old "waiting for X" shapes.
             return reason != null && (reason.StartsWith("waiting for ", System.StringComparison.Ordinal)
-                || reason.StartsWith("needs a ", System.StringComparison.Ordinal)) ? "Needs supplies" : null;
+                || reason.StartsWith("needs a ", System.StringComparison.Ordinal)
+                || SeaSick.World.Economy.MissingWords.IsSupplyLine(reason)) ? "Needs supplies" : null;
         }
     }
 }

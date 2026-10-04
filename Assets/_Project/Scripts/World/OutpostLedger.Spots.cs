@@ -25,13 +25,16 @@ namespace SeaSick.World
     /// Pause reasons, in the order they are checked:
     /// "no cook" / "no smith" / "no worker" (nobody works the station -- its
     /// spots do not advance); "needs the fire at II" / "needs the kitchen at
-    /// level 2" (locked); "store full of X" (the rack is full and nothing on
+    /// level 2" (locked -- now folded into the same whole line); "store full of X" (the rack is full and nothing on
     /// it can go to the store); the fishing hut's own shore/box reasons;
-    /// "waiting for saw blade" (the tool is not in the pile); "waiting for
-    /// onion" (an input is neither in the bay, on its way, in the store nor
-    /// standing to be gathered -- including one another station makes: no
-    /// auto-chaining). A batch already on the bench is never paused by an
-    /// input or the store: it finishes.
+    /// the tool AND the inputs, whole (2026-10-04, Kevin: 'it's set to fine
+    /// boards but I don't have a saw blade'): "fine boards need a saw blade
+    /// (make one at the forge) and boards (switch to Boards here)" --
+    /// `MissingWords`, every gap named, most blocking first, each with where
+    /// to get it; an input is missing when it is not in the bay, on its way,
+    /// in the store or a rack (a gatherable standing in the ground is named
+    /// but does not pause: no auto-chaining of makers). A batch already on
+    /// the bench is never paused by an input or the store: it finishes.
     /// </summary>
     public partial class OutpostLedger
     {
@@ -138,21 +141,6 @@ namespace SeaSick.World
         static string Word(string res) =>
             string.IsNullOrEmpty(res) ? "supplies" : Economy.ResDefs.Label(res).ToLowerInvariant();
 
-        /// The first input of `r` this station cannot get: not in the bay
-        /// or on its way, none in the store, and not standing to be gathered.
-        string MissingInput(StationStock st, int si, Economy.Recipe r)
-        {
-            foreach (var line in r.takes)
-            {
-                if (line.n <= 0) continue;
-                if (st.BayCount(line.res) + InFlightTo(HaulPlace.Station, si, line.res) >= line.n) continue;
-                if (StoreCountOf(line.res) > 0) continue;
-                if (Res.IsGatherable(line.res) && line.res != Res.Game && FieldFree(line.res) > 0) continue;
-                return line.res;
-            }
-            return null;
-        }
-
         /// Why a selected spot is not running, or null (see the class doc).
         string SpotPause(StationStock st, int si, SpotState sp, OutpostHand worker)
         {
@@ -161,15 +149,62 @@ namespace SeaSick.World
             if (r == null) return "recipe gone";
             if (worker == null) return "no " + StationSpots.WorkerNoun(st.planId);
             if (sp.BenchBusy) return null;
-            string locked = LockOf(st, r);
-            if (locked != null) return locked;
+            // A locked recipe says EVERYTHING it lacks, the lock first
+            // (2026-10-04, Kevin: 'it's set to fine boards but I don't have
+            // a saw blade'): `MissingWords`, never the lock alone.
+            if (LockOf(st, r) != null) return MissingLine(st, r, out _) ?? LockOf(st, r);
             string jam = RackJam(st);
             if (jam != null) return $"store full of {Word(jam)}";
             if (sp.benchState == BenchState.Finished) return null;   // unloading this step
             if (FishesAtShore(st)) return CatchStallCause(st);
-            if (r.tool != null && HeldOf(r.tool) <= 0f) return $"waiting for {Word(r.tool)}";
-            string miss = MissingInput(st, si, r);
-            return miss != null ? $"waiting for {Word(miss)}" : null;
+            // The tool AND every input, most blocking first, each with where
+            // to get it ("fine boards need a saw blade (make one at the
+            // forge) and boards (switch to Boards here)"). Null while only a
+            // gatherable standing in the ground is short: a gatherer fetches it.
+            string line = MissingLine(st, r, out bool blocking);
+            return blocking ? line : null;
+        }
+
+        /// **What `r` lacks at `st`, whole (2026-10-04)**: locks, the tool and
+        /// every input, with where to get each (`Economy.MissingWords`), or
+        /// null when nothing is missing. `blocking` is false when only
+        /// gatherables standing in the ground are short (not a stall).
+        /// The one source of every station's starved/locked/paused line --
+        /// the worker's reason, the alert chip, the Problems list, the
+        /// recipe card.
+        public string MissingLine(StationStock st, Economy.Recipe r, out bool blocking)
+        {
+            blocking = false;
+            if (st == null || r == null) return null;
+            return Economy.MissingWords.Line(new MissingView(this, st), st.planId, r, out blocking);
+        }
+
+        /// `MissingWords`' window onto this camp for one station.
+        readonly struct MissingView : Economy.MissingWords.IView
+        {
+            readonly OutpostLedger l;
+            readonly StationStock st;
+            readonly int si;
+            public MissingView(OutpostLedger ledger, StationStock station)
+            {
+                l = ledger; st = station;
+                si = ledger.stations != null ? ledger.stations.IndexOf(station) : -1;
+            }
+            public int FireLevel => l.CampfireLevel;
+            public int StationLevel => l.LevelOf(st.planId, st.ordinal);
+            // `HeldOf`: a saw blade at 0.95 is still a saw blade.
+            public bool HasTool(string res) => l.HeldOf(res) > 0f;
+            // The bay and what is already walking to it, then anything a
+            // runner or hauler can take there from the store or a rack.
+            public int Have(string res) =>
+                st.BayCount(res) + l.InFlightTo(HaulPlace.Station, si, res) + l.StoreCountOf(res) + l.RackCountOf(res);
+            public bool GatherLeft(string res)
+            {
+                if (res == Res.Game) return false;
+                var stock = l.Stock(res);
+                return stock != null && stock.standing >= 1f;
+            }
+            public bool Built(string planId) => l.CountBuilt(planId) > 0;
         }
 
         /// The Work hand dealt to this station, or null.

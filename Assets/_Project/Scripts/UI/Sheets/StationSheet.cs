@@ -900,7 +900,14 @@ namespace SeaSick.UI.Sheets
                 }
                 else if (!string.IsNullOrEmpty(sp.pauseReason))
                 {
-                    text = StationPage.Cap(sp.pauseReason);
+                    // The tile is half a screen wide: the whole "fine boards
+                    // need a saw blade (...) and boards (...)" sentence
+                    // (`MissingWords`, 2026-10-04) is the detail line's, which
+                    // wraps in full below the grid; the tile says that it is
+                    // short and of what kind.
+                    text = MissingWords.IsSupplyLine(sp.pauseReason)
+                        ? $"{StationPage.Cap(r != null ? r.label : sp.recipeId)} · short of supplies"
+                        : StationPage.Cap(sp.pauseReason);
                     kind = hand == null ? 2 : 1;
                     p = sp.progress01;
                 }
@@ -1149,7 +1156,17 @@ namespace SeaSick.UI.Sheets
             string text; int tone;
             var fix = default(ShortFix.Fix);
             if (!string.IsNullOrEmpty(refusal)) { text = refusal; tone = 2; }
-            else if (lockWhy != null) { text = StationPage.Cap(lockWhy) + "."; tone = 2; }
+            else if (lockWhy != null)
+            {
+                // **Everything it lacks, not the first thing (2026-10-04, Kevin:
+                // 'it's set to fine boards but I don't have a saw blade')**:
+                // a locked card names the lock, the tool AND the inputs, each
+                // with where to get it (`MissingWords`); the short lock is
+                // the fallback and the tile's own line.
+                string whole = l.MissingLine(st, r, out _);
+                text = StationPage.Cap(whole ?? lockWhy) + ".";
+                tone = 2;
+            }
             else if (mine && !string.IsNullOrEmpty(sp.pauseReason))
             {
                 text = StationPage.Cap(sp.pauseReason);
@@ -1159,9 +1176,14 @@ namespace SeaSick.UI.Sheets
             }
             else if (shortRes != null)
             {
+                // Every input and the tool, with where to get each
+                // (`MissingWords`, 2026-10-04); the old one-input sentence
+                // only when the ledger sees the stock somewhere (a rack).
+                string whole = l.MissingLine(st, r, out _);
                 int have = Have(l, st, shortRes);
                 string lab = ResDefs.Label(shortRes);
-                text = have <= 0
+                if (whole != null) text = StationPage.Cap(whole) + ". It will wait.";
+                else text = have <= 0
                     ? $"No {Plural(lab)} yet. It will wait for {(Mass(lab) ? "it" : "them")}."
                     : $"Short of {Plural(lab)} ({have}/{Need(r, shortRes)}). It will wait.";
                 tone = 1;

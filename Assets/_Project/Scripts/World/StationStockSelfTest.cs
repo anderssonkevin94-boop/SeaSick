@@ -751,7 +751,7 @@ namespace SeaSick.World
         /// (spear) run AT ONCE under one smith, each at its full rate: their
         /// benches advance exactly as far as each alone would. (2) A grill
         /// with grilled fish selected runs its last fish, auto-pauses
-        /// "waiting for fish", and resumes by itself when fish reaches the
+        /// ("grilled fish needs fish (...)", `MissingWords`), and resumes by itself when fish reaches the
         /// store. (3) A sawmill whose rack and store are full of boards
         /// pauses "store full of boards" without loading its timber, and
         /// resumes when the store has room.
@@ -830,7 +830,7 @@ namespace SeaSick.World
                 }
                 int fishUsed = 3 - l.StoreCountOf(Res.Fish) - st.BayCount(Res.Fish) - l.CarriedOf(Res.Fish);
                 Gate(sb, ref fails, "spot-pauses-on-input-and-resumes",
-                    picked && wrongSpot && fishLeft == 0 && stillSelected && paused.StartsWith("waiting for")
+                    picked && wrongSpot && fishLeft == 0 && stillSelected && Economy.MissingWords.IsSupplyLine(paused)
                     && resumed && fishUsed > 0,
                     $"select {picked} ({refusal ?? "ok"}), cauldron refused '{wrongWhy}', bay fish {fishLeft} then "
                     + $"'{paused}', fish in the store -> resumed {resumed}, {fishUsed} more used");
