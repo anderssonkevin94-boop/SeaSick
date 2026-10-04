@@ -1401,11 +1401,19 @@ namespace SeaSick.Ship
             if (isle == null) return;
             bool beach = CanLandHere(isle);
             bool res = isle.HasResources;
-            if (OfferStale(isle, 16 | (slow ? 4 : 0) | desk | (beach ? 32 : 0) | (res ? 64 : 0)))
+            // **Sand past the walk (2026-10-04):** the cliff card says where
+            // it is, "Sand 60 m astern". Metres in 10 m buckets and four
+            // sides, so the key (and the string) changes only when the words do.
+            int sandM = 0, sandSide = 0;
+            Vector3 sandAt = default;
+            bool sand = !beach && isle.SandBeyondReach(transform.position, out sandAt);
+            if (sand) Island.SandPointer(transform.position, transform.forward, sandAt, out sandM, out sandSide);
+            int sandKey = sand ? ((sandM / 10) << 2 | sandSide) + 1 : 0;
+            if (OfferStale(isle, 16 | (slow ? 4 : 0) | desk | (beach ? 32 : 0) | (res ? 64 : 0) | sandKey << 8))
             {
                 offerEyebrow = Upper(isle);
                 offerTitle = beach ? TitleLand : TitleCliff;
-                offerDetail = !beach ? "Find a beach to land"
+                offerDetail = !beach ? (sand ? Island.SandPointerText(sandM, sandSide) : "Find a beach to land")
                     : !slow ? SlowText
                     : (res && !string.IsNullOrEmpty(isle.ResourceName) ? isle.ResourceName : "Rest ashore")
                       + KeyHint("  ·  space");

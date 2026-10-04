@@ -85,7 +85,7 @@ namespace SeaSick.World
         /// Max rise per metre over the 12 m inland of the waterline for a
         /// landing to count as a beach (terrain-backed islands).
         public static float BeachMaxSlope = 0.5f;
-        int beachCacheFrame = -1; Vector3 beachCachePos; bool beachCache;
+        int beachCacheFrame = -1; Vector3 beachCachePos; bool beachCache, beachCacheBeyond; Vector3 beachCacheAt;
 
         /// True only when the profile is fully populated. The arrays are what
         /// every query below indexes into, so a half-built profile must fall
@@ -137,13 +137,46 @@ namespace SeaSick.World
                     && (worldPos - beachCachePos).sqrMagnitude < 1f) return beachCache;
                 Vector3 d = transform.position - worldPos; d.y = 0f;
                 float len = d.magnitude;
+                bool beyond = false; Vector3 at = worldPos;
                 bool result = len < 1f ? profile.hasBeach[0]
-                    : FindBeach(TerrainHeight, worldPos, len + 50f, LandingSlope, out _);
+                    : FindBeach(TerrainHeight, worldPos, len + 50f, LandingSlope, out at, out beyond);
                 beachCacheFrame = Time.frameCount; beachCachePos = worldPos; beachCache = result;
+                beachCacheBeyond = beyond; beachCacheAt = at;
                 return result;
             }
             return profile.hasBeach[SectorOf(BearingTo(worldPos, transform.position))];
         }
+
+        /// **Sand on this coast, but past the walk** (2026-10-04): when
+        /// `HasBeachToward(worldPos)` says cliff, is there a beach within
+        /// `BeachSeen` that is further than the nearest shore + `BeachWalk`?
+        /// `at` = its waterline, for the cliff card's pointer.
+        public bool SandBeyondReach(Vector3 worldPos, out Vector3 at)
+        {
+            at = worldPos;
+            if (TerrainHeight == null || HasBeachToward(worldPos) || !beachCacheBeyond) return false;
+            at = beachCacheAt;
+            return true;
+        }
+
+        /// The pointer's numbers: flat distance to `at` rounded to 10 m (at
+        /// least 10) and its side relative to her heading `fwd` -- 0 ahead,
+        /// 1 starboard, 2 astern, 3 port (45 deg either side of each). Pure,
+        /// no garbage: the card's cache key is built from these every frame.
+        public static void SandPointer(Vector3 ship, Vector3 fwd, Vector3 at, out int metres, out int side)
+        {
+            Vector3 to = at - ship; to.y = 0f; fwd.y = 0f;
+            if (fwd.sqrMagnitude < 1e-6f) fwd = Vector3.forward;
+            fwd.Normalize();
+            metres = Mathf.Max(10, Mathf.RoundToInt(to.magnitude / 10f) * 10);
+            float ahead = Vector3.Dot(to, fwd), right = to.x * fwd.z - to.z * fwd.x;
+            float ang = Mathf.Atan2(right, ahead) * Mathf.Rad2Deg;
+            side = Mathf.Abs(ang) <= 45f ? 0 : Mathf.Abs(ang) >= 135f ? 2 : ang > 0f ? 1 : 3;
+        }
+
+        static readonly string[] SideWords = { "ahead", "starboard", "astern", "port" };
+        /// "Sand 60 m astern": at most "Sand 120 m starboard", 20 characters.
+        public static string SandPointerText(int metres, int side) => $"Sand {metres} m {SideWords[side & 3]}";
 
         /// **The landing check's slope: can a man walk up from the
         /// waterline** (`Walkability`'s man grade, tan 33 deg = 0.65), never
@@ -205,10 +238,13 @@ namespace SeaSick.World
 
         /// Rays round the whole compass for the landing check (10 deg apart).
         const int BeachRays = 36;
-        /// A beach this far off (m, to its waterline) counts as "nearby"
-        /// whatever the nearest shore is; the old 25 m walk from the nearest
-        /// shore point still applies beyond it.
-        public const float BeachReach = 80f, BeachWalk = 25f;
+        /// A beach counts only within this walk (m) of the nearest shore --
+        /// the old check's reach, so the plank to it is never much longer
+        /// than before (2026-10-04: an 80 m reach meant an 80 m plank).
+        public const float BeachWalk = 25f;
+        /// Further than that, sand out to here (m) is still found, so the
+        /// cliff card can point at it ("Sand 60 m astern").
+        public const float BeachSeen = 120f;
         /// Longest ray (m): the ship is only offered a landing over the
         /// shelf, so a shore further than this is not the one she is off.
         const float BeachRayCap = 160f;
@@ -224,7 +260,8 @@ namespace SeaSick.World
         /// the sand at its head by more than 25 m. Now: 36 rays round the
         /// whole compass from the ship, the first land on each, and the
         /// nearest one that is a beach wins, if its waterline is within
-        /// `BeachReach` (or within `BeachWalk` of the nearest shore).
+        /// `BeachWalk` of the nearest shore. A beach further than that comes
+        /// back as `beyond` (and in `beach`), for the cliff card's pointer.
         ///
         /// A beach is ground that rises less than `maxSlope` over the 12 m
         /// inland -- measured UPHILL (the terrain's own gradient), not
@@ -233,15 +270,19 @@ namespace SeaSick.World
         /// `beach` = the chosen waterline point (y = its height).
         public static bool FindBeach(System.Func<float, float, float> height, Vector3 from,
             float maxRay, float maxSlope, out Vector3 beach)
+            => FindBeach(height, from, maxRay, maxSlope, out beach, out _);
+
+        public static bool FindBeach(System.Func<float, float, float> height, Vector3 from,
+            float maxRay, float maxSlope, out Vector3 beach, out bool beyond)
         {
-            beach = from;
+            beach = from; beyond = false;
             maxRay = Mathf.Min(maxRay, BeachRayCap);
             float nearest = float.MaxValue, bestT = float.MaxValue;
             for (int k = 0; k < BeachRays; k++)
             {
                 float a = k * (Mathf.PI * 2f / BeachRays);
                 Vector3 dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
-                float cap = Mathf.Min(maxRay, Mathf.Max(BeachReach, nearest + BeachWalk));
+                float cap = Mathf.Min(maxRay, BeachSeen);
                 for (float t = 0f; t < cap; t += 2f)
                 {
                     Vector3 p = from + dir * t;
@@ -256,7 +297,10 @@ namespace SeaSick.World
                     break;
                 }
             }
-            return bestT < float.MaxValue && bestT <= Mathf.Max(BeachReach, nearest + BeachWalk);
+            if (bestT == float.MaxValue) return false;
+            if (bestT <= nearest + BeachWalk) return true;
+            beyond = true;
+            return false;
         }
 
         /// Rise over the 12 m uphill of the waterline point `p`: the
@@ -297,21 +341,43 @@ namespace SeaSick.World
             float Cliff(float z) => z < 0f ? Deep : Mathf.Min(20f, z * 10f);
             float Sand(float z) => z < 0f ? Deep : z * 0.1f;
             Check("straight cliff coast: sheer cliff", false, (x, z) => Cliff(z), new Vector3(0f, 0f, -15f));
-            Check("cliff here, sand 40 m along: beach", true,
-                  (x, z) => x > 40f ? Sand(z) : Cliff(z), new Vector3(0f, 0f, -15f));
+            Check("cliff here, sand 25 m along (within the walk): beach", true,
+                  (x, z) => x > 25f ? Sand(z) : Cliff(z), new Vector3(0f, 0f, -15f));
             Check("cliff here, sand 200 m along: sheer cliff", false,
                   (x, z) => x > 200f ? Sand(z) : Cliff(z), new Vector3(0f, 0f, -15f));
-            // A bay 40 m wide: cliff walls at |x| >= 20, sand at its head (z = 60).
-            Check("inside a bay, sand at its head 60 m off: beach", true,
-                  (x, z) => Mathf.Abs(x) >= 20f ? Mathf.Min(20f, (Mathf.Abs(x) - 20f) * 10f + 0.5f) : Sand(z - 60f),
-                  Vector3.zero);
-            // Off a headland: a cliff peninsula (|x| < 30, z < 100) runs out
-            // from the island; the ship lies beside it, and the sand is a
-            // shore 50 m off her bow, ~140 deg off the line to the centre.
-            Check("beside a headland, sand 50 m off the other way: beach", true,
-                  (x, z) => z > 110f && x > 20f ? Sand(z - 110f)
-                          : Mathf.Abs(x) < 30f && z < 100f ? 20f : Deep,
-                  new Vector3(45f, 0f, 60f));
+            // A bay 40 m wide: cliff walls at |x| >= 20, sand at its head
+            // (z = 60): past the walls' 20 m + 25 m walk, so refused, and the
+            // card points at it -- she heads -Z, so it lies astern.
+            {
+                total++;
+                System.Func<float, float, float> bay = (x, z) =>
+                    Mathf.Abs(x) >= 20f ? Mathf.Min(20f, (Mathf.Abs(x) - 20f) * 10f + 0.5f) : Sand(z - 60f);
+                bool got = FindBeach(bay, Vector3.zero, 1000f, 0.5f, out Vector3 far, out bool beyond);
+                SandPointer(Vector3.zero, Vector3.back, far, out int m, out int sd);
+                string txt = SandPointerText(m, sd);
+                if (!got && beyond && txt == "Sand 60 m astern") pass++;
+                else sb.Append($"FAIL bay sand 60 m off: want refused + 'Sand 60 m astern', got {got} beyond {beyond} '{txt}'\n");
+            }
+            // Off a headland: a cliff peninsula (|x| < 30, z < 100); she lies
+            // beside it 15 m off, sand 50 m off her bow (heading +Z): refused
+            // (past 15 + 25 m), pointed at ahead.
+            {
+                total++;
+                System.Func<float, float, float> hd = (x, z) => z > 110f && x > 20f ? Sand(z - 110f)
+                        : Mathf.Abs(x) < 30f && z < 100f ? 20f : Deep;
+                Vector3 from = new Vector3(45f, 0f, 60f);
+                bool got = FindBeach(hd, from, 1000f, 0.5f, out Vector3 far, out bool beyond);
+                SandPointer(from, Vector3.forward, far, out int m, out int sd);
+                if (!got && beyond && sd == 0 && m == 50) pass++;
+                else sb.Append($"FAIL headland sand 50 m ahead: got {got} beyond {beyond} '{SandPointerText(m, sd)}'\n");
+            }
+            // Pointer sides: starboard is +X when she heads +Z.
+            {
+                total++;
+                SandPointer(Vector3.zero, Vector3.forward, new Vector3(34f, 0f, 3f), out int m, out int sd);
+                if (SandPointerText(m, sd) == "Sand 30 m starboard") pass++;
+                else sb.Append($"FAIL pointer starboard: '{SandPointerText(m, sd)}'\n");
+            }
             // The same headland with no sand anywhere: a real cliff.
             Check("beside a headland, cliffs only: sheer cliff", false,
                   (x, z) => Mathf.Abs(x) < 30f && z < 100f ? 20f : Deep,
@@ -332,17 +398,16 @@ namespace SeaSick.World
                                 1000f, LandingSlope, out _);
                 if (!got) pass++; else sb.Append("FAIL 0.8 slope at the landing slope: want false got true\n");
             }
-            // The landing step is the found sand, not the cliff on the line
-            // to the centre: the headland case again, step taken from her.
+            // The landing step is the found sand, not the cliff in front of
+            // her: cliff coast here, sand from x = 25 along it.
             {
-                System.Func<float, float, float> hl = (x, z) => z > 110f && x > 20f ? Sand(z - 110f)
-                        : Mathf.Abs(x) < 30f && z < 100f ? 20f : Deep;
-                Vector3 from = new Vector3(45f, 0f, 60f);
+                System.Func<float, float, float> hl = (x, z) => x > 25f ? Sand(z) : Cliff(z);
+                Vector3 from = new Vector3(0f, 0f, -15f);
                 total++;
                 if (FindBeach(hl, from, 1000f, 0.5f, out Vector3 b))
                 {
                     Vector3 st = LandingStep(hl, from, b);
-                    bool onSand = st.x > 20f && st.z > 110f && st.y >= 0f && st.y < 1f
+                    bool onSand = st.x > 25f && st.z >= 0f && st.y >= 0f && st.y < 1f
                                   && (st - b).magnitude <= LandingInland + 0.5f;
                     if (onSand) pass++;
                     else sb.Append($"FAIL landing step off the sand: ({st.x:F1},{st.y:F1},{st.z:F1})\n");
