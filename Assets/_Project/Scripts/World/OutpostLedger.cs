@@ -1277,6 +1277,23 @@ namespace SeaSick.World
         /// itself checks).
         public bool Holds(string res) => HeldOf(res) > 0f;
 
+        /// The camp total (`CountOf`) FOR DISPLAY: a worn tool held only as
+        /// part of a unit counts as 1, like `ShownStoreCount`.
+        public int ShownCount(string res)
+        {
+            int n = CountOf(res);
+            return n <= 0 && Wears(res) && Holds(res) ? 1 : n;
+        }
+
+        /// "have/need" for an ingredient line, with a worn tool's life
+        /// after it: "1/1 (90% left)". Never a floored 0/1 for a blade the
+        /// work itself would use.
+        public string IngredientCountText(string res, int need)
+        {
+            string life = LifeLeft(res);
+            return $"{ShownCount(res)}/{need}" + (life != null ? $" ({life})" : "");
+        }
+
         static int LifePercent(float f) => Mathf.Clamp(Mathf.RoundToInt(f * 100f), 1, 100);
 
         /// Put whole units in (everything, since infinite stacking; nothing

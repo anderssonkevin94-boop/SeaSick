@@ -141,6 +141,11 @@ namespace SeaSick.World
                     && l.LifeLeft(Res.SawBlade) == "90% left" && l.Holds(Res.SawBlade)
                     && !why.Contains("saw blade") && why.Contains("boards (switch to Boards here)"),
                     $"shown {l.ShownStoreCount(Res.SawBlade)} '{l.StoreCountText(Res.SawBlade)}' '{l.LifeLeft(Res.SawBlade)}'; stall '{why}'");
+                // IngredientLine (cost/ingredient rows) reads the same helpers.
+                Gate(sb, ref fails, "worn-blade-ingredient-line-not-floored",
+                    l.ShownCount(Res.SawBlade) == 1 && l.IngredientCountText(Res.SawBlade, 1) == "1/1 (90% left)"
+                    && l.IngredientCountText(Res.Boards, 2) == "0/2",
+                    $"'{l.IngredientCountText(Res.SawBlade, 1)}' / '{l.IngredientCountText(Res.Boards, 2)}'");
             }
 
             // (10) a forge with BOTH spots starved: worst line + "+1 more", both listed.

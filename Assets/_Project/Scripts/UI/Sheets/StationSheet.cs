@@ -1633,8 +1633,12 @@ namespace SeaSick.UI.Sheets
         /// red when it does not. Shared with `FireSheet`'s fire level.
         internal static VisualElement IngredientLine(OutpostLedger l, string res, int need)
         {
-            int have = l != null ? l.CountOf(res) : 0;
-            var lab = SheetKit.Text($"{ResDefs.Label(res)} {have}/{need}", false, false, 12f);
+            // A worn tool reads as one with its life ("saw blade 1/1 (90% left)"),
+            // never a floored 0; the count and the life come from the ledger's
+            // display helpers (`ShownCount`, `LifeLeft`).
+            int have = l != null ? l.ShownCount(res) : 0;
+            string counts = l != null ? l.IngredientCountText(res, need) : $"0/{need}";
+            var lab = SheetKit.Text($"{ResDefs.Label(res)} {counts}", false, false, 12f);
             lab.style.color = have >= need ? SheetTheme.Moss : SheetTheme.Ember;
             return lab;
         }
