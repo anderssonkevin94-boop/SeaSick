@@ -47,6 +47,22 @@ namespace SeaSick.World
         /// stands on, and there is none until the player names one.
         public bool IsHome => Home == this;
 
+        /// **The name a player reads** ("Island 6", never "Island_6 (1)"):
+        /// underscores to spaces, any clone suffix dropped. Every UI line that
+        /// names an island uses this, not `gameObject.name` (2026-10-04).
+        public string DisplayName
+        {
+            get
+            {
+                string n = name;
+                if (string.IsNullOrEmpty(n)) return "";
+                n = n.Replace('_', ' ');
+                int paren = n.IndexOf(" (");
+                if (paren > 0) n = n.Substring(0, paren);
+                return n.Trim();
+            }
+        }
+
         /// The island the home berth is on, or null before there is one.
         /// Set only through `Dock.Home`.
         public static Island Home { get; private set; }

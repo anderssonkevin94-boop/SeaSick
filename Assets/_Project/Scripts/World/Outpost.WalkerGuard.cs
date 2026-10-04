@@ -55,7 +55,7 @@ namespace SeaSick.World
                 ledger.walkerOk = p => WalkerSpotOk(p, true);
             // The name life stories use for this camp (death/rescue phase 1).
             if (ledger != null && string.IsNullOrEmpty(ledger.campName) && Island != null)
-                ledger.campName = Island.IsHome ? "the home island" : Island.gameObject.name;
+                ledger.campName = Island.IsHome ? "the home island" : Island.DisplayName;
         }
 
         /// Where a body with a bad booked spot is put: the stores, else the

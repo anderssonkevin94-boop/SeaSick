@@ -1628,20 +1628,6 @@ namespace SeaSick.UI.Sheets
             }
             return null;
         }
-
-        /// "boards 0/1" -- one ingredient, green when the pile covers it and
-        /// red when it does not. Shared with `FireSheet`'s fire level.
-        internal static VisualElement IngredientLine(OutpostLedger l, string res, int need)
-        {
-            // A worn tool reads as one with its life ("saw blade 1/1 (90% left)"),
-            // never a floored 0; the count and the life come from the ledger's
-            // display helpers (`ShownCount`, `LifeLeft`).
-            int have = l != null ? l.ShownCount(res) : 0;
-            string counts = l != null ? l.IngredientCountText(res, need) : $"0/{need}";
-            var lab = SheetKit.Text($"{ResDefs.Label(res)} {counts}", false, false, 12f);
-            lab.style.color = have >= need ? SheetTheme.Moss : SheetTheme.Ember;
-            return lab;
-        }
     }
 
 
@@ -1783,7 +1769,7 @@ namespace SeaSick.UI.Sheets
         public static string IslandName(Outpost o)
         {
             if (o == null || o.Island == null) return "";
-            return o.Island.IsHome ? "home island" : o.Island.gameObject.name;
+            return o.Island.IsHome ? "home island" : o.Island.DisplayName;
         }
 
         // --- the header ----------------------------------------------------

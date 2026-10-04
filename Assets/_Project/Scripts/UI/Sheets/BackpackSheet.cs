@@ -585,7 +585,7 @@ namespace SeaSick.UI.Sheets
             // only has to follow the world.
             Plan();
 
-            if (sub != null) sub.text = camp.Island != null ? camp.Island.name : "the camp";
+            if (sub != null) sub.text = camp.Island != null ? (camp.Island.IsHome ? "Home island" : camp.Island.DisplayName) : "the camp";
             awayLine.style.display = here ? DisplayStyle.None : DisplayStyle.Flex;
 
             long key = l.TransferKey();

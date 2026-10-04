@@ -83,7 +83,7 @@ namespace SeaSick.UI.Menus
             string where = "At sea";
             var anchor = UnityEngine.Object.FindFirstObjectByType<SeaSick.Ship.AnchorController>();
             if (anchor != null && anchor.CurrentIsland != null && !string.IsNullOrEmpty(anchor.CurrentIsland.name))
-                where = anchor.CurrentIsland.name;
+                where = anchor.CurrentIsland.IsHome ? "Home island" : anchor.CurrentIsland.DisplayName;
             return where + " — " + DateTime.Now.ToString("MMM d, HH:mm");
         }
     }
