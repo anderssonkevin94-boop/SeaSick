@@ -291,6 +291,9 @@ namespace SeaSick.Save
             SeaSick.Combat.RaidAlarm.ReturnAllHeldSpearsForSave();
             foreach (var kv in voyage.HeldStores)
                 if (kv.Value > 0) d.hold.Add(new StoreEntry { resource = kv.Key, count = kv.Value });
+            // `banked` is RETIRED (2026-10-04): only an old save's bank not
+            // yet repaired into a home camp (none to take it) is carried
+            // here, so it is never lost. Empty in every game since.
             foreach (var kv in voyage.BankedStores)
                 if (kv.Value > 0) d.banked.Add(new StoreEntry { resource = kv.Key, count = kv.Value });
 
@@ -485,8 +488,8 @@ namespace SeaSick.Save
                 shipyard.ApplyDryDockFromSave(data.ship.dryDock);
             }
 
-            // 3. The hold and the stores, after the yard told the voyage
-            // how big the hold is.
+            // 3. The hold, after the yard told the voyage how big the hold
+            // is -- and an old save's retired home bank, held until 5c2.
             voyage.RestoreStores(Pairs(data.hold), Pairs(data.banked));
 
             // 4. Where she is. Let go of the pier first, then put her there.
@@ -573,6 +576,16 @@ namespace SeaSick.Save
             // home berth before 5b set it) stands again beside the berth
             // now that it is the right one. See Outpost.DryDockRestore.cs.
             Outpost.ResiteOrphanDryDocks();
+
+            // 5c2. **The one-time home-bank repair** (2026-10-04): an old
+            // save's `banked` -- the hold home docking used to bank into a
+            // number the home camp never read (Kevin's "vanished" ore) --
+            // goes into the home camp's store now. HERE because the home
+            // camp's ledger was adopted in 5 and `Outpost.Home` follows
+            // `Dock.Home`, set in 5b; before time away (5d) so the camp has
+            // its goods while it plays and 5d's own save writes the repaired
+            // books. Idempotent; with no home camp the bank waits.
+            voyage.RepairLegacyBank();
 
             // 5d. **Time away** (2026-09-27): the real time since this save
             // was written, capped at 12 h, played through every camp's own
