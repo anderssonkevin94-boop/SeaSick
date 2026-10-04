@@ -21,7 +21,12 @@ namespace SeaSick.World
     ///    (maker not built, worked-out ground) before one that is just short;
     ///  - nothing missing -> null; only a gatherable standing -> named but
     ///    not blocking;
-    ///  - the real ledger's reason for a sawyer on fine boards names both.
+    ///  - the real ledger's reason for a sawyer on fine boards names both;
+    ///  - (2026-10-05, the store front runner loop) the walled-off words are
+    ///    walled-off lines and never supply lines; a sawmill the store cannot
+    ///    reach is offered no haul, its sawyer's stall says "walled off from
+    ///    the store", and a body's mark lifts only on a new wall/building
+    ///    revision.
     public static class MissingWordsSelfTest
     {
         sealed class Camp : MissingWords.IView
@@ -168,6 +173,56 @@ namespace SeaSick.World
                 Gate(sb, ref fails, "two-starved-spots-both-listed",
                     all.Count == 2 && why.EndsWith(" · +1 more") && all[0].Contains("iron needs") && all[1].Contains("spear needs"),
                     $"reason '{why}'; lines {all.Count}: '{(all.Count > 0 ? all[0] : "")}' / '{(all.Count > 1 ? all[1] : "")}'");
+            }
+
+            // (11) the cut-off words (2026-10-05): walled-off lines, not supply lines.
+            Gate(sb, ref fails, "cut-off-words-are-walled-not-supply",
+                MissingWords.IsWalledOff(MissingWords.CutOffByWall)
+                && MissingWords.IsWalledOff(MissingWords.WalledOffFromStore)
+                && MissingWords.IsWalledOff("walled off — no way round, needs a gate")
+                && !MissingWords.IsWalledOff(MissingWords.NoWayFromStore)
+                && !MissingWords.IsSupplyLine(MissingWords.CutOffByWall)
+                && !MissingWords.IsSupplyLine("walled off — no way round, needs a gate")
+                && MissingWords.IsStationCutOff(MissingWords.WalledOffFromStore)
+                && MissingWords.IsStationCutOff(MissingWords.NoWayFromStore)
+                && MissingWords.IsSupplyLine("fine boards need more boards (switch to Boards here)"),
+                $"'{MissingWords.CutOffByWall}' / '{MissingWords.WalledOffFromStore}' / '{MissingWords.NoWayFromStore}'");
+
+            // (12) the real ledger: a sawmill short of logs with logs in the
+            // store -- a haul until the store's check says it is walled off;
+            // then none, and the sawyer says why. A body's mark stays under
+            // the same revision and lifts on a new one.
+            {
+                var l = new OutpostLedger { ceilingPer = 1000, stationsMigrated = true, campfireLevel = 2 };
+                l.SetCentre(Vector3.zero);
+                l.raised.Add(new BuiltBuilding { planId = saw, x = 15f });
+                l.built.Add(saw);
+                var hand = new OutpostHand { name = "Yara", order = OutpostOrder.Work, target = saw,
+                    wHas = true, wx = 15f, wz = 0f };
+                l.hands.Add(hand);
+                l.Store(Res.Food, true).whole = 1000;
+                l.Store(Res.Timber, true).whole = 50;
+                l.lastTicked = 0.0;
+                l.EnsureStations();
+                var st = l.StationOf(saw);
+                l.SelectRecipe(st, 0, "boards", out _);
+                int si = l.stations.IndexOf(st);
+                bool before = l.HasHaulChore() && l.StationReachable(si);
+                l.SetStationReach(si, false, true, 1);
+                bool none = !l.HasHaulChore() && !l.StationReachable(si);
+                string why = l.StallReason(hand) ?? "";
+                Gate(sb, ref fails, "walled-off-station-gets-no-haul-and-says-why",
+                    before && none && why == MissingWords.WalledOffFromStore
+                    && l.StationCutOffWords(st) == MissingWords.WalledOffFromStore,
+                    $"haul before {before}, none after {none}; stall '{why}'");
+                l.SetStationReach(si, true, false, 1);
+                st.cutOffBody = true;
+                l.SetStationReach(si, true, false, 1);
+                bool kept = !l.StationReachable(si);
+                l.SetStationReach(si, true, false, 2);
+                bool lifted = l.StationReachable(si) && l.HasHaulChore() && l.StallReason(hand) != MissingWords.WalledOffFromStore;
+                Gate(sb, ref fails, "body-mark-lifts-on-new-revision-only",
+                    kept && lifted, $"kept under rev 1 {kept}; lifted on rev 2 {lifted}");
             }
 
             sb.AppendLine(fails == 0 ? "ALL PASS" : $"{fails} FAILED");

@@ -83,6 +83,30 @@ namespace SeaSick.UI.Sheets
             OutpostHand walled = null;
             foreach (var h in l.hands)
                 if (h != null && IsWalledOff(h)) { walled = h; break; }
+            // **And a station the store's runners cannot reach for a wall
+            // (2026-10-05, the store front runner loop):** the runners no
+            // longer walk into it, so no hand may be stuck to raise this --
+            // the chip stays while the station is walled off, and opens the
+            // wall piece nearest it.
+            if (walled == null && l.stations != null)
+                foreach (var st in l.stations)
+                {
+                    if (st == null || st.removed || !l.Manned(st)) continue;
+                    if (l.StationCutOffWords(st) != MissingWords.WalledOffFromStore) continue;
+                    var b = BuildingOf(camp, st);
+                    if (b == null) continue;
+                    Vector3 stAt = b.transform.position;
+                    into.Add(new Alert
+                    {
+                        text = "Walled off · needs a gate", tone = Tone.Bad, fixLabel = "Make gate",
+                        open = () =>
+                        {
+                            var seg = camp.NearestWall(stAt);
+                            return seg != null ? new WallSheet(camp, seg) : Sheets.TryCreateFor(b) ?? new StationSheet(camp, b);
+                        },
+                    });
+                    break;
+                }
             if (walled != null)
             {
                 var at = l.HandAt(walled);
@@ -142,6 +166,9 @@ namespace SeaSick.UI.Sheets
                 // miller's: "Flour waiting · Kitchen II bakes bread"
                 // (`FlourAlert`, the same test) is its one chip, with the fix.
                 if (why == OutpostLedger.FlourHoldWords) continue;
+                // **A station cut off from the store (2026-10-05)** has its
+                // own line below ("Fishing hut · walled off from the store").
+                if (MissingWords.IsStationCutOff(why)) continue;
                 string who = h.name;
                 // **No recipe chosen (2026-10-02):** "Edda · no recipe chosen
                 // · open the hunting lodge and pick one" -- the fix is at the
@@ -200,6 +227,29 @@ namespace SeaSick.UI.Sheets
                         {
                             text = StationName(l, st) + " · " + noOne, tone = Tone.Warn, fixLabel = "Assign",
                             open = () => Sheets.TryCreateFor(b) ?? new StationSheet(camp, b),
+                        });
+                        continue;
+                    }
+                    // **Cut off from the store (2026-10-05, Kevin's fishing
+                    // hut outside the palisade):** no runner is booked there
+                    // any more, and this says why, beside the camp's
+                    // "Walled off · needs a gate" chip. Walled: the tap
+                    // opens the wall piece nearest it (Make gate).
+                    string cut = l.StationCutOffWords(st);
+                    if (cut != null)
+                    {
+                        bool byWall = cut == MissingWords.WalledOffFromStore;
+                        Vector3 stAt = b.transform.position;
+                        var stB = b;
+                        into.Add(new Alert
+                        {
+                            text = StationName(l, st) + " · " + cut, tone = Tone.Bad,
+                            fixLabel = byWall ? "Make gate" : "Open " + StationName(l, st),
+                            open = () =>
+                            {
+                                var seg = byWall ? camp.NearestWall(stAt) : null;
+                                return seg != null ? new WallSheet(camp, seg) : Sheets.TryCreateFor(stB) ?? new StationSheet(camp, stB);
+                            },
                         });
                         continue;
                     }
@@ -493,8 +543,9 @@ namespace SeaSick.UI.Sheets
 
         /// The body's "walled off — no way round, needs a gate"
         /// (`CampWorker`), which the walled-off camp chip covers.
-        static bool IsWalledOff(OutpostHand h) =>
-            h.bodyBlocked != null && h.bodyBlocked.StartsWith("walled off", StringComparison.Ordinal);
+        /// Since 2026-10-05 also a station worker's "cut off by the wall ·
+        /// needs a gate" (`MissingWords.IsWalledOff`).
+        static bool IsWalledOff(OutpostHand h) => MissingWords.IsWalledOff(h.bodyBlocked);
 
         /// A stall reason in chip words. "waiting for stone: none
         /// left here" -> "no stone left"; anything else keeps its head.

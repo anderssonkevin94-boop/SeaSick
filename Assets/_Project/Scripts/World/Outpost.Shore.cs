@@ -150,5 +150,98 @@ namespace SeaSick.World
             why = walled ? "walled off from the water — needs a gate" : "no way down to the water";
             return false;
         }
+
+        // --- the store's way to each station (2026-10-05) --------------------
+        //
+        // **Kevin's Day 853 save: the fishing hut and pier outside the
+        // palisade, below a cliff band, nothing walkable joining them to the
+        // inside.** Runners were booked trips there over and over and stood
+        // at the store hut with no route (the store front runner loop). The
+        // ledger has no terrain, so -- as for the shore spot above -- the
+        // scene asks the path grid, once per catch-up, whether the store
+        // hut's door routes to each station's bays, and writes the answer on
+        // the station row (`OutpostLedger.SetStationReach`); every haul rung
+        // then skips a cut-off station (`OutpostLedger.StationReachable`).
+        //
+        // **Cached**: a station is asked again only when the wall layer is
+        // re-laid (`CampPath.WallRevision`: a raise, breach or gate) or a
+        // building is raised, moved, swapped or taken down
+        // (`CampPath.SolidRevision`), plus every `ReachRecheckSeconds` as a
+        // safety net. One int compare per station otherwise.
+        //
+        // **No grid, no answer**: an unwatched camp whose grid was never
+        // built (and a time-away chunk, `CampPath.NoBuildForRoutes`) asks
+        // nothing; what the last look said stays on the rows, and a station
+        // nobody has looked at is reachable -- the old behaviour.
+
+        /// Real seconds between safety re-checks of every station.
+        const float ReachRecheckSeconds = 15f;
+        float nextReachCheckAt;
+        readonly List<Vector3> reachTry = new List<Vector3>(2);
+
+        /// Once per catch-up, before the tick: every station's "can the
+        /// store walk there" is current. Cheap when nothing changed.
+        void SaveStationReach()
+        {
+            if (ledger == null || ledger.stations == null || ledger.stations.Count == 0) return;
+            var map = CampPath.For(this);
+            if (map == null || !(map.Built || Watched)) return;
+            if (!map.Built && CampPath.NoBuildForRoutes) return;
+            // From the store hut's door (the runners' post); no hut, the fire.
+            var store = CampPiles.StoreBuildingOf(this);
+            Vector3 from = store != null ? CampWorker.WorkSpot(this, store) : CampCentre;
+            // A watched camp's first ask builds the grid; an island not
+            // surveyed yet has none, and says nothing.
+            if (!map.Built) map.HasRoute(from, from, CampPath.Walker.Hand);
+            if (!map.Built) return;
+            int rev = unchecked(map.WallRevision * 65599 + map.SolidRevisionNow());
+            bool recheck = Time.unscaledTime >= nextReachCheckAt;
+            if (recheck) nextReachCheckAt = Time.unscaledTime + ReachRecheckSeconds;
+            for (int i = 0; i < ledger.stations.Count; i++)
+            {
+                var s = ledger.stations[i];
+                if (s == null || s.removed) continue;
+                if (s.reachRev == rev && !recheck) continue;
+                bool ok = StationRoutes(map, i, from, out bool walled);
+                ledger.SetStationReach(i, ok, walled, rev);
+            }
+        }
+
+        /// **Does the store's door route to station `i`?** Tried to its
+        /// bay marker (`Output_Dropoff`, else `Input_Pickup`) and to its
+        /// work spot, free spots as a walk plans them; any one routing is
+        /// enough (a false "cut off" would starve a station, so the test
+        /// leans to yes). A station not standing yet: yes. `walled`: no
+        /// route, but the ground alone joins them (`CampPath.Reachable`
+        /// ignores walls) and the camp has walls -- a gate would fix it.
+        bool StationRoutes(CampPath map, int i, Vector3 from, out bool walled)
+        {
+            walled = false;
+            var row = ledger.StationRow(i);
+            if (row == null) return true;
+            Building b = null;
+            float bestSq = 0.25f;
+            Vector3 at = row.At;
+            foreach (var x in built)
+            {
+                if (x == null || x.Id != row.planId) continue;
+                Vector3 d = x.transform.position - at;
+                d.y = 0f;
+                if (d.sqrMagnitude < bestSq) { bestSq = d.sqrMagnitude; b = x; }
+            }
+            reachTry.Clear();
+            if (b != null)
+            {
+                CampWorker.BayMarks(b, out var outAt, out bool hasOut, out var inAt, out bool hasIn);
+                if (hasOut) reachTry.Add(outAt);
+                else if (hasIn) reachTry.Add(inAt);
+                reachTry.Add(CampWorker.WorkSpot(this, b));
+            }
+            else reachTry.Add(at);
+            foreach (var p in reachTry)
+                if (map.HasRoute(from, CampPath.FreeSpot(this, p), CampPath.Walker.Hand)) return true;
+            walled = walls.Count > 0 && map.Reachable(reachTry[0]);
+            return false;
+        }
     }
 }

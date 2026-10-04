@@ -256,6 +256,39 @@ namespace SeaSick.World.Economy
         /// ..."): the building status chip and the tests read it as "short of
         /// supplies".
         public static bool IsSupplyLine(string s) =>
-            !string.IsNullOrEmpty(s) && (s.Contains(" needs ") || s.Contains(" need "));
+            !string.IsNullOrEmpty(s) && !IsWalledOff(s) && (s.Contains(" needs ") || s.Contains(" need "));
+
+        // --- cut off from the store (2026-10-05) -----------------------------
+        //
+        // **Kevin's Day 853 save: the fishing hut and pier outside the
+        // palisade, below the cliffs.** Runners were booked trips there over
+        // and over and stood at the store hut with no way to go. Now no haul
+        // is booked to or from a station the store cannot walk to
+        // (`OutpostLedger.StationReachable`), and these say why, in the
+        // same family as the camp's "Walled off · needs a gate" chip.
+
+        /// A station worker whose walk to his own station has no way round a
+        /// wall (`CampWorker`, his row's `bodyBlocked`).
+        public const string CutOffByWall = "cut off by the wall · needs a gate";
+
+        /// A station the store's runners cannot walk to because of a wall:
+        /// its stall line ("Fishing hut · walled off from the store").
+        public const string WalledOffFromStore = "walled off from the store";
+
+        /// The same with no wall to blame (a cliff band, the sea).
+        public const string NoWayFromStore = "no way there from the store";
+
+        /// One of the station-side lines above.
+        public static bool IsStationCutOff(string s) => s == WalledOffFromStore || s == NoWayFromStore;
+
+        /// **A "walled off" line**, body or station: the body's own "walled
+        /// off — no way round, needs a gate", `CutOffByWall`, and
+        /// `WalledOffFromStore`. The camp's walled-off chip covers these, and
+        /// none of them is a supply line (", needs a gate" read as "Needs
+        /// supplies" on the building's status chip).
+        public static bool IsWalledOff(string s) =>
+            !string.IsNullOrEmpty(s)
+            && (s.StartsWith("walled off", System.StringComparison.Ordinal)
+                || s.StartsWith(CutOffByWall, System.StringComparison.Ordinal));
     }
 }

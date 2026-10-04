@@ -282,6 +282,7 @@ namespace SeaSick.World
                         if (stations != null)
                             for (int i = 0; i < stations.Count; i++)
                             {
+                                if (!StationReachable(i)) continue;   // cut off from the store (2026-10-05)
                                 int free = RowFree(i, stations[i]?.Rack(res), false);
                                 if (free <= 0) continue;
                                 StartTimedTrip(h, res, Mathf.Min(cap, free), HaulPlace.Station, i, HaulPlace.Site, -1, site);

@@ -428,6 +428,9 @@ namespace SeaSick.World
                     if (space <= 0) continue;
                     int inStore = StoreFree(line.res);
                     if (inStore > 0 && fieldOnly) continue;      // a runner's
+                    // His station cut off from the store (2026-10-05): no
+                    // walk across the wall for it either; the stall says so.
+                    if (inStore > 0 && !StationReachable(si)) continue;
                     if (inStore > 0)
                     {
                         int n = Mathf.Min(Res.Armful(line.res), Mathf.Min(space, inStore));

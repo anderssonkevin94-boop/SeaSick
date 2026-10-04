@@ -1551,6 +1551,7 @@ namespace SeaSick.World
                 // At his post and stalled is arrived (2026-10-03): the sheet
                 // says "waiting for crops", not "on the way up from the ship".
                 if (Walk(door, dt)) { r.walkingIn = false; Face(face - transform.position, dt); }
+                else SayCutOff(r);
                 return;
             }
 
@@ -1558,7 +1559,7 @@ namespace SeaSick.World
             {
                 case Phase.Resting:
                     acting?.Set(VillagerActing.Mode.None);
-                    if (!Walk(door, dt)) return;
+                    if (!Walk(door, dt)) { SayCutOff(r); return; }
                     wait -= dt;
                     Face(face - transform.position, dt);
                     if (wait > 0f) return;
@@ -1568,7 +1569,7 @@ namespace SeaSick.World
 
                 case Phase.Going:
                     acting?.Set(VillagerActing.Mode.None);
-                    if (!Walk(door, dt)) return;
+                    if (!Walk(door, dt)) { SayCutOff(r); return; }
                     phase = Phase.Working;
                     wait = Random.Range(ShiftShortest, ShiftLongest);
                     // No building stood yet (assigned to a post before it is
@@ -1609,6 +1610,26 @@ namespace SeaSick.World
                     wait = RestSeconds;
                     return;
             }
+        }
+
+        /// **A station worker whose own station has no way in (2026-10-05,
+        /// Kevin's fix, part 3).** His walk to his post has had no route for
+        /// `HandBackSeconds` and a wall is the cause (straight through one,
+        /// or the store's check says the station is walled off): his row
+        /// says "cut off by the wall · needs a gate" (`bodyBlocked`, which
+        /// `StallReason` puts first and the camp's walled-off chip counts).
+        /// He stays posted -- assignments are permanent -- and the walk's
+        /// own backoff (`NoRouteBackoff`) keeps him at rest between asks;
+        /// a route found clears it (`NextCorner` rewrites `bodyBlocked`
+        /// every step). No wall to blame: the walk's own "can't reach
+        /// that" stands.
+        void SayCutOff(OutpostHand r)
+        {
+            if (row == null || r != row || noRouteFor < HandBackSeconds || r.Hauling) return;
+            if (!OutpostLedger.IsStation(r.target) || OutpostLedger.IsRunner(r)) return;
+            var st = camp.Ledger != null ? camp.Ledger.StationOfHand(r) : null;
+            if (noRouteWalled || (st != null && st.cutOffWalled))
+                row.bodyBlocked = Economy.MissingWords.CutOffByWall;
         }
 
         // --- hauling (2026-09-23) ----------------------------------------------
@@ -1663,7 +1684,20 @@ namespace SeaSick.World
                     phase = Phase.Going;
                     acting?.Set(VillagerActing.Mode.None);
                     Vector3 pick = view.from == HaulPlace.Field ? HaulPickupSpot(view) : mimePick;
-                    if (!Walk(pick, dt)) return;
+                    if (!Walk(pick, dt))
+                    {
+                        // **No way to the pickup for ~5 s (2026-10-05, the
+                        // store front runner loop):** the trip goes back to
+                        // the books untouched and its station is skipped
+                        // until the walls change (`HaulNoRoute`); he goes
+                        // back to his post or his next chore.
+                        if (noRouteFor >= HandBackSeconds)
+                        {
+                            noRouteFor = 0f;
+                            ledger.HaulNoRoute(r);
+                        }
+                        return;
+                    }
                     r.walkingIn = false;
                     ledger.BodyArrived(r);
                     return;
@@ -1703,7 +1737,19 @@ namespace SeaSick.World
                     mimeLoaded = true;
                     if (mimeEating) acting?.Set(VillagerActing.Mode.Reach, view.resource, 1);
                     else acting?.Set(VillagerActing.Mode.Carry, view.resource, Mathf.Max(1, view.count));
-                    if (!Walk(mimeDrop, dt)) return;
+                    if (!Walk(mimeDrop, dt))
+                    {
+                        // Loaded and no way to the drop-off (2026-10-05):
+                        // only the destination station is marked cut off;
+                        // the load is the existing give-up's (put down here,
+                        // still booked), never a new path.
+                        if (noRouteFor >= HandBackSeconds)
+                        {
+                            noRouteFor = 0f;
+                            ledger.HaulNoRoute(r);
+                        }
+                        return;
+                    }
                     mimeArrived = true;
                     Face(mimeFace - transform.position, dt);
                     ledger.BodyArrived(r);           // the drop-off event
@@ -2339,6 +2385,21 @@ namespace SeaSick.World
             if (m.inPick != null) return RoomySpot(b, Grounded(m.inPick.position), ref m.inAsk, ref m.inRoomy, ref m.inAt);
             if (m.inGroup != null) return EdgeBeyond(b, m.inGroup.position);
             return EdgeBeyond(b, b.transform.position + Flat(b.transform.right));
+        }
+
+        /// **Where a hauler would stand at station `b`'s bays, with no body
+        /// to ask** (2026-10-05, `Outpost.SaveStationReach`, the store's
+        /// route check): Astra's `Output_Dropoff` and `Input_Pickup`
+        /// themselves, whichever the model has (`hasOut` / `hasIn`). The
+        /// check plans to their free spots, as a walk does.
+        public static void BayMarks(Building b, out Vector3 output, out bool hasOut, out Vector3 input, out bool hasIn)
+        {
+            output = input = b != null ? b.transform.position : Vector3.zero;
+            hasOut = hasIn = false;
+            if (b == null) return;
+            var m = MarksOf(b);
+            if (m.outDrop != null) { output = m.outDrop.position; hasOut = true; }
+            if (m.inPick != null) { input = m.inPick.position; hasIn = true; }
         }
 
         /// The same for the OUTPUT rack: `Output_Dropoff`, else beyond the
@@ -3342,6 +3403,37 @@ namespace SeaSick.World
         /// this counter does the same for its `else`.
         int lostAsks;
 
+        /// **Seconds his walk has had no route and made no headway
+        /// (2026-10-05, Kevin's store front runner loop).** Counted while
+        /// the last plan on a BUILT grid failed (`planFailed`) and he is
+        /// either held by a wall (straight is through it: he stands) or has
+        /// not gained `NoRouteHeadway` on the target -- so a man walking the
+        /// old straight line home is never counted. Read by `TickHaul` (a
+        /// hauler gives his trip back, `OutpostLedger.HaulNoRoute`) and
+        /// `TickWorkAt` (a station worker says he is cut off). Reset by any
+        /// route, a new destination or arriving.
+        float noRouteFor;
+        float noRouteBest = float.MaxValue;
+        bool planFailed;
+        /// Was the straight line through a wall at the last plan.
+        bool noRouteWalled;
+        const float NoRouteHeadway = 0.5f;
+
+        /// **Seconds of `noRouteFor` before a hauler hands his trip back**
+        /// (Kevin, 2026-10-05: "~5 s"). Under the walled give-up's three
+        /// asks (`WalledAsksBeforeGiveUp`, ~6 s), so the trip goes back
+        /// through the ledger -- goods untouched, the station marked -- before
+        /// the old drop fires.
+        public const float HandBackSeconds = 5f;
+
+        void ResetNoRoute()
+        {
+            noRouteFor = 0f;
+            noRouteBest = float.MaxValue;
+            planFailed = false;
+            noRouteWalled = false;
+        }
+
         /// Metres from a target a hand stops at when the ground up to it is
         /// too steep: the tree on the bank is worked from its foot.
         /// (`CampPath.ReachCells` is the same distance for target picks.)
@@ -3361,6 +3453,7 @@ namespace SeaSick.World
             walledAsks = 0;
             lostAsks = 0;
             backtrack = false;
+            ResetNoRoute();
             if (row != null) row.bodyBlocked = null;
         }
 
@@ -3383,6 +3476,7 @@ namespace SeaSick.World
             // changed, which is a new question.
             bool moved = Vector3.SqrMagnitude(new Vector3(to.x - routeFor.x, 0f, to.z - routeFor.z))
                        > RePlanMoved * RePlanMoved;
+            if (moved) ResetNoRoute();   // a new errand is a new question
             bool stale = moved
                 || (!hasRoute
                     ? routeAge >= 0f
@@ -3406,6 +3500,10 @@ namespace SeaSick.World
                 hasRoute = map != null
                     && map.Route(here, to, CampPath.Walker.Hand, route)
                     && route.Count > 0;
+                // Only a grid that is up can say "no way" (an island with
+                // none walks the straight line, as it always did).
+                planFailed = !hasRoute && map != null && map.Built;
+                noRouteWalled = planFailed && straightCrosses;
                 if (!hasRoute)
                 {
                     route.Clear();
@@ -3473,6 +3571,14 @@ namespace SeaSick.World
                 }
                 else { walledAsks = 0; lostAsks = 0; }
             }
+
+            // The no-route clock (2026-10-05): held by a wall, or no headway.
+            if (planFailed && !hasRoute)
+            {
+                if (!straightCrosses && dist < noRouteBest - NoRouteHeadway) { noRouteBest = dist; noRouteFor = 0f; }
+                else noRouteFor += dt;
+            }
+            else if (hasRoute) { noRouteFor = 0f; noRouteBest = float.MaxValue; planFailed = false; }
 
             // No route (yet, or at all): the old straight line -- but never
             // through a wall. Standing still for the frames a plan takes, or

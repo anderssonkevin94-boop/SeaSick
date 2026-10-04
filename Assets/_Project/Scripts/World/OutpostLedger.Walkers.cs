@@ -644,6 +644,11 @@ namespace SeaSick.World
             foreach (var h in hands)
             {
                 if (h == null || !h.Hauling || h.driven || h.Busy || h.eating || h.orderOverride) continue;
+                // Never walk a planned trip through the wall overnight
+                // (2026-10-05): one booked before its station was known to be
+                // cut off is given back here, as in the day's passes.
+                DropCutOffTrip(h);
+                if (!h.Hauling) continue;
                 float b = days;
                 AdvanceHaul(h, ref b, 1f);
             }

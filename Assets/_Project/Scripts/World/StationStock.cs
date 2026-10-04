@@ -172,6 +172,22 @@ namespace SeaSick.World
         /// a loaded camp re-checks once against its fresh grid.
         [System.NonSerialized] public int shoreRev = int.MinValue;
 
+        /// **Cut off from the store (2026-10-05, Kevin's Day 853 save: the
+        /// fishing hut and pier outside the palisade, below the cliffs).**
+        /// `cutOffMap`: the scene's route check from the store hut found no
+        /// way to this station's bays (`Outpost.SaveStationReach`);
+        /// `cutOffBody`: a hauler's walk had no route for
+        /// `CampWorker.HandBackSeconds` and gave the trip back
+        /// (`OutpostLedger.HaulNoRoute`). Either one = no haul is booked to
+        /// or from here (`OutpostLedger.StationReachable`). `cutOffWalled`:
+        /// the ground alone would get there, so a wall is the cause (the
+        /// "walled off" words). `reachRev` is the wall + building revision
+        /// the answer was worked out under; when it moves, both marks are
+        /// asked again. Not saved: a loaded camp re-checks against its
+        /// fresh grid, and until it has one every station is reachable.
+        [System.NonSerialized] public bool cutOffMap, cutOffBody, cutOffWalled;
+        [System.NonSerialized] public int reachRev = int.MinValue;
+
         /// **Flagged guess** for a station plan whose `inputSlots` is 0.
         public const int DefaultInputSlots = 6;
         /// **Flagged guess** for a station plan whose `outputSlots` is 0.

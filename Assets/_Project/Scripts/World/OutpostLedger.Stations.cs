@@ -1437,7 +1437,7 @@ namespace SeaSick.World
             for (int i = 0; i < ns; i++)
             {
                 var s = stations[i];
-                if (s == null || s.bay == null) continue;
+                if (s == null || s.bay == null || !StationReachable(i)) continue;
                 // An unmanned station's order wants nothing: its bay goes home.
                 bool manned = Manned(s);
                 foreach (var row in s.bay)
@@ -1499,6 +1499,10 @@ namespace SeaSick.World
         {
             var s = stations[i];
             if (s == null || !Manned(s)) return false;
+            // **Never a bay the store cannot walk to (2026-10-05, Kevin's
+            // fishing hut outside the palisade):** the runner would stand at
+            // the store hut with no route, over and over.
+            if (!StationReachable(i)) return false;
             s.EnsureSpotRows();
             if (RackJam(s) != null) return false;
             bool offered = false;
@@ -1541,7 +1545,7 @@ namespace SeaSick.World
                     // ...or straight off another station's rack.
                     for (int j = 0; j < stations.Count; j++)
                     {
-                        if (j == i) continue;
+                        if (j == i || !StationReachable(j)) continue;
                         var row = stations[j]?.Rack(line.res);
                         int free = RowFree(j, row, false);
                         if (free <= 0 || Mathf.Min(load, free) < need) continue;
@@ -1594,6 +1598,7 @@ namespace SeaSick.World
                     if (stations != null)
                         for (int i = 0; i < stations.Count; i++)
                         {
+                            if (!StationReachable(i)) continue;   // cut off (2026-10-05)
                             var row = stations[i]?.Rack(res);
                             int free = RowFree(i, row, false);
                             if (free <= 0) continue;
@@ -1641,6 +1646,9 @@ namespace SeaSick.World
             c = default;
             var s = stations[i];
             if (s == null || s.rack == null) return false;
+            // A rack the store cannot walk to stays where it is (2026-10-05):
+            // the fisher's box outside the palisade is nobody's chore.
+            if (!StationReachable(i)) return false;
             bool lastHour = LastWorkOfDay;
             foreach (var row in s.rack)
             {
@@ -1686,7 +1694,8 @@ namespace SeaSick.World
                 for (int j = 0; j < stations.Count; j++)
                 {
                     var d = stations[j];
-                    if (j == i || d == null || !Manned(d) || !SpotsWant(d, res) || RackJam(d) != null) continue;
+                    if (j == i || d == null || !Manned(d) || !SpotsWant(d, res) || RackJam(d) != null
+                        || !StationReachable(j)) continue;
                     int space = d.InputCap - d.BayCount(res) - InFlightTo(HaulPlace.Station, j, res);
                     if (space < n)
                     {
@@ -1727,6 +1736,7 @@ namespace SeaSick.World
         /// `RackDest`'s part load.
         bool BayShortFor(StationStock d, int j, string res)
         {
+            if (!StationReachable(j)) return false;   // cut off (2026-10-05)
             d.EnsureSpotRows();
             int have = d.BayCount(res) + InFlightTo(HaulPlace.Station, j, res);
             foreach (var sp in d.spots)
@@ -1756,6 +1766,9 @@ namespace SeaSick.World
 
         void HaulerDay(OutpostHand h, ref float budget)
         {
+            // A planned trip to or from a cut-off station is given back
+            // first (2026-10-05), as a runner's is.
+            DropCutOffTrip(h);
             for (int guard = 0; guard < 64 && budget > Eps; guard++)
             {
                 if (h.Hauling) { if (!AdvanceHaul(h, ref budget)) break; continue; }
@@ -2102,6 +2115,12 @@ namespace SeaSick.World
                 if (shoreCause != null) return shoreCause;
             }
             int si = stations.IndexOf(s);
+            // **Cut off from the store (2026-10-05)**: no runner books a trip
+            // here (`StationReachable`), so an idle bench says why --
+            // "Fishing hut · walled off from the store" beside the camp's
+            // "Walled off · needs a gate" chip. He stays posted.
+            string cut = StationCutOffWords(s);
+            if (cut != null) return cut;
             // **Every stalled spot, worst first (2026-10-04).** Stalled only
             // when NO selected spot can go on; then each spot's own sentence
             // is kept (`SpotStallLines`, the station sheet shows them all)

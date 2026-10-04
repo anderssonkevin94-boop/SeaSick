@@ -250,6 +250,10 @@ namespace SeaSick.World
         void RunnerDay(OutpostHand h, ref float budget)
         {
             if (CountBuilt(h.target) <= 0) { if (h.Hauling) AdvanceHaul(h, ref budget); return; }
+            // A planned trip to or from a station now known to be cut off
+            // is given back before it is walked (2026-10-05, the store
+            // front runner loop): live or catching up, the same books.
+            DropCutOffTrip(h);
             for (int guard = 0; guard < 64 && budget > Eps; guard++)
             {
                 if (h.Hauling)
@@ -360,6 +364,125 @@ namespace SeaSick.World
             if (!RackChore(i, out var c, h, true)) return false;
             BeginChore(h, c);
             return true;
+        }
+
+        // --- cut off from the store (2026-10-05) --------------------------------
+        //
+        // **Kevin's Day 853 save: the fishing hut and pier stand outside the
+        // palisade, below a cliff band, and nothing walkable joins them to
+        // the inside.** The camp already said "Walled off · needs a gate",
+        // but runners were still booked trips to and from the fishing hut;
+        // each one stood at the store hut with no route until the body gave
+        // the trip up, and the next was booked at once -- "the store front
+        // runner loop". Kevin's fix:
+        //
+        //  1. hauls skip a station with no route from the store hut
+        //     (`StationReachable`, gated in every rung that names a station:
+        //     `BayChore`, `RackChore`, `RackDest`, `BayShortFor`,
+        //     `SiteChore`'s racks, rung 5, `RunnerNeed`, `RackOutbound`, the
+        //     worker's own store fetch), re-checked when the walls, gates or
+        //     buildings change (`Outpost.SaveStationReach`);
+        //  2. a hauler whose walk has had no route for ~5 s gives the trip
+        //     back (`HaulNoRoute`): nothing moves, and the station is
+        //     skipped until the walls change;
+        //  3. the station's worker says "cut off by the wall · needs a gate"
+        //     when his own walk there has no route (`CampWorker`) -- and
+        //     stays posted (assignments are permanent);
+        //  4. the station's stall line says "walled off from the store"
+        //     (`StationStallCause`), beside the camp's walled-off chip.
+        //
+        // **Unwatched / no grid**: nobody marks anything, so every station is
+        // reachable (the old behaviour) until a grid answers; marks made
+        // while watched stay on the rows, so the time-away catch-up skips
+        // what the last look said was cut off (D2: the same gates, read by
+        // the same `Step`).
+
+        /// **Can the store's people walk to station `si`?** True when
+        /// nothing has said otherwise (no grid, a probe's ledger, an index
+        /// out of range).
+        public bool StationReachable(int si) =>
+            stations == null || si < 0 || si >= stations.Count || StationReachable(stations[si]);
+
+        public bool StationReachable(StationStock s) => s == null || !(s.cutOffMap || s.cutOffBody);
+
+        /// The stall line of a station the store cannot reach, or null:
+        /// `MissingWords.WalledOffFromStore` when a wall is the cause, else
+        /// `MissingWords.NoWayFromStore`.
+        public string StationCutOffWords(StationStock s)
+        {
+            if (StationReachable(s)) return null;
+            return s.cutOffWalled || s.cutOffBody ? Economy.MissingWords.WalledOffFromStore : Economy.MissingWords.NoWayFromStore;
+        }
+
+        /// **The scene's answer for station `si`** (`Outpost.SaveStationReach`):
+        /// whether the store hut's door routes to its bays, whether a wall is
+        /// what stops it, and the wall + building revision it was asked
+        /// under. A new revision also lifts a body's mark (`HaulNoRoute`):
+        /// the walls changed, so the station is tried again.
+        public void SetStationReach(int si, bool reachable, bool walled, int rev)
+        {
+            if (stations == null || si < 0 || si >= stations.Count) return;
+            var s = stations[si];
+            if (s == null) return;
+            if (s.reachRev != rev) s.cutOffBody = false;
+            s.reachRev = rev;
+            s.cutOffMap = !reachable;
+            s.cutOffWalled = !reachable && walled;
+        }
+
+        /// **A body's walk for this hand's trip has had no route for
+        /// `CampWorker.HandBackSeconds`** (part 2 of Kevin's fix). Before
+        /// the pickup the trip is given back exactly as a cancelled plan
+        /// (`CancelPlanned`: nothing was taken, so nothing moves; a transfer
+        /// order gets its units back) and a station pickup is marked cut off
+        /// until the walls or buildings change. After the pickup only the
+        /// destination station is marked: the load stays with him and the
+        /// body's existing give-up (`DropCarriedLoadNow`) puts it down where
+        /// he stands, still booked. A trip to or from his OWN station (the
+        /// fisher's catch) never marks it -- his post is not a runner's
+        /// chore. True = the trip was given back.
+        public bool HaulNoRoute(OutpostHand h)
+        {
+            if (h == null || !h.Hauling || h.eating) return false;
+            var own = StationOfHand(h);
+            if (!h.haulPicked)
+            {
+                bool stationPick = h.haulFrom == HaulPlace.Station && !OwnStation(own, h.haulFromStation);
+                if (!stationPick && !IsRunner(h)) return false;
+                if (stationPick) MarkCutOff(h.haulFromStation);
+                CancelPlanned(h);
+                return true;
+            }
+            if (h.haulTo == HaulPlace.Station && !OwnStation(own, h.haulToStation)) MarkCutOff(h.haulToStation);
+            return false;
+        }
+
+        bool OwnStation(StationStock own, int si) =>
+            own != null && stations != null && si >= 0 && si < stations.Count && ReferenceEquals(stations[si], own);
+
+        void MarkCutOff(int si)
+        {
+            if (stations == null || si < 0 || si >= stations.Count || stations[si] == null) return;
+            stations[si].cutOffBody = true;
+        }
+
+        /// **A planned trip an invisible walker must not start walking**: a
+        /// runner's or spare hand's haul booked before its station was known
+        /// to be cut off (or before the walls closed), not picked up yet --
+        /// given back (`CancelPlanned`: nothing was taken, nothing moves).
+        /// A load already picked up is left to the existing logic, as the
+        /// body's is. Bodies settle their own trips (`CampWorker` ->
+        /// `HaulNoRoute`); a station worker's trip to or from his own
+        /// station is his post, left alone.
+        void DropCutOffTrip(OutpostHand h)
+        {
+            if (h == null || !h.Hauling || h.haulPicked || h.driven || h.eating || stations == null) return;
+            var own = StationOfHand(h);
+            bool fromCut = h.haulFrom == HaulPlace.Station && !StationReachable(h.haulFromStation)
+                           && !OwnStation(own, h.haulFromStation);
+            bool toCut = h.haulTo == HaulPlace.Station && !StationReachable(h.haulToStation)
+                         && !OwnStation(own, h.haulToStation);
+            if (fromCut || toCut) CancelPlanned(h);
         }
 
         // --- aging: the longest-waiting request first ---------------------------
@@ -514,6 +637,10 @@ namespace SeaSick.World
         bool BenchWantsRunner(StationStock s, int si)
         {
             if (s == null) return false;
+            // A station the store cannot walk to waits on no runner
+            // (2026-10-05): none is coming. Its stall line says why
+            // (`StationStallCause` -> "walled off from the store").
+            if (!StationReachable(si)) return false;
             // Only a box a runner can take somewhere (2026-10-02 play check:
             // Finch read "rack full · runners taking it away" while the store
             // was full of fish and the runners stood at the store with
@@ -529,6 +656,8 @@ namespace SeaSick.World
         string RackOutbound(StationStock s, int si)
         {
             if (s == null || s.rack == null) return null;
+            // Nobody can fetch it from a cut-off station (2026-10-05).
+            if (!StationReachable(si)) return null;
             foreach (var row in s.rack)
             {
                 if (row == null || row.whole <= 0) continue;
@@ -575,6 +704,8 @@ namespace SeaSick.World
         string RunnerNeed(StationStock s, int si)
         {
             if (s == null) return null;
+            // No runner can bring to or take from a cut-off station (2026-10-05).
+            if (!StationReachable(si)) return null;
             s.EnsureSpotRows();
             // Only a rack something can take: a full store is the store's
             // stall ("store is full of boards"), not "waiting for a runner"
@@ -598,7 +729,7 @@ namespace SeaSick.World
                     if (StoreFree(line.res) > 0) return line.res;
                     if (stations != null)
                         for (int j = 0; j < stations.Count; j++)
-                            if (j != si && RowFree(j, stations[j]?.Rack(line.res), false) > 0) return line.res;
+                            if (j != si && StationReachable(j) && RowFree(j, stations[j]?.Rack(line.res), false) > 0) return line.res;
                 }
             }
             return null;

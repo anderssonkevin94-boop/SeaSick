@@ -227,6 +227,10 @@ namespace SeaSick.World
             // Where each fishing hut's fisher stands to fish (2026-09-30),
             // before the tick plans a catch trip there. `Outpost.Shore.cs`.
             SaveShoreSpots();
+            // Which stations the store can walk to (2026-10-05, the store
+            // front runner loop): no haul is booked to a cut-off one.
+            // `Outpost.Shore.cs`.
+            SaveStationReach();
             ledger.Tick(TimeOfDay.Seconds);
             FeedTheFire();
 
