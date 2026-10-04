@@ -1707,6 +1707,12 @@ sweep (469 FBXs, 8 faulty) hit one real failure kind: the Astra-scale files (`gu
 `sawmill`/`blacksmith`) come back with the 100x import scale moved onto the root (`Lcl Scaling 1 -> 100`),
 which would resize them in game.
 
+**Recolouring a vertex-colour kit in place:** `tools/blender/fbx_palette_remap.py -- <in> <out> r,g,b=r,g,b ...`
+(`--list` prints each mesh's palette) rewrites colour VALUES only, through `winding_patch.py`'s byte-faithful
+writer; `fbx_diff.py` then shows only `colour_mismatch`. Used 2026-10-04 to match the L2 wall/gate stone to the
+beach rock (Kevin): measured in-engine at noon on his camp (sunlit half of the rock pixels vs the wall's stone
+pixels, linear), two passes, within 3 %.
+
 **So prefer the in-place patch** for any file already in the game:
 
     Blender -b --factory-startup --python tools/blender/winding_patch.py -- <in.fbx> <out.fbx>
