@@ -10,59 +10,65 @@ A feature is **CLOSED** only when every one of these holds:
 - No TODOs or debug leftovers remain.
 - Any queue entry (ASTRAS_READY_ASSETS.md) is removed.
 
-Sessions end every report with a **"loose ends:"** line. The orchestrator copies those lines here.
+Unapproved visuals stay on a branch until Kevin OKs the shots. Sessions end every report with **"loose ends:"**.
 
-## In flight
+Last on the phone and pushed: **f581a046** (2026-10-04).
 
-| Feature | State | Waiting on | Owner |
-|---|---|---|---|
-| ~~URGENT BUG~~ ON PHONE f581a046: cargo vanishes when docking home. Cause: CompleteVoyage still banks into the pre-camp `banked` dict (since 6a136c5e); the home camp never reads it. Goods are safe in his save (T27 S26 O20) | fix (1)-(5) GO'd: unload by hands/runners at home, BeginVoyage keeps cargo, shipyard spends the home store, no `banked` piles, one-time save repair | fix lands → rides the harpoon build → Kevin confirms T45/S26/O20 at home | Villager |
-| Harpoon phase 0: art (bow mount, barb, rope look, 🪝 + marker mock) | in progress; Blender scripts being written in art-staging/harpoon-v1 | Blender window from sailing, then shots → Kevin's approval | Villager |
-| Harpoon harpooner crew role (IHarpoonCrewSource on the gun-shift map) | queued after phase 0 shots; seam agreed (HarpoonCrew / IHarpoonCrewSource / BowPost) | phase 0 | Villager |
-| Farm-sheet bugs: half-picked field reports full yield; crop change relabels ripe harvest | Kevin: FIX (2026-10-04) | after harpooner role | Villager |
-| Stall lines name every missing input/tool + worn tools show life ("saw blade · 90% left") + multi-spot benches | LANDED c77f1f60/5d31cc42, MissingWordsSelfTest 10/10 | next build (held for the lamp approval) → Kevin | Villager |
-| Remove the sand spit at Kevin's home island (his island only; a capsule terrain edit in TerrainHeight.Evaluate keyed to his island; buildings/pier untouched) + check the "Sawmill · out of boards" alert wording | queued after the current build | before/after shots → Kevin's OK → the next build | Villager |
-| Harpoon gun-lamp (Kevin's final lantern design): a hooded lamp on the side of the gun, a forward spot light that follows the aim; it replaces the nose block + hanging lantern (removed, no dangling art/code) | spec sent | sailing's placement fix lands → art + light → in-engine shots → Kevin's OK → the NEXT build | Sailing |
-| Harpoon phase 1: hook & reel salvage, markers, 90° arc, snap + 5 s reload, captain-fallback crew seam | ON PHONE f581a046 (+ placement fix cc81ff52, new app icon) | Kevin's OK on the art shots → phone build → Kevin plays | Sailing |
+## Sailing session: queue (in order)
 
-| App icon (Kevin's ship-at-sunset art) | committed bc7fd04a, set as the default icon | the next phone build | Orchestrator |
+1. Harpoon gun-lamp: code + art on HEAD (b8f6fb12, 3e1aeeda), beam on branch lamp-beam. 4 shots → Kevin's OK → land the beam. The CoasterOutfitting stale-module question is confirmed or fixed with evidence. Stale renders cleaned. **The next phone build waits on this.**
+2. Loose-ends sweep:
+   - RescueHud tap marker overlaps the bottom reserve (168×37 px, portrait).
+   - Kraken items never verified in play: a cannonball on a raised arm, the warning camera, the edge chevron, the Settings row layout, the desktop ship height, the loot crate size.
+   - Harpoon phase 1 untested paths: kraken loot, wreckage, a miss, the SmoothnessMeter during a reel vs a snap.
+3. Stop. Harpoon phases 2-5 wait for Kevin's phase-1 verdict.
 
-## On the phone, awaiting Kevin's verdict (build f581a046, pushed; earlier items from 74116cd7)
+## Villager session: queue (in order)
 
-| Feature | Checklist lives in | Owner |
-|---|---|---|
-| Kraken steps 1-4 | orchestrator relay, 2026-10-03 | Sailing (kraken session ended) |
-| DREDGE controls steps 1-3 (stick, camera, boost punch); bake FEEL values if Kevin tuned | PLAN-dredge-controls.md | Sailing |
-| Villager groups 3-4 (Problems chip/list, runner aging, food draft rules) | orchestrator relay | Villager |
-| Storage containers + infinite island stacking (closes the ASTRAS queue entry) | orchestrator relay, 11 points | Villager |
-| Storehouse runner perks (L1-L3, placeholder model) | orchestrator relay | Villager |
-| Fog removed, Explore removed, whole-island landing party, berries (1 Food a bush), honest counts | orchestrator relay | Villager / Sailing |
-| Ore: guaranteed on meanR ≥ 100 m islands, 1 in 2 elsewhere | GDD | Sailing |
-| Landing fixes: home cast-off, card flicker, "Raider near" reason | orchestrator relay | Villager |
-| Cannon crew shift to the engaged side | GDD + GunShiftProbe | Villager |
+1. Spit removal at Kevin's home island (branch spit-edit): before/after shots on a COPY of his save → Kevin's OK → land.
+2. StationStockSelfTest: 19 of ~90 fail (walking legs). Baseline at f581a046, then fix to green.
+3. Harpooner crew role (IHarpoonCrewSource; the captain fallback is live until then).
+4. Farm-sheet bugs: a half-picked field reports the full yield; a crop change relabels a ripe harvest.
+5. Loose-ends sweep:
+   - Cannon-shift cue during the 3 s wait, plus its untested cases.
+   - Problems list: farm lines; alert chips ≥44 pt.
+   - False "Sheer cliff" off bays.
+   - IngredientLine worn-tool display.
+6. Stop.
 
-## Known loose ends (each needs a fix or Kevin's "park it")
+Landed, not on the phone yet (rides the next build): the stall lines name every missing input and tool, worn tools show their life ("saw blade · 90% left"), multi-spot benches (c77f1f60/5d31cc42); probe updates 5abe3f90.
 
-- Harpoon phase 1 (only the phone can verify): real thumb taps on the markers and button; castaway, kraken-loot and wreckage hooks untested in play; the miss path unexercised; default snap tuning is a guess (does it snap often enough?); SmoothnessMeter during a reel unmeasured.
-- Harpoon placement fix cc81ff52: on the phone now; Kevin's play is the in-engine check.
-- Cargo: the unload waits while every hand is busy. Probes SaveProbe/Loop/Sink updated (5abe3f90).
-- StationStockSelfTest: 19 of ~90 fail (walking trips/timing: legs never start in the edit-mode sim). Age unproven. Villager runs the baseline at f581a046 after the spit shots, then fixes the harness or the regression to green.
-- IngredientLine floors worn tools in fire-cost lines (harmless: costs spend whole units).
-- Ship repair timber also unloads at home unless cancelled in the Backpack. Kevin to say whether that's OK.
-- Raised bow: the kit post-lantern sits in the rope's path until the gun-lamp build removes all bow lanterns.
-- CoasterOutfitting may match the outgoing module during an in-play rebuild (unconfirmed). Sailing confirms/fixes it with the gun-lamp.
+## Kraken session ("Resource stacking"): finished
 
+Its kraken steps 1-4 are on the phone. Its unverified items moved to the Sailing sweep above.
 
-- Cannon shift: nothing on screen shows the 3 s wait. Untested: switching the locked side mid-walk, and the ~6 s walk on a big hull.
-- Landing: false "Sheer cliff" off bays and headlands; islets under 3000 m² have no landing.
-- Problems list: the farm has no line. Alert-strip chips are 36 units tall, under the 44 pt touch target.
-- RescueHud world tap marker overlaps the bottom strip by 168×37 px in portrait (pre-existing).
-- Storehouse has no model (placeholder hut). L3 is gated on fire II because Campfire III doesn't exist.
-- Storage: edit-mode lighting looked muddier than the Blender preview. Confirm on the phone.
+## Waiting on KEVIN
+
+**Play verdicts** (on the phone):
+- Kraken 1-4.
+- DREDGE controls 1-3; FEEL values to bake if he tuned any.
+- Harpoon phase 1 (does the snap tuning feel right?).
+- Cargo fix: home shows T~41-45 / S26 / O20; the crew carry cargo ashore.
+- Storehouse runner perks.
+- Villager groups 3-4 (Problems list).
+- Fog/Explore removal + whole-island landing party + berries + honest counts.
+- Ore rule.
+- Landing fixes.
+- Cannon crew shift.
+- New app icon.
+
+**Decided 2026-10-04:**
+- Repair timber stays aboard at home (keep a repair stock). → Villager.
+- Islets under 3000 m² without a landing: fine as is.
+- Storage containers look fine on the phone.
+
+**Open question:** the Storehouse's look (Kevin asked whether an existing asset fits).
 
 ## Parked by Kevin (not loose ends; revisit deliberately)
 
 - Full shipboard crew priority list (rescue → bail → engaged guns / harpoon → sails/oars). Only the cannon shift is built.
 - Boost fuel cost, once a fuel system exists.
 - Harpoon barb ammo (iron); ammo is unlimited for now.
+- Harpoon phases 2-5 (land pull, raiders/boarding, crew upgrades, next-level), after his phase-1 verdict.
 - Art queue (ASTRAS_READY_ASSETS.md): resource kit, worker tools, sea discovery kit; F18/F19 entry awaiting "F30 replaces it".
+- Player "dredge" tool (the spit fix is a one-off).
