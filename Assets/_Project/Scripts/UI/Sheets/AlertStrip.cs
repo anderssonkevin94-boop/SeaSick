@@ -52,6 +52,9 @@ namespace SeaSick.UI.Sheets
         readonly VisualElement row;
         readonly Button[] chips = new Button[MaxChips];
         readonly Button more;
+        // The drawn pills inside the 44 pt hit buttons (Ledger.uss, `.ledger-chip`).
+        readonly Label[] chipBodies = new Label[MaxChips];
+        readonly Label moreBody;
         readonly Func<ISheet>[] go = new Func<ISheet>[MaxChips];
         readonly string[] shown = new string[MaxChips];
         readonly CampAlerts.Tone[] tones = new CampAlerts.Tone[MaxChips];
@@ -75,6 +78,7 @@ namespace SeaSick.UI.Sheets
                 int index = i;
                 var chip = new Button(() => Tap(index));
                 chip.AddToClassList("ledger-chip");
+                chipBodies[i] = Body(chip);
                 chip.style.display = DisplayStyle.None;
                 row.Add(chip);
                 chips[i] = chip;
@@ -83,9 +87,21 @@ namespace SeaSick.UI.Sheets
             more = new Button(OpenProblems);
             more.AddToClassList("ledger-chip");
             more.AddToClassList("ledger-chip--more");
+            moreBody = Body(more);
             more.tooltip = "Everything that is stuck: open Problems";
             more.style.display = DisplayStyle.None;
             row.Add(more);
+        }
+
+        /// The chip's drawn pill. The button is the 44 pt touch target and
+        /// carries no text of its own (Ledger.uss, `.ledger-chip`).
+        static Label Body(Button chip)
+        {
+            var body = new Label();
+            body.AddToClassList("ledger-chip-body");
+            body.pickingMode = PickingMode.Ignore;
+            chip.Add(body);
+            return body;
         }
 
         /// "N problems": the Problems list, every alert with its fix.
@@ -143,7 +159,7 @@ namespace SeaSick.UI.Sheets
                 var a = alerts[i];
                 go[i] = a.open;
                 if (a.tone == CampAlerts.Tone.Raid) raid = true;
-                if (shown[i] != a.text) { shown[i] = a.text; chip.text = a.text; }
+                if (shown[i] != a.text) { shown[i] = a.text; chipBodies[i].text = a.text; }
                 if (tones[i] != a.tone || chip.style.display == DisplayStyle.None)
                 {
                     tones[i] = a.tone;
@@ -160,7 +176,7 @@ namespace SeaSick.UI.Sheets
             if (total != moreShown)
             {
                 moreShown = total;
-                if (total > 0) more.text = total + " problems";
+                if (total > 0) moreBody.text = total + " problems";
                 more.style.display = total > 0 ? DisplayStyle.Flex : DisplayStyle.None;
             }
             ShowsRaid = raid;

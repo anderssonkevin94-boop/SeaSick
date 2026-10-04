@@ -17,27 +17,41 @@
 .ledger-alerts {
     position: absolute; min-height: 36px; flex-direction: row; flex-wrap: wrap;
 }
+/* **44 pt touch target, same layout (2026-10-04).** The chip is a transparent
+   BUTTON 44 tall that carries the hit area; the drawn pill is its child
+   (`.ledger-chip-body`, 36 tall, text and look). Padding 4px top/bottom pads
+   the hit box around the pill and the -4/+2 margins give the 4 px back, so the
+   slot a chip takes in the strip is exactly the old 36 + 6 (and pill + 6 when
+   the text wraps to more lines): the strip's measured height, `TopHeight` and
+   the sheets' ceilings do not move. The extra 4 px above sit in the 6 px gap
+   under the resource bar; the ones below in the 6 px under the chip. */
 .ledger-chip {
-    flex-shrink: 1; min-height: 36px; margin: 0 6px 6px 0; padding: 4px 12px;
+    flex-shrink: 1; min-height: 44px; margin: -4px 6px 2px 0; padding: 4px 0;
+    border-width: 0; background-color: rgba(0, 0, 0, 0);
+    max-width: 260px;
+}
+.ledger-chip:hover, .ledger-chip:active, .ledger-chip:focus { background-color: rgba(0, 0, 0, 0); border-width: 0; }
+.ledger-chip-body {
+    flex-grow: 1; min-height: 36px; margin: 0; padding: 4px 12px;
     border-radius: 18px; border-width: 1.5px; font-size: 13px; white-space: normal;
     -unity-text-align: middle-center;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
-    max-width: 260px;
 }
-.ledger-chip--raid { background-color: rgb(228, 98, 58); border-width: 0; color: rgb(255, 255, 255);
+.ledger-chip--raid > .ledger-chip-body { background-color: rgb(228, 98, 58); border-width: 0; color: rgb(255, 255, 255);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
-.ledger-chip--raid:hover { background-color: rgb(240, 120, 80); }
-.ledger-chip--bad { background-color: rgb(42, 26, 26); border-color: rgb(246, 146, 128); color: rgb(246, 146, 128); }
-.ledger-chip--bad:hover { background-color: rgb(58, 34, 34); }
-.ledger-chip--warn { background-color: rgb(42, 36, 21); border-color: rgb(201, 147, 57); color: rgb(240, 195, 106); }
-.ledger-chip--warn:hover { background-color: rgb(58, 50, 28); }
+.ledger-chip--raid:hover > .ledger-chip-body { background-color: rgb(240, 120, 80); }
+.ledger-chip--bad > .ledger-chip-body { background-color: rgb(42, 26, 26); border-color: rgb(246, 146, 128); color: rgb(246, 146, 128); }
+.ledger-chip--bad:hover > .ledger-chip-body { background-color: rgb(58, 34, 34); }
+.ledger-chip--warn > .ledger-chip-body { background-color: rgb(42, 36, 21); border-color: rgb(201, 147, 57); color: rgb(240, 195, 106); }
+.ledger-chip--warn:hover > .ledger-chip-body { background-color: rgb(58, 50, 28); }
 
-/* "+N" after the one alert chip: the rest live in Camp (AlertStrip.cs). */
-.ledger-chip--more {
-    min-width: 44px; background-color: rgb(19, 34, 46); border-color: rgb(44, 74, 94); color: rgb(232, 242, 246);
+/* "N problems" after the one alert chip: the rest live in Problems (AlertStrip.cs). */
+.ledger-chip--more { min-width: 44px; }
+.ledger-chip--more > .ledger-chip-body {
+    background-color: rgb(19, 34, 46); border-color: rgb(44, 74, 94); color: rgb(232, 242, 246);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
-.ledger-chip--more:hover { background-color: rgb(32, 57, 72); }
+.ledger-chip--more:hover > .ledger-chip-body { background-color: rgb(32, 57, 72); }
 
 /* ---------------- drawer ---------------- */
 .ledger-layer {
