@@ -16,6 +16,8 @@ Last on the phone and pushed: **f581a046** (2026-10-04).
 
 ## Sailing session: queue (in order)
 
+- **NEW BUG (Kevin):** the gun-lamp beam shows at noon and while docked. Fix before the next build.
+- **NEW BUG (Kevin):** villagers path into buildings and get stuck (CampPath/CampWorker). Root cause → fix → stuck-count probe. After the lamp fix, before the sweep.
 0. **Kevin's phone bug (harpoon phase 1):** the fire button is unreliable, and taps hit the ship. Fire only from ONE FIXED on-screen button (≥64 pt, above ⚡); marker taps REMOVED (indicator only); every tap reader gated on the button rect; HarpoonTapCheck. In progress. Ships with the lamp build.
 1. Harpoon gun-lamp: code + art on HEAD (b8f6fb12, 3e1aeeda). **Kevin APPROVED with tweaks** (one continuous beam; warmer yellow-orange) → re-shoot check → land the beam (lamp-beam). CoasterOutfitting stale-module: CONFIRMED + FIXED (on the phone). Stale renders cleaned. **The next phone build waits on this.**
 2. Loose-ends sweep:
@@ -26,6 +28,10 @@ Last on the phone and pushed: **f581a046** (2026-10-04).
 
 ## Villager session: queue (in order)
 
+- **NOW:** castaway/docking fix + un-kill Bo and Pip (castaway-fix branch, self-test 31/31) → save-copy editor test → land → PHONE BUILD (carries the fire button, gun lamp, docking fix, stall lines).
+- **Next, Kevin's bug:** station workers walk around to place products. Inputs and outputs must be reachable from the work position. Before the harpooner.
+- Spit (C) rounded tip (spit-edit f0b84291): awaiting Kevin's OK.
+- Answer pending: Kevin's unselectable figure + 0.5-day food at a camp.
 1. Spit removal at Kevin's home island (branch spit-edit): before/after shots on a COPY of his save → Kevin's OK → land.
 2. StationStockSelfTest: GREEN 93/93 on branch stationstock-green (old failures: day/night harness gap since 8099268f + stale timings; no regression) -- awaiting landing. Minor ordering note (top-up vs hammering) in DEV-TOOLS.
 3. Harpooner crew role (IHarpoonCrewSource; the captain fallback is live until then).
