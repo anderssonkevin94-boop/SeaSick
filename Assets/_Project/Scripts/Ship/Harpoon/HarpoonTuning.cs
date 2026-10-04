@@ -126,7 +126,7 @@ namespace SeaSick.Ship.Harpoon
         public static float lampConeWiden = 0.6f;
         /// Air cone brightness (additive alpha) at the lens, full night; it eases to the
         /// pool's own near brightness where it lands. Range 0..1.
-        public static float lampConeAlpha = 0.4f;
+        public static float lampConeAlpha = 0.15f;
         /// Pool brightness at its near end, as a fraction of lampPoolAlpha (the
         /// cone fades into this). Range 0..1.
         public static float lampPoolNear = 0.6f;
