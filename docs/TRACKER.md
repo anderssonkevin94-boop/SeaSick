@@ -16,8 +16,8 @@ Last on the phone and pushed: **f581a046** (2026-10-04).
 
 ## Sailing session: queue (in order)
 
-0. **Kevin's phone bug (harpoon phase 1):** the fire button is unreliable, and taps hit the ship. Fire only from ONE FIXED on-screen button (≥64 pt, above ⚡); the world marker is an indicator only; button taps never pass through to the world. Ships with the lamp build.
-1. Harpoon gun-lamp: code + art on HEAD (b8f6fb12, 3e1aeeda), beam on branch lamp-beam. 4 shots → Kevin's OK → land the beam. The CoasterOutfitting stale-module question is confirmed or fixed with evidence. Stale renders cleaned. **The next phone build waits on this.**
+0. **Kevin's phone bug (harpoon phase 1):** the fire button is unreliable, and taps hit the ship. Fire only from ONE FIXED on-screen button (≥64 pt, above ⚡); marker taps REMOVED (indicator only); every tap reader gated on the button rect; HarpoonTapCheck. In progress. Ships with the lamp build.
+1. Harpoon gun-lamp: code + art on HEAD (b8f6fb12, 3e1aeeda). **Kevin APPROVED with tweaks** (one continuous beam; warmer yellow-orange) → re-shoot check → land the beam (lamp-beam). CoasterOutfitting stale-module: CONFIRMED + FIXED (on the phone). Stale renders cleaned. **The next phone build waits on this.**
 2. Loose-ends sweep:
    - RescueHud tap marker overlaps the bottom reserve (168×37 px, portrait).
    - Kraken items never verified in play: a cannonball on a raised arm, the warning camera, the edge chevron, the Settings row layout, the desktop ship height, the loot crate size.
@@ -63,7 +63,7 @@ Its kraken steps 1-4 are on the phone. Its unverified items moved to the Sailing
 - Islets under 3000 m² without a landing: fine as is.
 - Storage containers look fine on the phone.
 
-**Open question:** the Storehouse's look (Kevin asked whether an existing asset fits).
+- Storehouse look: option (a), the store-hut model scaled up with a different tarp and barrows out front → Villager (after the farm bugs), on a branch until Kevin OKs the shots.
 
 ## Parked by Kevin (not loose ends; revisit deliberately)
 
