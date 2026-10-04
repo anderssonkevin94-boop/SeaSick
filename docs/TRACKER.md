@@ -17,7 +17,8 @@ Last on the phone and pushed: **0053f72f** (2026-10-04, 14:20): the fire-button 
 ## Sailing session: queue (in order)
 
 - ~~Lamp at noon~~: it was the firing arcs, FIXED 0053f72f, on the phone.
-- **NEW BUG (Kevin):** villagers path into buildings and get stuck (CampPath/CampWorker). Root cause → fix → stuck-count probe. After the lamp fix, before the sweep.
+- **NEW BUG (Kevin):** villagers path into buildings and get stuck. Fix written (camp-pathing); editor proof pending.
+- **NEW BUG (Kevin):** L2 walls look shattered. Cause: 310 inside-out faces in the L2 kit FBX. Fix: recalc normals + re-export; sweep every kit for winding; add a winding check to the export scripts.
 0. **Kevin's phone bug (harpoon phase 1):** the fire button is unreliable, and taps hit the ship. Fire only from ONE FIXED on-screen button (≥64 pt, above ⚡); marker taps REMOVED (indicator only); every tap reader gated on the button rect; HarpoonTapCheck. In progress. Ships with the lamp build.
 1. Harpoon gun-lamp: code + art on HEAD (b8f6fb12, 3e1aeeda). **Kevin APPROVED with tweaks** (one continuous beam; warmer yellow-orange) → re-shoot check → land the beam (lamp-beam). CoasterOutfitting stale-module: CONFIRMED + FIXED (on the phone). Stale renders cleaned. **The next phone build waits on this.**
 2. Loose-ends sweep:
@@ -29,7 +30,8 @@ Last on the phone and pushed: **0053f72f** (2026-10-04, 14:20): the fire-button 
 ## Villager session: queue (in order)
 
 - ~~Castaway/docking fix + un-kill Bo/Pip/Ola + spit (C)~~: ON PHONE 0053f72f.
-- **Next, Kevin's bug:** station workers walk around to place products. Inputs and outputs must be reachable from the work position. Before the harpooner.
+- ~~Station walk-around~~: LANDED 02b3fe1e (next build).
+- **After the harpooner: STOREHOUSE MERGED INTO THE STORE HUT (Kevin 2026-10-04).** Store hut L1/L2/L3 carry runner posts + perks; the Storehouse is removed (build list, code); one-time save repair removes his Storehouse with a refund and reassigns its runners. The "Storehouse look" task is CANCELLED.
 - Sweep additions: HOME BERTH eyebrow; smoke shot in play; flour auto-pause proposal (ask Kevin).
 1. Spit removal at Kevin's home island (branch spit-edit): before/after shots on a COPY of his save → Kevin's OK → land.
 2. StationStockSelfTest: GREEN 93/93 on branch stationstock-green (old failures: day/night harness gap since 8099268f + stale timings; no regression) -- awaiting landing. Minor ordering note (top-up vs hammering) in DEV-TOOLS.
@@ -68,7 +70,7 @@ Its kraken steps 1-4 are on the phone. Its unverified items moved to the Sailing
 - Islets under 3000 m² without a landing: fine as is.
 - Storage containers look fine on the phone.
 
-- Storehouse look: option (a), the store-hut model scaled up with a different tarp and barrows out front → Villager (after the farm bugs), on a branch until Kevin OKs the shots.
+- Storehouse: MERGED into the store hut (Kevin); his Storehouse is removed with a refund.
 
 ## Parked by Kevin (not loose ends; revisit deliberately)
 
