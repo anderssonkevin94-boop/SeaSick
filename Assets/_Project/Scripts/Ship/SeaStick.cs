@@ -135,9 +135,12 @@ namespace SeaSick.Ship
             if (id == stickId) { Move(g); seen = true; return; }
             if (!began || stickId != NoTouch) return;
 
-            // The same thumb back down after a tiny lift: same stick, same anchor.
+            // The same thumb back down after a tiny lift: same stick, same
+            // anchor -- but never on a control (a lift beside the harpoon
+            // button and a tap on it, 2026-10-04, was steering).
             if (inGrace && (g - thumbPoint).magnitude
-                <= Mathf.Max(0f, SailControlTuning.liftGraceRadius) * ringRadiusPx)
+                <= Mathf.Max(0f, SailControlTuning.liftGraceRadius) * ringRadiusPx
+                && !UIBlocker.Blocked(screenPos))
             {
                 stickId = id;
                 inGrace = false;
@@ -146,12 +149,7 @@ namespace SeaSick.Ship
                 return;
             }
 
-            // A fresh stick: only in the boat zone, and only where no other
-            // control claimed the touch. UIBlocker.Blocked wants SCREEN space
-            // (it flips to GUI space itself).
-            bool inZone = screenPos.y <= Screen.height * Mathf.Clamp01(SailControlTuning.zoneTopFrac)
-                          && !UIBlocker.Blocked(screenPos);
-            if (!inZone) return;
+            if (!CanStartAt(screenPos)) return;
 
             stickId = id;
             inGrace = false;
@@ -159,6 +157,15 @@ namespace SeaSick.Ship
             Move(g);
             seen = true;
         }
+
+        /// The gate a fresh stick passes at touch-down (SCREEN space, origin
+        /// bottom-left): only in the boat zone, and only where no other
+        /// control claimed the touch (`UIBlocker.Blocked` flips to GUI space
+        /// itself; it covers the sea HUD's buttons, the harpoon's included).
+        /// Public for `HarpoonTapCheck`.
+        public static bool CanStartAt(Vector2 screenPos) =>
+            screenPos.y <= Screen.height * Mathf.Clamp01(SailControlTuning.zoneTopFrac)
+            && !UIBlocker.Blocked(screenPos);
 
         void Move(Vector2 g)
         {

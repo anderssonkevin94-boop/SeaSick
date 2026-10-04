@@ -44,7 +44,7 @@ namespace SeaSick.UI.Sheets
             if (pointer.press.wasPressedThisFrame)
             {
                 pressAt = pointer.position.ReadValue();
-                armed = !OverUI(pressAt) && !Busy();
+                armed = TapAllowedAt(pressAt);
                 return;
             }
 
@@ -59,6 +59,21 @@ namespace SeaSick.UI.Sheets
             if (Busy() || OverUI(at)) return;
 
             Tap(at);
+        }
+
+        /// The press-down gate (SCREEN space, origin bottom-left): not on the
+        /// sheet HUD's panel, not on a sea HUD control, and nothing modal
+        /// owns the finger. The sea HUD test is explicit as well as
+        /// `OverUI`'s pick (2026-10-04, Kevin: "it's impossible to press
+        /// [the harpoon button] without it pressing on my ship" -- a tap on
+        /// the bow that reached this opened the Ship sheet): `SeaHud.Blocks`
+        /// holds the harpoon button's layout rect from the first frame it
+        /// shows, whatever the panel has laid out yet. Public for
+        /// `HarpoonTapCheck`.
+        public static bool TapAllowedAt(Vector2 screen)
+        {
+            if (OverUI(screen) || Busy()) return false;
+            return !SeaHud.Blocks(new Vector2(screen.x, Screen.height - screen.y));
         }
 
         static bool Busy()

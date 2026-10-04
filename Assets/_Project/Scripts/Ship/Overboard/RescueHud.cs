@@ -196,9 +196,9 @@ namespace SeaSick.Ship.Overboard
 
             if (!offscreen)
             {
-                // In the harpoon's bow arc (or on its line) the hook marker
-                // owns the tap -- one tap must not both pick the harpoon's
-                // target and set the helm steering at it (2026-10-04).
+                // In the harpoon's bow arc (or on its line) the harpoon
+                // has it: no steer zone, so a thumb on its indicator marker
+                // (which takes no tap) never turns the helm (2026-10-04).
                 if (!HarpoonOwns(t)) DrawTapZone(gui, tapHalf, t);
                 return;
             }
@@ -266,8 +266,8 @@ namespace SeaSick.Ship.Overboard
             return origin + dir * t;
         }
 
-        /// True when `t` is the harpoon's to tap: in its bow arc, or the load
-        /// on its line. Outside the arc the steer tap stays, to bring it in.
+        /// True when `t` is the harpoon's: in its bow arc, or the load on its
+        /// line. Outside the arc the steer tap stays, to bring it in.
         static bool HarpoonOwns(IOverboardTarget t)
         {
             var gun = SeaSick.Ship.Harpoon.HarpoonGun.Player;
@@ -283,13 +283,28 @@ namespace SeaSick.Ship.Overboard
         /// thing that turns a tap into `HelmInput.SteerToward`. Blocks
         /// `SeaStick` off this rect FIRST (see the class doc), then reads
         /// the tap with an ordinary (styleless, so invisible) `GUI.Button`.
+        ///
+        /// **Never on the sea HUD's round buttons** (2026-10-04): a
+        /// `GUI.Button` reads its tap whatever UI Toolkit drew over it, so a
+        /// zone over the harpoon button (or the bolt) turned a fire tap into
+        /// a steer as well. A target that close to a button gets no zone.
         void DrawTapZone(Vector2 guiPoint, float half, IOverboardTarget t)
         {
-            var rect = new Rect(guiPoint.x - half, guiPoint.y - half, half * 2f, half * 2f);
+            if (!TapZoneAllowed(guiPoint)) return;
+            var rect = ZoneRect(guiPoint, half);
             UIBlocker.Block(rect);
             if (GUI.Button(rect, GUIContent.none, GUIStyle.none) && helm != null)
                 helm.SteerToward(t.Transform, t.Label);
         }
+
+        static Rect ZoneRect(Vector2 guiPoint, float half) =>
+            new Rect(guiPoint.x - half, guiPoint.y - half, half * 2f, half * 2f);
+
+        /// May a steer tap zone be centred on this GUI-space point? Not where
+        /// its square would touch the harpoon button or the bolt. Public for
+        /// `HarpoonTapCheck`.
+        public static bool TapZoneAllowed(Vector2 guiPoint) =>
+            !SeaSick.UI.Sheets.SeaHud.ButtonsOverlap(ZoneRect(guiPoint, HudLayout.Unit * TapRadiusUnits));
 
         void DrawArrow(Vector2 at, Vector2 dir, float timeLeft01, float distanceMetres, int u)
         {

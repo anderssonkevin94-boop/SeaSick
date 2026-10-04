@@ -179,7 +179,7 @@ namespace SeaSick.CameraRig
         {
             // Only above the boat zone, and only where no HUD control claimed
             // it. UIBlocker.Blocked wants SCREEN space (it flips itself).
-            if (!InCameraZone(screenPos)) return;
+            if (!CanBeginAt(screenPos)) return;
             stickId = id;
             anchor = thumb = screenPos;
             downTime = Time.unscaledTime;
@@ -187,7 +187,10 @@ namespace SeaSick.CameraRig
             seen = true;
         }
 
-        static bool InCameraZone(Vector2 screenPos)
+        /// The gate the camera stick passes at touch-down (SCREEN space):
+        /// above the boat zone and on no `UIBlocker` rect. Public for
+        /// `HarpoonTapCheck`.
+        public static bool CanBeginAt(Vector2 screenPos)
             => screenPos.y > Screen.height * Mathf.Clamp01(SeaSick.Ship.SailControlTuning.zoneTopFrac)
                && !UIBlocker.Blocked(screenPos);
 
@@ -233,7 +236,7 @@ namespace SeaSick.CameraRig
             if (mouseButton == 0)
             {
                 if (m.rightButton.wasPressedThisFrame && !UIBlocker.Blocked(pos)) StartMouse(2);
-                else if (m.leftButton.wasPressedThisFrame && InCameraZone(pos)) StartMouse(1);
+                else if (m.leftButton.wasPressedThisFrame && CanBeginAt(pos)) StartMouse(1);
             }
             if (mouseButton == 0) return;
 

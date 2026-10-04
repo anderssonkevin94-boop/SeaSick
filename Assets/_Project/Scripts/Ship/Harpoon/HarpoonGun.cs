@@ -11,7 +11,8 @@ namespace SeaSick.Ship.Harpoon
     /// follows the hull through every shipyard refit.
     ///
     /// The loop: the nearest harpoonable thing in the bow arc is the target
-    /// (a tapped marker overrides it, `SelectTarget`); `FireOrCut` winds up
+    /// (always: the markers are indicators, and the fixed button is the only
+    /// way to fire, 2026-10-04); `FireOrCut` winds up
     /// and fires a self-leading barb; a bite puts a live line on it, which
     /// the winch reels on a spring-damper while the tension reads slack →
     /// taut → strained; held strain snaps it, a second tap cuts it, both cost
@@ -84,7 +85,6 @@ namespace SeaSick.Ship.Harpoon
         // --- targeting ------------------------------------------------------
         readonly List<IHarpoonable> inArc = new List<IHarpoonable>();
         readonly List<float> inArcDist = new List<float>();
-        IHarpoonable selected;
         IHarpoonable trackOf;
         Vector3 trackLast, targetVel;
 
@@ -262,8 +262,7 @@ namespace SeaSick.Ship.Harpoon
             }
 
             if (LineOut) return;   // the line's own target stays the target
-            if (selected != null && !inArc.Contains(selected)) selected = null;
-            var pick = selected ?? (inArc.Count > 0 ? inArc[0] : null);
+            var pick = inArc.Count > 0 ? inArc[0] : null;
             if (pick != Target) { Target = pick; pendingShot = false; }
             Track(Target);
         }
@@ -281,17 +280,6 @@ namespace SeaSick.Ship.Harpoon
             if (d > HarpoonTuning.range) return false;
             if (d < 0.01f) return true;
             return Vector3.Angle(fwd, to) <= HarpoonTuning.arcHalfDeg;
-        }
-
-        /// The tapped marker's target. Holds until it leaves the arc or
-        /// stops being valid; the nearest is the pick again after that.
-        public void SelectTarget(IHarpoonable t)
-        {
-            if (!Valid(t)) return;
-            Vector3 fwd = transform.forward; fwd.y = 0f;
-            if (!InReach(t, MuzzlePos, fwd.normalized, out _)) return;
-            selected = t;
-            if (!LineOut && Target != t) { Target = t; pendingShot = false; Track(t); }
         }
 
         /// The target's own velocity, measured: the lead needs it and the

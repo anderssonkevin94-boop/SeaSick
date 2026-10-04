@@ -53,19 +53,28 @@ namespace SeaSick.UI.Sheets
     ///   button: `Blocks` covers `BoostRect`, so a thumb on it never starts
     ///   the stick. `HelmRect` is the whole bottom row (strip + button) so
     ///   the edge markers keep off both.</item>
-    /// <item>**The harpoon button** (2026-10-04, `docs/PLAN-harpoon.md` §4): a
-    ///   round hook button the same 48 design px as the bolt, its right edge
-    ///   on the bolt's and just above it, with a label pill running left
-    ///   from it (icon and pill are ONE tappable rect, `HarpoonRect`, in
-    ///   `Blocks`). Ready with a target: "crate · 22 m"; firing / reeling in:
+    /// <item>**The harpoon button** (2026-10-04, `docs/PLAN-harpoon.md` §4;
+    ///   2026-10-04 evening, after Kevin's phone: "pressing the button to
+    ///   launch the harpoon is spotty at best. It's impossible to press it
+    ///   without it pressing on my ship. Also I'd like the harpoon button to
+    ///   be fixed on the screen, not above whatever it's targeting"): the
+    ///   ONLY way to fire. One fixed-size button, its right edge on the
+    ///   bolt's and just above it: the round hook icon (`HarpoonSide`, at
+    ///   least 64 pt on a phone) on the right and a fixed-width label area
+    ///   (`HarpoonLabelWidth`) left of it, both one tappable rect,
+    ///   `HarpoonRect`. Shown for as long as the gun is fitted, so it never
+    ///   vanishes from under a thumb. Ready with a target: "crate" over
+    ///   "22 m"; no target: dimmed, "no target"; firing / reeling in:
     ///   dimmed; hooked: scissors and "Cut" with a tension bar (slack,
     ///   taut, strained); reloading: a ring countdown and "reload 3 s"; a
-    ///   full hold: "hold full". Hidden with no gun or no target in the arc.
-    ///   While the gun is fitted the space above the bolt is ALWAYS reserved
-    ///   (the card, the combat row, the hint and the IMGUI slot stack above
-    ///   it), so the stack does not jump as targets come and go. A short
-    ///   event word ("Missed", "Snapped", "Cut", "Aboard", "Hold full")
-    ///   fades in beside it. The world markers are `HarpoonMarkers`.</item>
+    ///   full hold: "hold full". Every state in the SAME rect, which is
+    ///   computed from the layout constants (never the lagging
+    ///   `worldBound`), so it is right from the first frame it shows and
+    ///   is in `Blocks`. The space above the bolt is reserved for it (the
+    ///   card, the combat row, the hint and the IMGUI slot stack above
+    ///   it). A short event word ("Missed", "Snapped", "Cut", "Aboard",
+    ///   "Hold full") fades in beside it. The world markers
+    ///   (`HarpoonMarkers`) are indicators only and take no tap.</item>
     /// <item>**First-use hint**: a faint dashed ring and "Drag to sail · let
     ///   go to stop" in the stick zone until the stick has been used once
     ///   (`GestureHints`).</item>
@@ -101,8 +110,14 @@ namespace SeaSick.UI.Sheets
         /// The boost button's side (design px; 48 is >= 44 pt on a phone) and
         /// the gap between it and the strip.
         public const float BoostSize = 48f, BoostGap = 8f;
-        /// The harpoon button sits above the bolt: the same side, this gap.
+        /// The harpoon button sits above the bolt, this gap over it. Its icon
+        /// is a square of `HarpoonSide` design px; its label area is
+        /// `HarpoonLabelWidth` wide, left of the icon.
         public const float HarpoonGap = 8f;
+        /// The harpoon button's least side, design px, and its least side in
+        /// points (Kevin's thumb, 2026-10-04): the larger of the two wins.
+        public const float HarpoonMinSide = 64f, HarpoonMinPt = 64f;
+        public const float HarpoonLabelWidth = 104f;
         const float ToastSeconds = 1.8f, ToastFade = .5f;
         /// Gap between the order strip (or the thumb bar) and the card, design px.
         public const float CardGap = 14f;
@@ -118,9 +133,41 @@ namespace SeaSick.UI.Sheets
         public static Rect HelmRect { get; private set; }
         /// The boost button alone (GUI space; zero while hidden).
         public static Rect BoostRect { get; private set; }
-        /// The harpoon button and its label pill, one rect (GUI space; zero
-        /// while hidden). In `Blocks`, and in `HelmRect`'s union while shown.
+        /// The harpoon button, icon and label area, one rect (GUI space; zero
+        /// while hidden). Computed from the layout constants each tick, so it
+        /// is exact from the first frame the button shows; constant for a
+        /// given screen. In `Blocks`, and in `HelmRect`'s union while shown.
         public static Rect HarpoonRect { get; private set; }
+        /// The button's drawn rect as UI Toolkit last laid it out (GUI space;
+        /// one frame late by nature). For `HarpoonTapCheck` only, to prove
+        /// `HarpoonRect` and the drawn button are the same rect.
+        public static Rect HarpoonDrawnRect { get; private set; }
+        /// Taps the harpoon button has taken since the domain loaded (for
+        /// `HarpoonTapCheck`: did the press reach the button).
+        public static int HarpoonTaps { get; private set; }
+
+        /// Points to screen px: `Screen.dpi / 160`, clamped 1..3, and 1 with
+        /// no dpi (the editor) -- the rule `CombatLock.PtPx` uses.
+        public static float PtPx(float pt)
+        {
+            float dpi = Screen.dpi;
+            return pt * (dpi > 0f ? Mathf.Clamp(dpi / 160f, 1f, 3f) : 1f);
+        }
+
+        /// The harpoon icon's side in design px for `ppd` screen px per
+        /// design px: `HarpoonMinSide`, or `HarpoonMinPt` points if larger.
+        public static float HarpoonSide(float ppd) =>
+            Mathf.Max(HarpoonMinSide, PtPx(HarpoonMinPt) / Mathf.Max(1e-4f, ppd));
+
+        /// Does a GUI-space rect touch one of the sea HUD's round buttons
+        /// (the harpoon or the bolt)? IMGUI tap zones (`RescueHud`) must not
+        /// lie on them: an IMGUI `GUI.Button` reads its tap no matter what
+        /// UI Toolkit drew over it.
+        public static bool ButtonsOverlap(Rect guiRect)
+        {
+            if (Time.frameCount - tickFrame > 1) return false;
+            return HarpoonRect.Overlaps(guiRect) || BoostRect.Overlaps(guiRect);
+        }
         /// Panel units from the panel's top edge at which the chart
         /// instrument sits under the bar (0 = no bar, the chart keeps its
         /// corner). `ChartInstrument` reads it.
@@ -154,9 +201,10 @@ namespace SeaSick.UI.Sheets
         static void Reset()
         {
             TopBarShowing = HelmShowing = cardTaps = false;
-            TopRect = AlertRect = HelmRect = BoostRect = HarpoonRect = Rect.zero;
+            TopRect = AlertRect = HelmRect = BoostRect = HarpoonRect = HarpoonDrawnRect = Rect.zero;
             ChartTopPanel = 0f;
             tickFrame = -10;
+            HarpoonTaps = 0;
         }
 
         static readonly Color Pearl = new Color32(232, 242, 246, 255);
@@ -193,7 +241,7 @@ namespace SeaSick.UI.Sheets
             readonly Button harpoonBtn;
             readonly Label harpoonText, harpoonToast, harpoonHintText;
             readonly SeaGlyph hookGlyph, cutGlyph, reloadRing;
-            readonly VisualElement harpoonTrack, harpoonFill, harpoonHint;
+            readonly VisualElement harpoonIcon, harpoonTrack, harpoonFill, harpoonHint;
             // --- hint
             readonly VisualElement hint;
             // The look hint (DREDGE controls step 2): text only, in the upper
@@ -243,6 +291,7 @@ namespace SeaSick.UI.Sheets
 
             // Harpoon state (re-textured only when one of these moves).
             int hMode = -1, hBand = -1, hMetres = -1, hSeconds = -1;
+            float hSide = -1f;
             string hLabel;
             float hFill = -1f;
             float toastStart = -10f, toastSeenAt;
@@ -347,12 +396,12 @@ namespace SeaSick.UI.Sheets
                 root.Add(boostBtn);
 
                 // --- the harpoon button: the hook (or scissors) on the right,
-                // its label pill running left from it. One button, one rect.
+                // its fixed-width label area left of it. One button, one rect.
                 harpoonBtn = new Button(TapHarpoon) { text = "" };
                 harpoonBtn.AddToClassList("sea-harpoon");
                 harpoonBtn.tooltip = "Harpoon";
                 harpoonText = Text(harpoonBtn, "sea-harpoon-text");
-                var harpoonIcon = Box("sea-harpoon-icon");
+                harpoonIcon = Box("sea-harpoon-icon");
                 hookGlyph = new SeaGlyph(SeaGlyph.Kind.Hook);
                 hookGlyph.AddToClassList("sea-harpoon-glyph");
                 harpoonIcon.Add(hookGlyph);
@@ -413,6 +462,7 @@ namespace SeaSick.UI.Sheets
             /// Fires when ready, cuts the line when it is out; the gun decides.
             void TapHarpoon()
             {
+                HarpoonTaps++;
                 var g = HarpoonGun.Player;
                 if (g == null) return;
                 GestureHints.MarkDone(GestureHints.Harpoon);
@@ -451,7 +501,7 @@ namespace SeaSick.UI.Sheets
                 Show(hint, ref hintShown, false);
                 Show(lookHint, ref lookHintShown, false);
                 TopBarShowing = HelmShowing = cardTaps = false;
-                TopRect = AlertRect = HelmRect = BoostRect = HarpoonRect = Rect.zero;
+                TopRect = AlertRect = HelmRect = BoostRect = HarpoonRect = HarpoonDrawnRect = Rect.zero;
                 ChartTopPanel = 0f;
                 SeaActions.Visible = false;
                 SeaActions.Rect = Rect.zero;
@@ -588,7 +638,8 @@ namespace SeaSick.UI.Sheets
                 // the card / combat row stack above it never jumps.
                 var gun = HarpoonGun.Player;
                 bool gunOn = helmOn && gun != null && gun.Available;
-                float harpH = gunOn ? HarpoonGap + BoostSize : 0f;     // design px
+                float harpSide = HarpoonSide(ppd);                       // design px
+                float harpH = gunOn ? HarpoonGap + harpSide : 0f;      // design px
                 float stackH = helmH + harpH;
                 Show(helmRow, ref helmShown, helmOn);
                 Show(boostBtn, ref boostShown, helmOn);
@@ -610,13 +661,13 @@ namespace SeaSick.UI.Sheets
                     var stripRect = new Rect(laneX, Screen.height - stripBottom - HelmHeight * ppd, stripW * ppd, HelmHeight * ppd);
                     HelmRect = Union(stripRect, BoostRect);
                     TickHelm(motor);
-                    TickHarpoon(gun, gunOn, safe, s, ppd, k, bottom, boostX);
+                    TickHarpoon(gun, gunOn, s, ppd, k, bottom, boostX, harpSide);
                     HelmRect = Union(HelmRect, HarpoonRect);
                 }
                 else
                 {
-                    HelmRect = BoostRect = HarpoonRect = Rect.zero;
-                    TickHarpoon(null, false, safe, s, ppd, k, 0f, 0f);
+                    HelmRect = BoostRect = Rect.zero;
+                    TickHarpoon(null, false, s, ppd, k, 0f, 0f, harpSide);
                 }
                 HelmShowing = helmOn;
                 // The combat row sits just above the strip, and above the
@@ -703,7 +754,7 @@ namespace SeaSick.UI.Sheets
 
                 // --- the harpoon's first-use hint: only once a target is in the
                 // arc, after the stick and look hints are done, retired by
-                // the first shot (any path: the button, a key, a marker).
+                // the first shot (either path: the button or desktop F).
                 if (gunOn && gun.State != HarpoonState.Ready) GestureHints.MarkDone(GestureHints.Harpoon);
                 bool harpHintOn = gunOn && !hintOn && !lookOn && !CombatHud.Visible && gun.State == HarpoonState.Ready
                                   && gun.InArc.Count > 0 && GestureHints.IsDone(GestureHints.Stick)
@@ -910,37 +961,39 @@ namespace SeaSick.UI.Sheets
 
             // --- the harpoon button (each frame, re-texted only on change) -----------
 
-            /// Modes of the pill, one per look.
-            const int MReady = 0, MFiring = 1, MReeling = 2, MHooked = 3, MReload = 4, MHoldFull = 5;
+            /// Modes of the button, one per look.
+            const int MReady = 0, MFiring = 1, MReeling = 2, MHooked = 3, MReload = 4, MHoldFull = 5, MNoTarget = 6;
 
-            void TickHarpoon(HarpoonGun gun, bool gunOn, Rect safe, float s, float ppd, float k, float bottom, float boostX)
+            /// The harpoon button: shown whenever the gun is fitted, in ONE
+            /// place whatever it says. Its rect is the layout's own numbers
+            /// (right edge on the bolt's, `HarpoonGap` above it, `side` +
+            /// `HarpoonLabelWidth` wide, `side` tall), so `Blocks` holds it
+            /// from the very frame it first draws.
+            void TickHarpoon(HarpoonGun gun, bool gunOn, float s, float ppd, float k, float bottom, float boostX, float side)
             {
                 if (!gunOn)
                 {
                     Show(harpoonBtn, ref harpoonShown, false);
                     Show(harpoonToast, ref toastShown, false);
-                    HarpoonRect = Rect.zero;
+                    HarpoonRect = HarpoonDrawnRect = Rect.zero;
                     toastSynced = false;
                     return;
                 }
 
                 var st = gun.State;
-                bool on = st != HarpoonState.Ready || gun.Target != null;
-                Show(harpoonBtn, ref harpoonShown, on);
-                float btnBottom = bottom + (BoostSize + HarpoonGap) * ppd;
+                Show(harpoonBtn, ref harpoonShown, true);
+                float btnBottom = bottom + (BoostSize + HarpoonGap) * ppd;   // screen px from the bottom
                 float boostRight = boostX + BoostSize * ppd;
-                if (on)
-                {
-                    harpoonBtn.style.right = (Screen.width - boostRight) * s;
-                    harpoonBtn.style.bottom = btnBottom * s;
-                    SetScale(harpoonBtn, ref kHarpoon, k);
-                    RefreshHarpoon(gun, st);
-                    // Last frame's layout: the pill grows and shrinks with its words.
-                    HarpoonRect = ToGui(harpoonBtn.worldBound, s);
-                }
-                else HarpoonRect = Rect.zero;
+                float w = (side + HarpoonLabelWidth) * ppd, h = side * ppd;
+                harpoonBtn.style.right = (Screen.width - boostRight) * s;
+                harpoonBtn.style.bottom = btnBottom * s;
+                SetScale(harpoonBtn, ref kHarpoon, k);
+                SizeHarpoon(side);
+                RefreshHarpoon(gun, st);
+                HarpoonRect = new Rect(boostRight - w, Screen.height - btnBottom - h, w, h);
+                HarpoonDrawnRect = ToGui(harpoonBtn.worldBound, s);
 
-                // The event word, beside the button (or where it would be).
+                // The event word, beside the button.
                 if (!toastSynced || !ReferenceEquals(toastGun, gun))
                 {
                     toastGun = gun;
@@ -963,12 +1016,31 @@ namespace SeaSick.UI.Sheets
                 Show(harpoonToast, ref toastShown, toastOn);
                 if (toastOn)
                 {
-                    float edge = HarpoonRect.width > 0f ? HarpoonRect.xMin : boostRight - BoostSize * ppd;
-                    harpoonToast.style.right = (Screen.width - edge + 8f * ppd) * s;
-                    harpoonToast.style.bottom = (btnBottom + 9f * ppd) * s;
+                    harpoonToast.style.right = (Screen.width - HarpoonRect.xMin + 8f * ppd) * s;
+                    harpoonToast.style.bottom = (btnBottom + (side - 30f) * .5f * ppd) * s;
                     SetScale(harpoonToast, ref kToast, k);
                     harpoonToast.style.opacity = Mathf.Clamp01((ToastSeconds - age) / ToastFade);
                 }
+            }
+
+            /// The button's design-px box, re-styled only when the side moves
+            /// (a dpi or safe-area change): the icon square, the round ends,
+            /// the tension track stopping short of the icon.
+            void SizeHarpoon(float side)
+            {
+                if (Mathf.Approximately(side, hSide)) return;
+                hSide = side;
+                harpoonBtn.style.width = side + HarpoonLabelWidth;
+                harpoonBtn.style.height = side;
+                var r = new StyleLength(side * .5f);
+                harpoonBtn.style.borderTopLeftRadius = r;
+                harpoonBtn.style.borderBottomLeftRadius = r;
+                harpoonBtn.style.borderTopRightRadius = r;
+                harpoonBtn.style.borderBottomRightRadius = r;
+                // Inside the 2 px border, so the icon fills the round end.
+                harpoonIcon.style.width = side - 4f;
+                harpoonIcon.style.height = side - 4f;
+                harpoonTrack.style.right = side;
             }
 
             void RefreshHarpoon(HarpoonGun gun, HarpoonState st)
@@ -977,7 +1049,8 @@ namespace SeaSick.UI.Sheets
                     : st == HarpoonState.Returning ? MReeling
                     : st == HarpoonState.Reloading ? MReload
                     : st == HarpoonState.Hooked ? (gun.HoldFull ? MHoldFull : MHooked)
-                    : MReady;
+                    : gun.Target != null ? MReady
+                    : MNoTarget;
                 bool line = mode == MHooked || mode == MHoldFull;
                 int band = line ? (int)gun.Band : -1;
                 if (mode != hMode || band != hBand)
@@ -986,7 +1059,7 @@ namespace SeaSick.UI.Sheets
                     hBand = band;
                     hLabel = null;
                     hMetres = hSeconds = -1;
-                    harpoonBtn.EnableInClassList("sea-harpoon--dim", mode == MFiring || mode == MReeling);
+                    harpoonBtn.EnableInClassList("sea-harpoon--dim", mode == MFiring || mode == MReeling || mode == MNoTarget);
                     harpoonBtn.EnableInClassList("sea-harpoon--line", line);
                     harpoonBtn.EnableInClassList("sea-harpoon--taut", band == (int)TensionBand.Taut);
                     harpoonBtn.EnableInClassList("sea-harpoon--strained", band == (int)TensionBand.Strained);
@@ -1003,6 +1076,7 @@ namespace SeaSick.UI.Sheets
                         case MReeling: harpoonText.text = "reeling in"; break;
                         case MHooked: harpoonText.text = "Cut"; break;
                         case MHoldFull: harpoonText.text = "hold full"; break;
+                        case MNoTarget: harpoonText.text = "no target"; break;
                     }
                 }
 
@@ -1015,7 +1089,9 @@ namespace SeaSick.UI.Sheets
                     {
                         hMetres = metres;
                         hLabel = label;
-                        harpoonText.text = label + " · " + metres + " m";
+                        // Name over distance: two short lines fit the
+                        // fixed label area, so the button never resizes.
+                        harpoonText.text = label + "\n" + metres + " m";
                     }
                 }
                 else if (mode == MReload)

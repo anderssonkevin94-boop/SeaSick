@@ -68,7 +68,7 @@ Today's screen (`SailControlTuning.zoneTopFrac` 0.55, `SeaHud`, `CombatHud`):
 - **One button, 🪝, sitting just above ⚡ on the bottom-right edge.** That spot is free today, it's a thumb's reach from the stick, and it registers in `UIBlocker` like `BoostRect` so it never starts the stick.
   - It shows only when there is a valid target in the arc, labelled with it: "🪝 crate · 22 m".
   - While the line is out it becomes **✂ Cut**.
-- **Choosing a different target:** tap a hook marker in the world. A tap on a ship still locks it, as today (`CombatLock`). A locked enemy in the bow arc becomes the harpoon's target.
+- **Choosing a target:** the nearest in the arc is auto-picked and its marker is highlighted. **Markers are indicators only (2026-10-04, after Kevin's phone test: a marker tap over the bow opened the Ship sheet):** they take no taps; the fixed 🪝 button is the only way to fire. A tap on a ship still locks it, as today (`CombatLock`).
 - **No aiming.** The barb auto-leads the target. Skill is in **bringing the bow round** to put it in the arc and **managing the line** afterwards, which is sailing, not thumb-aiming.
 - **One-thumb conflict:** "let go = engine stops". Tapping 🪝 means lifting the thumb off the stick, so the engine stops for a moment. That's fine, even good: firing happens in a calm beat, and the winch then reels while you steer again.
 - **Desktop:** **F** fires and cuts (F is free; Space, Q/E, R, C, G and H are taken).
@@ -116,7 +116,7 @@ Today's screen (`SailControlTuning.zoneTopFrac` 0.55, `SeaHud`, `CombatHud`):
 
 ## 8. Kevin's decisions (2026-10-04)
 
-1. **Aiming:** auto-target the nearest in the bow arc, tap a marker to switch, and the barb leads itself. **Show a marker** on targets. The **bow arc is 90° total (±45°)** for now.
+1. **Aiming:** auto-target the nearest in the bow arc (marker taps removed 2026-10-04: markers are indicators, firing only from the fixed button), and the barb leads itself. **Show a marker** on targets. The **bow arc is 90° total (±45°)** for now.
 2. **Ammo: unlimited** for now. Revisit later; barb items are parked.
 3. **Lines snap** under held strain. After a snap the gun **reloads for 5 s**.
 4. **Every ship has a basic bow harpoon from the start.** Upgrades come later in the shipyard.

@@ -195,7 +195,7 @@ namespace SeaSick.Combat
             if (p.press.wasPressedThisFrame)
             {
                 tapStart = p.position.ReadValue();
-                tapStartTime = !UIBlocker.Blocked(tapStart) ? Time.unscaledTime : -1f;
+                tapStartTime = TapAllowedAt(tapStart) ? Time.unscaledTime : -1f;
                 return;
             }
             if (!p.press.wasReleasedThisFrame || tapStartTime < 0f) return;
@@ -209,6 +209,13 @@ namespace SeaSick.Combat
             var t = PickAt(tapStart);
             if (t != null && !ReferenceEquals(t, Locked)) LockOn(t);
         }
+
+        /// The press-down gate of tap-to-lock (input space, origin
+        /// bottom-left): a press on any HUD control -- `UIBlocker`, which
+        /// covers the sea HUD's buttons, the harpoon's fixed button included
+        /// -- is that control's, never a lock, even with a ship right
+        /// behind it (`WouldLock` true). Public for `HarpoonTapCheck`.
+        public static bool TapAllowedAt(Vector2 screen) => !UIBlocker.Blocked(screen);
 
         /// Whether a tap landing at this screen point (input space, the same
         /// convention `PickAt` and `Pointer.position` use) would lock an
