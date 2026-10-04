@@ -1331,6 +1331,8 @@ namespace SeaSick.Ship
         string offerEyebrow = "", offerTitle = "", offerDetail = "";
         // The island a pier in range stands on, found once per pier (`Island.Nearest` walks every island).
         Dock offerDockOf; Island offerDockIsle;
+        // The last sand the cliff card pointed at, held against one-metre misses.
+        Island sandHeldIsle; Vector3 sandHeldAt, sandHeldFrom; float sandHeldTime = -1f;
 
         const string TitleLand = "Land here";
         const string TitleCliff = "Sheer cliff";
@@ -1348,7 +1350,8 @@ namespace SeaSick.Ship
 
         string SlowText => $"Slow to under {approachSpeedLimit:0.#} m/s" + KeyHint("  ·  S");
 
-        static string Upper(Object o) => o != null ? o.name.ToUpperInvariant() : "";
+        static string Upper(Object o) => o is Island isle ? isle.DisplayName.ToUpperInvariant()
+            : o != null ? o.name.ToUpperInvariant() : "";
 
         /// **The anchor's offers to the sea action card**, once a frame from
         /// `Update`, at `SeaActions.PriorityLand` (200): what the IMGUI
@@ -1427,6 +1430,14 @@ namespace SeaSick.Ship
             int sandM = 0, sandSide = 0;
             Vector3 sandAt = default;
             bool sand = !beach && isle.SandBeyondReach(transform.position, out sandAt);
+            // Held like the beach itself (`Island.BeachHoldRadius`/`Seconds`): a
+            // sand search that misses for a metre or two keeps the last pointer
+            // rather than dropping to "Find a beach to land" and back.
+            if (sand) { sandHeldIsle = isle; sandHeldAt = sandAt; sandHeldFrom = transform.position; sandHeldTime = Time.time; }
+            else if (!beach && sandHeldIsle == isle
+                     && ((transform.position - sandHeldFrom).sqrMagnitude <= Island.BeachHoldRadius * Island.BeachHoldRadius
+                         || Time.time - sandHeldTime <= Island.BeachHoldSeconds))
+            { sand = true; sandAt = sandHeldAt; }
             if (sand) Island.SandPointer(transform.position, transform.forward, sandAt, out sandM, out sandSide);
             int sandKey = sand ? ((sandM / 10) << 2 | sandSide) + 1 : 0;
             if (OfferStale(isle, 16 | (slow ? 4 : 0) | desk | (beach ? 32 : 0) | (res ? 64 : 0) | sandKey << 8))

@@ -238,20 +238,21 @@ namespace SeaSick.UI.Sheets
             if (l.away != null && l.away.Open && l.away.raids > 0) return FlameState.Raided;
             if (camp.LastReturn != null && camp.LastReturn.raids > 0) return FlameState.Raided;
 
-            // Hungry is the ledger's own two answers to "is anybody going
-            // without": the pile is empty with mouths to feed (`Hungry`), or
-            // a shortfall has already been booked (`hungerDays`). The
-            // food-days test is the third, and the one that warns AHEAD.
+            // Hungry is NOW: the pile is empty with mouths to feed (`Hungry`),
+            // or under a day of food left (the warning AHEAD). Not
+            // `hungerDays`: that is a lifetime tally that never goes back to
+            // 0, so one lean week long ago read "hungry" forever (Kevin's home
+            // camp, 15 days of food in the top bar, 2026-10-04).
             if (l.hands.Count > 0)
             {
-                if (l.Hungry || l.hungerDays > 0f) return FlameState.Hungry;
+                if (l.Hungry) return FlameState.Hungry;
                 float days = SheetBits.FoodDays(l);
                 if (days >= 0f && days < 1f) return FlameState.Hungry;
             }
             return FlameState.Fed;
         }
 
-        /// "23 timber · 4 hands · fed" — the biggest pile, the roster, and the
+        /// "23 timber · 4 hands · 15 days of food" — the biggest pile, the roster, and the
         /// word the flame is already saying, for a player reading the chart
         /// rather than the mark.
         static string LedgerLine(Outpost camp)
@@ -271,13 +272,24 @@ namespace SeaSick.UI.Sheets
             var bits = new List<string>(3);
             if (most > 0) bits.Add(most + " " + CampLoading.Lower(big));
             bits.Add(l.hands.Count == 1 ? "1 hand" : l.hands.Count + " hands");
-            switch (Flame(camp))
-            {
-                case FlameState.Raided: bits.Add("raided"); break;
-                case FlameState.Hungry: bits.Add("hungry"); break;
-                default: bits.Add("fed"); break;
-            }
+            // The food as the top bar counts it ("15 days of food"), not a
+            // bare "fed"/"hungry" the player has to decode.
+            if (Flame(camp) == FlameState.Raided) bits.Add("raided");
+            bits.Add(FoodWords(l));
             return string.Join(" · ", bits);
+        }
+
+        /// "15 days of food", "under a day of food", "no food", or
+        /// "nobody to feed": `SheetBits.FoodDays`, the top bar's own number.
+        static string FoodWords(OutpostLedger l)
+        {
+            if (l == null || l.hands.Count == 0) return "nobody to feed";
+            if (l.Hungry) return "no food";
+            float days = SheetBits.FoodDays(l);
+            if (days < 0f) return "eating nothing";
+            if (days < 1f) return "under a day of food";
+            int d = Mathf.FloorToInt(days);
+            return d == 1 ? "1 day of food" : d + " days of food";
         }
 
         // --- the track ----------------------------------------------------------
