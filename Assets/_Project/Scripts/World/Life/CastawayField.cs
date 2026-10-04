@@ -246,8 +246,25 @@ namespace SeaSick.World.Life
                 if (sh == null) sh = Shader.Find("Particles/Standard Unlit");
                 if (sh == null) sh = Shader.Find("Universal Render Pipeline/Unlit");
                 smokeMat = new Material(sh) { hideFlags = HideFlags.DontSave };
-                if (smokeMat.HasProperty("_Surface")) smokeMat.SetFloat("_Surface", 1f);
-                if (smokeMat.HasProperty("_Blend")) smokeMat.SetFloat("_Blend", 0f);
+                // **A soft round puff, really transparent** (2026-10-04, Kevin:
+                // Mabel's smoke read as a "grey block"). With no texture every
+                // particle was a solid square, and setting `_Surface` alone
+                // leaves the material opaque (no blend, ZWrite on, no
+                // transparent keyword), so the squares stacked into a block.
+                // The same cached radial puff and transparent setup the
+                // storm spray already ships with on the phone.
+                var puff = SeaSick.Ocean.FoamTexture.SoftPuff();
+                if (smokeMat.HasProperty("_BaseMap")) smokeMat.SetTexture("_BaseMap", puff);
+                if (smokeMat.HasProperty("_MainTex")) smokeMat.SetTexture("_MainTex", puff);
+                if (smokeMat.HasProperty("_BaseColor")) smokeMat.SetColor("_BaseColor", Color.white);
+                smokeMat.SetFloat("_Surface", 1f);
+                smokeMat.SetFloat("_Blend", 0f);
+                smokeMat.SetOverrideTag("RenderType", "Transparent");
+                smokeMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                smokeMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                smokeMat.SetInt("_ZWrite", 0);
+                smokeMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                smokeMat.renderQueue = 3005;
             }
             renderer.sharedMaterial = smokeMat;
         }
