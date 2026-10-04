@@ -4743,6 +4743,8 @@ namespace SeaSick.World
             // Same for a dry dock -- it stands beside the home berth, and
             // only `SnapDryDock` knows where.
             if (plan.kind == BuildKind.DryDock) return null;
+            // And a mine: it stands against a face only `SnapMine` finds.
+            if (plan.kind == BuildKind.Mine) return null;
 
             float len = plan.footprint.x, wid = plan.footprint.y;
             float halfDiag = 0.5f * Mathf.Sqrt(len * len + wid * wid);
@@ -4839,7 +4841,10 @@ namespace SeaSick.World
                 // the saved spot stands regardless of steepness or beach; the
                 // corner heights are still sampled honestly so the building
                 // doesn't float or sink.
-                if (!Corners(at, Quaternion.Euler(0f, yaw, 0f), plan.footprint.x, plan.footprint.y,
+                // A mine's corners are half in its hill: it stands at its
+                // foot's height (`CanPlaceMine` already set lo = hi to it).
+                if (plan.kind != BuildKind.Mine
+                    && !Corners(at, Quaternion.Euler(0f, yaw, 0f), plan.footprint.x, plan.footprint.y,
                         true, out lo, out hi, out _))
                     lo = hi = at.y;
                 Debug.LogWarning("Outpost.Raise: " + plan.label + " stood at its saved spot ("
@@ -5139,6 +5144,9 @@ namespace SeaSick.World
                     return false;
                 }
             }
+
+            // A mine stands against a face, by its own rules (`Outpost.Mine`).
+            if (plan.kind == BuildKind.Mine) return CanPlaceMine(plan, at, yaw, out why, out lo, out hi);
 
             float len = plan.footprint.x, wid = plan.footprint.y;
             // **A tower ON the wall stands wherever the wall itself may run**

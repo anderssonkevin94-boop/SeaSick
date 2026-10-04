@@ -1994,6 +1994,7 @@ namespace SeaSick.World
         void StepStations(float days, bool gatherersHaul)
         {
             if (hands == null) return;
+            ForgetMineStarts();
             foreach (var h in hands)
             {
                 if (h == null) continue;

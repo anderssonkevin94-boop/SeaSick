@@ -28,7 +28,7 @@ namespace SeaSick.World
         /// The marker names a worker walks to at a building: where `CampPath`
         /// keeps a lane open from (`Lanes`).
         public static readonly string[] AccessStems =
-            { "Input_Pickup", "Output_Dropoff", "Worker_Stand", "Worker_Approach", "Entry", "Entrance_Anchor" };
+            { "Input_Pickup", "Output_Dropoff", "Worker_Stand", "Worker_Approach", "Entry", "Entrance_Anchor", "DropSpot" };
 
         /// This building's boxes in its own frame (x = centre x, y = centre
         /// z, z = half x, w = half z) into `into`; how many.
@@ -38,6 +38,17 @@ namespace SeaSick.World
             if (b == null) return 0;
             if (b.Kind == BuildKind.Pier || b.Kind == BuildKind.DryDock) return 0;
             var plan = BuildPlans.Named(b.Id);
+            // **The mine (2026-10-05)**: its footprint is centred on the lip,
+            // half in the hill and half the working apron. Only the shaft
+            // head behind the lip is solid; the apron, the container's front
+            // and the mouth stand stay walkable.
+            if (b.Kind == BuildKind.Mine)
+            {
+                float hw = Mathf.Max(0.4f, plan.footprint.x * 0.5f - FootprintInset);
+                float d = BuildPlans.MineHeadDepth;
+                into.Add(new Vector4(0f, -0.3f - d * 0.5f, hw, d * 0.5f));
+                return into.Count;
+            }
             // The model it wears NOW: a level 2 swap reads its own boxes.
             string model = !string.IsNullOrEmpty(b.ModelPrefab) ? b.ModelPrefab : plan.prefab;
             if (!string.IsNullOrEmpty(model) && Baked.TryGetValue(model, out var f)

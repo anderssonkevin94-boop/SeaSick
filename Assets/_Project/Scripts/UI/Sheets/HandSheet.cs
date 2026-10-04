@@ -463,6 +463,8 @@ namespace SeaSick.UI.Sheets
                 string load = ResDefs.Counted(h.haulRes, h.haulCount);
                 if (h.HuntTrip && !h.huntKilled) { main = "Out after game"; icon = Res.Game; }
                 else if (h.haulPicked) main = $"Carrying {load} to the {PlaceName(l, h.haulTo, h.haulToStation)}";
+                else if (h.haulFrom == HaulPlace.Shore && OutpostLedger.Mines(StationOfTrip(l, h)))
+                    main = h.Leg == TripLeg.AtPickup ? "In the mine" : "Walking to the mine";
                 else if (h.haulFrom == HaulPlace.Shore) main = "Fishing at the shore";
                 else main = $"Fetching {load} from the {PlaceName(l, h.haulFrom, h.haulFromStation)}";
                 sub = DoingLine(l, h);
@@ -505,7 +507,7 @@ namespace SeaSick.UI.Sheets
             {
                 case 0: return "fetch";
                 case 1:
-                    if (h.haulFrom == HaulPlace.Shore) return "fish";
+                    if (h.haulFrom == HaulPlace.Shore) return h.haulRes == Res.Fish ? "fish" : "dig";
                     if (h.haulFrom != HaulPlace.Field) return "load";
                     if (h.haulRes == Res.Game) return "hunt";
                     if (h.haulRes == Res.Timber) return "cut";
@@ -516,6 +518,13 @@ namespace SeaSick.UI.Sheets
             }
         }
 
+        static StationStock StationOfTrip(OutpostLedger l, OutpostHand h)
+        {
+            var list = l.Stations;
+            int i = h.haulFromStation;
+            return list != null && i >= 0 && i < list.Count ? list[i] : null;
+        }
+
         static string PlaceName(OutpostLedger l, HaulPlace p, int station)
         {
             switch (p)
@@ -523,7 +532,12 @@ namespace SeaSick.UI.Sheets
                 case HaulPlace.Store: return "store";
                 case HaulPlace.Site: return "site";
                 case HaulPlace.Field: return "island";
-                case HaulPlace.Shore: return "shore";
+                case HaulPlace.Shore:
+                {
+                    var list = l.Stations;
+                    bool mine = list != null && station >= 0 && station < list.Count && OutpostLedger.Mines(list[station]);
+                    return mine ? "mine" : "shore";
+                }
                 case HaulPlace.Station:
                 {
                     var list = l.Stations;

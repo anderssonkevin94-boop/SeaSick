@@ -1462,7 +1462,23 @@ namespace SeaSick.UI.Sheets
             // "empty" there was a lie while he stood at the water.
             bool shore = OutpostLedger.FishesAtShore(st);
             benchValue.EnableInClassList("st-flow-value--words", shore || sp == null);
-            if (shore)
+            if (shore && OutpostLedger.Mines(st))
+            {
+                // **The mine (2026-10-05)**: where the miner is, and while he
+                // is underground how long until he is back -- the ring fills
+                // as the trip runs down.
+                int si = IndexOfStation(l, st);
+                float left = l.MineSecondsLeft(hand, si);
+                bool under = hand != null && hand.Hauling && !hand.haulPicked && hand.Leg == TripLeg.AtPickup && left >= 0f;
+                ring.Value = under ? Mathf.Clamp01(1f - left / Mathf.Max(1f, l.MineTripSecondsAt(si))) : 0f;
+                benchValue.text = hand == null ? "no miner"
+                    : under ? $"back in {Clock(left)}"
+                    : left > 0f ? "walking in"
+                    : hand.Hauling && hand.haulPicked && hand.haulFrom == HaulPlace.Shore ? "bringing stone up"
+                    : "at the mine";
+                benchLabel.text = "in the mine";
+            }
+            else if (shore)
             {
                 ring.Value = 0f;
                 bool fishing = hand != null && hand.Hauling && hand.haulFrom == HaulPlace.Shore;
@@ -1475,6 +1491,21 @@ namespace SeaSick.UI.Sheets
             string why = StallText(l, hand, BusySpot(st) >= 0);
             stallLine.text = why;
             stallLine.style.display = string.IsNullOrEmpty(why) ? DisplayStyle.None : DisplayStyle.Flex;
+        }
+
+        /// "0:42" -- minutes and seconds, rounded up so it never reads 0:00
+        /// while he is still below.
+        static string Clock(float seconds)
+        {
+            int s = Mathf.Max(0, Mathf.CeilToInt(seconds));
+            return $"{s / 60}:{s % 60:00}";
+        }
+
+        static int IndexOfStation(OutpostLedger l, StationStock st)
+        {
+            var list = l.Stations;
+            if (list != null) for (int i = 0; i < list.Count; i++) if (ReferenceEquals(list[i], st)) return i;
+            return -1;
         }
 
         /// The ledger's `StallReason` for the hand on it; with nobody on it,

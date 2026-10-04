@@ -123,6 +123,16 @@ namespace SeaSick.World.Economy
             new Recipe { id = "fish", station = "FishingHut", makes = Res.Fish, yield = 1,
                 takes = Cost.None, ratePerDay = 4f },
 
+            // --- mine (2026-10-05) ---
+            // **A dig: no takes**, the fishing hut's shape with the hill for
+            // the sea. One batch is one trip underground: `MineLoad` stone in
+            // `MineTripSeconds` (60 s -> 12 a hand-day at the 180 s day).
+            // Stone is Raw, allowed here as a catch (`RecipeGraph.IsCatch`).
+            // **The ore seam:** an ore dig is a second recipe here (makes
+            // Ore, stationLevel/campfireLevel gated) -- nothing else changes.
+            new Recipe { id = "mine-stone", station = "Mine", makes = Res.Stone, yield = SeaSick.World.BuildPlans.MineLoad,
+                takes = Cost.None, ratePerDay = Cook(SeaSick.World.BuildPlans.MineTripSeconds, SeaSick.World.BuildPlans.MineLoad) },
+
             // --- fletcher ---
             new Recipe { id = "arrows", station = "Fletcher", makes = Res.Arrows, yield = 3,
                 takes = Cost.Of(Cost.I(Res.Timber, 1)), ratePerDay = 3f },

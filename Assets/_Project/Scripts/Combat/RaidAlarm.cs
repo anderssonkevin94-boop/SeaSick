@@ -75,6 +75,9 @@ namespace SeaSick.Combat
                     || !string.IsNullOrEmpty(h.rescuing)) continue;   // keep doing that
                 if (IsPostedLookout(h)) { h.raidLookout = true; continue; }   // stays put, keeps shooting
                 if (h.huntArmed) continue;   // straight to the fight, own spear
+                // Down a mine (2026-10-05): already hidden; he finishes his
+                // dig and comes up as normal.
+                if (ledger.Underground(h)) continue;
                 eligible.Add(h);
             }
 
@@ -216,6 +219,7 @@ namespace SeaSick.Combat
                     if (h.downed || h.recovering || h.dragged || h.pouting
                         || !string.IsNullOrEmpty(h.rescuing)) continue;
                     if (h.hidingHut || h.hidingCrouch) continue;
+                    if (ledger.Underground(h)) continue;     // hidden down the mine already
 
                     if (h.defending) { h.defending = false; h.defendSpear = null; }
                     h.fetchingSpear = false;
