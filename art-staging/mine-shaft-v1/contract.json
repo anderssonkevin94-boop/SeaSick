@@ -1,0 +1,18 @@
+{
+  "source": "Meshy_AI_Lantern_Mine_Entrance_1004225155_texture.fbx (untouched)",
+  "tris": 2376, "verts": 1411, "materials": 1,
+  "material": "Assets/_Project/Art/MineShaft/SS_MineEntrance.mat (URP/Lit, albedo + normal, smoothness 0.25, metallic 0; roughness/metallic maps imported linear but unused, as SS_Octopus)",
+  "scale": 7.2,
+  "boundsLocal_m": {"min": [-3.60, 0.00, -4.72], "max": [3.60, 4.07, 2.01]},
+  "buryDepth_m": 4.7,
+  "buryNote": "rock mass runs from the lip (z=0) back to z=-4.72; the whole rock body (~4 m tall at its crest) is meant to sit in the hill; the dirt apron in front reaches z=+2.0",
+  "opening_m": {"width": 1.9, "height": 2.6},
+  "mouth": [0, 0, -0.5],
+  "container": [2.52, 0.96, 0.07],
+  "dropSpot": [2.02, 0.0, 1.51],
+  "containerSource": "model",
+  "containerNote": "open wooden crate beside the entrance (on the +X side of the prefab, ~1.2 m wide, rim 0.96 m); it is baked with a heap of grey rocks that rise to ~1.2 m, so stone pile visuals will overlap them",
+  "facing": "+Z out of the hill verified in engine (Visual yawed 180 deg: raw FBX faces -Z); +Y up, ground y=0 exact",
+  "villager_height_m": 1.84,
+  "winding": "check_winding.py: 18 inside-out faces on 3 of 82 closed islands (Mesh_0); NOT fixed (needs Kevin's OK for Meshy), small islands (rock bits) only"
+}
