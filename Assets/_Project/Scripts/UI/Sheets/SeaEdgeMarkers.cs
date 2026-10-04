@@ -223,8 +223,7 @@ namespace SeaSick.UI.Sheets
             top = Mathf.Max(top, SeaHud.AlertRect.yMax + pad);
             if (CombatHud.Visible && CombatHud.ChipRect.height > 0f) top = Mathf.Max(top, CombatHud.ChipRect.yMax + pad);
             float bottom = safe.yMax - safe.height * BottomClearShare;
-            if (SeaHud.HelmRect.height > 0f) bottom = Mathf.Min(bottom, SeaHud.HelmRect.yMin - pad);
-            if (CombatHud.Visible) bottom = Mathf.Min(bottom, CombatHud.Rect.yMin - pad);
+            bottom = Mathf.Min(bottom, BottomStackTop() - pad);
             if (bottom < top + u * 6f) return;   // no room worth marking
 
             Rect chart = ChartInstrument.ScreenRect;
@@ -310,16 +309,41 @@ namespace SeaSick.UI.Sheets
                 GUI.DrawTexture(new Rect(at.x - size * 0.5f, at.y - size * 0.5f, size, size), arrow, ScaleMode.ScaleToFit, true);
                 GUI.matrix = prevMatrix;
 
-                DrawLabel(at, size, band, m.label, col, m.locked || m.kind == Kind.Kraken);
+                DrawLabel(at, size, band, bottom, m.label, col, m.locked || m.kind == Kind.Kraken);
             }
 
             GUI.matrix = prevMatrix;
             GUI.color = prevColor;
         }
 
+        /// Top edge (GUI y) of the highest thing in the bottom stack: every
+        /// bottom-centre slot `HudLayout` has issued (the wheel reserve), the
+        /// helm row with its harpoon button, and the combat row while it is
+        /// up. Markers and their labels stay above it. Measured 2026-10-04
+        /// on 1080x2340: the locked kraken's chevron sat at y 1241..1399, over
+        /// the wheel reserve that starts at 1368.
+        static float BottomStackTop()
+        {
+            Rect safe = HudLayout.Safe;
+            float top = safe.yMax;
+            top = Mathf.Min(top, HudLayout.BottomClustersTop);
+            var issued = HudLayout.Issued;
+            var names = HudLayout.IssuedTo;
+            string wheel = HudLayout.Slot.Wheel.ToString();
+            for (int i = 0; i < issued.Count && i < names.Count; i++)
+                if (names[i] == wheel && issued[i].height > 0f) top = Mathf.Min(top, issued[i].yMin);
+            top = MinTop(top, SeaHud.HelmRect);
+            top = MinTop(top, SeaHud.HarpoonRect);
+            top = MinTop(top, SeaHud.HarpoonDrawnRect);
+            if (CombatHud.Visible) top = MinTop(top, CombatHud.Rect);
+            return top;
+        }
+
+        static float MinTop(float top, Rect r) => r.width > 0f && r.height > 0f ? Mathf.Min(top, r.yMin) : top;
+
         /// The distance, on the inward side of the chevron so it never runs
         /// off the screen, with a dark drop shadow for bright water.
-        void DrawLabel(Vector2 at, float size, Rect band, string text, Color col, bool bold)
+        void DrawLabel(Vector2 at, float size, Rect band, float bottom, string text, Color col, bool bold)
         {
             int u = HudLayout.Unit;
             float w = u * 5.4f, h = u * 1.5f;
@@ -338,6 +362,9 @@ namespace SeaSick.UI.Sheets
             }
             Rect safe = HudLayout.Safe;
             r.x = Mathf.Clamp(r.x, safe.xMin, safe.xMax - w);
+            // Never into the bottom stack either: a chevron on the top edge
+            // puts its label under it, which can reach down that far.
+            r.y = Mathf.Min(r.y, bottom - h);
 
             var style = bold ? labelStyleBold : labelStyle;
             float o = Mathf.Max(1.5f, u * 0.08f);
