@@ -219,7 +219,7 @@ namespace SeaSick.UI.Sheets
             {
                 foreach (var id in AllIds(l, v))
                 {
-                    if (IslandCount(l, id) > 0 || ShipCount(l, id) > 0
+                    if (l.ShownStoreCount(id) > 0 || ShipCount(l, id) > 0
                         || l.TransferPending(id, true) || l.TransferPending(id, false))
                         scratch.Add(id);
                 }
@@ -548,7 +548,7 @@ namespace SeaSick.UI.Sheets
             string keep = cap < 0 ? "all can sail" : cap == 0 ? "all stays ashore" : "keeps " + cap + " ashore";
             string blurb = string.IsNullOrEmpty(def.blurb) ? "" : " " + def.blurb;
             infoLine.text = StationPage.Cap(def.label) + " · " + TierWord(def.tier) + ", " + SourceWord(def.source)
-                + " · island " + IslandCount(l, selected) + " · ship " + ShipCount(l, selected) + " · " + keep + "." + blurb;
+                + " · island " + l.StoreCountText(selected) + " · ship " + ShipCount(l, selected) + " · " + keep + "." + blurb;
         }
 
         /// One line for goods in workshop boxes: in the camp's total
@@ -709,8 +709,10 @@ namespace SeaSick.UI.Sheets
         void Fill(OutpostLedger l, Tile t, string res, bool onShip)
         {
             int have = onShip ? ShipCount(l, res) : IslandCount(l, res);
-            t.count.text = MidnightLandHud.CompactCount(have);
-            t.root.EnableInClassList("pack-tile--dim", have <= 0);
+            // A worn tool is one, with its life ("1 (90%)"), never 0 (2026-10-04).
+            bool worn = !onShip && l.ShownStoreCount(res) > have;
+            t.count.text = worn ? l.StoreCountText(res) : MidnightLandHud.CompactCount(have);
+            t.root.EnableInClassList("pack-tile--dim", have <= 0 && !worn);
             // Island stores never fill (2026-10-03, infinite stacking).
             t.root.EnableInClassList("pack-tile--full", false);
 

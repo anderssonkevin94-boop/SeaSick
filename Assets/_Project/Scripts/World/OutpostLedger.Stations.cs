@@ -2101,15 +2101,48 @@ namespace SeaSick.World
                 if (shoreCause != null) return shoreCause;
             }
             int si = stations.IndexOf(s);
-            string first = null;
+            // **Every stalled spot, worst first (2026-10-04).** Stalled only
+            // when NO selected spot can go on; then each spot's own sentence
+            // is kept (`SpotStallLines`, the station sheet shows them all)
+            // and the one line this returns is the WORST spot's (lowest
+            // `MissingWords` rank; the earlier spot wins a tie) with
+            // "+N more" for the rest, so the alert chip stays short and its
+            // tap opens the station, which lists them.
+            var lines = spotLines;
+            lines.Clear();
+            string worst = null; int worstRank = int.MaxValue;
             foreach (var sp in s.spots)
             {
                 if (sp == null || !sp.Selected) continue;
-                string cause = SpotInputCause(s, si, sp.Recipe);
-                if (cause == null) return null;
-                if (first == null) first = cause;
+                string cause = SpotInputCause(s, si, sp.Recipe, out int rank);
+                if (cause == null) { lines.Clear(); return null; }
+                if (worst == null || rank < worstRank) { worst = cause; worstRank = rank; }
+                lines.Add(cause);
             }
-            return first;
+            if (worst == null) return null;
+            // Worst first for the list too.
+            lines.Remove(worst);
+            lines.Insert(0, worst);
+            if (stallAll != null) { stallAll.Clear(); stallAll.AddRange(lines); }
+            return lines.Count > 1 ? $"{worst} · +{lines.Count - 1} more" : worst;
+        }
+
+        static readonly List<string> spotLines = new List<string>(2);
+        /// Set only while `StallReasonAll` runs: where `StationStallCause`
+        /// leaves every stalled spot's line.
+        [System.NonSerialized] List<string> stallAll;
+
+        /// **`StallReason`, and every stalled spot's own line (2026-10-04)**:
+        /// `into` holds one sentence per stalled spot, worst first -- for the
+        /// station sheet, which says them all where the alert chip says the
+        /// worst and "+N more". Empty when the reason is not a spot's (a full
+        /// rack, no recipe, a body blocked), and the caller shows `StallReason`.
+        public string StallReasonAll(OutpostHand h, List<string> into)
+        {
+            into.Clear();
+            stallAll = into;
+            try { return StallReason(h); }
+            finally { stallAll = null; }
         }
 
         /// One spot's recipe: why it cannot start, in the worker's words.
@@ -2124,10 +2157,11 @@ namespace SeaSick.World
         /// blade (make one at the forge) and boards (switch to Boards here)").
         /// Null when the only gap is a gatherable standing in the ground
         /// (a gatherer fetches it: not a stall).
-        string SpotInputCause(StationStock s, int si, Economy.Recipe r)
+        string SpotInputCause(StationStock s, int si, Economy.Recipe r, out int rank)
         {
+            rank = int.MaxValue;
             if (r == null) return "no order given";
-            string line = MissingLine(s, r, out bool blocking);
+            string line = MissingLine(s, r, out bool blocking, out rank);
             return blocking ? line : null;
         }
     }

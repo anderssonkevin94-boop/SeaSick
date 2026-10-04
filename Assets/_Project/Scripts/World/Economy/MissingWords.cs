@@ -77,9 +77,17 @@ namespace SeaSick.World.Economy
         /// stops the bench (a lock, a tool, an input nobody is already
         /// gathering); false when the only gaps are gatherables standing in
         /// the ground, which are named but are not a stall.
-        public static string Line<V>(V view, string stationId, Recipe r, out bool blocking) where V : IView
+        public static string Line<V>(V view, string stationId, Recipe r, out bool blocking) where V : IView =>
+            Line(view, stationId, r, out blocking, out _);
+
+        /// As `Line`, and `worstRank`: the most blocking gap's rank (0 lock,
+        /// 1 tool, 2 nobody can supply, 3 just short, 4 gatherable standing;
+        /// `int.MaxValue` when nothing is missing). A bench with several
+        /// spots uses it to say the WORST spot first (2026-10-04).
+        public static string Line<V>(V view, string stationId, Recipe r, out bool blocking, out int worstRank) where V : IView
         {
             blocking = false;
+            worstRank = int.MaxValue;
             if (r == null) return null;
             var gaps = scratch;
             gaps.Clear();
@@ -117,6 +125,7 @@ namespace SeaSick.World.Economy
                 while (j >= 0 && gaps[j].rank > g.rank) { gaps[j + 1] = gaps[j]; j--; }
                 gaps[j + 1] = g;
             }
+            worstRank = gaps[0].rank;
             var sb = new StringBuilder(96);
             string label = r.label;
             sb.Append(label).Append(EndsWithS(label) ? " need " : " needs ");

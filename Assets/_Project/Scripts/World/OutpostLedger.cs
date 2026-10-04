@@ -1215,6 +1215,64 @@ namespace SeaSick.World
             return (s != null ? s.whole + s.part : 0f) + StationHeldOf(resource);
         }
 
+        // --- worn tools, as the player reads them (display only) ----------------
+        //
+        // **2026-10-04, Kevin: 'I don't have a saw blade'** -- the home store
+        // held SawBlade whole 0, part 0.90: a worn blade with 90% of its life
+        // left. The books were right (`HeldOf` > 0, the work goes on) but every
+        // count the player sees floors to whole units, so it read 0. A part
+        // unit of a thing that wears IS one of it, with its life left. These
+        // read the same stock and change nothing in it.
+
+        static HashSet<string> wearing;
+
+        /// A good that wears out in use: a recipe's tool (saw blade, tools),
+        /// a spear or the bow (`Techs.SpearWear`).
+        public static bool Wears(string res)
+        {
+            if (string.IsNullOrEmpty(res)) return false;
+            if (wearing == null)
+            {
+                var set = new HashSet<string> { Res.Spear, Res.IronSpear, Res.Bow };
+                foreach (var r in Economy.Recipes.All) if (r != null && r.tool != null) set.Add(r.tool);
+                wearing = set;
+            }
+            return wearing.Contains(res);
+        }
+
+        /// The store holds no whole unit of a wearing good, only part of one.
+        bool OnlyWornIn(string res)
+        {
+            if (!Wears(res)) return false;
+            var s = Store(res);
+            return s != null && s.whole <= 0 && s.part > 0.004f;
+        }
+
+        /// The store's count FOR DISPLAY: a part-worn tool counts as 1.
+        public int ShownStoreCount(string res) => OnlyWornIn(res) ? 1 : StoreCountOf(res);
+
+        /// "3", or "1 (90%)" for a worn tool alone -- tight number cells.
+        public string StoreCountText(string res)
+        {
+            if (!OnlyWornIn(res)) return StoreCountOf(res).ToString();
+            return $"1 ({LifePercent(Store(res).part)}%)";
+        }
+
+        /// "90% left" for a tool held as less than one whole unit (store and
+        /// racks), else null: the line the station card adds under its needs.
+        public string LifeLeft(string res)
+        {
+            if (!Wears(res)) return null;
+            float held = HeldOf(res);
+            return held > 0f && held < 1f ? $"{LifePercent(held)}% left" : null;
+        }
+
+        /// A tool is in the pile and usable, worn or not (what the work
+        /// itself checks).
+        public bool Holds(string res) => HeldOf(res) > 0f;
+
+        static int LifePercent(float f) => Mathf.Clamp(Mathf.RoundToInt(f * 100f), 1, 100);
+
         /// Put whole units in (everything, since infinite stacking; nothing
         /// on bare ground). Returns what was taken.
         public int Add(string resource, int n)
@@ -3710,12 +3768,19 @@ namespace SeaSick.World
                     return "not set to make anything";
                 if (string.IsNullOrEmpty(makes) || ratePerDay <= 0f) return "not set to make anything";
                 if (RoomFor(makes) <= 0) return "pile is full";
-                if (tool != null && HeldOf(tool) <= 0f) return $"needs a {Friendly(tool)} in the pile";
-                if (takes != null && takes.Length > 0)
+                // **Through `MissingWords` (2026-10-04)**: the tool and every
+                // input, with where to get each, from a one-recipe stand-in
+                // for the plan's own `makes`/`takes` (no station row, so an
+                // empty bay). Reachable only by a Work plan that is neither a
+                // recipe station nor the farm nor the watchtower -- today
+                // none (every producer has recipes).
+                if ((tool != null) || (takes != null && takes.Length > 0))
                 {
-                    foreach (var line in takes)
-                        if (HeldOf(line.res) <= 0f) return $"waiting on {Friendly(line.res)}";
-                    return null;
+                    var stand = new Economy.Recipe { id = "legacy", station = h.target, makes = makes,
+                        takes = takes ?? Economy.Cost.None, tool = tool };
+                    string line = Economy.MissingWords.Line(new MissingView(this, null, h.target), h.target, stand, out bool blocking);
+                    if (blocking) return line;
+                    if (takes != null && takes.Length > 0) return null;
                 }
                 // The field is the input: stripped bare is stalled, until it
                 // grows back.

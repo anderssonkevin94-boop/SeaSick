@@ -121,6 +121,50 @@ namespace SeaSick.World
                     $"select {picked} ({refusal ?? "ok"}); stall '{why}'");
             }
 
+            // (9) Kevin's real save: a WORN blade (whole 0, part 0.90) is a blade.
+            {
+                var l = new OutpostLedger { ceilingPer = 1000, stationsMigrated = true, campfireLevel = 2 };
+                l.SetCentre(Vector3.zero);
+                l.raised.Add(new BuiltBuilding { planId = saw, x = 15f });
+                l.built.Add(saw);
+                var hand = new OutpostHand { name = "Yara", order = OutpostOrder.Work, target = saw,
+                    wHas = true, wx = 15f, wz = 0f };
+                l.hands.Add(hand);
+                l.lastTicked = 0.0;
+                l.EnsureStations();
+                var blade = l.Store(Res.SawBlade, true); blade.whole = 0; blade.part = 0.9f;
+                var st = l.StationOf(saw);
+                l.SelectRecipe(st, 0, "fine-boards", out _);
+                string why = l.StallReason(hand) ?? "";
+                Gate(sb, ref fails, "worn-blade-counts-as-one-with-its-life",
+                    l.ShownStoreCount(Res.SawBlade) == 1 && l.StoreCountText(Res.SawBlade) == "1 (90%)"
+                    && l.LifeLeft(Res.SawBlade) == "90% left" && l.Holds(Res.SawBlade)
+                    && !why.Contains("saw blade") && why.Contains("boards (switch to Boards here)"),
+                    $"shown {l.ShownStoreCount(Res.SawBlade)} '{l.StoreCountText(Res.SawBlade)}' '{l.LifeLeft(Res.SawBlade)}'; stall '{why}'");
+            }
+
+            // (10) a forge with BOTH spots starved: worst line + "+1 more", both listed.
+            {
+                string forge = BuildPlans.Blacksmith.id;
+                var l = new OutpostLedger { ceilingPer = 1000, stationsMigrated = true, campfireLevel = 2 };
+                l.SetCentre(Vector3.zero);
+                l.raised.Add(new BuiltBuilding { planId = forge, x = 15f });
+                l.built.Add(forge);
+                var hand = new OutpostHand { name = "Smith", order = OutpostOrder.Work, target = forge,
+                    wHas = true, wx = 15f, wz = 0f };
+                l.hands.Add(hand);
+                l.lastTicked = 0.0;
+                l.EnsureStations();
+                var st = l.StationOf(forge);
+                l.SelectRecipe(st, StationSpots.IndexOf(forge, "Smelter"), "iron", out _);
+                l.SelectRecipe(st, StationSpots.IndexOf(forge, "Forge"), "spear", out _);
+                var all = new List<string>();
+                string why = l.StallReasonAll(hand, all) ?? "";
+                Gate(sb, ref fails, "two-starved-spots-both-listed",
+                    all.Count == 2 && why.EndsWith(" · +1 more") && all[0].Contains("iron needs") && all[1].Contains("spear needs"),
+                    $"reason '{why}'; lines {all.Count}: '{(all.Count > 0 ? all[0] : "")}' / '{(all.Count > 1 ? all[1] : "")}'");
+            }
+
             sb.AppendLine(fails == 0 ? "ALL PASS" : $"{fails} FAILED");
             Debug.Log(sb.ToString());
             return fails == 0;

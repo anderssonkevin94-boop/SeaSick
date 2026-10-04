@@ -172,11 +172,16 @@ namespace SeaSick.World
         /// The one source of every station's starved/locked/paused line --
         /// the worker's reason, the alert chip, the Problems list, the
         /// recipe card.
-        public string MissingLine(StationStock st, Economy.Recipe r, out bool blocking)
+        public string MissingLine(StationStock st, Economy.Recipe r, out bool blocking) =>
+            MissingLine(st, r, out blocking, out _);
+
+        /// As above, with the rank of the most blocking gap (`MissingWords`).
+        public string MissingLine(StationStock st, Economy.Recipe r, out bool blocking, out int worstRank)
         {
             blocking = false;
+            worstRank = int.MaxValue;
             if (st == null || r == null) return null;
-            return Economy.MissingWords.Line(new MissingView(this, st), st.planId, r, out blocking);
+            return Economy.MissingWords.Line(new MissingView(this, st, st.planId), st.planId, r, out blocking, out worstRank);
         }
 
         /// `MissingWords`' window onto this camp for one station.
@@ -185,19 +190,23 @@ namespace SeaSick.World
             readonly OutpostLedger l;
             readonly StationStock st;
             readonly int si;
-            public MissingView(OutpostLedger ledger, StationStock station)
+            readonly string planId;
+            /// `station` null = a plan with no station row (the legacy
+            /// one-input path in `StallCause`): empty bay, plan-best level.
+            public MissingView(OutpostLedger ledger, StationStock station, string plan)
             {
-                l = ledger; st = station;
-                si = ledger.stations != null ? ledger.stations.IndexOf(station) : -1;
+                l = ledger; st = station; planId = plan;
+                si = station != null && ledger.stations != null ? ledger.stations.IndexOf(station) : -1;
             }
             public int FireLevel => l.CampfireLevel;
-            public int StationLevel => l.LevelOf(st.planId, st.ordinal);
+            public int StationLevel => st != null ? l.LevelOf(st.planId, st.ordinal) : l.LevelOf(planId);
             // `HeldOf`: a saw blade at 0.95 is still a saw blade.
             public bool HasTool(string res) => l.HeldOf(res) > 0f;
             // The bay and what is already walking to it, then anything a
             // runner or hauler can take there from the store or a rack.
             public int Have(string res) =>
-                st.BayCount(res) + l.InFlightTo(HaulPlace.Station, si, res) + l.StoreCountOf(res) + l.RackCountOf(res);
+                (st != null ? st.BayCount(res) + l.InFlightTo(HaulPlace.Station, si, res) : 0)
+                + l.StoreCountOf(res) + l.RackCountOf(res);
             public bool GatherLeft(string res)
             {
                 if (res == Res.Game) return false;

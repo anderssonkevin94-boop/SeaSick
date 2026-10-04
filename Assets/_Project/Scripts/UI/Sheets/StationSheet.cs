@@ -784,7 +784,7 @@ namespace SeaSick.UI.Sheets
             bool ok = l.RecipeAvailable(r, out string why);
             if (l.CampfireLevel < r.campfireLevel) return "needs Campfire " + RecipeGraph.Roman(r.campfireLevel);
             if (MyLevel(l) < r.stationLevel) return $"needs level {r.stationLevel}";
-            if (r.tool != null && l.CountOf(r.tool) <= 0) return "needs a " + ResDefs.Label(r.tool);
+            if (r.tool != null && !l.Holds(r.tool)) return "needs a " + ResDefs.Label(r.tool);
             return ok ? null : why;
         }
 
@@ -1199,6 +1199,13 @@ namespace SeaSick.UI.Sheets
                 else text = "Runs until an input runs out or you stop it.";
                 tone = 3;
             }
+            // **A worn tool says so (2026-10-04, Kevin: 'I don't have a saw
+            // blade' with one at 90%)**: "Saw blade: 90% left."
+            if (lockWhy == null && r.tool != null)
+            {
+                string life = l.LifeLeft(r.tool);
+                if (life != null) text += " " + StationPage.Cap(ResDefs.Label(r.tool)) + ": " + life + ".";
+            }
             SetText(detailLine, text);
             SetTone(detailLine, tone);
 
@@ -1299,7 +1306,7 @@ namespace SeaSick.UI.Sheets
                     }
                 }
             }
-            else if (r.tool != null && l.CountOf(r.tool) <= 0)
+            else if (r.tool != null && !l.Holds(r.tool))
                 fix = ShortFix.For(outpost, r.tool);
             if (!fix.Valid) return Main.None;
             text = fix.label;
@@ -1474,12 +1481,24 @@ namespace SeaSick.UI.Sheets
         /// The ledger's `StallReason` for the hand on it; with nobody on it,
         /// a spot that has a recipe waiting for a hand says so. Empty when
         /// working.
+        static readonly List<string> allSpotLines = new List<string>(2);
+
         internal static string StallText(OutpostLedger l, OutpostHand hand, bool wantsHand)
         {
             if (hand != null)
             {
-                string why = l.StallReason(hand);
-                return string.IsNullOrEmpty(why) ? "" : "stopped · " + why;
+                // **One line per stalled spot (2026-10-04)**: a kitchen with
+                // the grill AND the cauldron short says both, worst first,
+                // each whole (the label wraps; the alert chip says the worst
+                // and "+N more").
+                var all = allSpotLines;
+                string why = l.StallReasonAll(hand, all);
+                if (string.IsNullOrEmpty(why)) return "";
+                if (all.Count < 2) return "stopped · " + why;
+                var sb = new System.Text.StringBuilder(160);
+                for (int i = 0; i < all.Count; i++)
+                    sb.Append(i > 0 ? "\nstopped · " : "stopped · ").Append(all[i]);
+                return sb.ToString();
             }
             return wantsHand ? "stopped · nobody working it" : "";
         }
@@ -1497,12 +1516,12 @@ namespace SeaSick.UI.Sheets
             if (storeTiles == null) return;
             held.Clear();
             foreach (var s in l.stores)
-                if (s != null && s.whole > 0 && !string.IsNullOrEmpty(s.resource)) held.Add(s.resource);
+                if (s != null && !string.IsNullOrEmpty(s.resource) && l.ShownStoreCount(s.resource) > 0) held.Add(s.resource);
             // Insertion sort by count, descending: a handful of kinds, no allocation.
             for (int i = 1; i < held.Count; i++)
             {
-                var r = held[i]; int c = l.StoreCountOf(r); int j = i - 1;
-                while (j >= 0 && l.StoreCountOf(held[j]) < c) { held[j + 1] = held[j]; j--; }
+                var r = held[i]; int c = l.ShownStoreCount(r); int j = i - 1;
+                while (j >= 0 && l.ShownStoreCount(held[j]) < c) { held[j + 1] = held[j]; j--; }
                 held[j + 1] = r;
             }
             // True counts only (Kevin 2026-10-03, infinite stacking): no
@@ -1515,10 +1534,10 @@ namespace SeaSick.UI.Sheets
                 if (t.root.style.display != want) t.root.style.display = want;
                 if (!show) continue;
                 string res = held[i];
-                int have = l.StoreCountOf(res);
+                string have = l.StoreCountText(res);   // "1 (90%)" for a worn blade
                 StationPage.SetIcon(t.icon, res);
                 t.res = res;
-                string text = ItemIconSet.Get(res) == null ? $"{ResDefs.Label(res)} {have}" : have.ToString();
+                string text = ItemIconSet.Get(res) == null ? $"{ResDefs.Label(res)} {have}" : have;
                 if (t.count.text != text) t.count.text = text;
                 t.fill.style.width = Length.Percent(l.Fill01(res) * 100f);
                 t.root.EnableInClassList("st-store-tile--full", false);
