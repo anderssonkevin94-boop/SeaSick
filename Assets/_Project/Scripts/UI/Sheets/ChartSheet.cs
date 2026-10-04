@@ -124,6 +124,7 @@ namespace SeaSick.UI.Sheets
         CardKit.Tile pickTile;
         VisualElement colEl, hintEl, segEl;     // for sizing the map to the room left
         VisualElement campGrid;                 // one row per camp, under the pick tile
+        VisualElement listTop;                  // the pick tile's grid (its top margin differs by shape)
         readonly Dictionary<Island, CardKit.Tile> campTiles = new Dictionary<Island, CardKit.Tile>();
         long campKey = long.MinValue;
 
@@ -145,7 +146,7 @@ namespace SeaSick.UI.Sheets
             laid.Clear();
             fitted = default;
             vw = vh = 0f;
-            campGrid = null; pickTile = null; courseBtn = null;
+            campGrid = null; pickTile = null; courseBtn = null; listTop = null;
             trackOn = trackOff = null;
             colEl = hintEl = segEl = null;
 
@@ -205,6 +206,7 @@ namespace SeaSick.UI.Sheets
 
             var grid = CardKit.Grid(list);
             grid.style.marginTop = 8f;
+            listTop = grid;
             pickTile = new CardKit.Tile(_ => { selected = null; wordsKey = long.MinValue; Refresh(); }, false);
             pickTile.Root.AddToClassList("ck-tile--wide");
             var compass = new StationPage.Glyph("chart", MidnightLandHud.Ice, "ck-glyph-fill");
@@ -212,6 +214,7 @@ namespace SeaSick.UI.Sheets
             compass.style.height = Length.Percent(100f);
             pickTile.Ico.Add(compass);
             grid.Add(pickTile.Root);
+            pickTile.Root.RegisterCallback<GeometryChangedEvent>(_ => AdaptMapHeight());
 
             campGrid = CardKit.Grid(list);
 
@@ -249,13 +252,14 @@ namespace SeaSick.UI.Sheets
         /// wider than it is allowed to be tall, and on the desk column it
         /// is 400 px — both want the same ratio and a floor under it.
         ///
-        /// **Desk (2026-10-04, round 2).** The card is short and the column
-        /// is third-of-the-screen wide, so the old 260 px cap left a map of
-        /// ~220 px and a list of ~90 px. On the wide shape the hint line is
-        /// dropped (the pick tile already says "Tap a flame on the chart"),
-        /// the Track toggle shrinks to a 44 pt row, and the map takes what is
-        /// left after two full list rows, never under `DeskMapMin`. The
-        /// phone keeps its own numbers.
+        /// **Desk (round 3).** The desk card's column is only ~370 panel
+        /// units tall (the 885 px sheet is 1.5 panel px per unit, minus the
+        /// header and the thumb row), so a fixed 300 map left the list 0 px.
+        /// The desk sizes the map from the RESOLVED layout: the column's
+        /// height, less the Track row and the real heights of two list rows,
+        /// goes to the map, between `DeskMapFloor` and `DeskMapMax`. The
+        /// hint is dropped, the Track toggle is a 44 pt row, the tiles are
+        /// 46, and the subtitle fits one line. The phone keeps its numbers.
         void AdaptMapHeight()
         {
             if (chart == null || vw <= 1f) return;
@@ -265,14 +269,17 @@ namespace SeaSick.UI.Sheets
             float want;
             if (wide)
             {
-                want = DeskMapMin;
-                if (colH > 1f)
+                want = DeskMapMax;
+                if (colH > 1f && segEl != null && segEl.layout.height > 1f && pickTile != null && pickTile.Root.layout.height > 1f)
                 {
-                    float segH = segEl != null && segEl.layout.height > 1f ? segEl.layout.height + 8f : DeskSegPx + 18f;
-                    float tileH = pickTile != null && pickTile.Root.layout.height > 1f ? pickTile.Root.layout.height + 6f : 80f;
-                    float room = colH - 8f - segH - (8f + tileH * 2f);
-                    want = Mathf.Clamp(room, DeskMapMin, 360f);
+                    float seg = segEl.layout.height + segEl.resolvedStyle.marginTop + segEl.resolvedStyle.marginBottom;
+                    float tile = pickTile.Root.layout.height + pickTile.Root.resolvedStyle.marginBottom;
+                    float list = DeskListTop + tile * 2f;
+                    float mapMargin = chart.resolvedStyle.marginTop + chart.resolvedStyle.marginBottom;
+                    float room = colH - seg - list - mapMargin;
+                    want = Mathf.Clamp(room, DeskMapFloor, DeskMapMax);
                 }
+                else want = DeskMapFloor;
             }
             else
             {
@@ -289,13 +296,19 @@ namespace SeaSick.UI.Sheets
                 chart.style.height = want;
         }
 
-        const float DeskMapMin = 300f;
+        const float DeskMapFloor = 190f;
+        const float DeskMapMax = 300f;
         const float DeskSegPx = 44f;
+        const float DeskTilePx = 46f;
+        const float DeskListTop = 4f;
+
+        bool wideShape;
 
         /// The pieces that differ between the phone and the desk shape.
         /// Idempotent, so it is safe to call on every geometry change.
         void ApplyShape(bool wide)
         {
+            if (wide != wideShape) { wideShape = wide; headKey = long.MinValue; layoutDirty = true; }
             if (hintEl != null)
                 hintEl.style.display = wide ? DisplayStyle.None : DisplayStyle.Flex;
             if (segEl != null)
@@ -303,10 +316,20 @@ namespace SeaSick.UI.Sheets
                 float pad = wide ? 3f : 5f;
                 segEl.style.paddingTop = segEl.style.paddingBottom = pad;
                 segEl.style.paddingLeft = segEl.style.paddingRight = pad;
+                segEl.style.marginTop = wide ? 6f : StyleKeyword.Null;
                 StyleLength h = wide ? new StyleLength(DeskSegPx) : new StyleLength(StyleKeyword.Null);
                 if (trackOn != null) trackOn.style.height = h;
                 if (trackOff != null) trackOff.style.height = h;
             }
+            if (listTop != null) listTop.style.marginTop = wide ? DeskListTop : 8f;
+            TileShape(pickTile);
+            foreach (var t in campTiles.Values) TileShape(t);
+        }
+
+        void TileShape(CardKit.Tile t)
+        {
+            if (t == null) return;
+            t.Root.style.minHeight = wideShape ? new StyleLength(DeskTilePx) : new StyleLength(StyleKeyword.Null);
         }
 
         // --- refresh ---------------------------------------------------------------
@@ -319,14 +342,20 @@ namespace SeaSick.UI.Sheets
             int camps = 0;
             foreach (var i in isles) if (i.outpost != null) camps++;
 
-            long hk = seenCount * 1000003L + camps * 31L + TimeOfDay.Day;
+            long hk = seenCount * 1000003L + camps * 31L + TimeOfDay.Day + (wideShape ? 7L : 0L);
             if (hk != headKey)
             {
                 headKey = hk;
                 if (head != null)
-                    head.SetSub("Day " + TimeOfDay.Day + " · " + Cap(Words(seenCount))
-                        + (seenCount == 1 ? " island seen, " : " islands seen, ")
-                        + Words(camps) + (camps == 1 ? " camp" : " camps"));
+                {
+                    // The desk header has the width for one line only when it is short.
+                    if (wideShape)
+                        head.SetSub("Day " + TimeOfDay.Day + " · " + seenCount + " seen · " + camps + (camps == 1 ? " camp" : " camps"));
+                    else
+                        head.SetSub("Day " + TimeOfDay.Day + " · " + Cap(Words(seenCount))
+                            + (seenCount == 1 ? " island seen, " : " islands seen, ")
+                            + Words(camps) + (camps == 1 ? " camp" : " camps"));
+                }
             }
 
             Fit();
@@ -366,6 +395,7 @@ namespace SeaSick.UI.Sheets
                             Refresh();
                         }, false);
                         tile.Root.AddToClassList("ck-tile--wide");
+                        TileShape(tile);
                         var fire = new StationPage.Glyph("fire", new Color32(242, 196, 109, 255), "sheet-glyph");
                         fire.style.width = Length.Percent(100f);
                         fire.style.height = Length.Percent(100f);
@@ -398,7 +428,7 @@ namespace SeaSick.UI.Sheets
                 foreach (var i in isles)
                 {
                     if (i.island != selected) continue;
-                    label = i.seen == Seen.Landed ? ChartData.PlaceName(i.island) : "unseen";
+                    label = i.seen == Seen.Landed ? ChartData.PlaceName(i.island) : "Unseen";
                     sub = Km(Vector2.Distance(ChartData.ShipPos, i.centre))
                         + (i.outpost != null ? " · tap to drop" : " · no camp · tap to drop");
                     canSet = i.outpost != null;
@@ -578,6 +608,11 @@ namespace SeaSick.UI.Sheets
         readonly List<Rect> taken = new List<Rect>();                  // labels and marks already placed
         readonly List<Ring> rings = new List<Ring>();                  // patrol rings: only the stroke is solid
         readonly List<Placed> laid = new List<Placed>();               // the kept answer
+        readonly Dictionary<string, Vector2> prev = new Dictionary<string, Vector2>();
+        readonly List<bool> tiny = new List<bool>();                   // unnamed islets a name may touch as a last resort
+        const float TinyPx = 16f;
+        /// A name sits within this many px of its island's bounds.
+        const float NameReach = 40f;
         long layoutKey = long.MinValue;
         bool layoutDirty = true;
 
@@ -589,11 +624,16 @@ namespace SeaSick.UI.Sheets
         /// the same placement.
         void LayOutNames(IReadOnlyList<ChartIsland> isles)
         {
+            // The last answer, kept so a name that still fits where it was
+            // stays there (hysteresis: a refit or a refresh never nudges it).
+            prev.Clear();
+            foreach (var l in laid) prev[l.text] = l.at;
             taken.Clear();
             shapes.Clear();
             polys.Clear();
             names.Clear();
             rings.Clear();
+            tiny.Clear();
             laid.Clear();
 
             // The marks that belong to the frame rather than to the sea.
@@ -603,10 +643,12 @@ namespace SeaSick.UI.Sheets
             var scalePos = new Vector2(14f + ScaleBarPx() * 0.5f, vh - 26f);
             Take(scalePos, ScaleLabel().Length * 9f * 0.7f + 8f, 9f * 1.4f);
             Take(new Vector2(14f + ScaleBarPx() * 0.5f, vh - 16f), ScaleBarPx() + 6f, 8f);   // the bar
-            Take(P(ChartData.ShipPos), 18f, 18f);
+            // **The ship and the raiders are NOT obstacles (round 3).** They
+            // move every frame; a name that steered round where one happened
+            // to be at layout time jumped whenever the layout was redone. The
+            // patrol rings are fixed, so they stay.
             foreach (var r in ChartData.Raiders())
             {
-                Take(P(r.pos), 14f, 14f);
                 float rr = r.patrolRadius * scale;
                 if (rr >= 2f) rings.Add(new Ring { c = P(r.patrolCentre), r = rr });
             }
@@ -615,7 +657,10 @@ namespace SeaSick.UI.Sheets
             {
                 var poly = OutlinePoly(isle);
                 polys.Add(poly);
-                shapes.Add(BoundsOf(poly));
+                var bb = BoundsOf(poly);
+                shapes.Add(bb);
+                bool named = isle.seen == Seen.Landed && !string.IsNullOrEmpty(isle.name);
+                tiny.Add(!named && Mathf.Max(bb.width, bb.height) <= TinyPx);
                 if (isle.seen == Seen.Landed && !string.IsNullOrEmpty(isle.name))
                     names.Add(new NameWord { text = isle.name, shape = shapes.Count - 1, camp = isle.outpost != null });
 
@@ -729,7 +774,7 @@ namespace SeaSick.UI.Sheets
 
         /// The hard rules: inside the frame, off every island's outline (its
         /// own too), off every mark and earlier name, off every ring stroke.
-        bool Clean(Rect r)
+        bool Clean(Rect r, bool relaxed = false)
         {
             if (r.xMin < FrameMargin || r.yMin < FrameMargin || r.xMax > vw - FrameMargin || r.yMax > vh - FrameMargin)
                 return false;
@@ -738,6 +783,7 @@ namespace SeaSick.UI.Sheets
                 if (Overlap(g, t) > 0f) return false;
             for (int s = 0; s < shapes.Count; s++)
             {
+                if (relaxed && tiny[s]) continue;
                 if (Overlap(g, shapes[s]) <= 0f) continue;
                 if (RectHitsPoly(g, polys[s])) return false;
             }
@@ -746,15 +792,38 @@ namespace SeaSick.UI.Sheets
             return true;
         }
 
-        /// **A name goes beside its island, never on anything.** Candidate
-        /// spots round the shape's bounds (right, left, above, below, the
-        /// corners and the aligned-above/below ones), at five distances. A
-        /// spot that breaks a hard rule (`Clean`) is out; of the clean ones
-        /// the nearest and most usual (right first) wins. If none is clean,
-        /// a scan of the chart round the island takes the clean spot nearest
-        /// to it. Only when the sea is truly full does it settle for the
-        /// cheapest overlap, still inside the frame. A name is never
-        /// shortened and never dropped.
+        /// Distance from a rect to another rect (0 when they touch or overlap).
+        static float Gap(Rect a, Rect b)
+        {
+            float dx = Mathf.Max(0f, Mathf.Max(b.xMin - a.xMax, a.xMin - b.xMax));
+            float dy = Mathf.Max(0f, Mathf.Max(b.yMin - a.yMax, a.yMin - b.yMax));
+            return Mathf.Sqrt(dx * dx + dy * dy);
+        }
+
+        /// Area of a rect lying on tiny unnamed islets (the last-resort cost).
+        float TinyOverlap(Rect r)
+        {
+            float a = 0f;
+            for (int s = 0; s < shapes.Count; s++)
+                if (tiny[s]) a += Overlap(r, shapes[s]);
+            return a;
+        }
+
+        /// **A name goes beside its island, never on anything, never far.**
+        /// In order:
+        ///  1. the old spot, if the name was laid out before and it is still
+        ///     clean and within `NameReach` (stability);
+        ///  2. candidate spots round the shape's bounds (right, left, above,
+        ///     below, the corners and the aligned ones) at five distances, up
+        ///     to `NameReach`; a spot that breaks a hard rule (`Clean`) is
+        ///     out, the nearest and most usual (right first) of the rest wins;
+        ///  3. a scan of the chart within `NameReach` for the nearest clean spot;
+        ///  4. the same scan allowed to touch a tiny UNNAMED islet's outline
+        ///     (least overlap with those, then nearest), which is better than
+        ///     drifting away;
+        ///  5. only when even that fails, the cheapest overlap near the island.
+        /// Never on its own island, a ring, a mark or another name, never
+        /// outside the frame, never shortened, never dropped.
         void PlaceName(NameWord n)
         {
             // The label's real width is not known before layout; the estimate
@@ -763,9 +832,20 @@ namespace SeaSick.UI.Sheets
             float th = NameSize * 1.4f;
             Rect own = shapes[n.shape];
             float cx = own.center.x, cy = own.center.y;
-            float[] ring = { 2f, 8f, 16f, 28f, 44f };
+            float[] ring = { 2f, 8f, 16f, 28f, 40f };
             float loX = FrameMargin, hiX = Mathf.Max(loX, vw - tw - FrameMargin);
             float loY = FrameMargin, hiY = Mathf.Max(loY, vh - th - FrameMargin);
+
+            if (prev.TryGetValue(n.text, out var old))
+            {
+                var r0 = new Rect(old.x - tw * 0.5f, old.y - th * 0.5f, tw, th);
+                if (Gap(r0, own) <= NameReach && Clean(r0))
+                {
+                    taken.Add(r0);
+                    laid.Add(new Placed { text = n.text, at = old });
+                    return;
+                }
+            }
 
             float bestClean = float.MaxValue, bestSoft = float.MaxValue;
             Rect clean = default, soft = default;
@@ -794,6 +874,7 @@ namespace SeaSick.UI.Sheets
                     x = Mathf.Clamp(x, loX, hiX);
                     y = Mathf.Clamp(y, loY, hiY);
                     var r = new Rect(x, y, tw, th);
+                    if (Gap(r, own) > NameReach) continue;
                     float order = ri * 8f + d * 1.5f;
                     if (Clean(r))
                     {
@@ -809,23 +890,29 @@ namespace SeaSick.UI.Sheets
             if (haveClean) chosen = clean;
             else
             {
-                // Nothing clean beside the island: scan the chart round it for
-                // the clean spot nearest to it, 3 px at a time.
-                float reach = 120f;
-                float bestD = float.MaxValue;
+                // Scan within the reach: first strictly clean, then allowed on
+                // tiny unnamed islets. 3 px steps.
+                float x0 = Mathf.Max(loX, own.xMin - NameReach - tw), x1 = Mathf.Min(hiX, own.xMax + NameReach);
+                float y0 = Mathf.Max(loY, own.yMin - NameReach - th), y1 = Mathf.Min(hiY, own.yMax + NameReach);
                 bool found = false;
                 Rect scan = default;
-                float y0 = Mathf.Max(loY, cy - reach), y1 = Mathf.Min(hiY, cy + reach);
-                float x0 = Mathf.Max(loX, cx - reach - tw), x1 = Mathf.Min(hiX, cx + reach);
-                for (float y = y0; y <= y1; y += 3f)
-                    for (float x = x0; x <= x1; x += 3f)
-                    {
-                        var r = new Rect(x, y, tw, th);
-                        float dd = (r.center - own.center).sqrMagnitude;
-                        if (dd >= bestD) continue;
-                        if (!Clean(r)) continue;
-                        bestD = dd; scan = r; found = true;
-                    }
+                for (int pass = 0; pass < 2 && !found; pass++)
+                {
+                    bool relaxed = pass == 1;
+                    float bestScore = float.MaxValue;
+                    for (float y = y0; y <= y1; y += 3f)
+                        for (float x = x0; x <= x1; x += 3f)
+                        {
+                            var r = new Rect(x, y, tw, th);
+                            float gap = Gap(r, own);
+                            if (gap > NameReach) continue;
+                            float score = (r.center - own.center).sqrMagnitude * 0.001f + gap;
+                            if (relaxed) score += TinyOverlap(r) * 4f;
+                            if (score >= bestScore) continue;
+                            if (!Clean(r, relaxed)) continue;
+                            bestScore = score; scan = r; found = true;
+                        }
+                }
                 chosen = found ? scan
                     : bestSoft < float.MaxValue ? soft
                     : new Rect(Mathf.Clamp(cx - tw * 0.5f, loX, hiX), Mathf.Clamp(own.yMin - th - 2f, loY, hiY), tw, th);
@@ -1065,6 +1152,7 @@ namespace SeaSick.UI.Sheets
             p.ClosePath();
             p.Fill();
 
+            bool picked = isle.island == selected;
             if (!landed)
             {
                 // **Hatched, not greyed.** A glimpse is a shape you saw and
@@ -1079,10 +1167,12 @@ namespace SeaSick.UI.Sheets
             }
 
             p.strokeColor = SheetTheme.Ink;
-            p.lineWidth = isle.island == selected ? 2.4f : 1.4f;
-            if (isle.island == selected) p.strokeColor = SheetTheme.Brass;
+            p.lineWidth = picked ? 2.4f : 1.4f;
+            if (picked) p.strokeColor = SheetTheme.Brass;
             p.BeginPath();
-            if (landed)
+            // A picked island is outlined solid in brass, seen or not: the
+            // dashes of an unseen one are too faint to read as a pick.
+            if (landed || picked)
             {
                 p.MoveTo(poly[0]);
                 for (int i = 1; i < poly.Count; i++) p.LineTo(poly[i]);
@@ -1094,6 +1184,29 @@ namespace SeaSick.UI.Sheets
                     Dash(p, poly[i], poly[(i + 1) % poly.Count], 3f, 3f);
             }
             p.Stroke();
+
+            // A pick on an islet a few pixels wide would be a brass dot nobody
+            // can see: ring it, so the pick reads at any size.
+            if (picked)
+            {
+                Vector2 lo = poly[0], hi = poly[0];
+                foreach (var q in poly) Grow(ref lo, ref hi, q);
+                if (Mathf.Max(hi.x - lo.x, hi.y - lo.y) < 14f)
+                {
+                    Vector2 c = (lo + hi) * 0.5f;
+                    p.strokeColor = SheetTheme.Brass;
+                    p.lineWidth = 1.8f;
+                    p.BeginPath();
+                    const int seg = 24;
+                    for (int i = 0; i <= seg; i++)
+                    {
+                        float a = i * Mathf.PI * 2f / seg;
+                        var q = c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 9f;
+                        if (i == 0) p.MoveTo(q); else p.LineTo(q);
+                    }
+                    p.Stroke();
+                }
+            }
         }
 
         void Raider(Painter2D p, ChartRaider r)
