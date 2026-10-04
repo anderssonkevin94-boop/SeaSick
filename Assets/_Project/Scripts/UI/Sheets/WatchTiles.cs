@@ -107,6 +107,7 @@ namespace SeaSick.UI.Sheets
                 var words = Box("st-head-words");
                 title = StationPage.Text(titleText, "st-title");
                 sub = StationPage.Text("", "st-sub");
+                sub.style.whiteSpace = WhiteSpace.Normal;
                 words.Add(title);
 
                 pill = Box("st-pill");

@@ -1816,6 +1816,10 @@ namespace SeaSick.UI.Sheets
                 if (hug) words.style.marginLeft = 0f;
                 words.Add(Text(title, "st-title"));
                 sub = Text("", "st-sub");
+                // The sub line wraps inside its own column on every shape. Left
+                // to its default it kept one line and ran on under the Move
+                // button on the 400 px desk column (2026-10-04, 1920x1080).
+                sub.style.whiteSpace = WhiteSpace.Normal;
 
                 pill = new VisualElement(); pill.AddToClassList("st-pill");
                 pill.pickingMode = PickingMode.Ignore;
