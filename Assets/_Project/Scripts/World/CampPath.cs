@@ -586,16 +586,42 @@ namespace SeaSick.World
                 corners.Add(to);
                 return true;
             }
-            int a = Nearest(laneA ? exitA : from, who), b = Nearest(laneB ? exitB : to, who);
+            // **Every leg is checked against the boxes (2026-10-04).** Kevin's
+            // phone: "they're just running into a building, trying to force
+            // their way to where they're going, and they end up being
+            // stuck." Only the cell-to-cell legs ever were; the leg from
+            // where he really stands to the first corner, and from the last
+            // corner to the target (or its lane), went straight through
+            // whatever was there, and the step guard pinned him against it.
+            // Now the target is planned to free ground beside it
+            // (`FreeSpot`: a marker drawn against its own bench, an
+            // `EdgeBeyond` spot), a man in a bench's clearance steps out to
+            // free ground first when his way out is refused, and the first
+            // and last corners are picked by testing the real legs.
+            bool hand = who == Walker.Hand;
+            Vector3 toF = FreeSpot(to);
+            Vector3 start = laneA ? exitA : from;
+            Vector3 end = laneB ? exitB : toF;
+            Vector3 fromF = FreeSpot(from);
+            bool stepOut = false;
+            if (Flat2(fromF, from) > 0.0004f)
+            {
+                if (!laneA) { stepOut = true; start = fromF; }
+                else if (!LegClear(from, hasViaA ? viaA : exitA, hand, true)) stepOut = true;
+            }
+            int a = Nearest(start, who), b = Nearest(end, who);
             if (a < 0 || b < 0) return false;
+            if (stepOut) corners.Add(fromF);
             // Out by the approach first (a stand's lane, `ViaApproach`),
             // unless he is leaving it for the approach itself.
             if (laneA && hasViaA && (viaA - to).sqrMagnitude > 0.09f) corners.Add(viaA);
             if (laneA && (exitA - (hasViaA ? viaA : from)).sqrMagnitude > 0.0001f) corners.Add(exitA);
             if (a == b)
             {
+                if (!LegClear(start, end, hand, true)) corners.Add(Centre(a));
                 if (laneB) corners.Add(exitB);
                 if (laneB && hasViaB && (viaB - from).sqrMagnitude > 0.09f) corners.Add(viaB);
+                if (Flat2(toF, to) > 0.0004f) corners.Add(toF);
                 corners.Add(to);
                 return true;
             }
@@ -632,32 +658,97 @@ namespace SeaSick.World
             const int Window = 24;
             int at = 0;
             int last = cells.Count - 1;
+            // Where he really is when he leaves `cells[at]`: the start (or
+            // its lane's end) at first, a cell centre after.
+            Vector3 pos = start;
+            bool atCentre = false;
             while (at < last)
             {
-                int far = at + 1;
+                int far = -1;
+                bool endClear = false;
                 // **Never pull a corner across a ladder (2026-09-27).** Both
                 // ends of a link hop stay corners, so the walker arrives at
                 // the foot and `LadderClimb` sees the leg up to the top.
-                if (!Hop(cells[at], cells[at + 1]))
+                if (Hop(cells[at], cells[at + 1])) far = at + 1;
+                else
                 {
                     int lookTo = Mathf.Min(last, at + Window);
                     for (int k = at + 1; k < lookTo; k++)
                         if (Hop(cells[k], cells[k + 1])) { lookTo = k; break; }
-                    for (int j = lookTo; j > at + 1; j--)
-                        if (Clear(cells[at], cells[j]) && KeepsRoad(at, j)
-                            && SolidLineClear(Centre(cells[at]), Centre(cells[j]))) { far = j; break; }
+                    // The next cell too (2026-10-04): a post can stand
+                    // between two neighbouring open centres.
+                    for (int j = lookTo; j > at; j--)
+                    {
+                        if (!Clear(cells[at], cells[j])) continue;
+                        if (j > at + 1 && !KeepsRoad(at, j)) continue;
+                        if (j == last)
+                        {
+                            // The last leg: to the target's free spot or lane.
+                            if (!atCentre && !SolidLineClear(Centre(cells[at]), end)) continue;
+                            if (!LegClear(pos, end, hand, true)) continue;
+                            endClear = true;
+                        }
+                        else
+                        {
+                            Vector3 cj = Centre(cells[j]);
+                            if (!atCentre && !SolidLineClear(Centre(cells[at]), cj)) continue;
+                            if (!LegClear(pos, cj, hand, !atCentre)) continue;
+                        }
+                        far = j;
+                        break;
+                    }
+                    if (far < 0)
+                    {
+                        // Nothing clear from where he really stands: the
+                        // cell's own centre first (`Nearest` checked that leg).
+                        if (!atCentre)
+                        {
+                            pos = Centre(cells[at]);
+                            atCentre = true;
+                            corners.Add(pos);
+                            continue;
+                        }
+                        far = at + 1;
+                        // A diagonal grazing a post: round it by one of the
+                        // two straight neighbours.
+                        int c0 = cells[at], c1 = cells[far];
+                        if (c0 % n != c1 % n && c0 / n != c1 / n && !SolidLineClear(pos, Centre(c1)))
+                        {
+                            int o1 = (c0 / n) * n + c1 % n, o2 = (c1 / n) * n + c0 % n;
+                            if (Walk(o1) && SolidLineClear(pos, Centre(o1)) && SolidLineClear(Centre(o1), Centre(c1)))
+                                corners.Add(Centre(o1));
+                            else if (Walk(o2) && SolidLineClear(pos, Centre(o2)) && SolidLineClear(Centre(o2), Centre(c1)))
+                                corners.Add(Centre(o2));
+                        }
+                    }
                 }
                 at = far;
-                if (far < last) corners.Add(Centre(cells[far]));
+                if (far < last || (!endClear && !LegClear(pos, end, hand, true)))
+                {
+                    pos = Centre(cells[far]);
+                    atCentre = true;
+                    corners.Add(pos);
+                }
             }
 
             // The real destination last, never a cell centre: arrival
             // tolerance and every "am I there" test upstream are about the
-            // target, not about the map. Down its lane, if it has one.
+            // target, not about the map. Down its lane, if it has one, then
+            // to its free spot when it is drawn against a box.
             if (laneB) corners.Add(exitB);
             if (laneB && hasViaB) corners.Add(viaB);
+            if (Flat2(toF, to) > 0.0004f) corners.Add(toF);
             corners.Add(to);
             return true;
+        }
+
+        /// A straight leg off the boxes (`SolidClearance`) and, for a leg
+        /// off the grid (`walls`), not across a wall either -- the grid
+        /// already keeps centre-to-centre legs off the walls.
+        bool LegClear(Vector3 p, Vector3 q, bool hand, bool walls)
+        {
+            if (!SolidLineClear(p, q)) return false;
+            return !walls || camp == null || !WallsBlock(camp.Walls, p, q, hand, 0f, out _);
         }
 
         bool Search(int start, int goal)
@@ -819,14 +910,22 @@ namespace SeaSick.World
         {
             int i = Index(at);
             if (i < 0) return -1;
-            if (Walk(i)) return i;
+            // **Off the boxes too (2026-10-04)**: a cell whose centre is
+            // across a bench from the point is no start -- the first leg
+            // would run through the bench. The nearest such cell is kept as
+            // the fallback, so nobody loses the route he had before.
+            bool boxes = groups.Count > 0;
+            if (Walk(i) && (!boxes || SolidLineClear(at, Centre(i)))) return i;
 
             bool gatesOpen = who == Walker.Hand;
             int cx = i % n, cy = i / n;
+            int fallback = Walk(i) ? i : -1;
             for (int r = 1; r <= 6; r++)
             {
                 int best = -1;
                 float bestD = float.MaxValue;
+                int ringAny = -1;
+                float ringAnyD = float.MaxValue;
                 for (int dy = -r; dy <= r; dy++)
                 {
                     int y = cy + dy;
@@ -843,13 +942,19 @@ namespace SeaSick.World
                         if (d >= bestD) continue;
                         if (camp != null && WallsBlock(camp.Walls, at, Centre(j), gatesOpen, 0f, out _))
                             continue;
+                        if (boxes && !SolidLineClear(at, Centre(j)))
+                        {
+                            if (d < ringAnyD) { ringAnyD = d; ringAny = j; }
+                            continue;
+                        }
                         best = j;
                         bestD = d;
                     }
                 }
                 if (best >= 0) return best;
+                if (fallback < 0) fallback = ringAny;
             }
-            return -1;
+            return fallback;
         }
 
         /// Is the straight line between two cells walkable the whole way?

@@ -2384,6 +2384,9 @@ namespace SeaSick.World
             float reach = Mathf.Min(ax > 1e-4f ? hx / ax : float.MaxValue,
                                     az > 1e-4f ? hz / az : float.MaxValue);
             Vector3 p = c + d * (reach + 0.6f);
+            // **On free ground (2026-10-04):** a pace past the footprint can
+            // be inside a neighbour's bench, or against it.
+            p = CampPath.FreeSpot(camp, p);
             p.y = camp.GroundAt(p);
             return p;
         }
@@ -2723,6 +2726,13 @@ namespace SeaSick.World
             // that began on the pad has passed its gate the first time the
             // gate has nothing to say.
             else if (!padPassed && padStartedOn) padPassed = true;
+            // **He walks to the free spot, so he arrives there (2026-10-04).**
+            // `CampPath.Route` plans to `FreeSpot(to)` -- a marker in a
+            // bench's clearance (the watchtower's output, 0.35 m in) moves
+            // out to open ground -- and arriving was still judged against the
+            // marker itself: he stood on the free spot, short of it, until
+            // the 1.2 m pin rule let him off. One goal for both.
+            if (!gated && camp != null) to = CampPath.FreeSpot(camp, to);
             Vector3 d = to - here;
             d.y = 0f;
             float dist = d.magnitude;
@@ -2765,12 +2775,23 @@ namespace SeaSick.World
             // wall, the errand counts as reached where he stands.
             if (TickStall(here, to, dist, RouteLeft(here, to, dist), dt)) { stride.Stop(); ClearRoute(); return Reached(gated); }
             if (escapeLeft > 0f) { StepEscape(here, dt); return false; }
+            TickPin(here, to, dt);
+            if (escapeLeft > 0f) { StepEscape(here, dt); return false; }
 
             // Where to head THIS frame: the next corner of the route if there
             // is one, otherwise the target itself — which is exactly the
             // straight line this used to be, and is what a failed plan falls
-            // back to.
-            Vector3 aim = NextCorner(here, to, dist, dt);
+            // back to. Backing out of a wedge (`TickPin`): the breadcrumb.
+            Vector3 aim;
+            if (backtrack && FlatDistance(here, crumb) < 0.25f)
+            {
+                backtrack = false;
+                hasRoute = false;
+                route.Clear();
+                routeAt = 0;
+                if (routeAge > 0f) routeAge = 0f;   // re-planned from here, next line
+            }
+            aim = backtrack ? crumb : NextCorner(here, to, dist, dt);
             if (stallNote != null && row != null && string.IsNullOrEmpty(row.bodyBlocked))
                 row.bodyBlocked = stallNote;
             // The leg up (or down) a ladder chain: the route kept both of
@@ -2811,13 +2832,13 @@ namespace SeaSick.World
             // against each building's benches, racks and posts as boxes:
             // slide along the face, never through; a box his own errand's
             // spot is inside of never blocks him.
-            if (CampPath.Obstructs(camp, here, next, to, CampPath.Walker.Hand, out Vector3 along))
+            if (CampPath.Obstructs(camp, here, next, to, CampPath.Walker.Hand,
+                    out Vector3 along, out Vector3 faceU, out Vector3 faceV))
             {
-                Vector3 slide = along * Vector3.Dot(step, along);
-                Vector3 alt = here + slide;
-                if (slide.sqrMagnitude < 1e-8f
-                    || CampPath.Obstructs(camp, here, alt, to, CampPath.Walker.Hand, out _))
+                if (!Slide(here, step, leg, to, along, faceU, faceV, out Vector3 alt))
                 {
+                    // Pinned: the pin detector re-plans (`TickPin`).
+                    pinRefused = true;
                     // Re-ask in half a second rather than every frame: a
                     // pinned man asking every frame is a search a frame.
                     routeAge = Mathf.Max(routeAge, RePlanSeconds - 0.5f);
@@ -2896,7 +2917,159 @@ namespace SeaSick.World
             // 0.16 m rise at the mill, and the terrain everywhere else).
             next.y = WorkerPad.Foot(next, camp.GroundAt(next));
             transform.position = next;
+            DropCrumb(next);
             return false;
+        }
+
+        // --- the slide (2026-10-04) --------------------------------------------------
+
+        /// Side-steps tried when nothing along the box's faces is clear, in
+        /// degrees off the refused step.
+        static readonly float[] SideSteps = { 30f, -30f, 60f, -60f, 90f, -90f, 120f, -120f };
+
+        /// **A refused step slides, whichever way round is open.** The old
+        /// slide went along ONE face -- the one picked by `ex > ez`, which
+        /// at a box's corner was the face running into the neighbouring
+        /// box -- and that step refused too, so he stood facing the
+        /// building (the kitchen's pickup, Kevin's "running into a
+        /// building"). Now: both faces' tangents both ways, the tangent
+        /// round the corner, then short side-steps, and the clear one that
+        /// best follows the leg to his next corner wins. Never backwards:
+        /// no forward candidate is a pin, and `TickPin` re-plans.
+        bool Slide(Vector3 here, Vector3 step, Vector3 leg, Vector3 to,
+            Vector3 along, Vector3 faceU, Vector3 faceV, out Vector3 alt)
+        {
+            alt = here;
+            float sl = Mathf.Sqrt(step.x * step.x + step.z * step.z);
+            float ll = Mathf.Sqrt(leg.x * leg.x + leg.z * leg.z);
+            if (sl < 1e-5f || ll < 1e-5f) return false;
+            float lx = leg.x / ll, lz = leg.z / ll;
+            float sx = step.x / sl, sz = step.z / sl;
+            float best = 0.05f;
+            bool found = false;
+            for (int k = 0; k < 6 + SideSteps.Length; k++)
+            {
+                float ux, uz;
+                switch (k)
+                {
+                    case 0: ux = along.x; uz = along.z; break;
+                    case 1: ux = -along.x; uz = -along.z; break;
+                    case 2: ux = faceU.x; uz = faceU.z; break;
+                    case 3: ux = -faceU.x; uz = -faceU.z; break;
+                    case 4: ux = faceV.x; uz = faceV.z; break;
+                    case 5: ux = -faceV.x; uz = -faceV.z; break;
+                    default:
+                        float a = SideSteps[k - 6] * Mathf.Deg2Rad, c = Mathf.Cos(a), s = Mathf.Sin(a);
+                        ux = sx * c - sz * s; uz = sx * s + sz * c;
+                        break;
+                }
+                float un = Mathf.Sqrt(ux * ux + uz * uz);
+                if (un < 1e-4f) continue;
+                ux /= un; uz /= un;
+                float score = ux * lx + uz * lz;
+                if (score <= best) continue;
+                float m = sl * Mathf.Max(0.35f, score);
+                var q = new Vector3(here.x + ux * m, here.y, here.z + uz * m);
+                if (CampPath.Obstructs(camp, here, q, to, CampPath.Walker.Hand, out _)) continue;
+                best = score;
+                alt = q;
+                found = true;
+            }
+            return found;
+        }
+
+        // --- the pin detector (2026-10-04) ---------------------------------------
+        //
+        // Kevin: "they're just running into a building, trying to force their
+        // way to where they're going, and they end up being stuck." A pinned
+        // walker used to re-plan every 0.5 s into the same route and wait 5 s
+        // for the stall guard, whose escape tested 1.2 m strides with the full
+        // clearance -- refused in every direction in clutter -- and whose
+        // "reached" wanted him within 2.5 m: he looped for good. Now every
+        // half second of walking is checked: a refused step with no slide, or
+        // barely any ground gained, re-plans at once from where he stands; if
+        // the new route's first leg is still refused he walks back to his
+        // breadcrumb (the last spot he passed that was well clear of every box
+        // on an open cell) and plans from there; a third miss in a row steps
+        // him out (`PickEscape`). The stall guard stays as the backstop.
+
+        const float PinWindow = 0.5f;
+        /// Metres gained in `PinWindow` that count as walking (less for a
+        /// tired walk: half what his gait covers in the window).
+        const float PinProgress = 0.15f;
+        /// A breadcrumb further than this is not walked back to.
+        const float CrumbReach = 4f;
+
+        Vector3 pinFor, pinFrom, crumb, crumbFrom;
+        float pinWin;
+        bool pinRefused, hasCrumb, backtrack;
+        int pinFails;
+
+        void TickPin(Vector3 here, Vector3 to, float dt)
+        {
+            float mx = to.x - pinFor.x, mz = to.z - pinFor.z;
+            if (mx * mx + mz * mz > 1f)
+            {
+                pinFor = to;
+                pinFrom = here;
+                pinWin = 0f;
+                pinRefused = false;
+                pinFails = 0;
+                backtrack = false;
+                return;
+            }
+            pinWin += dt;
+            if (pinWin < PinWindow) return;
+            float need = Mathf.Min(PinProgress, 0.5f * Cruise * PinWindow);
+            bool stuck = pinRefused || FlatDistance(here, pinFrom) < need;
+            pinWin = 0f;
+            pinFrom = here;
+            pinRefused = false;
+            if (!stuck) { pinFails = 0; return; }
+            // Waiting out a "no way round" backoff (`NextCorner`) is standing
+            // on purpose: a re-plan would flood a closed ring every 0.5 s.
+            if (!hasRoute && routeAge < 0f) return;
+            Recover(here, to);
+        }
+
+        void Recover(Vector3 here, Vector3 to)
+        {
+            backtrack = false;
+            if (++pinFails >= 3)
+            {
+                pinFails = 0;
+                if (PickEscape(here, to, out escapeDir)) escapeLeft = EscapeTime();
+                hasRoute = false;
+                route.Clear();
+                routeAt = 0;
+                if (routeAge > 0f) routeAge = 0f;
+                return;
+            }
+            if (!CampPath.Budget()) return;   // the next window asks again
+            var map = CampPath.For(camp);
+            routePlans++;
+            routeFor = to;
+            routeAt = 0;
+            routeAge = 0f;
+            hasRoute = map != null && map.Route(here, to, CampPath.Walker.Hand, route) && route.Count > 0;
+            if (!hasRoute) { route.Clear(); return; }   // `NextCorner` asks, and backs off
+            Vector3 first = route[0];
+            if (!CampPath.SolidBetween(camp, here, first, to)
+                && !CampPath.Crosses(camp, here, first, CampPath.Walker.Hand)) return;
+            // Still refused from here: back to the breadcrumb, plan there.
+            if (hasCrumb && FlatDistance(here, crumb) > 0.3f && FlatDistance(here, crumb) < CrumbReach)
+                backtrack = true;
+            else if (PickEscape(here, to, out escapeDir)) escapeLeft = EscapeTime();
+        }
+
+        /// Every half metre walked: here, if it is a spot worth coming back to.
+        void DropCrumb(Vector3 at)
+        {
+            if (FlatDistance(at, crumbFrom) < 0.5f) return;
+            crumbFrom = at;
+            if (!CampPath.CrumbSpot(camp, at)) return;
+            crumb = at;
+            hasCrumb = true;
         }
 
         // --- the stall guard -------------------------------------------------------
@@ -3002,7 +3175,8 @@ namespace SeaSick.World
             stallEscapes++;
             stallBest = left;
             stallNote = "stuck — can't get through to where he's going";
-            if (PickEscape(here, to, out escapeDir)) escapeLeft = EscapeSeconds;
+            backtrack = false;
+            if (PickEscape(here, to, out escapeDir)) escapeLeft = EscapeTime();
             hasRoute = false;
             route.Clear();
             routeAt = 0;
@@ -3010,9 +3184,13 @@ namespace SeaSick.World
             return false;
         }
 
-        /// The free direction out of a wedge: of eight, the one whose stride
-        /// is not refused by a wall or the slope and lands furthest from any
-        /// wall line, ties toward the target.
+        /// **The free direction out of a wedge (2026-10-04): short strides,
+        /// rated, not refused.** Of sixteen 0.4 m strides, those that go
+        /// into a box, across a wall or up a slope are out; the rest are
+        /// scored by how far off the boxes and walls they land, ties toward
+        /// the target. The old test asked 1.2 m strides to keep the full
+        /// clearance, and in clutter every one of the eight was refused, so
+        /// the escape never happened.
         bool PickEscape(Vector3 here, Vector3 to, out Vector3 dir)
         {
             dir = Vector3.zero;
@@ -3020,14 +3198,14 @@ namespace SeaSick.World
             if (toT.sqrMagnitude > 1e-6f) toT.Normalize();
             float best = float.MinValue;
             var walls = camp.Walls;
-            for (int k = 0; k < 8; k++)
+            for (int k = 0; k < 16; k++)
             {
-                float t = k * Mathf.PI * 0.25f;
+                float t = k * Mathf.PI * 0.125f;
                 var d = new Vector3(Mathf.Sin(t), 0f, Mathf.Cos(t));
-                Vector3 q = here + d * 1.2f;
-                if (CampPath.Obstructs(camp, here, q, to, CampPath.Walker.Hand, out _)) continue;
+                Vector3 q = here + d * EscapeStride;
+                if (CampPath.Penetrates(camp, here, q)) continue;
                 if (!Walkability.MayStep(camp, Grounded(here), q, Walkability.Feet.Man)) continue;   // terrain, not pad (see `Walk`)
-                float clear = 3f;
+                float clear = 1f;
                 if (walls != null)
                     for (int i = 0; i < walls.Count; i++)
                     {
@@ -3035,22 +3213,32 @@ namespace SeaSick.World
                         if (w == null || w.Breached) continue;
                         clear = Mathf.Min(clear, w.FlatDistanceTo(q));
                     }
-                float score = clear + 0.25f * Vector3.Dot(d, toT);
+                float boxes = Mathf.Clamp(CampPath.SolidDistance(camp, q), 0f, 0.6f);
+                float score = 2f * boxes + clear + 0.25f * Vector3.Dot(d, toT);
                 if (score > best) { best = score; dir = d; }
             }
             return best > float.MinValue;
         }
 
+        /// Metres an escape walks.
+        const float EscapeStride = 0.4f;
+
+        float EscapeTime() => Mathf.Clamp(EscapeStride / Mathf.Max(0.1f, Cruise) + 0.2f, 0.3f, EscapeSeconds);
+
+        /// The escape's own step: never into a box or across a wall, never
+        /// up a slope -- but it may pass inside the clearance (that is what
+        /// it is getting out of).
         void StepEscape(Vector3 here, float dt)
         {
             escapeLeft -= dt;
             Vector3 next = here + stride.Step(transform, escapeDir, Cruise, 9f, dt);
             acting?.Commanded(stride.Speed);
-            if (CampPath.Obstructs(camp, here, next, stallFor, CampPath.Walker.Hand, out _)
+            if (CampPath.Penetrates(camp, here, next)
                 || !Walkability.MayStep(camp, Grounded(here), next, Walkability.Feet.Man))
             { escapeLeft = 0f; return; }
             next.y = WorkerPad.Foot(next, camp.GroundAt(next));
             transform.position = next;
+            DropCrumb(next);
         }
 
         // --- routing -----------------------------------------------------------
@@ -3123,6 +3311,7 @@ namespace SeaSick.World
             routeAge = 0f;
             walledAsks = 0;
             lostAsks = 0;
+            backtrack = false;
             if (row != null) row.bodyBlocked = null;
         }
 
@@ -3262,8 +3451,13 @@ namespace SeaSick.World
                 float d2 = dx * dx + dz * dz;
                 if (d2 > CornerReach * CornerReach) break;
                 Vector3 after = routeAt + 1 >= route.Count - 1 ? to : route[routeAt + 1];
-                if (d2 > 0.09f && (CampPath.Crosses(camp, here, after, CampPath.Walker.Hand)
-                                   || CampPath.SolidBetween(camp, here, after, to))) break;
+                // **Not even on top of it (2026-10-04)** when the next leg
+                // is refused from here: retired at 0.3 m regardless, he
+                // walked the refused leg into the box and pinned there.
+                // Standing on a corner whose next leg is refused is what
+                // `TickPin` re-plans.
+                if (CampPath.Crosses(camp, here, after, CampPath.Walker.Hand)
+                    || CampPath.SolidBetween(camp, here, after, to)) break;
                 routeAt++;
             }
 

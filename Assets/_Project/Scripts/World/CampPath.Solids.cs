@@ -39,6 +39,9 @@ namespace SeaSick.World
         /// Metres a walker's centre keeps off a building's box.
         public static float SolidClearance = 0.15f;
 
+        /// A lane's outside end keeps this far off every box.
+        const float LaneExitClear = 0.3f;
+
         /// A grid cell is closed when its centre is this close to a box:
         /// half a cell, so no box, however small, slips between centres.
         public static float SolidGridInflate = 1.0f;
@@ -66,6 +69,17 @@ namespace SeaSick.World
         readonly List<int> accessGroup = new List<int>();
         readonly List<byte> accessKind = new List<byte>();
         readonly List<Vector4> localScratch = new List<Vector4>();
+        readonly List<Vector4> markerScratch = new List<Vector4>();
+        readonly List<int> markerGroup = new List<int>();
+        /// Markers too close to a box to stand at, and their free spots.
+        readonly List<Vector3> freeAt = new List<Vector3>();
+        readonly List<Vector3> freeTo = new List<Vector3>();
+        /// Every access marker, as read (`RebuildSolids`): the free spots
+        /// are worked out again from these when a wall changes.
+        readonly List<Vector3> markerAll = new List<Vector3>();
+        /// The `WallRevision` the free spots (marker cache and ring) were
+        /// worked out under.
+        int freeWallRev = -1;
 
         /// Per-cell: blocked by a building (both walkers).
         byte[] bldg;
@@ -132,6 +146,11 @@ namespace SeaSick.World
             accessPts.Clear();
             accessGroup.Clear();
             accessKind.Clear();
+            freeAt.Clear();
+            freeTo.Clear();
+            markerAll.Clear();
+            markerScratch.Clear();
+            markerGroup.Clear();
             var list = camp.Built;
             for (int i = 0; i < list.Count; i++)
             {
@@ -167,19 +186,37 @@ namespace SeaSick.World
                 g.count = boxes.Count - g.first;
                 groups.Add(g);
 
-                // Access markers: the spots a worker walks to here. One
-                // inside a box (a shell's unused `Entry`) is not a spot.
+                // Access markers: the spots a worker walks to here. Read
+                // after every box is down (below): a marker can sit in a
+                // building raised later in the list.
                 foreach (var m in b.GetComponentsInChildren<Transform>(true))
                 {
-                    if (System.Array.IndexOf(BuildingSolids.AccessStems, BuildingFactory.Stem(m.name)) < 0) continue;
-                    Vector3 p = m.position;
-                    if (DistToSolids(p.x, p.z) < 0f) continue;
-                    accessPts.Add(p);
                     string stem = BuildingFactory.Stem(m.name);
-                    accessGroup.Add(groups.Count - 1);
-                    accessKind.Add((byte)(stem == "Worker_Stand" ? 1 : stem == "Worker_Approach" ? 2 : 0));
+                    if (System.Array.IndexOf(BuildingSolids.AccessStems, stem) < 0) continue;
+                    markerScratch.Add(new Vector4(m.position.x, m.position.y, m.position.z,
+                        stem == "Worker_Stand" ? 1 : stem == "Worker_Approach" ? 2 : 0));
+                    markerGroup.Add(groups.Count - 1);
                 }
             }
+
+            // One inside a box (a shell's unused `Entry`) is not a spot. Every
+            // marker too close to a box or a wall to stand at (a stand 5 cm
+            // into its own bench, a pickup 7 cm off the counter, a spot 30 cm
+            // off the palisade) keeps its free spot (`FreeSpot`), worked out
+            // once (`RefreshFreeSpots`), not per route.
+            for (int i = 0; i < markerScratch.Count; i++)
+            {
+                var m = markerScratch[i];
+                var p = new Vector3(m.x, m.y, m.z);
+                markerAll.Add(p);
+                if (DistToSolids(p.x, p.z) < 0f) continue;
+                accessPts.Add(p);
+                accessGroup.Add(markerGroup[i]);
+                accessKind.Add((byte)m.w);
+            }
+            RefreshFreeSpots();
+            markerScratch.Clear();
+            markerGroup.Clear();
         }
 
         // --- geometry ------------------------------------------------------
@@ -245,14 +282,76 @@ namespace SeaSick.World
             return best;
         }
 
+        /// Outward unit direction of a box's distance at a point outside it
+        /// (world, flat): off the face he is beside, or out of the corner's
+        /// rounding.
+        static void Grad(in Box b, float x, float z, out float gx, out float gz)
+        {
+            Local(b, x, z, out float lx, out float lz);
+            float cx = Mathf.Clamp(lx, -b.hx, b.hx), cz = Mathf.Clamp(lz, -b.hz, b.hz);
+            float ox = lx - cx, oz = lz - cz;
+            float n = Mathf.Sqrt(ox * ox + oz * oz);
+            if (n < 1e-6f)
+            {
+                // On the face itself: its normal.
+                if (Mathf.Abs(lx) - b.hx > Mathf.Abs(lz) - b.hz) { ox = lx >= 0f ? 1f : -1f; oz = 0f; }
+                else { ox = 0f; oz = lz >= 0f ? 1f : -1f; }
+            }
+            else { ox /= n; oz /= n; }
+            gx = ox * b.ux + oz * b.vx;
+            gz = ox * b.uz + oz * b.vz;
+        }
+
+        /// **True distance from a flat segment to a box** (round corners,
+        /// like `SignedDist`), for a segment that does not cross it: the
+        /// nearer of its two ends, or of the box's four corners to it.
+        /// `SegHits` with a margin grows the box with SQUARE corners, so a
+        /// man 0.155 m off a bench's corner read as inside the 0.15 m
+        /// clearance and every step he could take was refused (the
+        /// kitchen's pickup, 2026-10-04).
+        static float SegDist(in Box b, float px, float pz, float qx, float qz)
+        {
+            Local(b, px, pz, out float ax, out float az);
+            Local(b, qx, qz, out float bx, out float bz);
+            float m = Mathf.Min(LocalDist(b, ax, az), LocalDist(b, bx, bz));
+            float dx = bx - ax, dz = bz - az, ll = dx * dx + dz * dz;
+            if (ll < 1e-12f) return m;
+            for (int c = 0; c < 4; c++)
+            {
+                float cx = (c & 1) == 0 ? b.hx : -b.hx, cz = (c & 2) == 0 ? b.hz : -b.hz;
+                float t = Mathf.Clamp01(((cx - ax) * dx + (cz - az) * dz) / ll);
+                float ex = ax + t * dx - cx, ez = az + t * dz - cz;
+                m = Mathf.Min(m, Mathf.Sqrt(ex * ex + ez * ez));
+            }
+            return m;
+        }
+
+        static float LocalDist(in Box b, float lx, float lz)
+        {
+            float ex = Mathf.Abs(lx) - b.hx, ez = Mathf.Abs(lz) - b.hz;
+            if (ex <= 0f && ez <= 0f) return Mathf.Max(ex, ez);
+            float ox = ex > 0f ? ex : 0f, oz = ez > 0f ? ez : 0f;
+            return Mathf.Sqrt(ox * ox + oz * oz);
+        }
+
         /// The step guard, for one camp. See `Obstructs`.
         bool SolidStepBlocks(Vector3 p, Vector3 q, Vector3 goal, float r, out Vector3 along)
+            => SolidStepBlocks(p, q, goal, r, out along, out _, out _);
+
+        /// `faceU`/`faceV`: the blocking box's two face directions (both
+        /// tangents a man at its corner may slide along).
+        bool SolidStepBlocks(Vector3 p, Vector3 q, Vector3 goal, float r, out Vector3 along,
+            out Vector3 faceU, out Vector3 faceV)
         {
             along = default;
+            faceU = default;
+            faceV = default;
             SyncSolids();
             if (groups.Count == 0) return false;
             float mx = 0.5f * (p.x + q.x), mz = 0.5f * (p.z + q.z);
-            float half = 0.5f * Mathf.Sqrt((q.x - p.x) * (q.x - p.x) + (q.z - p.z) * (q.z - p.z));
+            float sx = q.x - p.x, sz = q.z - p.z;
+            float len = Mathf.Sqrt(sx * sx + sz * sz);
+            float half = 0.5f * len;
             for (int gi = 0; gi < groups.Count; gi++)
             {
                 var g = groups[gi];
@@ -267,23 +366,210 @@ namespace SeaSick.World
                     if (SignedDist(b, goal.x, goal.z) < 0.05f) continue;     // his spot is in it
                     bool hit;
                     if (SegHits(b, p.x, p.z, q.x, q.z, 0f)) hit = true;      // straight through
-                    else if (d0 >= r) hit = SegHits(b, p.x, p.z, q.x, q.z, r);
+                    else if (d0 >= r)
+                        hit = SegHits(b, p.x, p.z, q.x, q.z, r) && SegDist(b, p.x, p.z, q.x, q.z) < r - 1e-4f;
                     else
                     {
-                        // Already within the clearance: only closing in is refused.
-                        float d1 = SignedDist(b, q.x, q.z);
-                        hit = d1 < d0 && d1 < r;
+                        // **Already within the clearance: refused if it comes
+                        // any closer, anywhere along it (2026-10-04).** The
+                        // distance to a box along a straight line is convex,
+                        // so the line comes closer than `d0` somewhere iff it
+                        // starts by closing in. The old endpoint test passed
+                        // a long leg that grazed the bench a man stood
+                        // beside and came away again (`NextCorner`'s 6 m
+                        // shortcut walked him through it).
+                        Grad(b, p.x, p.z, out float gx, out float gz);
+                        hit = len > 1e-6f && (gx * sx + gz * sz) / len < -0.02f;
                     }
                     if (!hit) continue;
-                    // Slide along the face he is outside of.
-                    Local(b, p.x, p.z, out float lx, out float lz);
-                    float ex = Mathf.Abs(lx) - b.hx, ez = Mathf.Abs(lz) - b.hz;
-                    along = ex > ez ? new Vector3(b.vx, 0f, b.vz) : new Vector3(b.ux, 0f, b.uz);
+                    // Slide along the box where he stands: the face's tangent,
+                    // or round the corner's rounding -- never into the
+                    // neighbouring box the old `ex > ez` face pick chose.
+                    Grad(b, p.x, p.z, out float tx, out float tz);
+                    along = new Vector3(-tz, 0f, tx);
+                    faceU = new Vector3(b.ux, 0f, b.uz);
+                    faceV = new Vector3(b.vx, 0f, b.vz);
                     return true;
                 }
             }
             return false;
         }
+
+        /// Does the flat segment pass INTO a box (no clearance)? Boxes `p` is
+        /// inside of do not count. The escape's test: in clutter every
+        /// stride closes on something, and only going through one is wrong.
+        bool SolidPenetrates(Vector3 p, Vector3 q)
+        {
+            SyncSolids();
+            float mx = 0.5f * (p.x + q.x), mz = 0.5f * (p.z + q.z);
+            float half = 0.5f * Mathf.Sqrt((q.x - p.x) * (q.x - p.x) + (q.z - p.z) * (q.z - p.z));
+            for (int gi = 0; gi < groups.Count; gi++)
+            {
+                var g = groups[gi];
+                float dx = mx - g.cx, dz = mz - g.cz;
+                float reach = g.rad + half;
+                if (dx * dx + dz * dz > reach * reach) continue;
+                for (int k = g.first; k < g.first + g.count; k++)
+                {
+                    var b = boxes[k];
+                    if (SignedDist(b, p.x, p.z) < 0f) continue;
+                    if (SegHits(b, p.x, p.z, q.x, q.z, 0f)) return true;
+                }
+            }
+            return false;
+        }
+
+        // --- free ground beside a marker (2026-10-04) ------------------------
+
+        /// Metres past `SolidClearance` a free spot keeps off every box, and
+        /// past `WallClearance` off every wall.
+        const float FreeMargin = 0.05f;
+
+        /// **The nearest point a body can actually stand at** near `p`:
+        /// `p` itself when it is `SolidClearance + FreeMargin` off every
+        /// box and `WallClearance + FreeMargin` off every wall, else the
+        /// closest point that is, on `p`'s side of every wall and reachable
+        /// from `p` without going through a box or a wall. Markers drawn
+        /// into or against their own bench (the grain mill's stand 5 cm
+        /// inside, the kitchen's stand 7 cm off its counter), against the
+        /// palisade (the watchtower's output spot, 30 cm off it) and every
+        /// fallback spot (`EdgeBeyond`, a bay a pace off a wall) are planned
+        /// to this, so the last leg ends where the step guard lets a man
+        /// stand. Markers are cached (`RefreshFreeSpots`); anything else
+        /// costs a distance read unless it is in the clearance. The caches
+        /// follow the buildings (`SolidRevision`) and the walls
+        /// (`WallRevision`).
+        public Vector3 FreeSpot(Vector3 p)
+        {
+            SyncSolids();
+            var walls = camp != null ? camp.Walls : null;
+            if (!TooClose(walls, p)) return p;
+            if (freeWallRev != WallRevision) RefreshFreeSpots();
+            for (int i = 0; i < freeAt.Count; i++)
+                if (Flat2(freeAt[i], p) < 1e-4f) return freeTo[i];
+            // Anything else in the clearance (an `EdgeBeyond` spot against
+            // a neighbour's bench) is asked for every frame its errand
+            // walks: the last few answers are kept.
+            for (int i = 0; i < FreeRing; i++)
+                if (freeQRev[i] == SolidRevision && freeQWall[i] == WallRevision
+                    && Flat2(freeQAt[i], p) < 1e-4f) return freeQTo[i];
+            Vector3 f = FindFreeSpot(p);
+            freeQAt[freeQNext] = p;
+            freeQTo[freeQNext] = f;
+            freeQRev[freeQNext] = SolidRevision;
+            freeQWall[freeQNext] = WallRevision;
+            freeQNext = (freeQNext + 1) % FreeRing;
+            return f;
+        }
+
+        const int FreeRing = 8;
+        readonly Vector3[] freeQAt = new Vector3[FreeRing], freeQTo = new Vector3[FreeRing];
+        readonly int[] freeQRev = { -1, -1, -1, -1, -1, -1, -1, -1 };
+        readonly int[] freeQWall = { -1, -1, -1, -1, -1, -1, -1, -1 };
+        int freeQNext;
+
+        public static Vector3 FreeSpot(Outpost camp, Vector3 p)
+        {
+            var map = camp != null ? For(camp) : null;
+            return map != null ? map.FreeSpot(p) : p;
+        }
+
+        /// Is `p` in the clearance of a box or a wall?
+        bool TooClose(IReadOnlyList<WallSegment> walls, Vector3 p)
+            => DistToSolids(p.x, p.z) < SolidClearance + FreeMargin
+               || NearWall(walls, p.x, p.z, WallClearance + FreeMargin);
+
+        /// The free spot of every marker in a clearance, again: the markers
+        /// are the same, the walls (or the boxes) are not.
+        void RefreshFreeSpots()
+        {
+            freeWallRev = WallRevision;
+            freeAt.Clear();
+            freeTo.Clear();
+            var walls = camp != null ? camp.Walls : null;
+            for (int i = 0; i < markerAll.Count; i++)
+            {
+                var p = markerAll[i];
+                if (!TooClose(walls, p)) continue;
+                freeAt.Add(p);
+                freeTo.Add(FindFreeSpot(p));
+            }
+        }
+
+        /// Is a standing wall of the list closer than `r` to the point? Every
+        /// segment counts as it stands for a body that is not a hand: a gate
+        /// is shut to him (`WallsBlock`'s notion), a breached piece is gone.
+        /// A box reject first, as `PieceBlocks` does.
+        static bool NearWall(IReadOnlyList<WallSegment> walls, float x, float z, float r)
+        {
+            if (walls == null) return false;
+            for (int k = 0; k < walls.Count; k++)
+            {
+                var w = walls[k];
+                if (w == null || w.Breached) continue;
+                Vector3 a = w.A, b = w.B;
+                if (x < (a.x < b.x ? a.x : b.x) - r || x > (a.x > b.x ? a.x : b.x) + r) continue;
+                if (z < (a.z < b.z ? a.z : b.z) - r || z > (a.z > b.z ? a.z : b.z) + r) continue;
+                if (PointSegDist(x, z, a.x, a.z, b.x, b.z) < r) return true;
+            }
+            return false;
+        }
+
+        /// Does the straight line from `p` to `c` cross a standing wall,
+        /// gates shut? `WallsBlock` lets a walker already within
+        /// `WallEmbedded` of a wall out through it; a spot must not be put
+        /// on the far side of one that way, so this has no such grace.
+        static bool CrossesWall(IReadOnlyList<WallSegment> walls, Vector3 p, Vector3 c)
+        {
+            if (walls == null) return false;
+            for (int k = 0; k < walls.Count; k++)
+            {
+                var w = walls[k];
+                if (w == null || w.Breached) continue;
+                Vector3 a = w.A, b = w.B;
+                float c1 = Cross2(a.x, a.z, b.x, b.z, p.x, p.z), c2 = Cross2(a.x, a.z, b.x, b.z, c.x, c.z);
+                float c3 = Cross2(p.x, p.z, c.x, c.z, a.x, a.z), c4 = Cross2(p.x, p.z, c.x, c.z, b.x, b.z);
+                if ((c1 > 0f) != (c2 > 0f) && (c3 > 0f) != (c4 > 0f)) return true;
+            }
+            return false;
+        }
+
+        /// Rings of 16 every 10 cm out to 1.5 m; the first ring with a spot
+        /// wins, and in it the one furthest off the boxes (to 2 m), a spot
+        /// he can walk to without closing on any box first. A spot keeps
+        /// `WallClearance + FreeMargin` off every wall and stays on `p`'s
+        /// side of them.
+        Vector3 FindFreeSpot(Vector3 p)
+        {
+            Vector3 best = p;
+            var walls = camp != null ? camp.Walls : null;
+            for (int ring = 1; ring <= 15; ring++)
+            {
+                float rr = 0.1f * ring, bestScore = float.MinValue;
+                for (int h = 0; h < 16; h++)
+                {
+                    float a = h * Mathf.PI / 8f;
+                    var c = new Vector3(p.x + Mathf.Sin(a) * rr, p.y, p.z + Mathf.Cos(a) * rr);
+                    float dc = DistToSolids(c.x, c.z);
+                    if (dc < SolidClearance + FreeMargin) continue;
+                    if (NearWall(walls, c.x, c.z, WallClearance + FreeMargin)) continue;
+                    if (SolidPenetrates(p, c)) continue;
+                    if (CrossesWall(walls, p, c)) continue;
+                    float score = Mathf.Min(dc, 2f) + (SolidStepBlocks(p, c, FarGoal, SolidClearance, out _) ? 0f : 1f);
+                    if (score <= bestScore) continue;
+                    bestScore = score;
+                    best = c;
+                }
+                if (bestScore > float.MinValue)
+                {
+                    if (camp != null) best.y = camp.GroundAt(best);
+                    return best;
+                }
+            }
+            return p;
+        }
+
+        static readonly Vector3 FarGoal = new Vector3(1e9f, 0f, 1e9f);
 
         // --- the public face ---------------------------------------------
 
@@ -300,6 +586,50 @@ namespace SeaSick.World
             if (camp == null) return false;
             var map = For(camp);
             return map != null && map.SolidStepBlocks(from, to, goal, SolidClearance, out along);
+        }
+
+        /// `Obstructs`, also handing back the blocking box's two face
+        /// directions (zero when a wall blocked): the slide candidates at a
+        /// box's corner (`CampWorker.Walk`).
+        public static bool Obstructs(Outpost camp, Vector3 from, Vector3 to, Vector3 goal,
+            Walker who, out Vector3 along, out Vector3 faceU, out Vector3 faceV)
+        {
+            faceU = default;
+            faceV = default;
+            if (Blocks(camp, from, to, who, WallClearance, out along)) return true;
+            if (camp == null) return false;
+            var map = For(camp);
+            return map != null && map.SolidStepBlocks(from, to, goal, SolidClearance, out along, out faceU, out faceV);
+        }
+
+        /// A stride that goes INTO a box or across a wall (no clearance):
+        /// what an escape out of a wedge may not do (`CampWorker.PickEscape`).
+        public static bool Penetrates(Outpost camp, Vector3 from, Vector3 to)
+        {
+            if (camp == null) return false;
+            if (Crosses(camp, from, to, Walker.Hand)) return true;
+            var map = For(camp);
+            return map != null && map.SolidPenetrates(from, to);
+        }
+
+        /// Signed distance to the nearest building box (big when none).
+        public static float SolidDistance(Outpost camp, Vector3 p)
+        {
+            var map = camp != null ? For(camp) : null;
+            return map != null ? map.SolidDistance(p) : 1e9f;
+        }
+
+        /// **A spot worth coming back to** (`CampWorker`'s breadcrumb): a
+        /// hand-walkable cell, 0.3 m+ off every box.
+        public static bool CrumbSpot(Outpost camp, Vector3 p)
+        {
+            var map = camp != null ? For(camp) : null;
+            if (map == null || !map.built || map.hs == null) return false;
+            if (map.SolidDistance(p) < 0.3f) return false;
+            int i = map.Index(p);
+            if (i < 0) return false;
+            map.mask = BlockHand;
+            return map.Walk(i);
         }
 
         /// Is there a building's box on the straight line from `from` to
@@ -398,16 +728,27 @@ namespace SeaSick.World
                     for (int s = 1; s <= 48; s++)
                     {
                         float qx = p.x + dx * 0.25f * s, qz = p.z + dz * 0.25f * s;
-                        bool inSolid = DistToSolids(qx, qz) < SolidClearance;
+                        float dq = DistToSolids(qx, qz);
+                        bool inSolid = dq < SolidClearance;
                         cost += inSolid ? 10f : 1f;
                         if (cost >= bestCost) break;
-                        if (inSolid) continue;
+                        // **The exit is somewhere to stand (2026-10-04)**: a
+                        // comfortable 0.3 m off every box, not the first
+                        // point 0.15 m off one.
+                        if (inSolid || dq < LaneExitClear) continue;
                         int c = Index(new Vector3(qx, 0f, qz));
                         if (c < 0) break;
                         if (bldg[c] == 0 && open[c])
                         {
-                            bestCost = cost;
-                            bestExit = new Vector3(qx, p.y, qz);
+                            // And a lane the step guard will walk: one that
+                            // closes on a box on its way out costs extra.
+                            var q = new Vector3(qx, p.y, qz);
+                            if (SolidStepBlocks(p, q, FarGoal, SolidClearance, out _)) cost += 20f;
+                            if (cost < bestCost)
+                            {
+                                bestCost = cost;
+                                bestExit = q;
+                            }
                             break;
                         }
                     }
@@ -483,8 +824,9 @@ namespace SeaSick.World
                 hasVia = lanes[i].hasVia;
                 found = true;
             }
-            // A marker already outside every building's cells needs no lane.
-            if (found && !hasVia && (exit - p).sqrMagnitude < 0.09f) return false;
+            // A marker already outside every building's cells needs no lane --
+            // unless the short way out is itself refused (2026-10-04).
+            if (found && !hasVia && (exit - p).sqrMagnitude < 0.09f && SolidLineClear(p, exit)) return false;
             return found;
         }
 

@@ -155,6 +155,61 @@ namespace SeaSick.Dev
             return report.ToString();
         }
 
+        /// A marker this close to one of its own boxes is reported.
+        const float MarkerClearanceMin = 0.15f;
+
+        /// **Marker clearance report (2026-10-04).** Every access marker of
+        /// every baked prefab against the boxes the GAME uses
+        /// (`BuildingSolids.Baked`, not a fresh bake): one error per marker
+        /// inside one of its own boxes or within `MarkerClearanceMin` of one.
+        /// Prefabs are not edited -- `CampPath.FreeSpot` stands the worker
+        /// on free ground beside such a marker at runtime; this says which
+        /// markers an art pass should move.
+        /// Run: `SeaSick.Dev.BuildingSolidsBake.MarkerClearance()`.
+        [MenuItem("SeaSick/Dev/Building Marker Clearance")]
+        public static string MarkerClearance()
+        {
+            var field = typeof(SeaSick.World.BuildingSolids).GetField("Baked",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            var baked = field?.GetValue(null) as Dictionary<string, float[]>;
+            if (baked == null) return "no baked table";
+            var report = new StringBuilder();
+            int markers = 0, bad = 0;
+            foreach (var (prefab, _) in Table)
+            {
+                if (!baked.TryGetValue(prefab, out var f)) { report.Append($"{prefab}: not baked\n"); continue; }
+                var asset = Resources.Load<GameObject>(prefab);
+                if (asset == null) { report.Append($"MISSING {prefab}\n"); continue; }
+                var boxes = new List<Vector4>();
+                for (int i = 0; i + 3 < f.Length; i += 4) boxes.Add(new Vector4(f[i], f[i + 1], f[i + 2], f[i + 3]));
+                var holder = new GameObject("MarkerClearanceHolder");
+                var model = Object.Instantiate(asset, holder.transform);
+                model.transform.localPosition = Vector3.zero;
+                model.transform.localRotation = Quaternion.identity;
+                try
+                {
+                    foreach (var t in model.GetComponentsInChildren<Transform>(true))
+                    {
+                        string stem = Stem(t.name);
+                        if (System.Array.IndexOf(AccessStems, stem) < 0) continue;
+                        markers++;
+                        Vector3 p = holder.transform.InverseTransformPoint(t.position);
+                        float best = float.MaxValue;
+                        foreach (var b in boxes) best = Mathf.Min(best, SignedDist(p.x, p.z, b));
+                        if (best >= MarkerClearanceMin) continue;
+                        bad++;
+                        string line = $"{prefab} {t.name} at ({p.x:0.00},{p.z:0.00}): "
+                            + (best < 0f ? $"INSIDE its box by {-best:0.000} m" : $"only {best:0.000} m off its box");
+                        report.Append(line).Append('\n');
+                        Debug.LogError("[MarkerClearance] " + line);
+                    }
+                }
+                finally { Object.DestroyImmediate(holder); }
+            }
+            report.Insert(0, $"marker clearance: {markers} markers, {bad} inside or within {MarkerClearanceMin:0.00} m of their own boxes\n");
+            return report.ToString();
+        }
+
         static string F(float v) => v.ToString("0.###", CultureInfo.InvariantCulture) + "f";
 
         static string Stem(string name)

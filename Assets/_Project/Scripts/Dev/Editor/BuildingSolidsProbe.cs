@@ -3,6 +3,8 @@ using System.Reflection;
 using System.Text;
 using SeaSick.World;
 using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
 
 namespace SeaSick.Dev
 {
@@ -20,6 +22,8 @@ namespace SeaSick.Dev
     ///    `CampWorker.Walk` (reflection), from 12 m out to every marker of
     ///    every building with that plan id, marker to marker, and back out;
     ///    counts arrivals and steps taken inside any box.
+    ///  - `Trips(n, seed)` + `TripsReport()`: chained random trips with the
+    ///    real resolvers and the real walk, in the player loop (see below).
     public static class BuildingSolidsProbe
     {
         const BindingFlags Any = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
@@ -239,6 +243,313 @@ namespace SeaSick.Dev
         {
             int dot = name.LastIndexOf('.');
             return dot > 0 ? name.Substring(0, dot) : name;
+        }
+
+        // =====================================================================
+        // Trips (2026-10-04): chained random errands, the real walk
+        // =====================================================================
+        //
+        // Kevin: "A lot of times they're just running into a building, trying
+        // to force their way to where they're going, and they end up being
+        // stuck." `Trips(n, seed)` borrows 1-3 villagers (their `CampWorker`
+        // switched off, exactly as `WalkSlipProbe.Drive`) and walks them
+        // through n random trips between them, each from where the last
+        // ended, with the REAL private `CampWorker.Walk`. Targets come from
+        // the real resolvers: `StoreSpot`, every building's `InputSpot` /
+        // `OutputSpot` (`EdgeBeyond` where it has no marker), `WorkSpot`,
+        // hut `Entry`s, `EdgeBeyond` toward the fire, plus random free
+        // points. Counted: arrivals (<= 0.35 m), fake arrivals (the walk
+        // said "there" further out: the 1.2 m pin rule, or the stall
+        // guard's 2.5 m / 5 m), spots held by another body, stuck events
+        // (< 0.25 m gained in a 0.5 s window), pins (consecutive stuck
+        // windows: total and longest), overlaps (the body's centre inside a
+        // box), trips not arrived in 60 s, and the worst 10 trips.
+        //
+        // **Runs in the player loop.** An eval runs outside it (the
+        // `HarpoonTapCheck` trap): `Time.frameCount`, the plan budget and the
+        // walk's per-frame state would all be read in the wrong frame. So
+        // `Trips` only queues; every step happens in `InputSystem
+        // .onAfterUpdate` for the Dynamic update -- once per player frame --
+        // `Substeps` walk steps a frame (fast-forward). Read `TripsReport()`
+        // any time; it says when it is done. Play mode, a camp loaded.
+        //
+        // Eval: `return SeaSick.Dev.BuildingSolidsProbe.Trips(40, 1);` then
+        // `return SeaSick.Dev.BuildingSolidsProbe.TripsReport();`.
+
+        const float TripTimeout = 60f;
+        const float StuckWindow = 0.5f;
+        const float StuckGain = 0.25f;
+        const float ArriveOk = 0.35f;
+        const int Substeps = 4;
+
+        class Trip
+        {
+            public string label;
+            public Vector3 from, to, end;
+            public float t, longestPin, pin, straight;
+            public string result = "walking";
+            public int stuck, overlaps;
+        }
+
+        class Walker
+        {
+            public CampWorker w;
+            public Vector3 home;
+            public Trip trip;
+            public float win;
+            public Vector3 winFrom;
+            public bool inside;
+            public float pinRun;
+        }
+
+        static readonly List<Walker> tripWalkers = new List<Walker>();
+        static readonly List<Trip> tripsDone = new List<Trip>();
+        static readonly List<(string label, Vector3 at)> tripTargets = new List<(string, Vector3)>();
+        static System.Random tripRng;
+        static int tripsWanted, tripsStarted;
+        static bool tripsRunning;
+        static string tripsNote = "not run";
+        static Outpost tripCamp;
+        static MethodInfo walkMI, clearMI;
+        static FieldInfo budgetFI;
+
+        /// Queue `n` chained trips (seed `seed`); returns at once.
+        public static string Trips(int n, int seed)
+        {
+            if (!Application.isPlaying) return "FAIL: play mode only";
+            StopTrips();
+            tripsWanted = Mathf.Max(1, n);
+            tripsStarted = 0;
+            tripRng = new System.Random(seed);
+            tripsDone.Clear();
+            tripTargets.Clear();
+            tripsNote = "queued for the next player frame";
+            InputSystem.onAfterUpdate -= TripsTick;
+            InputSystem.onAfterUpdate += TripsTick;
+            tripsRunning = true;
+            return $"Trips({n}, {seed}) queued: read BuildingSolidsProbe.TripsReport()";
+        }
+
+        /// Hand the villagers back and stop (also done when the trips end).
+        public static string StopTrips()
+        {
+            InputSystem.onAfterUpdate -= TripsTick;
+            foreach (var b in tripWalkers)
+            {
+                if (b.w == null) continue;
+                clearMI?.Invoke(b.w, null);
+                b.w.GetComponent<VillagerActing>()?.Set(VillagerActing.Mode.None);
+                b.w.enabled = true;
+            }
+            int c = tripWalkers.Count;
+            tripWalkers.Clear();
+            tripsRunning = false;
+            return $"released {c}";
+        }
+
+        static void TripsTick()
+        {
+            if (InputState.currentUpdateType != InputUpdateType.Dynamic) return;
+            if (!Application.isPlaying) { StopTrips(); return; }
+            try
+            {
+                if (tripWalkers.Count == 0 && !TripsSetup()) { StopTrips(); return; }
+                float dt = Mathf.Min(Time.deltaTime, 1f / 30f);
+                if (dt <= 0f) return;
+                for (int sub = 0; sub < Substeps && tripsRunning; sub++)
+                    for (int i = 0; i < tripWalkers.Count; i++) StepWalker(tripWalkers[i], dt);
+                bool any = false;
+                foreach (var b in tripWalkers) if (b.trip != null) any = true;
+                if (!any) { tripsNote = "done"; StopTrips(); }
+            }
+            catch (System.Exception e)
+            {
+                tripsNote = "FAIL: " + e.GetType().Name + ": " + e.Message;
+                StopTrips();
+            }
+        }
+
+        static bool TripsSetup()
+        {
+            tripCamp = Camp();
+            if (tripCamp == null) { tripsNote = "FAIL: no camp"; return false; }
+            var map = CampPath.For(tripCamp);
+            map.HasRoute(tripCamp.CampCentre, tripCamp.CampCentre + Vector3.right, CampPath.Walker.Hand);   // builds
+            map.ResyncSolids();
+            walkMI = typeof(CampWorker).GetMethod("Walk", Any, null, new[] { typeof(Vector3), typeof(float) }, null);
+            clearMI = typeof(CampWorker).GetMethod("ClearRoute", Any);
+            budgetFI = typeof(CampPath).GetField("budgetFrame", Any);
+            // Borrow up to three (`WalkSlipProbe.Drive`'s way).
+            foreach (var w in new List<CampWorker>(CampWorker.Bodies))
+            {
+                if (tripWalkers.Count >= 3) break;
+                if (w == null || !w.isActiveAndEnabled || w.OnTower || CampOf(w) != tripCamp) continue;
+                var acting = w.GetComponent<VillagerActing>();
+                if (acting == null) continue;
+                w.enabled = false;
+                acting.WalkGait = VillagerActing.Gait.Errand;
+                acting.Set(VillagerActing.Mode.None);
+                clearMI.Invoke(w, null);
+                tripWalkers.Add(new Walker { w = w, home = w.transform.position });
+            }
+            if (tripWalkers.Count == 0) { tripsNote = "FAIL: no villager to borrow"; return false; }
+            CollectTargets(tripWalkers[0].w, map);
+            if (tripTargets.Count < 2) { tripsNote = "FAIL: no targets"; return false; }
+            foreach (var b in tripWalkers) NextTrip(b);
+            tripsNote = $"running: {tripWalkers.Count} villagers, {tripTargets.Count} targets";
+            return true;
+        }
+
+        /// Every target the real resolvers give, plus random free points.
+        static void CollectTargets(CampWorker w, CampPath map)
+        {
+            var camp = tripCamp;
+            var store = typeof(CampWorker).GetMethod("StoreSpot", Any);
+            var input = typeof(CampWorker).GetMethod("InputSpot", Any);
+            var output = typeof(CampWorker).GetMethod("OutputSpot", Any);
+            var edge = typeof(CampWorker).GetMethod("EdgeBeyond", Any);
+            var args2 = new object[2];
+            args2[0] = "Timber";
+            tripTargets.Add(("StoreSpot", (Vector3)store.Invoke(w, args2)));
+            float x0 = 1e9f, z0 = 1e9f, x1 = -1e9f, z1 = -1e9f;
+            foreach (var b in camp.Built)
+            {
+                if (b == null || b.Kind == BuildKind.Pier || b.Kind == BuildKind.DryDock) continue;
+                var p = b.transform.position;
+                x0 = Mathf.Min(x0, p.x); x1 = Mathf.Max(x1, p.x); z0 = Mathf.Min(z0, p.z); z1 = Mathf.Max(z1, p.z);
+                string tag = $"{b.Id}@({p.x - camp.CampCentre.x:0},{p.z - camp.CampCentre.z:0})";
+                args2[0] = b;
+                tripTargets.Add((tag + " InputSpot", (Vector3)input.Invoke(w, args2)));
+                tripTargets.Add((tag + " OutputSpot", (Vector3)output.Invoke(w, args2)));
+                tripTargets.Add((tag + " WorkSpot", CampWorker.WorkSpot(camp, b)));
+                tripTargets.Add((tag + " EdgeBeyond", (Vector3)edge.Invoke(w, new object[] { b, camp.CampCentre })));
+                foreach (var t in b.GetComponentsInChildren<Transform>(true))
+                    if (BuildingFactoryStem(t.name) == "Entry" && map.SolidDistance(t.position) >= 0f)
+                        tripTargets.Add((tag + " Entry", t.position));
+            }
+            // Random free points among the buildings.
+            int want = Mathf.Max(8, tripsWanted / 4), tries = 0, got = 0;
+            while (got < want && tries++ < want * 40)
+            {
+                var q = new Vector3(Mathf.Lerp(x0 - 4f, x1 + 4f, (float)tripRng.NextDouble()), 0f,
+                                    Mathf.Lerp(z0 - 4f, z1 + 4f, (float)tripRng.NextDouble()));
+                if (map.SolidDistance(q) < 0.4f || !map.Reachable(q) || !map.WalkableAt(q, CampPath.Walker.Hand)) continue;
+                q.y = camp.GroundAt(q);
+                tripTargets.Add(($"free({q.x - camp.CampCentre.x:0.0},{q.z - camp.CampCentre.z:0.0})", q));
+                got++;
+            }
+        }
+
+        static void NextTrip(Walker b)
+        {
+            if (b.trip != null) tripsDone.Add(b.trip);
+            b.trip = null;
+            if (tripsStarted >= tripsWanted) return;
+            Vector3 here = b.w.transform.position;
+            for (int k = 0; k < 50; k++)
+            {
+                var (label, at) = tripTargets[tripRng.Next(tripTargets.Count)];
+                if (Flat(here, at) < 3f) continue;
+                tripsStarted++;
+                clearMI.Invoke(b.w, null);
+                b.trip = new Trip { label = label, from = here, to = at, straight = Flat(here, at) };
+                b.win = 0f;
+                b.winFrom = here;
+                b.pinRun = 0f;
+                b.inside = tripCamp != null && CampPath.SolidDistance(tripCamp, here) < -0.02f;
+                return;
+            }
+        }
+
+        static void StepWalker(Walker b, float dt)
+        {
+            var tr = b.trip;
+            if (tr == null || b.w == null) return;
+            budgetFI.SetValue(null, -1);
+            bool done = (bool)walkMI.Invoke(b.w, new object[] { tr.to, dt });
+            tr.t += dt;
+            Vector3 here = b.w.transform.position;
+            bool inside = CampPath.SolidDistance(tripCamp, here) < -0.02f;
+            if (inside && !b.inside) tr.overlaps++;
+            b.inside = inside;
+            b.win += dt;
+            if (b.win >= StuckWindow)
+            {
+                if (Flat(here, b.winFrom) < StuckGain)
+                {
+                    tr.stuck++;
+                    b.pinRun += b.win;
+                    tr.pin += b.win;
+                    tr.longestPin = Mathf.Max(tr.longestPin, b.pinRun);
+                }
+                else b.pinRun = 0f;
+                b.win = 0f;
+                b.winFrom = here;
+            }
+            if (!done && tr.t < TripTimeout) return;
+            tr.end = here;
+            float d = Flat(here, tr.to);
+            if (!done) tr.result = "TIMEOUT";
+            else if (d <= ArriveOk) tr.result = "arrived";
+            else if (HeldByOther(b.w, tr.to)) tr.result = "held";
+            else tr.result = d <= 1.2f ? "FAKE(pin 1.2 m)" : "FAKE(stall)";
+            NextTrip(b);
+        }
+
+        static bool HeldByOther(CampWorker me, Vector3 at)
+        {
+            float r = 2f * CampWorker.BodyRadius + 0.2f;
+            foreach (var o in CampWorker.Bodies)
+                if (o != null && o != me && o.gameObject.activeInHierarchy && Flat(o.transform.position, at) < r) return true;
+            return false;
+        }
+
+        static float Flat(Vector3 a, Vector3 b) => Vector2.Distance(new Vector2(a.x, a.z), new Vector2(b.x, b.z));
+
+        /// The trips so far (or the final count once `done`).
+        public static string TripsReport()
+        {
+            var all = new List<Trip>(tripsDone);
+            foreach (var b in tripWalkers) if (b.trip != null) all.Add(b.trip);
+            int arrived = 0, fakePin = 0, fakeStall = 0, held = 0, timeouts = 0, stuck = 0, overlaps = 0, finished = 0;
+            float pinTotal = 0f, pinLongest = 0f, time = 0f;
+            foreach (var t in all)
+            {
+                if (t.result != "walking") finished++;
+                if (t.result == "arrived") arrived++;
+                else if (t.result == "FAKE(pin 1.2 m)") fakePin++;
+                else if (t.result == "FAKE(stall)") fakeStall++;
+                else if (t.result == "held") held++;
+                else if (t.result == "TIMEOUT") timeouts++;
+                stuck += t.stuck;
+                overlaps += t.overlaps;
+                pinTotal += t.pin;
+                pinLongest = Mathf.Max(pinLongest, t.longestPin);
+                time += t.t;
+            }
+            var sb = new StringBuilder();
+            sb.Append($"trips {tripsNote}: {finished}/{tripsWanted} finished, {tripWalkers.Count} walking now, {tripTargets.Count} targets\n");
+            sb.Append($"arrived(<= {ArriveOk} m) {arrived}, fake arrivals {fakePin + fakeStall} (pin 1.2 m {fakePin}, stall {fakeStall}), held by another {held}, not arrived in {TripTimeout:0} s {timeouts}\n");
+            sb.Append($"stuck events (< {StuckGain} m in {StuckWindow} s) {stuck}, pinned total {pinTotal:0.0} s, longest pin {pinLongest:0.0} s, overlap events {overlaps}, walked {time:0} s\n");
+            all.Sort((a, c) => Badness(c).CompareTo(Badness(a)));
+            sb.Append("worst trips:\n");
+            var o = tripCamp != null ? tripCamp.CampCentre : Vector3.zero;
+            for (int i = 0; i < all.Count && i < 10; i++)
+            {
+                var t = all[i];
+                if (Badness(t) <= 0f) break;
+                sb.Append($"  {t.result} {t.t:0.0} s, pin {t.longestPin:0.0} s (total {t.pin:0.0}), stuck {t.stuck}, overlaps {t.overlaps}: ");
+                sb.Append($"({t.from.x - o.x:0.0},{t.from.z - o.z:0.0}) -> {t.label} ({t.to.x - o.x:0.0},{t.to.z - o.z:0.0}), ended ({t.end.x - o.x:0.0},{t.end.z - o.z:0.0}) {Flat(t.end, t.to):0.00} m off, straight {t.straight:0.0} m\n");
+            }
+            return sb.ToString();
+        }
+
+        static float Badness(Trip t)
+        {
+            float s = t.longestPin * 10f + t.overlaps * 5f + t.stuck;
+            if (t.result == "TIMEOUT") s += 10000f;
+            else if (t.result.StartsWith("FAKE")) s += 1000f;
+            return s;
         }
     }
 }
