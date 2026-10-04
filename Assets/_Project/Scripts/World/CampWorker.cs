@@ -1467,6 +1467,11 @@ namespace SeaSick.World
             {
                 acting?.Set(VillagerActing.Mode.None);
                 phase = Phase.Going;
+                // A batch that loaded while he walks in to his own stand
+                // is still his to pick up when he gets there (2026-10-04):
+                // `BenchHandOff` lets a take go `HandOffSeconds` after it was
+                // seen, and a walk in is longer than that.
+                if (takeOwed) takeAt = Time.time;
                 return;
             }
             // **Onto the crank's own spot (2026-10-01).** A walk "arrives"
@@ -2064,8 +2069,14 @@ namespace SeaSick.World
                 placeLeft -= dt;
                 Face(placeFace - transform.position, dt);
                 if (placeLeft > 0f) { acting?.Set(placeMode, placeRes, placeCount); return true; }
+                // Done: the rest of this frame decides what is next (2026-10-04).
+                // Returning true here ended the frame on `None`, and
+                // `VillagerActing` (applied in LateUpdate) cross-faded to Idle
+                // for one frame between a bench set-down and the pick-up that
+                // `BenchHandOff` starts the frame after. `Set` only records,
+                // so a mode set below this frame wins over this `None`.
                 acting?.Set(VillagerActing.Mode.None);
-                return true;
+                return false;
             }
             if (!delivering) return false;
 
