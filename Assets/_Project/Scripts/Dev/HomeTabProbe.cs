@@ -66,13 +66,14 @@ public class HomeTabProbe : MonoBehaviour
         // --- take her away, loaded and under way -----------------------------
         int loadWas = voyage != null ? voyage.TotalHeld : 0;
         if (voyage != null && voyage.TotalHeld == 0) { voyage.AddSalvage(6); loadWas = voyage.TotalHeld; }
-        // What is already on the beach, because a free tow means the cargo
-        // is DELIVERED, not retained. The first version of this probe gated
-        // on the hold still being full afterwards and failed a button that
-        // was working perfectly: arriving at the berth completes the voyage,
-        // and completing a voyage is what unloads her. Measure where the
-        // timber ENDED UP, not where it was.
-        int bankedWas = voyage != null ? voyage.BankedTotal : 0;
+        // What the home camp already holds, because a free tow means the
+        // cargo is on its way ASHORE, not retained: arriving at the berth
+        // completes the voyage, which places an "all ashore" transfer order
+        // (2026-10-04: home docking unloads like any camp, the hold is no
+        // longer banked) and the home hands carry it armful by armful. So
+        // cargo may be aboard, in a hand's arms, or in the home store --
+        // measure all three, never just where it was.
+        int homeWas = voyage != null ? voyage.HomeStoreTotal : 0;
         anchor.CastOff();
         var rb = motor.GetComponent<Rigidbody>();
         Vector3 away = berth + new Vector3(0f, 0f, 1000f);
@@ -114,7 +115,11 @@ public class HomeTabProbe : MonoBehaviour
         float heading = Mathf.Abs(Mathf.DeltaAngle(
             motor.transform.eulerAngles.y, Dock.Home.Heading.eulerAngles.y));
         int loadNow = voyage != null ? voyage.TotalHeld : 0;
-        int bankedNow = voyage != null ? voyage.BankedTotal : 0;
+        int homeNow = voyage != null ? voyage.HomeStoreTotal : 0;
+        // Armfuls already off the ship but still walking to the store.
+        var homeCamp = Outpost.Home;
+        int inArms = homeCamp != null && homeCamp.Ledger != null
+            ? homeCamp.Ledger.CarryingTransfer(null, false) : 0;
 
         sb.AppendLine($"after:  {dist:F2} m from the berth, making {speed:F2} m/s, "
                     + $"{heading:F1}° off the berth heading, hold {loadNow}");
@@ -129,11 +134,12 @@ public class HomeTabProbe : MonoBehaviour
         Gate(heading < 25f, $"lying along the pier ({heading:F1}° off)");
         Gate(anchor.AtHomeDock, "tied up as far as AtHomeDock is concerned");
         Gate(voyage == null || voyage.AtHome, "the VOYAGE closed — not just the hull moved");
-        // Delivered or still aboard — either is fine, vanished is not.
-        int accounted = loadNow + (bankedNow - bankedWas);
+        // Still aboard, in a hand's arms, or landed in the home store — any
+        // is fine, vanished is not.
+        int accounted = loadNow + inArms + (homeNow - homeWas);
         Gate(voyage == null || accounted >= loadWas,
              $"her cargo came home with her: {loadWas} aboard → {loadNow} aboard "
-             + $"+ {bankedNow - bankedWas} landed = {accounted}. Kevin's call is a free "
+             + $"+ {inArms} in arms + {homeNow - homeWas} landed = {accounted}. Kevin's call is a free "
              + "tow, so none of it may vanish.");
 
         Finish(sb, fails == 0 ? "PASS" : $"FAIL: {fails} gate(s)");

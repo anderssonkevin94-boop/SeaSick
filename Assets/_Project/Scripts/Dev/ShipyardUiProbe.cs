@@ -1402,14 +1402,17 @@ public class ShipyardUiProbe : MonoBehaviour
         + (File.Exists(realSavePath) ? $", now {File.GetLastWriteTimeUtc(realSavePath):O} {new FileInfo(realSavePath).Length} B (was {realSaveTime:O} {realSaveLen} B)" : ", absent now");
 
     void SetHold(int timber, int stone) =>
-        voyage.RestoreStores(new[] { Pair(Res.Timber, timber), Pair(Res.Stone, stone) }, Banked());
+        voyage.RestoreStores(new[] { Pair(Res.Timber, timber), Pair(Res.Stone, stone) }, LegacyBank());
 
     static string Msg(ShipyardDraft d) => $"count {d.Count}, rotor {d.Rotor}, message \"{d.Message}\"";
     static string Describe(ShipConfiguration c) =>
         c == null ? "null" : $"{c.middleIds.Count} bays, {(c.rotorId == ShipConfiguration.TimberRotor ? "timber" : c.rotorId == ShipConfiguration.ReinforcedRotor ? "reinforced" : c.rotorId)}";
     static ShipConfiguration Mod(ShipConfiguration c, Action<ShipConfiguration> f) { var x = c.Clone(); f(x); return x; }
     static KeyValuePair<string, int> Pair(string r, int n) => new KeyValuePair<string, int>(r, n);
-    IEnumerable<KeyValuePair<string, int>> Banked()
+    /// The retired legacy `banked` rows, passed straight back through
+    /// `RestoreStores` so a hold reset leaves them alone (empty in any game
+    /// since 2026-10-04; home docking no longer banks).
+    IEnumerable<KeyValuePair<string, int>> LegacyBank()
     {
         var l = new List<KeyValuePair<string, int>>();
         foreach (var kv in voyage.BankedStores) l.Add(kv);

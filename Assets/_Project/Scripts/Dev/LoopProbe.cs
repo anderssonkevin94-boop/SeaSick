@@ -6,7 +6,8 @@ using SeaSick.Voyage;
 using SeaSick.World;
 
 /// Drives one whole voyage in about ten seconds and reports what the loop
-/// did: cast off, load, come home, land the haul against a capacity, build.
+/// did: cast off, load, come home, let the home camp's hands carry the haul
+/// ashore into its store, build.
 ///
 /// It moves the SHIP and then lets the real systems run — it does not call
 /// CompleteVoyage or set a phase itself. That distinction is the whole value
@@ -49,15 +50,17 @@ public class LoopProbe : MonoBehaviour
         sb.AppendLine($"warped {dock.DistanceFrom(motor.transform.position):F0} m off the berth"
             + $" -> panel up: {voyage.AtHome} (want false)");
 
-        // --- load her past what home can keep ------------------------------
+        // --- load her ----------------------------------------------------
+        // Island stores are unlimited and home docking no longer banks or
+        // spoils anything (2026-10-04): the hold stays aboard and the home
+        // camp's hands carry it ashore. A modest haul, so the carry finishes
+        // inside the probe's wait.
         voyage.TakeDeckCargo = true;
-        voyage.AddLoot(60, "Timber");
-        // What she actually took, not what was offered -- AddLoot clamps to
-        // the physical limit, and the overflow arithmetic below has to be
-        // against the real load or the report lies about the game.
+        voyage.AddLoot(12, "Timber");
         int loaded = voyage.TotalHeld;
+        int homeWas = voyage.HomeStoreOf("Timber");
         sb.AppendLine($"loaded -> hold {loaded} of {voyage.MaxHold}, "
-            + $"home keeps {voyage.StoreCapacity}");
+            + $"home store timber {homeWas}");
 
         // --- and bring her home --------------------------------------------
         Warp(motor, dock.Berth, dock.Heading);
@@ -67,26 +70,26 @@ public class LoopProbe : MonoBehaviour
         float t = 0f;
         while (!voyage.AtHome && t < 4f) { t += Time.deltaTime; yield return null; }
         sb.AppendLine($"panel up after {t:F2}s: {voyage.AtHome} (want true)");
-        Line(voyage, village, "home");
-        sb.AppendLine($"  spoiled on the sand: {loaded - voyage.BankedTotal} "
-            + $"(want {loaded} landed minus the {voyage.StoreCapacity} home can keep)");
+        Line(voyage, village, "home, hold still aboard");
 
-        // Let the unload coroutine set the pile down before counting it.
-        yield return new WaitForSeconds(voyage.BankedTotal * 0.18f + 0.6f);
-        var pile = Stockpile.Instance;
-        int onBeach = pile != null ? pile.CountOf("Timber") : -1;
-        sb.AppendLine($"logs actually on the beach: {onBeach} (want {voyage.Banked("Timber")})");
+        // The home camp's hands carry the hold ashore armful by armful
+        // (`OutpostLedger.OrderTransfer`, placed on arrival), so the hold is
+        // behind the store until they finish. Waited for in real time, capped.
+        float carry = 0f;
+        while (voyage.TotalHeld > 0 && carry < 120f) { carry += Time.deltaTime; yield return null; }
+        sb.AppendLine($"hold {voyage.TotalHeld} left after {carry:F0}s   "
+            + $"home store timber {homeWas} -> {voyage.HomeStoreOf("Timber")} "
+            + $"(want +{loaded}; 0 left aboard means every unit landed)");
+        Line(voyage, village, "home, carried ashore");
 
         // --- build --------------------------------------------------------
         var plan = BuildPlans.Storehouse;
-        int capBefore = voyage.StoreCapacity, hadBefore = voyage.Banked(plan.resource);
+        int capBefore = voyage.StoreCapacity, hadBefore = voyage.HomeStoreOf(plan.resource);
         bool built = voyage.TryBuild(plan);
         yield return null;
         sb.AppendLine($"build {plan.label}: {built}   "
-            + $"timber {hadBefore} -> {voyage.Banked(plan.resource)} (cost {plan.cost})   "
+            + $"timber {hadBefore} -> {voyage.HomeStoreOf(plan.resource)} (cost {plan.cost})   "
             + $"capacity {capBefore} -> {voyage.StoreCapacity}");
-        sb.AppendLine($"logs on the beach after paying: "
-            + $"{(pile != null ? pile.CountOf("Timber") : -1)} (want {voyage.Banked("Timber")})");
         sb.AppendLine($"buildings standing: {(village != null ? village.Built.Count : -1)}");
 
         Report(sb.ToString());
@@ -96,7 +99,7 @@ public class LoopProbe : MonoBehaviour
     void Line(VoyageManager v, Outpost village, string label)
     {
         sb.AppendLine($"{label}: panel {v.AtHome}   hold {v.TotalHeld}   "
-            + $"stores {v.BankedTotal}/{v.StoreCapacity}   "
+            + $"home store {v.HomeStoreTotal}   "
             + $"buildings {(village != null ? village.Built.Count : -1)}");
     }
 

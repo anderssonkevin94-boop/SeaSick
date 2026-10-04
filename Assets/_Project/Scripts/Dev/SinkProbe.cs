@@ -19,7 +19,11 @@ using SeaSick.World;
 /// **It presses the real calls.** `Shipyard.Move`, `Shipyard.Upgrade`,
 /// `VoyageManager.AddLoot` at sea, and then the real homecoming — cast off,
 /// stand out, load, warp back to the berth, `TryComeAlongside`, wait for
-/// `AtHome` — exactly as `LoopProbe` does. It never calls `CompleteVoyage` and
+/// `AtHome` — exactly as `LoopProbe` does. Since 2026-10-04 the hold is NOT
+/// banked on arrival: it stays aboard and the home camp's hands carry it
+/// ashore into the home store (`OutpostLedger.OrderTransfer`). The yard buys
+/// out of that store, so the pricing sections below credit it straight
+/// through the ledger (`Credit`) instead of waiting on hands. It never calls `CompleteVoyage` and
 /// never sets a phase behind the game's back, because a check that drove the
 /// state machine by hand would prove only that the state machine can be driven
 /// by hand. The one exception is `Apply`, which is BY DESIGN the free path:
@@ -90,7 +94,7 @@ public class SinkProbe : MonoBehaviour
 
         sb.AppendLine("SinkProbe — does the ladder cost anything?");
         sb.AppendLine($"found her on rung {startRung}, "
-            + $"AtHome {startedAtHome}, home keeps {voyage.StoreCapacity} of each");
+            + $"AtHome {startedAtHome}, home store timber {voyage.HomeStoreOf(Res.Timber)}");
 
         // ================================================================
         // 1. THE TABLE ITSELF. No ship needed — these are facts about the
@@ -181,14 +185,15 @@ public class SinkProbe : MonoBehaviour
         // ================================================================
         // 4. A MIXED HAUL. The bug this replaces: ONE pool of room shared
         //    across every kind, walked in dictionary order, so whichever
-        //    resource enumerated first silently ate the space.
+        //    resource enumerated first silently ate the space. Since
+        //    2026-10-04 the haul stays aboard on homecoming and the home
+        //    camp's hands carry it ashore: every kind must get its own order
+        //    and every kind must land.
         // ================================================================
         sb.AppendLine("\n== a mixed haul comes home ==");
 
-        int keeps = voyage.StoreCapacity;
-        int wantTimber = keeps + 9;       // deliberately more than home keeps
-        const int WantBoards = 12, WantTools = 8;
-        int wantAll = wantTimber + WantBoards + WantTools;
+        const int WantTimber = 14, WantBoards = 6, WantTools = 4;
+        int wantAll = WantTimber + WantBoards + WantTools;
 
         // She needs a hold before she can carry a test haul: rung 0 has two
         // bays. `Apply` and `AddCell` are the free dev path, and the haul
@@ -207,7 +212,7 @@ public class SinkProbe : MonoBehaviour
         for (int i = 0; i < 6; i++) yield return null;
 
         voyage.TakeDeckCargo = true;
-        voyage.AddLoot(wantTimber, Res.Timber);
+        voyage.AddLoot(WantTimber, Res.Timber);
         voyage.AddLoot(WantBoards, Res.Boards);
         voyage.AddLoot(WantTools, Res.Tools);
         int gotTimber = voyage.AmountOf(Res.Timber);
@@ -217,39 +222,59 @@ public class SinkProbe : MonoBehaviour
             + $"(line {voyage.HoldCapacity}): timber {gotTimber}, "
             + $"boards {gotBoards}, tools {gotTools}");
 
-        var pile = Stockpile.Instance;
-        int pileTimberWas = Count(pile, Res.Timber);
-        int pileBoardsWas = Count(pile, Res.Boards);
-        int pileToolsWas = Count(pile, Res.Tools);
+        int storeTimberWas = voyage.HomeStoreOf(Res.Timber);
+        int storeBoardsWas = voyage.HomeStoreOf(Res.Boards);
+        int storeToolsWas = voyage.HomeStoreOf(Res.Tools);
 
         yield return Alongside(motor, anchor, voyage, dock);
 
-        int bankTimber = voyage.Banked(Res.Timber);
-        int bankBoards = voyage.Banked(Res.Boards);
-        int bankTools = voyage.Banked(Res.Tools);
-        sb.AppendLine($"  landed: timber {bankTimber}/{keeps}, boards {bankBoards}/{keeps}, "
-            + $"tools {bankTools}/{keeps}   spoiled {voyage.Spoiled} "
-            + $"\"{voyage.SpoiledDetail}\"");
+        var homeCamp = Outpost.Home;
+        var homeLedger = homeCamp != null ? homeCamp.Ledger : null;
+        // An order stands for each kind, or the hands already moved some of
+        // it (the transfer is placed on arrival; it ends when carried).
+        bool ordered = homeLedger != null;
+        string orderGap = "";
+        if (homeLedger != null)
+        {
+            if (!(homeLedger.TransferPending(Res.Timber, false) || voyage.HomeStoreOf(Res.Timber) > storeTimberWas))
+            { ordered = false; orderGap += " timber"; }
+            if (!(homeLedger.TransferPending(Res.Boards, false) || voyage.HomeStoreOf(Res.Boards) > storeBoardsWas))
+            { ordered = false; orderGap += " boards"; }
+            if (!(homeLedger.TransferPending(Res.Tools, false) || voyage.HomeStoreOf(Res.Tools) > storeToolsWas))
+            { ordered = false; orderGap += " tools"; }
+        }
+        Gate("homecoming-orders-every-kind-ashore", ordered,
+             homeLedger == null ? "no home camp ledger" : "no order and nothing landed for:" + orderGap);
 
-        Gate("boards-are-not-squeezed-out-by-timber", bankBoards == gotBoards,
-             $"carried {gotBoards} boards, landed {bankBoards}");
-        Gate("tools-are-not-squeezed-out-by-timber", bankTools == gotTools,
-             $"carried {gotTools} tools, landed {bankTools}");
-        // Store-cap gate retired 2026-10-03: island stores are unlimited (Kevin). (timber-fills-its-own-pile-and-stops, only-the-timber-spoiled)
-
-        // The carry-ashore is a coroutine, one unit every 0.18 s, so the beach
-        // is behind the ledger until it finishes. Counting it early is how a
-        // green run reports an empty beach.
-        yield return new WaitForSeconds(voyage.BankedTotal * 0.18f + 0.8f);
-        int dTimber = Count(pile, Res.Timber) - pileTimberWas;
-        int dBoards = Count(pile, Res.Boards) - pileBoardsWas;
-        int dTools = Count(pile, Res.Tools) - pileToolsWas;
-        sb.AppendLine($"  on the beach: +{dTimber} timber, +{dBoards} boards, +{dTools} tools");
-        Gate("the-beach-agrees-with-the-ledger",
-             pile != null && dTimber == bankTimber && dBoards == bankBoards
-             && dTools == bankTools,
-             $"beach +{dTimber}/+{dBoards}/+{dTools} vs ledger "
-             + $"{bankTimber}/{bankBoards}/{bankTools}");
+        // The carry is the home camp's hands, armful by armful, so the hold is
+        // behind the store until they finish. Waited for in real time, capped;
+        // with no hands at home nothing can carry, which this probe cannot fix
+        // (it says so rather than failing a mechanism it cannot exercise).
+        int handsAtHome = homeLedger != null ? homeLedger.hands.Count : 0;
+        float carry = 0f;
+        while (handsAtHome > 0 && voyage.TotalHeld > 0 && carry < 240f)
+        { carry += Time.deltaTime; yield return null; }
+        int landTimber = voyage.HomeStoreOf(Res.Timber) - storeTimberWas;
+        int landBoards = voyage.HomeStoreOf(Res.Boards) - storeBoardsWas;
+        int landTools = voyage.HomeStoreOf(Res.Tools) - storeToolsWas;
+        sb.AppendLine($"  carried ashore in {carry:F0}s by {handsAtHome} hands: "
+            + $"timber +{landTimber}/{gotTimber}, boards +{landBoards}/{gotBoards}, "
+            + $"tools +{landTools}/{gotTools}   hold left {voyage.TotalHeld}");
+        if (handsAtHome == 0)
+            sb.AppendLine("  [skip] the-whole-haul-lands-in-the-home-store -- the home camp has no hands to carry it");
+        else
+        {
+            Gate("the-hold-empties-once-carried-ashore", voyage.TotalHeld == 0,
+                 $"{voyage.TotalHeld} still aboard after {carry:F0}s");
+            Gate("boards-are-not-squeezed-out-by-timber", landBoards == gotBoards,
+                 $"carried {gotBoards} boards, landed {landBoards}");
+            Gate("tools-are-not-squeezed-out-by-timber", landTools == gotTools,
+                 $"carried {gotTools} tools, landed {landTools}");
+            Gate("the-whole-timber-haul-lands-in-the-home-store", landTimber == gotTimber,
+                 $"carried {gotTimber} timber, landed {landTimber}");
+        }
+        // Retired 2026-10-04: home docking unloads like any camp (banked retired)
+        // (the-beach-agrees-with-the-ledger -- no crate piles on the beach any more)
 
         // ================================================================
         // 5. EXACTLY THE PRICE BUYS THE RUNG.
@@ -257,60 +282,46 @@ public class SinkProbe : MonoBehaviour
         sb.AppendLine("\n== buying rung 1 ==");
         yard.Apply(0);                    // free dev path, back to the start
         yield return null;
-        Trim(voyage, rung1.a, rung1.na);
+        // Put exactly the price in the home store through the ledger: the
+        // yard buys from the home camp's store, and who carried it ashore is
+        // section 4's question, not this one's.
+        Trim(voyage, rung1.a, 0);
+        Credit(rung1.a, rung1.na);
         yield return null;
 
         int purseWas = voyage.Banked(rung1.a);
-        int pileWas = Count(pile, rung1.a);
         bool bought = yard.Move("lengthen");
-        yield return null;
         int purseNow = voyage.Banked(rung1.a);
-        int pileNow = Count(pile, rung1.a);
+        yield return null;
         sb.AppendLine($"  rung 1 wants {rung1}; had {purseWas}   Move -> {bought}   "
-            + $"rung {yard.NodeIndex}   store {purseWas} -> {purseNow}   "
-            + $"beach {pileWas} -> {pileNow}");
+            + $"rung {yard.NodeIndex}   home store {purseWas} -> {purseNow}");
         Gate("exactly-the-price-buys-the-rung", bought && yard.NodeIndex == 1,
              $"returned {bought}, rung {yard.NodeIndex}, said \"{yard.Status}\"");
         Gate("the-rung-took-exactly-its-price", purseWas - purseNow == rung1.na,
              $"store fell by {purseWas - purseNow}, price is {rung1.na}");
-        Gate("and-the-visible-pile-came-down-with-it",
-             pile == null || pileWas - pileNow == rung1.na,
-             $"beach fell by {pileWas - pileNow}, price is {rung1.na}");
+        // Retired 2026-10-04: home docking unloads like any camp (banked retired)
+        // (and-the-visible-pile-came-down-with-it)
 
         // ================================================================
-        // 6. AND EXACTLY THE PRICE BUYS THE FITTING. One more real voyage,
-        //    because the only way to put something in the stores is to sail
-        //    it home — which is the whole design.
+        // 6. AND EXACTLY THE PRICE BUYS THE FITTING. The goods reach the home
+        //    store through the ledger, as in section 5 (the real voyage and
+        //    carry-ashore is section 4).
         // ================================================================
         sb.AppendLine("\n== buying a fitting ==");
         var rudder = ShipPrices.ForFit(FitTrack.Rudder, 1);
 
-        voyage.BeginVoyage();
-        guard = 0;
-        while (voyage.MaxHold < rudder.na + 2 && guard++ < 30)
-            if (!yard.AddCell(BayUse.Hold)) break;
-        anchor.CastOff();
-        Warp(motor, dock.Berth + dock.Seaward * 400f,
-             Quaternion.LookRotation(dock.Seaward));
-        for (int i = 0; i < 6; i++) yield return null;
-        voyage.TakeDeckCargo = true;
-        voyage.AddLoot(rudder.na, rudder.a);
-        sb.AppendLine($"  carrying {voyage.AmountOf(rudder.a)} {rudder.a.ToLowerInvariant()} "
-            + $"home in a hold of {voyage.MaxHold}");
-        yield return Alongside(motor, anchor, voyage, dock);
-        Trim(voyage, rudder.a, rudder.na);
-        yield return new WaitForSeconds(voyage.BankedTotal * 0.18f + 0.6f);
+        Trim(voyage, rudder.a, 0);
+        Credit(rudder.a, rudder.na);
+        yield return null;
 
         int fitPurseWas = voyage.Banked(rudder.a);
-        int fitPileWas = Count(pile, rudder.a);
         int lvlWas = yard.Fit.Level(FitTrack.Rudder);
         bool fitted = yard.Upgrade(FitTrack.Rudder);
-        yield return null;
         int fitPurseNow = voyage.Banked(rudder.a);
-        int fitPileNow = Count(pile, rudder.a);
+        yield return null;
         sb.AppendLine($"  rudder L{lvlWas + 1} wants {rudder}; had {fitPurseWas}   "
             + $"Upgrade -> {fitted}   level {lvlWas} -> {yard.Fit.Level(FitTrack.Rudder)}   "
-            + $"store {fitPurseWas} -> {fitPurseNow}   beach {fitPileWas} -> {fitPileNow}");
+            + $"home store {fitPurseWas} -> {fitPurseNow}");
         Gate("exactly-the-price-buys-the-fitting",
              fitted && yard.Fit.Level(FitTrack.Rudder) == lvlWas + 1,
              $"returned {fitted}, level {yard.Fit.Level(FitTrack.Rudder)}, "
@@ -318,9 +329,8 @@ public class SinkProbe : MonoBehaviour
         Gate("the-fitting-took-exactly-its-price",
              fitPurseWas - fitPurseNow == rudder.na,
              $"store fell by {fitPurseWas - fitPurseNow}, price is {rudder.na}");
-        Gate("and-the-fitting-took-it-off-the-beach-too",
-             pile == null || fitPileWas - fitPileNow == rudder.na,
-             $"beach fell by {fitPileWas - fitPileNow}, price is {rudder.na}");
+        // Retired 2026-10-04: home docking unloads like any camp (banked retired)
+        // (and-the-fitting-took-it-off-the-beach-too)
 
         // ================================================================
         // 7. THE DEV PATH IS STILL FREE. This is the gate that protects every
@@ -363,15 +373,15 @@ public class SinkProbe : MonoBehaviour
         sb.AppendLine("\n== restored ==");
         sb.AppendLine($"  rung {yard.NodeIndex} (was {startRung})   "
             + $"AtHome {voyage.AtHome} (was {startedAtHome})");
-        // The stores are NOT restorable: there is no way to put something into
-        // them but to sail it home, which is the design. Said out loud so the
-        // next probe in the session knows what it inherited.
+        // The home store is NOT restored: this probe credited and spent it
+        // through the ledger. Said out loud so the next probe in the session
+        // knows what it inherited.
         var spent = new StringBuilder();
         foreach (var r in AllRes)
             if (voyage.Banked(r) != startBanked[r])
                 spent.Append($" {r.ToLowerInvariant()} {startBanked[r]}->{voyage.Banked(r)}");
         sb.AppendLine(spent.Length > 0
-            ? $"  stores NOT restored (nothing can bank but a voyage):{spent}"
+            ? $"  home store NOT restored:{spent}"
             : "  stores unchanged");
 
         Finish();
@@ -446,7 +456,7 @@ public class SinkProbe : MonoBehaviour
     // --- small helpers -------------------------------------------------------
 
     /// Empty the stores through the same call the yard and the build buttons
-    /// spend with, so the visible pile comes down with the number.
+    /// spend with (the home camp's store).
     static void Drain(VoyageManager v)
     {
         foreach (var r in AllRes)
@@ -463,7 +473,15 @@ public class SinkProbe : MonoBehaviour
         if (over > 0) v.SpendBanked(res, over);
     }
 
-    static int Count(Stockpile pile, string res) => pile != null ? pile.CountOf(res) : 0;
+    /// Put `n` of a resource straight into the home camp's store -- what the
+    /// hands do armful by armful on a real homecoming, minus the walking.
+    /// Straight onto the store's count, as `HomeBankRepair` does.
+    static void Credit(string res, int n)
+    {
+        var home = Outpost.Home;
+        if (home == null || home.Ledger == null || n <= 0) return;
+        home.Ledger.Store(res, true).whole += n;
+    }
 
     static bool IsRes(string r)
     {

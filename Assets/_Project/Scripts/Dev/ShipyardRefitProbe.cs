@@ -127,7 +127,7 @@ public class ShipyardRefitProbe : MonoBehaviour
         EnsureDryDock();
         yield return new WaitForSeconds(0.5f);
         if (hull != null) hull.Batter(yard.transform.position, 0.15f);
-        voyage.RestoreStores(new[] { Pair(Res.Timber, 3), Pair(Res.Stone, 2) }, Banked());
+        voyage.RestoreStores(new[] { Pair(Res.Timber, 3), Pair(Res.Stone, 2) }, LegacyBank());
         yield return null;
         sb.AppendLine($"start: {Crew().Count} hands, hold {voyage.TotalHeld}/{voyage.HoldCapacity}, integrity {Integrity():F3}, "
             + $"can refit: {yard.CanRefitNow(out string r0)} {r0}");
@@ -143,9 +143,9 @@ public class ShipyardRefitProbe : MonoBehaviour
         // 2026-09-25 (Kevin): surplus hands are never a refusal any more --
         // they go ashore to the home settlement instead. See the dedicated
         // "hands ashore" gates in the equipment + dry dock block below.
-        voyage.RestoreStores(new[] { Pair(Res.Timber, 14), Pair(Res.Stone, 2) }, Banked());
+        voyage.RestoreStores(new[] { Pair(Res.Timber, 14), Pair(Res.Stone, 2) }, LegacyBank());
         Refuse("cargo-would-not-fit", ShipConfiguration.Short(), ShipyardCodes.CargoWouldNotFit);
-        voyage.RestoreStores(new[] { Pair(Res.Timber, 3), Pair(Res.Stone, 2) }, Banked());
+        voyage.RestoreStores(new[] { Pair(Res.Timber, 3), Pair(Res.Stone, 2) }, LegacyBank());
 
 
         string tmp = Application.temporaryCachePath;
@@ -502,7 +502,7 @@ public class ShipyardRefitProbe : MonoBehaviour
         yield return new WaitForSeconds(1f);
         // Earlier blocks may have emptied the hold; load a known cargo so
         // "cargo carried" means something through the raised sequence.
-        voyage.RestoreStores(new[] { Pair(Res.Timber, 3), Pair(Res.Stone, 2) }, Banked());
+        voyage.RestoreStores(new[] { Pair(Res.Timber, 3), Pair(Res.Stone, 2) }, LegacyBank());
 
         yield return RefitAndCheck("raised-seq: w1x-long-start", ExpandedPresets.ExpandedLong());
         midDeckYSingle = MidStationDeckY();
@@ -538,7 +538,7 @@ public class ShipyardRefitProbe : MonoBehaviour
         // Raised stern + bow over a low middle: +11 t of ends, but the low
         // middle still caps her waterline at 1.76, so her cargo allowance
         // falls to ~2 t (a real CARGO_WOULD_NOT_FIT with the 2.5 t seed).
-        voyage.RestoreStores(new[] { Pair(Res.Timber, 2) }, Banked());
+        voyage.RestoreStores(new[] { Pair(Res.Timber, 2) }, LegacyBank());
         var mix1 = MixedConfig(DeckLevel.Raised, new[] { DeckLevel.Low }, DeckLevel.Raised);
         yield return RefitAndCheck("raised-sections: stern-wf-low-bow-wa", mix1);
         MixedStepAsserts("raised-sections: stern-wf-low-bow-wa", mix1);
@@ -811,7 +811,10 @@ public class ShipyardRefitProbe : MonoBehaviour
 
     static ShipConfiguration Mod(ShipConfiguration c, System.Action<ShipConfiguration> f) { var x = c.Clone(); f(x); return x; }
     static KeyValuePair<string, int> Pair(string r, int n) => new KeyValuePair<string, int>(r, n);
-    IEnumerable<KeyValuePair<string, int>> Banked()
+    /// The retired legacy `banked` rows, passed straight back through
+    /// `RestoreStores` so a hold reset leaves them alone (empty in any game
+    /// since 2026-10-04; home docking no longer banks).
+    IEnumerable<KeyValuePair<string, int>> LegacyBank()
     {
         var l = new List<KeyValuePair<string, int>>();
         foreach (var kv in voyage.BankedStores) l.Add(kv);

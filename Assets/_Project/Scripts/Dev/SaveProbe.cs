@@ -48,6 +48,9 @@ public class SaveProbe : MonoBehaviour
     const int RudderLevel = 1;
     const int TimberAboard = 7;
     const int BoardsAboard = 3;
+    /// An OLD save's retired `banked` rows (home docking banked here until
+    /// 2026-10-04). Seeded as the legacy bank so the round trip proves the
+    /// one-time load repair moves it into the home camp's store.
     const int TimberBanked = 9;
     const int TreesToFell = 3;
 
@@ -113,8 +116,8 @@ public class SaveProbe : MonoBehaviour
         var hold = motor.GetComponent<ShipHold>();
         sb.AppendLine("hold: " + voyage.AmountOf(Res.Timber) + " timber, "
             + voyage.AmountOf(Res.Boards) + " boards, total " + voyage.TotalHeld
-            + ", " + (hold != null ? hold.VisibleCount : -1) + " drawn;  banked timber "
-            + voyage.Banked(Res.Timber));
+            + ", " + (hold != null ? hold.VisibleCount : -1) + " drawn;  legacy bank timber "
+            + LegacyBank(voyage, Res.Timber) + "  (home store " + voyage.HomeStoreOf(Res.Timber) + ")");
 
         // --- somewhere with a beach on it (as CampLoadProbe finds one) -------
         Island target = null; Vector3 standOff = default; float bestGap = float.MaxValue;
@@ -245,6 +248,9 @@ public class SaveProbe : MonoBehaviour
         // SAVE
         // =====================================================================
 
+        // What the home camp keeps right before the file is written: after the
+        // load, the repaired legacy bank must sit ON TOP of this.
+        int homeTimberBefore = voyage.HomeStoreOf(Res.Timber);
         string path = System.IO.Path.Combine(Application.temporaryCachePath, "SaveProbe-roundtrip.json");
         try { if (System.IO.File.Exists(path)) System.IO.File.Delete(path); } catch { }
         bool wrote = SaveGame.SaveTo(path, "SaveProbe");
@@ -373,8 +379,17 @@ public class SaveProbe : MonoBehaviour
         Gate("and-the-stack-on-deck-with-it",
             hold == null || hold.VisibleCount == TimberAboard + BoardsAboard,
             (hold != null ? hold.VisibleCount : -1) + " drawn");
-        Gate("the-stores-come-back", voyage.Banked(Res.Timber) == TimberBanked,
-            voyage.Banked(Res.Timber) + " banked");
+        // Rewritten 2026-10-04: home docking unloads like any camp (banked
+        // retired). What an old save banked is repaired into the home camp's
+        // store on load (SaveGame step 5c2) and the legacy bank is emptied.
+        // `>=`: the home camp's own hands may have moved goods during the
+        // time-away step; it must never be LESS than what was there plus the
+        // bank.
+        Gate("the-old-bank-is-repaired-into-the-home-store-on-load",
+            LegacyBank(voyage, Res.Timber) == 0
+            && voyage.HomeStoreOf(Res.Timber) >= homeTimberBefore + TimberBanked,
+            "legacy bank " + LegacyBank(voyage, Res.Timber) + ", home store "
+            + voyage.HomeStoreOf(Res.Timber) + " against " + homeTimberBefore + " + " + TimberBanked);
 
         Gate("the-ship-comes-back-where-she-was",
             Island.FlatDistance(motor.transform.position, before.shipAt) < 6f,
@@ -484,6 +499,12 @@ public class SaveProbe : MonoBehaviour
                 if (camp.Site(plan, p, 90f, out why) >= 0) return true;
             }
         return false;
+    }
+
+    static int LegacyBank(VoyageManager v, string res)
+    {
+        v.BankedStores.TryGetValue(res, out int n);
+        return n;
     }
 
     static bool HasHome(SaveData d)

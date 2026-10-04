@@ -137,7 +137,7 @@ public static class RunProbe
     /// steamer. Play mode, Sea.unity, ~1 min. Logs/ShipyardUiProbe.txt.
     public static void ShipyardUi() => Call("ShipyardUiProbe");
     /// A rung costs goods that were sailed home: refused at sea, refused short,
-    /// banked per resource, paid exactly, and `Apply` stays free for the rig.
+    /// carried ashore into the home store, paid exactly, and `Apply` stays free for the rig.
     public static void Sink() => Call("SinkProbe");
     public static void VillageBuild() => Call("VillageProbe", "Build");
     public static void VillageShot() => Call("VillageProbe", "Shot");
