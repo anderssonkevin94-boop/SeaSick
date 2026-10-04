@@ -130,46 +130,140 @@ namespace SeaSick.World
             if (!HasProfile) return true;
             if (TerrainHeight != null)
             {
-                // Judge the NEAREST shore within ±60° of the line to the centre:
-                // on a big island the centre line can hit a cliff while the
-                // beach the ship is actually facing is 20 m away.
-                if (beachCacheFrame == Time.frameCount && (worldPos - beachCachePos).sqrMagnitude < 4f) return beachCache;
-                Vector3 c = transform.position;
-                Vector3 d = c - worldPos; d.y = 0f;
+                // The ground does not move: one answer per metre she moves
+                // (refreshed every 30 frames regardless), not one per frame
+                // -- the prompt asks every frame while she is in range.
+                if (beachCacheFrame >= 0 && Time.frameCount - beachCacheFrame < 30
+                    && (worldPos - beachCachePos).sqrMagnitude < 1f) return beachCache;
+                Vector3 d = transform.position - worldPos; d.y = 0f;
                 float len = d.magnitude;
-                bool result = false;
-                if (len < 1f) result = profile.hasBeach[0];
-                else
-                {
-                    float baseAng = Mathf.Atan2(d.x, d.z);
-                    // Any beach within a short walk (25 m) of the nearest shore
-                    // point counts: the crew can land beside a bank.
-                    float nearest = float.MaxValue;
-                    var hits = new System.Collections.Generic.List<(float t, float rise)>(13);
-                    for (int k = -6; k <= 6; k++)
-                    {
-                        float a = baseAng + k * 10f * Mathf.Deg2Rad;
-                        Vector3 dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
-                        float maxT = Mathf.Min(len + 50f, nearest + 25f);
-                        for (float t = 0f; t < maxT; t += 2f)
-                        {
-                            Vector3 p = worldPos + dir * t;
-                            if (TerrainHeight(p.x, p.z) > -0.3f)
-                            {
-                                Vector3 q = p + dir * 12f;
-                                hits.Add((t, TerrainHeight(q.x, q.z) - TerrainHeight(p.x, p.z)));
-                                nearest = Mathf.Min(nearest, t);
-                                break;
-                            }
-                        }
-                    }
-                    foreach (var (t, rise) in hits)
-                        if (t <= nearest + 25f && rise / 12f < BeachMaxSlope) { result = true; break; }
-                }
+                bool result = len < 1f ? profile.hasBeach[0]
+                    : FindBeach(TerrainHeight, worldPos, len + 50f, BeachMaxSlope, out _);
                 beachCacheFrame = Time.frameCount; beachCachePos = worldPos; beachCache = result;
                 return result;
             }
             return profile.hasBeach[SectorOf(BearingTo(worldPos, transform.position))];
+        }
+
+        /// Rays round the whole compass for the landing check (10 deg apart).
+        const int BeachRays = 36;
+        /// A beach this far off (m, to its waterline) counts as "nearby"
+        /// whatever the nearest shore is; the old 25 m walk from the nearest
+        /// shore point still applies beyond it.
+        public const float BeachReach = 80f, BeachWalk = 25f;
+        /// Longest ray (m): the ship is only offered a landing over the
+        /// shelf, so a shore further than this is not the one she is off.
+        const float BeachRayCap = 160f;
+
+        /// **Is there a landable beach near `from` (2026-10-04)?** Pure: any
+        /// height function `(x, z) -> y`, sea level 0, no scene.
+        ///
+        /// Kevin's phone: "Sheer cliff" off bays and headlands with sand in
+        /// plain view. The old check fanned 13 rays over +-60 deg of the
+        /// line to the island's CENTRE and only counted a beach within 25 m
+        /// of the nearest shore hit. Off a headland the beaches lie abeam or
+        /// astern of that line; inside a bay the cliff walls are nearer than
+        /// the sand at its head by more than 25 m. Now: 36 rays round the
+        /// whole compass from the ship, the first land on each, and the
+        /// nearest one that is a beach wins, if its waterline is within
+        /// `BeachReach` (or within `BeachWalk` of the nearest shore).
+        ///
+        /// A beach is ground that rises less than `maxSlope` over the 12 m
+        /// inland -- measured UPHILL (the terrain's own gradient), not
+        /// along the ray: a ray grazing a steep coast at a shallow angle
+        /// climbs it slowly and used to pass a cliff as sand.
+        /// `beach` = the chosen waterline point (y = its height).
+        public static bool FindBeach(System.Func<float, float, float> height, Vector3 from,
+            float maxRay, float maxSlope, out Vector3 beach)
+        {
+            beach = from;
+            maxRay = Mathf.Min(maxRay, BeachRayCap);
+            float nearest = float.MaxValue, bestT = float.MaxValue;
+            for (int k = 0; k < BeachRays; k++)
+            {
+                float a = k * (Mathf.PI * 2f / BeachRays);
+                Vector3 dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
+                float cap = Mathf.Min(maxRay, Mathf.Max(BeachReach, nearest + BeachWalk));
+                for (float t = 0f; t < cap; t += 2f)
+                {
+                    Vector3 p = from + dir * t;
+                    float h0 = height(p.x, p.z);
+                    if (h0 <= -0.3f) continue;
+                    if (t < nearest) nearest = t;
+                    if (t < bestT && UphillRise(height, p, dir, h0) / 12f < maxSlope)
+                    {
+                        bestT = t;
+                        beach = new Vector3(p.x, h0, p.z);
+                    }
+                    break;
+                }
+            }
+            return bestT < float.MaxValue && bestT <= Mathf.Max(BeachReach, nearest + BeachWalk);
+        }
+
+        /// Rise over the 12 m uphill of the waterline point `p`: the
+        /// gradient's direction a few metres inland, the ray's when the
+        /// ground there is flat (or slopes back toward the sea).
+        static float UphillRise(System.Func<float, float, float> height, Vector3 p, Vector3 dir, float h0)
+        {
+            Vector3 c = p + dir * 3f;
+            float gx = height(c.x + 2f, c.z) - height(c.x - 2f, c.z);
+            float gz = height(c.x, c.z + 2f) - height(c.x, c.z - 2f);
+            Vector3 up = new Vector3(gx, 0f, gz);
+            if (up.sqrMagnitude < 1e-6f || Vector3.Dot(up, dir) <= 0f) up = dir;
+            else up.Normalize();
+            Vector3 q = p + up * 12f;
+            // From the waterline (sea level), not from `h0`: a 2 m step can
+            // land past a narrow cliff face onto its flat top, and the rise
+            // from there was ~0 -- a cliff top passed as a beach.
+            return height(q.x, q.z) - Mathf.Min(h0, 0f);
+        }
+
+        // ---- self-test (pure, no scene) ----------------------------------
+        //
+        //   tools/selftest-outside-editor/run.sh SeaSick.World.Island.BeachSelfTest
+
+        public static string BeachSelfTest()
+        {
+            var sb = new System.Text.StringBuilder();
+            int pass = 0, total = 0;
+            void Check(string name, bool want, System.Func<float, float, float> h, Vector3 from)
+            {
+                total++;
+                bool got = FindBeach(h, from, 1000f, 0.5f, out Vector3 at);
+                if (got == want) { pass++; return; }
+                sb.Append($"FAIL {name}: want {want} got {got} at ({at.x:F0},{at.z:F0})\n");
+            }
+            const float Deep = -5f;
+            // Straight coast along z = 0, land to +z.
+            float Cliff(float z) => z < 0f ? Deep : Mathf.Min(20f, z * 10f);
+            float Sand(float z) => z < 0f ? Deep : z * 0.1f;
+            Check("straight cliff coast: sheer cliff", false, (x, z) => Cliff(z), new Vector3(0f, 0f, -15f));
+            Check("cliff here, sand 40 m along: beach", true,
+                  (x, z) => x > 40f ? Sand(z) : Cliff(z), new Vector3(0f, 0f, -15f));
+            Check("cliff here, sand 200 m along: sheer cliff", false,
+                  (x, z) => x > 200f ? Sand(z) : Cliff(z), new Vector3(0f, 0f, -15f));
+            // A bay 40 m wide: cliff walls at |x| >= 20, sand at its head (z = 60).
+            Check("inside a bay, sand at its head 60 m off: beach", true,
+                  (x, z) => Mathf.Abs(x) >= 20f ? Mathf.Min(20f, (Mathf.Abs(x) - 20f) * 10f + 0.5f) : Sand(z - 60f),
+                  Vector3.zero);
+            // Off a headland: a cliff peninsula (|x| < 30, z < 100) runs out
+            // from the island; the ship lies beside it, and the sand is a
+            // shore 50 m off her bow, ~140 deg off the line to the centre.
+            Check("beside a headland, sand 50 m off the other way: beach", true,
+                  (x, z) => z > 110f && x > 20f ? Sand(z - 110f)
+                          : Mathf.Abs(x) < 30f && z < 100f ? 20f : Deep,
+                  new Vector3(45f, 0f, 60f));
+            // The same headland with no sand anywhere: a real cliff.
+            Check("beside a headland, cliffs only: sheer cliff", false,
+                  (x, z) => Mathf.Abs(x) < 30f && z < 100f ? 20f : Deep,
+                  new Vector3(45f, 0f, 60f));
+            // A steep (0.8) coast met by grazing rays: still a cliff.
+            Check("steep coast at a grazing angle: sheer cliff", false,
+                  (x, z) => z < 0f ? Deep : z * 0.8f, new Vector3(0f, 0f, -10f));
+            Check("open water: nothing", false, (x, z) => Deep, Vector3.zero);
+            sb.Insert(0, $"{(pass == total ? "PASS" : "FAIL")} {pass}/{total}\n");
+            return sb.ToString().TrimEnd();
         }
 
         /// Largest shoreline distance, for spawn spacing and safety margins.
