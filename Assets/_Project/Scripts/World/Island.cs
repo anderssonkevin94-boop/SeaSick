@@ -138,11 +138,41 @@ namespace SeaSick.World
                 Vector3 d = transform.position - worldPos; d.y = 0f;
                 float len = d.magnitude;
                 bool result = len < 1f ? profile.hasBeach[0]
-                    : FindBeach(TerrainHeight, worldPos, len + 50f, BeachMaxSlope, out _);
+                    : FindBeach(TerrainHeight, worldPos, len + 50f, LandingSlope, out _);
                 beachCacheFrame = Time.frameCount; beachCachePos = worldPos; beachCache = result;
                 return result;
             }
             return profile.hasBeach[SectorOf(BearingTo(worldPos, transform.position))];
+        }
+
+        /// **The landing check's slope: can a man walk up from the
+        /// waterline** (`Walkability`'s man grade, tan 33 deg = 0.65), never
+        /// stricter than `BeachMaxSlope`. Measured 2026-10-04 on the seed-1337
+        /// world, 4969 shore crossings x 7 approach angles: against 0.5 the
+        /// uphill rule refused 960 shore points the old along-the-ray rule
+        /// had called beach, 95 % of them 0.5-0.65 slopes a villager walks
+        /// (the old rule passed them only because a slanting ray reads a
+        /// fraction of the slope). At the man grade it refuses 78 and
+        /// accepts 76 new ones -- the old coverage, minus faces steeper than
+        /// anyone can climb, and independent of the approach angle.
+        public static float LandingSlope => Mathf.Max(BeachMaxSlope, Walkability.Grade(Walkability.Feet.Man));
+
+        /// **Hold a found beach (2026-10-04).** At a narrow sand sliver
+        /// `FindBeach` is true on a ~1 m column and false a metre either side
+        /// (2 m ray steps, 10 deg rays), so "Land here" / "Sheer cliff"
+        /// blinked as she drifted. A beach, once found, stays offered while
+        /// she is within `BeachHoldRadius` of where it was last found OR it
+        /// was found within `BeachHoldSeconds`; cliff -> beach is immediate.
+        /// Pure: the caller keeps `heldAt`/`heldTime` (time < 0 = nothing
+        /// held) per island and resets them when the island changes.
+        public const float BeachHoldRadius = 6f, BeachHoldSeconds = 1f;
+        public static bool BeachHold(bool found, Vector3 pos, float now, ref Vector3 heldAt, ref float heldTime)
+        {
+            if (found) { heldAt = pos; heldTime = now; return true; }
+            if (heldTime < 0f) return false;
+            float dx = pos.x - heldAt.x, dz = pos.z - heldAt.z;
+            return dx * dx + dz * dz <= BeachHoldRadius * BeachHoldRadius
+                || now - heldTime <= BeachHoldSeconds;
         }
 
         /// Rays round the whole compass for the landing check (10 deg apart).
@@ -262,6 +292,28 @@ namespace SeaSick.World
             Check("steep coast at a grazing angle: sheer cliff", false,
                   (x, z) => z < 0f ? Deep : z * 0.8f, new Vector3(0f, 0f, -10f));
             Check("open water: nothing", false, (x, z) => Deep, Vector3.zero);
+            // A 0.6 slope (31 deg): steeper than the 0.5 knob, walkable by a
+            // man (33 deg) -- a beach at the landing slope.
+            {
+                total++;
+                bool got = FindBeach((x, z) => z < 0f ? Deep : z * 0.6f, new Vector3(0f, 0f, -10f),
+                                     1000f, LandingSlope, out _);
+                if (got) pass++; else sb.Append("FAIL 0.6 slope at the landing slope: want true got false\n");
+                total++;
+                got = FindBeach((x, z) => z < 0f ? Deep : z * 0.8f, new Vector3(0f, 0f, -10f),
+                                1000f, LandingSlope, out _);
+                if (!got) pass++; else sb.Append("FAIL 0.8 slope at the landing slope: want false got true\n");
+            }
+            // The hold: a sliver found at x = 0, lost a metre on.
+            void Hold(string name, bool want, bool got) { total++; if (got == want) pass++; else sb.Append($"FAIL hold {name}: want {want} got {got}\n"); }
+            Vector3 hAt = Vector3.zero; float hT = -1f;
+            Hold("nothing found yet", false, BeachHold(false, Vector3.zero, 0f, ref hAt, ref hT));
+            Hold("found", true, BeachHold(true, new Vector3(10f, 0f, 0f), 5f, ref hAt, ref hT));
+            Hold("1 m on, 0.2 s later", true, BeachHold(false, new Vector3(11f, 0f, 0f), 5.2f, ref hAt, ref hT));
+            Hold("5 m on, 10 s later (parked by the sliver)", true, BeachHold(false, new Vector3(10f, 0f, 5f), 15f, ref hAt, ref hT));
+            Hold("20 m on but 0.5 s after (fast)", true, BeachHold(false, new Vector3(30f, 0f, 0f), 5.5f, ref hAt, ref hT));
+            Hold("20 m on, 2 s after: cliff", false, BeachHold(false, new Vector3(30f, 0f, 0f), 7f, ref hAt, ref hT));
+            Hold("found again at once", true, BeachHold(true, new Vector3(30f, 0f, 0f), 7.1f, ref hAt, ref hT));
             sb.Insert(0, $"{(pass == total ? "PASS" : "FAIL")} {pass}/{total}\n");
             return sb.ToString().TrimEnd();
         }

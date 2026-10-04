@@ -299,7 +299,22 @@ namespace SeaSick.Ship
 
         /// You can only put a boat ashore on a beach — cliff faces drop sheer
         /// into the water, so the approach bearing matters.
-        bool CanLandHere(Island isle) => isle != null && isle.HasBeachToward(transform.position);
+        ///
+        /// **Held (2026-10-04):** a beach found at this island stays offered
+        /// within `Island.BeachHoldRadius` of where it was found or for
+        /// `Island.BeachHoldSeconds` (`Island.BeachHold`): at a narrow sand
+        /// sliver the raw answer was true on a ~1 m column and the card
+        /// blinked "Land here" / "Sheer cliff". Cliff -> beach is immediate.
+        bool CanLandHere(Island isle)
+        {
+            if (isle == null) return false;
+            if (isle != beachHeldIsle) { beachHeldIsle = isle; beachHeldTime = -1f; }
+            Vector3 at = transform.position;
+            return Island.BeachHold(isle.HasBeachToward(at), at, Time.time, ref beachHeldAt, ref beachHeldTime);
+        }
+        Island beachHeldIsle;
+        Vector3 beachHeldAt;
+        float beachHeldTime = -1f;
 
         /// The nearest berth, home's or a camp pier's, if she is close
         /// enough to take it.
