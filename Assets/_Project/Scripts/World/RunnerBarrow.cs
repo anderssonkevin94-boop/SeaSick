@@ -70,8 +70,8 @@ namespace SeaSick.World
         const float FistFollowSeconds = 0.06f;
 
         /// Most of one load drawn in the tray (the ledger's count is the truth).
-        /// **Raised 2026-10-03 for the Storehouse's bigger barrows** (base /
-        /// +1 / +2 armfuls: logs 6/8/10, stone 8/11/14, boards 10/14/18,
+        /// **Raised 2026-10-03 for the bigger barrows** (store hut L1 / L2 / L3:
+        /// base / +1 / +2 armfuls: logs 6/8/10, stone 8/11/14, boards 10/14/18,
         /// bricks 12/16/20, small goods 16/20/24 -- `Res.BarrowArmful`): what
         /// a body pushes must match what the books handed him, so every
         /// perk load is drawn whole. Loads up to the old maxima keep their
@@ -678,7 +678,7 @@ namespace SeaSick.World
         /// 0.245 thick, bottom origin), cut to `BilletLength`: 0.15 x 0.50 m.
         /// The top log rises 0.12 m over the rim, over the floor only.
         ///
-        /// **More than `LogsLong` (2026-10-03, the Storehouse's 8 / 10):**
+        /// **More than `LogsLong` (2026-10-03, store hut L2 / L3: 8 / 10):**
         /// cut shorter (`ShortBillet`) and laid in two rows end to end, each
         /// row stacked 3 / 2 / 1, filled a layer at a time with the front
         /// row first -- ten logs stand 0.28 m, under the old six's 0.41.
@@ -722,7 +722,7 @@ namespace SeaSick.World
         /// A bundle of planks lengthwise, two side by side, layer on layer
         /// (Boards_Unit: 1.60 x 0.25 wide x 0.075 m, long on z, bottom origin),
         /// cut to `BilletLength`. Ten = five layers, 0.23 m: under the rim.
-        /// **Past ten (2026-10-03, the Storehouse's 14 / 18): three side by
+        /// **Past ten (2026-10-03, store hut L2 / L3: 14 / 18): three side by
         /// side** (0.47 m of the 0.52 tray), 18 = six layers, 0.28 m.
         bool Planks(int n, bool fine, Transform into)
         {
@@ -744,7 +744,7 @@ namespace SeaSick.World
 
         /// Stones / ore: a 3 x 3 bed (front row first, every other one turned a
         /// quarter), then three in the hollows on top. 0.16 m tall at twelve.
-        /// **Past twelve (2026-10-03, the Storehouse's 14):** all four
+        /// **Past twelve (2026-10-03, store hut L3: 14):** all four
         /// hollows of the bed, then one on the crown -- ~0.22 m.
         static readonly Vector2[] RockTop = { new Vector2(-0.08f, 0.085f), new Vector2(0.08f, 0.085f), new Vector2(0f, -0.085f) };
         static readonly Vector2[] RockHollows = { new Vector2(-0.08f, 0.085f), new Vector2(0.08f, 0.085f),

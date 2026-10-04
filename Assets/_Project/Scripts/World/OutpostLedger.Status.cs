@@ -248,7 +248,7 @@ namespace SeaSick.World
             if (h.TopUpTrip) return "topping up the store's " + ResLabel(h.topUpRes);
             // The runners (2026-10-02).
             if (IsRunner(h) && !h.Hauling)
-                return h.target == StorehouseId ? "at the storehouse, nothing to carry" : "at the store hut, nothing to carry";
+                return "at the store hut, nothing to carry";
             // Ahead of the runner's words: with nothing chosen, a recipe is
             // the fix, whatever is on the rack.
             if (BenchUnordered(h)) return NoRecipeWords(StationOfHand(h));

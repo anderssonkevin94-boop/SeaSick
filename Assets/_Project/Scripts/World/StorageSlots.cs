@@ -69,17 +69,12 @@ namespace SeaSick.World
         /// storage is built everything moves into it".
         static readonly int[] FireCache = { 2, 1, 1, 2, 2, 1, 1 };
 
-        /// **Storehouse (the big one)**: no art, no SPEC layout yet. It kept
-        /// 40 of each (twice the hut's 20), so it is given twice the hut's
-        /// slots until its own containers are designed. PROVISIONAL, and
-        /// visual only since infinite stacking (2026-10-03).
-        static readonly int[] Storehouse = { 8, 6, 6, 12, 12, 8, 8 };
-
         // **No level-2 slots (Kevin DECIDED 2026-10-03):** with infinite
         // stacking a store hut's level 2 is about its runners (4 instead of
         // 2), not room; the earlier "+1 slot a family" was dropped the same
-        // day, and the storehouse's L2 extra went with it. A level never
-        // changes a site's slots. (`Techs.StoreBonus` is unread for storage.)
+        // day. A level never changes a site's slots (nor does level 3, the
+        // runner level the Storehouse merged into, 2026-10-04).
+        // (`Techs.StoreBonus` is unread for storage.)
 
         /// **Add the slots one standing building gives** to `into` (length
         /// `FamilyCount`). Anything that is not a store adds nothing.
@@ -88,7 +83,6 @@ namespace SeaSick.World
             if (into == null || string.IsNullOrEmpty(planId)) return;
             int[] baseRow = null;
             if (planId == BuildPlans.Storage.id) baseRow = HutL1;
-            else if (planId == BuildPlans.Storehouse.id) baseRow = Storehouse;
             else if (planId == BuildPlans.Campfire.id) baseRow = FireCache;
             if (baseRow == null) return;
             for (int f = 0; f < FamilyCount; f++) into[f] += baseRow[f];
@@ -113,8 +107,7 @@ namespace SeaSick.World
 
         /// True for a plan that holds store slots.
         public static bool IsStoreSite(string planId) =>
-            planId == BuildPlans.Storage.id || planId == BuildPlans.Storehouse.id
-            || planId == BuildPlans.Campfire.id;
+            planId == BuildPlans.Storage.id || planId == BuildPlans.Campfire.id;
 
         // --- resource -> family + bundle -------------------------------------
 

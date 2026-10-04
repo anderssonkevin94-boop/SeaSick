@@ -11,13 +11,13 @@ namespace SeaSick.UI.Sheets
     /// owns the job (`OutpostLedger.IsRunner`, `RunnerCount`,
     /// `RunnerSlots`); this is the slot UI, shaped like the station
     /// `WorkerCard` but with one row per slot of THIS copy
-    /// (`StationCapacity`: 2 at level 1, 4 at level 2).
+    /// (`StationCapacity`: 2 / 4 / 6 at levels 1 / 2 / 3).
     ///
-    /// **The Storehouse uses it too (2026-10-03, Kevin: runner
-    /// progression):** 2 / 4 / 6 slots at levels 1 / 2 / 3, and a perk line
-    /// under the blurb says what the island's best Storehouse gives EVERY
-    /// runner ("Every runner here: barrow +1 armful · jog 10% faster"); on a
-    /// store hut the line shows only when a Storehouse stands.
+    /// **Runner progression (Kevin 2026-10-03; the Storehouse merged into
+    /// the store hut 2026-10-04):** a perk line under the blurb says what the
+    /// island's best store hut gives EVERY runner ("Every runner on this
+    /// island: barrow +1 armful · jog 10% faster"), or, below level 2, what
+    /// the next level would give. It wraps, never cut (phone portrait).
     ///
     /// A filled row is the person (tap: their sheet, the same one a tap in
     /// the world opens), their status word ("Runner, waiting", "Running 6
@@ -32,8 +32,8 @@ namespace SeaSick.UI.Sheets
     {
         public readonly VisualElement Root;
 
-        /// Six is the level 3 Storehouse's capacity (four the level 2 store
-        /// hut's); a row past the copy's capacity is simply hidden.
+        /// Six is the level 3 store hut's capacity (four at level 2, two at
+        /// level 1); a row past the copy's capacity is simply hidden.
         const int MaxSlots = 6;
 
         readonly Outpost outpost;
@@ -82,7 +82,7 @@ namespace SeaSick.UI.Sheets
             blurb.style.marginBottom = 6f;
             Root.Add(blurb);
 
-            // The Storehouse's camp-wide runner perk (2026-10-03): wraps,
+            // The store hut's camp-wide runner perk (2026-10-04): wraps,
             // never cut (phone portrait).
             perks = StationPage.Text("", "st-worker-sub");
             perks.style.whiteSpace = WhiteSpace.Normal;
@@ -161,11 +161,12 @@ namespace SeaSick.UI.Sheets
 
             countLabel.text = $"{l.RunnerCount()}/{l.RunnerSlots()}";
 
-            int shLevel = l.StorehouseLevel();
-            string perk = OutpostLedger.PerkWords(shLevel);
-            string pt = string.IsNullOrEmpty(perk) ? ""
-                : planId == BuildPlans.Storehouse.id ? "Every runner on this island: " + perk
-                : "Storehouse perk, every runner: " + perk;
+            // The perk is the island's best store hut's; below level 2 the
+            // line says what level 2 would bring every runner.
+            int best = l.StoreHutLevel();
+            string perk = OutpostLedger.PerkWords(best);
+            string pt = !string.IsNullOrEmpty(perk) ? "Every runner on this island: " + perk
+                : "At store hut level 2, every runner: " + OutpostLedger.PerkWords(2);
             if (perks.text != pt) perks.text = pt;
             perks.style.display = pt.Length > 0 ? DisplayStyle.Flex : DisplayStyle.None;
             bool free = l.FreeHandFor(planId) != null;

@@ -382,10 +382,6 @@ namespace SeaSick.World.Economy
             foreach (var p in BuildPlans.AtACamp)
                 ps.Add(new PlanRow { planId = p.id, timber = p.baseCost, stone = p.baseStoneCost,
                     brick = p.baseBrickCost, hammerSeconds = BuildPlans.DefaultHammerSeconds(p.id) });
-            foreach (var p in BuildPlans.All)
-                if (!System.Array.Exists(BuildPlans.AtACamp, a => a.id == p.id))   // the Storehouse is in both (2026-10-03)
-                    ps.Add(new PlanRow { planId = p.id, timber = p.baseCost, stone = p.baseStoneCost,
-                    brick = p.baseBrickCost, hammerSeconds = BuildPlans.DefaultHammerSeconds(p.id) });
             plans = ps.ToArray();
             var fs = new System.Collections.Generic.List<FireRow>();
             foreach (var c in Techs.Campfire) fs.Add(new FireRow { level = c.level, cost = c.baseCost });

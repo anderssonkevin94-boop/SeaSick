@@ -103,7 +103,7 @@ public static class BarrowShot
                 ("jog bricks x24", Res.Brick, 24, VillagerGaits.Barrow, 0f, 0f),
                 ("jog stone x12", Res.Stone, 12, VillagerGaits.Barrow, 0f, 0f),
                 ("jog potatoes x8", Res.Potato, 8, VillagerGaits.Barrow, 0f, 0f),
-                // The Storehouse's bigger barrows (2026-10-03): +1 and +2
+                // The store hut L2 / L3 bigger barrows (2026-10-03/04): +1 and +2
                 // armfuls (`Res.BarrowArmful(r, n)`), drawn whole, flat jog.
                 ("jog logs x8 (+1)", Res.Timber, Res.BarrowArmful(Res.Timber, 1), VillagerGaits.Barrow, 0f, 0f),
                 ("jog logs x10 (+2)", Res.Timber, Res.BarrowArmful(Res.Timber, 2), VillagerGaits.Barrow, 0f, 0f),

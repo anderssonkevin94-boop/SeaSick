@@ -112,26 +112,19 @@ namespace SeaSick.World.Economy
                 cost = Cost.Of(Cost.I(Res.Brick, 8), Cost.I(Res.FineBoards, 2)) },
             new UpgradeStep { planId = "Hut", toLevel = 2, campfireLevel = 2, rateMul = 1f, housesBonus = 1,
                 cost = Cost.Of(Cost.I(Res.Brick, 4), Cost.I(Res.FineBoards, 4)) },
-            // **The Storehouse is runner progression (2026-10-03, Kevin):**
-            // island stores are unlimited, so its old +20 store bonus is gone;
-            // each level adds 2 runner posts and a camp-wide runner perk
-            // (`OutpostLedger.StorehouseRunners` / `PerksAt`). L2 keeps its
-            // price. L3 is new and needs fire II, like L2 (Kevin 2026-10-03:
-            // "gate L3 on fire level II" -- fire III does not exist yet,
-            // `MaxCampfireLevel` 2, and a fire-III gate left L3 unreachable).
-            // Its price mirrors L2's goods at ~1.75x
-            // brick / 2x fine boards (14 + 8): the top runner perk is the
-            // whole camp's hauling, worth a fire-III-sized bill, and both
-            // goods already need the quarry, the saw blade and an ore island.
-            // PROVISIONAL, Kevin to tune.
-            new UpgradeStep { planId = "Storehouse", toLevel = 2, campfireLevel = 2, rateMul = 1f,
-                cost = Cost.Of(Cost.I(Res.Brick, 8), Cost.I(Res.FineBoards, 4)) },
-            new UpgradeStep { planId = "Storehouse", toLevel = 3, campfireLevel = 2, rateMul = 1f,
-                cost = Cost.Of(Cost.I(Res.Brick, 14), Cost.I(Res.FineBoards, 8)) },
-            // The store hut's level 2 is its 4 runner posts (2 at level 1);
-            // its old +10 store bonus died with the store caps (2026-10-03).
+            // **The store hut is runner progression (Kevin 2026-10-03; the
+            // Storehouse merged into it 2026-10-04):** island stores are
+            // unlimited, so its old +10 store bonus died with the caps; each
+            // level is 2 / 4 / 6 runner posts and, from level 2, a camp-wide
+            // runner perk (`OutpostLedger.StoreRunners` / `PerksAt`). L2
+            // keeps its price. L3 is the old Storehouse L3 bill (14 brick + 8
+            // fine boards) and needs fire II like every second level -- fire
+            // III does not exist yet (`MaxCampfireLevel` 2). PROVISIONAL,
+            // Kevin to tune.
             new UpgradeStep { planId = "Storage", toLevel = 2, campfireLevel = 2, rateMul = 1f,
                 cost = Cost.Of(Cost.I(Res.Brick, 6), Cost.I(Res.FineBoards, 2)) },
+            new UpgradeStep { planId = "Storage", toLevel = 3, campfireLevel = 2, rateMul = 1f,
+                cost = Cost.Of(Cost.I(Res.Brick, 14), Cost.I(Res.FineBoards, 8)) },
             // The level 2 watchtower (2026-10-01): the big gun deck, its own
             // model (`BuildingLevelLook`). Not a station, so no rate. A
             // PROVISIONAL price, Kevin to tune: the sawmill's.
@@ -150,7 +143,6 @@ namespace SeaSick.World.Economy
         {
             new BuildingCap { planId = "Hut",        copies = new[] { 2, 3, 4, 5 } },
             new BuildingCap { planId = "Storage",    copies = new[] { 1, 2, 3, 3 } },
-            new BuildingCap { planId = "Storehouse", copies = new[] { 1, 1, 2, 2 } },
             new BuildingCap { planId = "Watchtower", copies = new[] { 2, 4, 6, 8 } },
             new BuildingCap { planId = "Farm",       copies = new[] { 1, 2, 2, 3 } },
             // Food without a field (2026-09-27): a second hut at fire II,

@@ -163,7 +163,7 @@ public class LedgerProbe : MonoBehaviour
         var before = Working(t0);
         before.Tick(t0 + 7.0 * day);
         before.hands[0].mood = 0.42f;
-        before.built.Add("Storehouse");
+        before.built.Add("Storage");
         string json = JsonUtility.ToJson(before);
         var after = JsonUtility.FromJson<OutpostLedger>(json);
 
@@ -174,7 +174,7 @@ public class LedgerProbe : MonoBehaviour
             && after.hands.Count == before.hands.Count
             && after.hands[0].name == before.hands[0].name
             && Mathf.Abs(after.hands[0].mood - 0.42f) < 1e-5
-            && after.built.Count == 1 && after.built[0] == "Storehouse"
+            && after.built.Count == 1 && after.built[0] == "Storage"
             && after.keyX == before.keyX && after.keyZ == before.keyZ
             && System.Math.Abs(after.lastTicked - before.lastTicked) < 1e-9;
         Gate(sb, ref fails, "round-trips-through-json", same,

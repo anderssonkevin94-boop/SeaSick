@@ -31,7 +31,7 @@ namespace SeaSick.World
     /// <summary>
     /// **Stations, orders and hauling (2026-09-23, Kevin's storage-hub rules).**
     ///
-    /// The camp store (`stores`) is the hub: before a Storage/Storehouse
+    /// The camp store (`stores`) is the hub: before a Storage (store hut)
     /// stands it is the square by the fire, afterwards it is inside that
     /// building (`HasStorageBuilding` tells the visuals which). Every gathered
     /// unit lands there. Production stations (`IsStation`: a plan with a
@@ -57,7 +57,7 @@ namespace SeaSick.World
     /// `days = seconds / TimeOfDay.WorkDaySeconds`. A leg is the straight line
     /// between the two ledger positions times `PathFactor` (1.15: the ledger
     /// has no A*, the bodies walk round things). Positions the ledger knows:
-    /// the STORE (first Storage/Storehouse `raised` row, else the campfire's
+    /// the STORE (first Storage `raised` row, else the campfire's
     /// `raised` row, else the campfire's site, else the centre `Outpost`
     /// saved), a STATION (its `raised` row, by ordinal), a SITE (its x,z).
     /// The island's sources have no position in the books: `Outpost` saves
@@ -138,7 +138,7 @@ namespace SeaSick.World
         /// `VillagerGaits.Barrow` (his body's own `CruiseSpeed`, so a watched
         /// and an unwatched camp keep the same pace); everybody else at
         /// `WalkMetresPerSecond`. **Instance since 2026-10-03:** the jog
-        /// takes this camp's Storehouse perk (`RunnerJogSpeed`, 10 % / 20 %
+        /// takes this camp's store hut perk (`RunnerJogSpeed`, 10 % / 20 %
         /// faster at levels 2 / 3), the same number the body is given, so
         /// the offline catch-up walks the runner exactly as fast as you see.
         public float WalkSpeedOf(OutpostHand h) => IsRunner(h) ? RunnerJogSpeed() : WalkMetresPerSecond;
@@ -226,13 +226,13 @@ namespace SeaSick.World
             return false;
         }
 
-        /// Where the store is: inside the first Storage/Storehouse standing,
-        /// else the square by the fire (the centre).
+        /// Where the store is: inside the first store hut standing, else the
+        /// square by the fire (the centre).
         public bool StoreAt(out Vector3 at)
         {
             if (raised != null)
                 foreach (var r in raised)
-                    if (r != null && (r.planId == BuildPlans.Storage.id || r.planId == BuildPlans.Storehouse.id))
+                    if (r != null && r.planId == BuildPlans.Storage.id)
                     { at = r.At; return true; }
             return CentreAt(out at);
         }
@@ -364,9 +364,9 @@ namespace SeaSick.World
             !string.IsNullOrEmpty(planId) && BuildPlans.HasPosition(planId)
             && Economy.Recipes.StationHasRecipes(planId);
 
-        /// Storage or Storehouse is standing: the store is drawn in it.
+        /// A store hut is standing: the store is drawn in it.
         public bool HasStorageBuilding =>
-            built != null && (built.Contains(BuildPlans.Storage.id) || built.Contains(BuildPlans.Storehouse.id));
+            built != null && built.Contains(BuildPlans.Storage.id);
 
         public IReadOnlyList<StationStock> Stations
         {

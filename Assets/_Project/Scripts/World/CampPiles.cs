@@ -42,9 +42,9 @@ namespace SeaSick.World
         static readonly Dictionary<string, Material> mats = new Dictionary<string, Material>();
 
         /// **The storage building the store is kept in**, or null while
-        /// the store is the ring by the fire. The standing Storage or
-        /// Storehouse nearest the ledger's own store point
-        /// (`OutpostLedger.StoreAt`, the first raised row of either), so
+        /// the store is the ring by the fire. The standing store hut nearest
+        /// the ledger's own store point (`OutpostLedger.StoreAt`, the first
+        /// raised row), so
         /// the hands, these stacks and the books agree on which one. Found
         /// by plan id among `Outpost.Built` rather than by an exact
         /// position match, so a trip booked before the hut stood, or a
@@ -57,13 +57,13 @@ namespace SeaSick.World
             var built = o.Built;
             if (built == null) return null;
             bool anchored = l.StoreAt(out Vector3 want);
-            string a = BuildPlans.Storage.id, b = BuildPlans.Storehouse.id;
+            string a = BuildPlans.Storage.id;
             Building best = null;
             float bestSq = float.MaxValue;
             for (int i = 0; i < built.Count; i++)
             {
                 var x = built[i];
-                if (x == null || (x.Id != a && x.Id != b)) continue;
+                if (x == null || x.Id != a) continue;
                 if (!anchored) return x;
                 Vector3 d = x.transform.position - want;
                 d.y = 0f;

@@ -677,7 +677,8 @@ namespace SeaSick.World
             // always use their wheelbarrow"): up a ladder chain, or lying
             // down by the fire, it is set down where he left it.
             RunnerBarrow.Sync(this, r, acting, climb.Active || lyingByFire);
-            // **The Storehouse's jog perk (2026-10-03)**: the same multiplier
+            // **The store hut's jog perk (2026-10-03, on the store hut since
+            // 2026-10-04)**: the same multiplier
             // the books walk him at (`OutpostLedger.RunnerJogSpeed`). Asked
             // only for a runner: a few list reads a frame.
             if (acting != null)
@@ -1886,7 +1887,7 @@ namespace SeaSick.World
 
         /// **The store's end of ANY carry** -- a ledger haul, a gatherer's
         /// armful, a hunter's meat, a farmhand's yield. Before a
-        /// Storage/Storehouse stands the store IS the stacks by the fire
+        /// store hut stands the store IS the stacks by the fire
         /// (`CampPiles`), so the load goes to its own stack (`PileSpot`), not
         /// into the fire. After, the storage building's `Input_Pickup` if
         /// Astra gave it one, else the side of it that faces the fire.

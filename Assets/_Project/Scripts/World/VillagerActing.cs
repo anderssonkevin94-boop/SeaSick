@@ -203,10 +203,10 @@ namespace SeaSick.World
         /// `BarrowRate`, not the 3.0 m/s sprint `Cruise(RunClip)` gives).
         public float CruiseSpeed() => PushGait ? VillagerGaits.BarrowAt(BarrowSpeedMul) : GaitCruise(GaitState());
 
-        /// **This runner's camp-wide Storehouse jog perk** (2026-10-03, x1 /
-        /// x1.1 / x1.2), set every frame by `CampWorker` from
-        /// `OutpostLedger.RunnerPerks` -- per body, since two camps may have
-        /// different Storehouses. 1 for everybody else.
+        /// **This runner's camp-wide store hut jog perk** (2026-10-03, x1 /
+        /// x1.1 / x1.2 at store hut level 1 / 2 / 3), set every frame by
+        /// `CampWorker` from `OutpostLedger.RunnerPerks` -- per body, since
+        /// two camps may have different store huts. 1 for everybody else.
         public float BarrowSpeedMul { get; set; } = 1f;
 
         /// Idle or the `WalkGait` walk, at the rate his speed asks for.

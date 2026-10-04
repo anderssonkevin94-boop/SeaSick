@@ -150,8 +150,8 @@ namespace SeaSick.World
         public int supports;
 
         /// **Beds: how many hands this plan houses, 2026-09-21.** Zero on
-        /// everything that is not a hut -- the campfire houses nobody, and
-        /// so does the storehouse at home -- so `OutpostLedger.HousingCapacity`
+        /// everything that is not a hut -- the campfire houses nobody, nor
+        /// does the store hut -- so `OutpostLedger.HousingCapacity`
         /// can sum this over every plan raised without a special case for
         /// what a hut is. Placeholder number, balance later.
         public int houses;
@@ -260,7 +260,6 @@ namespace SeaSick.World
             "Sawmill" => 60f,
             "Quarry" => 60f,
             "Pier" => 60f,
-            "Storehouse" => 60f,
             "Blacksmith" => 75f,
             "DryDock" => 120f,
             _ => 0f,
@@ -273,34 +272,6 @@ namespace SeaSick.World
             var r = EconomyTuning.Plan(planId);
             return r != null && r.hammerSeconds > 0f ? r.hammerSeconds : DefaultHammerSeconds(planId);
         }
-
-        /// **The first building in the game.**
-        ///
-        /// Cost is set against the hold, not against a spreadsheet: she
-        /// carries 24 to the marked line and 38 stuffed with deck cargo, so
-        /// a storehouse is one full hold and a log over. **Two voyages,
-        /// never one** -- and the second one has to come home, which is the
-        /// decision the whole loop is made of. 
-        public static readonly BuildPlan Storehouse = new BuildPlan
-        {
-            id = "Storehouse",
-            baseStoneCost = 4,
-            label = "storehouse",
-            // **Runner progression (2026-10-03, Kevin):** island stores are
-            // unlimited, so it no longer keeps "much more"; it posts runners
-            // (2 / 4 / 6 by level) and makes every runner on the island
-            // better (`OutpostLedger.RunnerPerks`). `storeCapacity` below
-            // only feeds the old `KeepsOfEach` sum, which nothing caps on.
-            blurb = "more runners, bigger barrows, quicker feet",
-            // A Work hand here is a runner, as at the store hut
-            // (`OutpostLedger.IsRunnerPost`); no recipes, so no station.
-            position = "runner",
-            resource = Res.Timber,
-            baseCost = 25,
-            storeCapacity = 40,
-            footprint = new Vector2(8f, 5f),
-            ridge = WorldScale.Storehouse,
-        };
 
         /// **The first thing you put on an island that is not home.**
         ///
@@ -370,6 +341,9 @@ namespace SeaSick.World
             // hauling (OutpostLedger.Runners.cs). The position is what lets
             // the Hand, `Outpost.Assign` and the caps treat it as a post;
             // it has no recipes, so it is not a station (`IsStation`).
+            // 2 / 4 / 6 posts at levels 1 / 2 / 3, and from level 2 a perk
+            // for every runner on the island (the Storehouse merged in,
+            // Kevin 2026-10-04: `OutpostLedger.StoreRunners` / `PerksAt`).
             position = "runner",
             footprint = new Vector2(6.46f, 5.14f),
             ridge = 3.84f,
@@ -1011,10 +985,6 @@ namespace SeaSick.World
             return copy;
         }
 
-        /// What sizes the HOME village clearing. Not the camp list: home is
-        /// the one place with a hand-composed shot to fit buildings into.
-        public static readonly BuildPlan[] All = { Storehouse };
-
         /// **What a camp can put up, in the order the Build menu offers it.**
         ///
         /// The fire is first and is not really one of them -- it is the thing
@@ -1022,15 +992,11 @@ namespace SeaSick.World
         /// same blueprint, so keeping it in the list is what stops it becoming
         /// a special case.
         ///
-        /// **The Storehouse joins it (2026-10-03).** It was home's building
-        /// (`All`) and no island is home any more, so it could not be built
-        /// anywhere; as runner progression (Kevin: "the more you upgrade it,
-        /// the more / better runners you get") it has to stand on a camp.
-        /// One at fire I-II, two from III (`Techs.Caps`). PLACEHOLDER LOOK:
-        /// no authored model, so `BuildingFactory` raises the primitive hut
-        /// shape at its 8 x 5 m footprint until a tarp storehouse is drawn.
+        /// **No Storehouse (Kevin 2026-10-04):** its runner progression is
+        /// the store hut's levels now; an old save's Storehouse is taken
+        /// down and refunded on load (`OutpostLedger.MergeStorehouses`).
         public static readonly BuildPlan[] AtACamp =
-            { Campfire, Storage, Storehouse, Hut, Farm, FishingHut, Sawmill, Quarry, Fletcher, Kitchen, Mill, Blacksmith, Watchtower, Pier, DryDock };
+            { Campfire, Storage, Hut, Farm, FishingHut, Sawmill, Quarry, Fletcher, Kitchen, Mill, Blacksmith, Watchtower, Pier, DryDock };
 
         /// Look a plan up by the id a ledger row carries. A save restores ids,
         /// not structs, and so does an assignment.
@@ -1039,7 +1005,6 @@ namespace SeaSick.World
             foreach (var p in AtACamp) if (p.id == id) return p;
             foreach (var p in Fortifications) if (p.id == id) return p;
             if (id == Road.id) return Road;
-            foreach (var p in All) if (p.id == id) return p;
             return default;
         }
 

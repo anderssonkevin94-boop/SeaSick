@@ -67,8 +67,8 @@ namespace SeaSick.World
         public static float BarrowRate = 1f;
         public static float Barrow => BarrowAt(1f);
 
-        /// **The jog with a camp's Storehouse perk** (2026-10-03: x1.1 at
-        /// Storehouse level 2, x1.2 at level 3; `OutpostLedger.RunnerJogSpeed`),
+        /// **The jog with a camp's store hut perk** (2026-10-03: x1.1 at
+        /// store hut level 2, x1.2 at level 3; `OutpostLedger.RunnerJogSpeed`),
         /// m/s. The Run clip plays at speed / `RunClip`, so the rate is
         /// `BarrowRate x speedMul` off the road and that x the road's
         /// `CampRoads.SpeedMultiplier` on it; both must stay inside

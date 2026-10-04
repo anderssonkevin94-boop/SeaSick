@@ -50,7 +50,7 @@ namespace SeaSick.World
     /// </list>
     ///
     /// **Which slot shows what** is `StorageSlots.Allocate` over the WHOLE
-    /// camp's slots of a family -- store huts and storehouses first, in raise
+    /// camp's slots of a family -- store huts first, in raise
     /// order, then the fire cache (the hut fills first, the fire keeps the
     /// overflow) -- so a view only shows its own window of that list. It is
     /// derived from the ledger every refresh, never saved, so it cannot
@@ -237,14 +237,14 @@ namespace SeaSick.World
 
         /// Where this building's slots of `fam` start in the camp-wide list,
         /// and how many it has by the table (`StorageSlots.SlotsOf`). Store
-        /// huts and storehouses first in `Outpost.Built` order, then the fire
+        /// huts first in `Outpost.Built` order, then the fire
         /// cache -- the same sites `Outpost.StoreSlotsNow` sums.
         int OffsetOf(StoreFamily fam, out int own)
         {
             own = 0;
             int before = 0;
             var built = outpost.Built;
-            // The stores first (store huts, storehouses), in raise order.
+            // The stores first (store huts), in raise order.
             for (int i = 0; i < built.Count; i++)
             {
                 var b = built[i];

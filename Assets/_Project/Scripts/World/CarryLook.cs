@@ -418,7 +418,7 @@ namespace SeaSick.World
             return crate;
         }
 
-        /// **A runner's barrow load** (2026-10-03, the Storehouse's bigger
+        /// **A runner's barrow load** (2026-10-03, the store hut L2 / L3 bigger
         /// barrows: small goods 16 / 20 / 24): `Build`, except that crate
         /// goods are drawn WHOLE, up to three layers of the crate's 8 slots
         /// -- each layer above pulled in toward the crate's middle and set a

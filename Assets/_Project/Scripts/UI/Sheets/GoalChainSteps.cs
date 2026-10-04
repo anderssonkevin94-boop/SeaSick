@@ -132,8 +132,7 @@ namespace SeaSick.UI.Sheets
                 fill = FillFood,
             },
             BuildStep("store", BuildPlans.Storage.id, "Build a store hut",
-                "A store hut is where runners work and the camp's goods are kept.",
-                (o, l) => Built(l, BuildPlans.Storehouse.id)),
+                "A store hut is where runners work and the camp's goods are kept."),
             BuildStep("sawmill", Saw, "Build a sawmill", "Logs into boards. Boards raise the fire."),
             new Step
             {

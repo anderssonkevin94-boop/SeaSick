@@ -92,9 +92,9 @@ namespace SeaSick.UI.Sheets
         internal static string PurposeOf(BuildPlan p)
         {
             if (p.id == BuildPlans.Hut.id) return p.houses > 0 ? $"Beds for {p.houses}" : "Beds";
-            if (p.id == BuildPlans.Storage.id) return "More storage";
-            // Runner progression since 2026-10-03 (stores are unlimited).
-            if (p.id == BuildPlans.Storehouse.id) return "More, better runners";
+            // Runners and the store (stores unlimited since 2026-10-03; the
+            // Storehouse's runner progression is its levels since 2026-10-04).
+            if (p.id == BuildPlans.Storage.id) return "Runners and goods";
             if (p.id == BuildPlans.Farm.id) return "Grows food";
             if (p.id == BuildPlans.FishingHut.id) return "Fish for food";
             if (p.id == BuildPlans.Kitchen.id) return "Cooks dishes";

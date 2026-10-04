@@ -62,9 +62,6 @@ namespace SeaSick.World.Economy
             var stations = new HashSet<string>();
             foreach (var p in BuildPlans.AtACamp) stations.Add(p.id);
             foreach (var p in BuildPlans.Fortifications) stations.Add(p.id);
-            // The home storehouse is in `All`, not `AtACamp`: buildable, just
-            // not at an outpost. It upgrades like the rest.
-            foreach (var p in BuildPlans.All) stations.Add(p.id);
             var madeBy = new Dictionary<string, List<Recipe>>();
             var ids = new HashSet<string>();
             foreach (var r in Recipes.All)
@@ -120,7 +117,6 @@ namespace SeaSick.World.Economy
             var plans = new HashSet<string>();
             foreach (var p in BuildPlans.AtACamp) if (Techs.PlanLevel(p.id) <= 1) plans.Add(p.id);
             foreach (var p in BuildPlans.Fortifications) if (Techs.PlanLevel(p.id) <= 1) plans.Add(p.id);
-            foreach (var p in BuildPlans.All) if (Techs.PlanLevel(p.id) <= 1) plans.Add(p.id);
             var levels = new Dictionary<string, int>();
 
             for (int L = 1; L <= Techs.MaxCampfireLevel; L++)

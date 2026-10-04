@@ -83,7 +83,7 @@ public class LoopProbe : MonoBehaviour
         Line(voyage, village, "home, carried ashore");
 
         // --- build --------------------------------------------------------
-        var plan = BuildPlans.Storehouse;
+        var plan = BuildPlans.Storage;
         int capBefore = voyage.StoreCapacity, hadBefore = voyage.HomeStoreOf(plan.resource);
         bool built = voyage.TryBuild(plan);
         yield return null;

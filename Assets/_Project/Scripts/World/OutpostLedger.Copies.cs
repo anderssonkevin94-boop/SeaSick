@@ -150,24 +150,20 @@ namespace SeaSick.World
         /// bench and bays) share that one worker.
         ///
         /// **Runners (2026-10-02, approved design):** a store hut takes
-        /// `RunnersPerStoreL1` runners at level 1 and `RunnersPerStoreL2`
-        /// from level 2 -- the barrow crew, see OutpostLedger.Runners.cs.
-        /// **The Storehouse (2026-10-03, Kevin):** 2 / 4 / 6 runners at
-        /// levels 1 / 2 / 3 (`StorehouseRunners`), on top of the huts'.
+        /// 2 / 4 / 6 runners at levels 1 / 2 / 3 (`StoreRunners`; level 3
+        /// since the Storehouse merged into it, 2026-10-04) -- the barrow
+        /// crew, see OutpostLedger.Runners.cs.
         public int StationCapacity(string planId, int ordinal)
         {
             if (planId == StorageId)
-                return LevelOf(planId, ordinal) >= 2 ? RunnersPerStoreL2 : RunnersPerStoreL1;
-            if (planId == StorehouseId)
-                return StorehouseRunners(LevelOf(planId, ordinal));
+                return StoreRunners(LevelOf(planId, ordinal));
             return 1;
         }
 
         /// The refusal for a full copy of `planId`, in the UI's words: the
         /// store's barrows, or one worker per station.
         public string CapacityReason(string planId) =>
-            planId == StorageId ? RunnersFullReason
-            : planId == StorehouseId ? StorehouseFullReason : OneWorkerReason;
+            planId == StorageId ? RunnersFullReason : OneWorkerReason;
 
         /// Work hands standing at copy `ordinal` of `planId`, `except` aside.
         public int WorkersAt(string planId, int ordinal, OutpostHand except = null)

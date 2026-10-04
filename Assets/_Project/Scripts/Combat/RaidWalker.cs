@@ -442,7 +442,7 @@ namespace SeaSick.Combat
         Vector3 PileSpot(string resource)
         {
             // **The hut, once one stands** (2026-09-24): the goods moved off
-            // the fire ring into the Storage/Storehouse (`CampPiles`), so the
+            // the fire ring into the store hut (`CampPiles`), so the
             // raider goes where the goods are -- a stride outside the hut on
             // his own side of it.
             var hut = World.CampPiles.StoreBuildingOf(camp);

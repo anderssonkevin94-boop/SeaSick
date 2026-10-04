@@ -104,7 +104,7 @@ public class VillageProbe : MonoBehaviour
         Report(sb.ToString());
     }
 
-    /// Raise storehouses until the clearing refuses one, and measure each
+    /// Raise store huts until the clearing refuses one, and measure each
     /// against the ground it stands on. Nothing is flattened, so the only
     /// question that matters is how far the low corner is below the floor --
     /// that gap is what the footing has to bridge, and an unbridged one is a
@@ -115,7 +115,7 @@ public class VillageProbe : MonoBehaviour
         var village = Outpost.Home;
         if (village == null) { Report("no Outpost\n"); return; }
         var sb = new StringBuilder();
-        var plan = BuildPlans.Storehouse;
+        var plan = BuildPlans.Storage;
         var dock = Dock.Home;
 
         int before = village.Built.Count;

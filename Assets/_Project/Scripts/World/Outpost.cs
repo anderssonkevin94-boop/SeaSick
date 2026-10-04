@@ -158,6 +158,13 @@ namespace SeaSick.World
         public Vector3 ClearingCentre { get; private set; }
         public float ClearingRadius { get; private set; }
 
+        /// **The room a building needs at the clearing's edge** (metres) when
+        /// the clearing is sized by the shot: half the diagonal of the old
+        /// 8 x 5 m home storehouse, which was the one plan that sized it.
+        /// The Storehouse is gone (Kevin 2026-10-04, merged into the store
+        /// hut); the number stays so no clearing changes size.
+        public static readonly float ClearingEdgeRoom = 0.5f * Mathf.Sqrt(8f * 8f + 5f * 5f);
+
         /// **What this place actually is.** The buildings and the crew you can
         /// see are a rendering of this; see OutpostLedger.
         ///
@@ -3634,14 +3641,9 @@ namespace SeaSick.World
             //
             // So the clearing is sized by what the SHOT holds instead: the
             // measured half-width of the view, less the room a building needs
-            // to stand at its edge and still be in it.
-            float widest = 0f;
-            foreach (var plan in BuildPlans.All)
-                widest = Mathf.Max(widest,
-                    0.5f * Mathf.Sqrt(plan.footprint.x * plan.footprint.x
-                                    + plan.footprint.y * plan.footprint.y));
+            // to stand at its edge and still be in it (`ClearingEdgeRoom`).
             float reach = viewHalfWidth > 0.01f ? viewHalfWidth : Dock.ViewHalfWidth;
-            ClearingRadius = Mathf.Clamp(reach - widest - 2f, 14f, 30f);
+            ClearingRadius = Mathf.Clamp(reach - ClearingEdgeRoom - 2f, 14f, 30f);
 
             // A CAMP's clearing is sized by the ground, not by the shot.
             //
@@ -4907,10 +4909,10 @@ namespace SeaSick.World
         {
             if (saved == null || !Sited) return false;
 
-            // What stood here before -- home's storehouses from THIS boot,
-            // or nothing -- comes down first. A save replaces; it does not
-            // add, and two storehouses on one plot is what "load" would
-            // otherwise mean at home.
+            // What stood here before -- buildings from THIS boot, or
+            // nothing -- comes down first. A save replaces; it does not
+            // add, and two of everything on one plot is what "load" would
+            // otherwise mean.
             RetireAllBlueprints();
             foreach (var w in walls) if (w != null) Destroy(w.gameObject);
             walls.Clear();
@@ -4944,6 +4946,13 @@ namespace SeaSick.World
             ledger.MigratePlayerBuild();
             // A pre-2026-10-03 save: one log a tree, now one armful a tree.
             ledger.MigrateTimberTrees();
+            // **Kevin 2026-10-04: the Storehouse is merged into the store
+            // hut.** An old save's Storehouse comes down here, before any
+            // row is raised (so its body never spawns), its cost goes back
+            // to this camp's store and its runners to store hut posts. The
+            // ONE exception to "saved buildings never move", at Kevin's own
+            // request; nothing else is touched. Idempotent.
+            ledger.MergeStorehouses();
             if (ledger.stores == null) ledger.stores = new List<OutpostStore>();
             if (ledger.stocks == null) ledger.stocks = new List<OutpostStock>();
 

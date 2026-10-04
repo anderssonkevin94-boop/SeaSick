@@ -730,10 +730,7 @@ namespace SeaSick.UI.Sheets
                     bool runner = OutpostLedger.IsRunnerPost(t.job.id);
                     // The store hut's post is the runner (2026-10-02): its
                     // tile says "Runner" and counts the store's own slots.
-                    // The Storehouse's (2026-10-03) is its own tile, "Storehouse
-                    // runner", counting its own posts.
-                    name = !runner ? StationPage.Cap(plan.label)
-                        : t.job.id == BuildPlans.Storehouse.id ? "Storehouse runner" : "Runner";
+                    name = runner ? "Runner" : StationPage.Cap(plan.label);
                     here = h.order == OutpostOrder.Work && h.target == t.job.id;
                     var other = FirstOn(l, h, t.job.id);
                     int filled = CountOn(l, h, t.job.id);

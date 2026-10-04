@@ -10,7 +10,7 @@ using Debug = UnityEngine.Debug;
 /// **A refactor that changes home is a bug**, so the first half re-measures
 /// home against the numbers the old code produced and states them out loud
 /// rather than asserting a tautology: the clearing is 30 m because
-/// `Dock.ViewHalfWidth` is 42 and the widest plan's half-diagonal is 4.72,
+/// `Dock.ViewHalfWidth` is 42 and the clearing's edge room (`Outpost.ClearingEdgeRoom`) is 4.72,
 /// and 42 - 4.72 - 2 clamps to the 30 m ceiling. Those are the shipped
 /// constants, read here off the built objects.
 ///
@@ -54,18 +54,14 @@ public class OutpostProbe : MonoBehaviour
             yield break;
         }
 
-        // Recomputed from the SHIPPED plan list and the SHIPPED dock constant,
+        // Recomputed from the SHIPPED edge room and the SHIPPED dock constant,
         // so this disagrees the moment either is retuned -- which is the point.
-        float widest = 0f;
-        foreach (var plan in BuildPlans.All)
-            widest = Mathf.Max(widest,
-                0.5f * Mathf.Sqrt(plan.footprint.x * plan.footprint.x
-                                + plan.footprint.y * plan.footprint.y));
+        float widest = Outpost.ClearingEdgeRoom;
         float expected = Mathf.Clamp(Dock.ViewHalfWidth - widest - 2f, 14f, 30f);
 
         sb.AppendLine($"HOME  '{home.Island?.name}'");
         sb.AppendLine($"  clearing r={home.ClearingRadius:F2} m  (expected {expected:F2} from "
-            + $"ViewHalfWidth {Dock.ViewHalfWidth:F0} - widest plan {widest:F2} - 2)");
+            + $"ViewHalfWidth {Dock.ViewHalfWidth:F0} - edge room {widest:F2} - 2)");
         sb.AppendLine($"  centred {home.ClearingCentre.x:F1},{home.ClearingCentre.z:F1}"
             + $"   capacity {home.StoreCapacity}   built {home.Built.Count}");
         sb.AppendLine($"  sited {home.Sited}   isHome {home.IsHome}");
