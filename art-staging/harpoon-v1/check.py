@@ -1,8 +1,9 @@
 # Harpoon v1 static check: re-imports the two EXPORTED FBXs (not the blend) and checks them against CONTRACT.md
 # and the REAL base-coaster bow (kit.json, read-only). Run (see RUN.md):
 #   Blender -b --factory-startup --python art-staging/harpoon-v1/check.py
-# Writes art-staging/harpoon-v1/export-verification.json and prints one CHECK line; when BowLantern.fbx exists it also
-# checks the lantern (line clearance over the bow arc incl. the swing) -> lantern-verification.json + one CHECK_LANTERN line.
+# Writes art-staging/harpoon-v1/export-verification.json + one CHECK line, then checks the gun-lamp (hierarchy, light
+# empty, lens behind the muzzle, no clipping, rope clearance via the in-game stem fairlead on the low AND raised bow)
+# -> lamp-verification.json + one CHECK_LAMP line.
 import bpy, math, json, re
 from mathutils import Vector, Matrix
 from mathutils.bvhtree import BVHTree
@@ -23,7 +24,7 @@ def world_tris(objs):
     return v, f
 def zero_area(o): return sum(1 for p in o.data.polygons if p.area < 1e-7)
 
-EXPECT = {'HarpoonMount.fbx': ('HarpoonMount', {'Swivel': (0, 0, .16), 'Barb_Muzzle': (0, -.80, 1.72), 'Winch_Drum': (0, .42, 1.06), 'Harpooner_Stand': (0, .86, .30)}, 2500),
+EXPECT = {'HarpoonMount.fbx': ('HarpoonMount', {'Swivel': (0, 0, .16), 'Barb_Muzzle': (0, -.80, 1.72), 'Winch_Drum': (0, .42, 1.06), 'Harpooner_Stand': (0, .86, .30), 'Lamp_Light': (-.33, -.60, 1.72)}, 2500),
           'HarpoonBarb.fbx': ('HarpoonBarb', {'Line_Attach': (0, .335, 0)}, 400)}
 objs = {}
 for fbx, (rootname, empties, budget) in EXPECT.items():
@@ -49,7 +50,7 @@ for fbx, (rootname, empties, budget) in EXPECT.items():
     if r['tris'] > budget: E.append('%s %d tris > %d' % (fbx, r['tris'], budget))
     if any(v['zero_area_faces'] for v in r['meshes'].values()): E.append('%s zero-area faces' % fbx)
     if any(not v['colour_attrs'] for v in r['meshes'].values()): E.append('%s mesh without vertex colours' % fbx)
-    bad = {m for v in r['meshes'].values() for m in v['materials']} - {'SS_Harpoon_Timber', 'SS_Harpoon_Rope', 'SS_Harpoon_Iron'}
+    bad = {m for v in r['meshes'].values() for m in v['materials']} - {'SS_Harpoon_Timber', 'SS_Harpoon_Rope', 'SS_Harpoon_Iron', 'SS_Harpoon_Lens'}
     if bad: E.append('%s unexpected materials %s' % (fbx, bad))
     v, f = world_tris(meshes); r['bounds'] = [[round(min(p[k] for p in v), 3) for k in range(3)], [round(max(p[k] for p in v), 3) for k in range(3)]]
 
@@ -64,7 +65,7 @@ if 'HarpoonMount' in R['HarpoonMount.fbx']['roots'] or True:
         if o and o.parent and stem(o.parent.name) != 'Swivel': E.append('%s is not under Swivel' % n)
 
 # ------------------------------------------------------------------ fit on the REAL BowLow deck
-hull = load_kit(models=('BowLow',))
+hull = load_kit(models=('BowLow',), skip=('Lantern_Bow_Frame', 'Lantern_Bow_Glass'))   # the game hides the kit's bow lantern: the gun-lamp is the only bow light
 parts = {o.name.split('_', 1)[1]: o for o in hull}
 def bvh(objs):
     v, f = world_tris(objs); return BVHTree.FromPolygons(v, f)
@@ -119,159 +120,110 @@ json.dump(R, open(HV + '/export-verification.json', 'w'), indent=1)
 print('CHECK mount tris %s barb tris %s | muzzle %.2f m above deck | rope-blocked cases %d | errors %d: %s' % (
     R['HarpoonMount.fbx'].get('tris'), R['HarpoonBarb.fbx'].get('tris'), R['muzzle_height_above_deck_m'], len(rope), len(E), '; '.join(E[:8])))
 
-# ================================================================== BowLantern (Kevin 2026-10-04) -> lantern-verification.json
-# Runs whenever BowLantern.fbx exists (after `build.py -- lantern`). Uses the mount placed + swept above (`mob`, `sw`,
-# `sw0`, `axis`) and the real BowLow (`parts`) WITHOUT the kit's old bow lantern (the game hides it).
-import os, bmesh
-if os.path.exists(HV + '/BowLantern.fbx'):
-    LE = []; LR = {'errors': LE}
-    lobs = load('BowLantern.fbx'); lby = {stem(o.name): o for o in lobs}
-    LR['roots'] = [stem(o.name) for o in lobs if o.parent is None]
-    if LR['roots'] != ['BowLantern']: LE.append('roots %s' % LR['roots'])
-    for n, par in (('BowLantern_Beam', 'BowLantern'), ('LanternBow_Pivot', 'BowLantern'), ('LanternBow_Chain', 'LanternBow_Pivot'),
-                   ('Lantern_Bow_Frame', 'LanternBow_Pivot'), ('Lantern_Bow_Glass', 'LanternBow_Pivot')):
-        o = lby.get(n)
-        if not o: LE.append('missing ' + n); continue
-        if not o.parent or stem(o.parent.name) != par: LE.append('%s parent %s != %s' % (n, o.parent and stem(o.parent.name), par))
-    pv = lby.get('LanternBow_Pivot')
-    if pv:
-        if pv.type != 'EMPTY': LE.append('LanternBow_Pivot is not an empty')
-        at = pv.matrix_world.translation; LR['pivot_root_frame'] = [round(x, 3) for x in at]
-        if (at - L(*PIVOT_U)).length > TOL: LE.append('pivot at %s, expected %s' % (LR['pivot_root_frame'], [round(x, 3) for x in L(*PIVOT_U)]))
-        fwd = (pv.matrix_world.to_3x3() @ Vector((0, -1, 0))).normalized(); up = (pv.matrix_world.to_3x3() @ Vector((0, 0, 1))).normalized()
-        if (fwd - Vector((0, -1, 0))).length > .01 or (up - Vector((0, 0, 1))).length > .01: LE.append('pivot axes rotated')
-    lmesh = [o for o in lobs if o.type == 'MESH']
-    def islands_inward(o):
-        bm = bmesh.new(); bm.from_mesh(o.data); seen = set(); n = bad = 0
-        for f in bm.faces:
-            if f.index in seen: continue
-            stack = [f]; isl = []; seen.add(f.index)
-            while stack:
-                g = stack.pop(); isl.append(g)
-                for e in g.edges:
-                    for h in e.link_faces:
-                        if h.index not in seen: seen.add(h.index); stack.append(h)
-            c = sum((g.calc_center_median() for g in isl), Vector()) / len(isl); n += 1
-            if sum(1 for g in isl if g.normal.dot(g.calc_center_median() - c) < 0) > len(isl) / 2: bad += 1
-        bm.free(); return n, bad
-    LR['meshes'] = {}
-    for o in lmesh:
-        isl, inward = islands_inward(o)
-        LR['meshes'][stem(o.name)] = {'tris': tris(o), 'materials': [stem(m.name) for m in o.data.materials if m],
-                                      'colour_attrs': [a.name for a in o.data.color_attributes], 'zero_area_faces': zero_area(o),
-                                      'islands': isl, 'inward_islands': inward}
-        if inward: LE.append('%s: %d of %d islands face inward (winding)' % (stem(o.name), inward, isl))
-    LR['tris'] = sum(v['tris'] for v in LR['meshes'].values())
-    if LR['tris'] > 600: LE.append('lantern %d tris > 600' % LR['tris'])
-    if any(v['zero_area_faces'] for v in LR['meshes'].values()): LE.append('lantern zero-area faces')
-    if any(not v['colour_attrs'] for v in LR['meshes'].values()): LE.append('lantern mesh without vertex colours')
-    bad = {m for v in LR['meshes'].values() for m in v['materials']} - {'SS_Harpoon_Timber', 'SS_Harpoon_Rope', 'SS_Harpoon_Iron'}
-    if bad: LE.append('lantern unexpected materials %s' % bad)
-    if LR['meshes'].get('Lantern_Bow_Frame', {}).get('islands') != 8: LE.append('Lantern_Bow_Frame islands %s, expected the kit lantern\'s 8' % LR['meshes'].get('Lantern_Bow_Frame', {}).get('islands'))
-    # CoasterOutfitting hangs its warm light on every renderer named *Lantern*_Glass: exactly one here.
-    glassy = sorted(stem(o.name) for o in lmesh if 'Lantern' in stem(o.name) and '_Glass' in stem(o.name))
-    if glassy != ['Lantern_Bow_Glass']: LE.append('light contract: *Lantern*_Glass renderers %s' % glassy)
+# ================================================================== Gun-lamp (Kevin 2026-10-04) -> lamp-verification.json
+# Uses the mount placed on the low bow + the sweep set-up above (`mob`, `sw`, `sw0`, `axis`). Everything stays in the
+# review frame with the root at MOUNT_AT; the raised bow is the same gun with its own deck height, sea and fairlead.
+LE = []; LR = {'errors': LE}
+for n, par, kind in (('Lamp', 'Swivel', 'MESH'), ('Lamp_Lens', 'Lamp', 'MESH'), ('Lamp_Light', 'Lamp', 'EMPTY')):
+    o = mob.get(n)
+    if not o: LE.append('missing ' + n); continue
+    if o.type != kind: LE.append('%s is %s, expected %s' % (n, o.type, kind))
+    if not o.parent or stem(o.parent.name) != par: LE.append('%s parent %s != %s' % (n, o.parent and stem(o.parent.name), par))
+lamp_o, lens_o, light_o, body_o = mob.get('Lamp'), mob.get('Lamp_Lens'), mob.get('Lamp_Light'), mob['Swivel_Body']
+if lamp_o and lens_o and light_o:
+    rootinv = root.matrix_world.inverted()
+    LR['lamp_local_under_Swivel_blender_m'] = [round(x, 3) for x in (sw.matrix_world.inverted() @ lamp_o.matrix_world.translation)]
+    LR['lamp_local_under_Swivel_unity_m'] = [round(-LR['lamp_local_under_Swivel_blender_m'][0], 3), LR['lamp_local_under_Swivel_blender_m'][2], round(-LR['lamp_local_under_Swivel_blender_m'][1], 3)]
+    LR['tris'] = {'Lamp': tris(lamp_o), 'Lamp_Lens': tris(lens_o)}; LR['tris']['total'] = sum(LR['tris'].values())
+    if LR['tris']['total'] > 300: LE.append('lamp %d tris > 300' % LR['tris']['total'])
+    LR['materials'] = {'Lamp': [stem(m.name) for m in lamp_o.data.materials if m], 'Lamp_Lens': [stem(m.name) for m in lens_o.data.materials if m]}
+    if LR['materials']['Lamp_Lens'] != ['SS_Harpoon_Lens']: LE.append('Lamp_Lens materials %s' % LR['materials']['Lamp_Lens'])
+    # the light empty: at the lens centre, identity (forward = Unity +Z = down the bore)
+    lens_v = [lens_o.matrix_world @ v.co for v in lens_o.data.vertices]
+    front = min(p.y for p in lens_v); face = [p for p in lens_v if p.y < front + 1e-4]
+    lc = sum(face, Vector()) / len(face); lt = light_o.matrix_world.translation
+    LR['light_to_lens_face_centre_m'] = round((lt - lc).length, 4)
+    if LR['light_to_lens_face_centre_m'] > .01: LE.append('Lamp_Light not at the lens centre (%s m)' % LR['light_to_lens_face_centre_m'])
+    fwd = (light_o.matrix_world.to_3x3() @ Vector((0, -1, 0))).normalized(); up = (light_o.matrix_world.to_3x3() @ Vector((0, 0, 1))).normalized()
+    if (fwd - Vector((0, -1, 0))).length > .01 or (up - Vector((0, 0, 1))).length > .01: LE.append('Lamp_Light axes rotated')
+    # lens behind the muzzle face; lamp on the side away from the crank
+    mzw = mob['Barb_Muzzle'].matrix_world.translation
+    allv = [lamp_o.matrix_world @ v.co for v in lamp_o.data.vertices] + lens_v
+    LR['lens_face_behind_muzzle_m'] = round(front - mzw.y, 3)
+    LR['lamp_front_behind_muzzle_m'] = round(min(p.y for p in allv) - mzw.y, 3)
+    if LR['lens_face_behind_muzzle_m'] <= 0: LE.append('lens not behind the muzzle')
+    crank_x = max((mob['Winch_Coil'].matrix_world @ v.co).x for v in mob['Winch_Coil'].data.vertices) - root.matrix_world.translation.x
+    lamp_x = (sum(allv, Vector()) / len(allv)).x - root.matrix_world.translation.x
+    LR['lamp_side_vs_crank'] = {'lamp_centre_x_blender': round(lamp_x, 3), 'crank_tip_x_blender': round(crank_x, 3)}
+    if lamp_x * crank_x >= 0: LE.append('lamp is on the crank side')
+    # no clipping: lamp vs the rest of the gun (barrel/yoke/post/drum/crank/base) and a loaded barb
+    barb_objs = [o for o in objs['HarpoonBarb.fbx'] if o.type == 'MESH']
+    broot_ = next(o for o in objs['HarpoonBarb.fbx'] if o.parent is None)
+    broot_.matrix_world = mob['Barb_Muzzle'].matrix_world.copy(); bpy.context.view_layer.update()
+    lamp_bvh = BVHTree.FromPolygons(*world_tris([lamp_o, lens_o]))
+    LR['clip'] = {}
+    for name, ol in (('Swivel_Body', [body_o]), ('Winch_Coil', [mob['Winch_Coil']]), ('Mount_Base', [mob['Mount_Base']]), ('loaded barb', barb_objs)):
+        ov = lamp_bvh.overlap(BVHTree.FromPolygons(*world_tris(ol)))
+        ob_bvh = BVHTree.FromPolygons(*world_tris(ol))
+        dmin = min(ob_bvh.find_nearest(p)[3] for p in allv)
+        LR['clip'][name] = {'overlapping_tri_pairs': len(ov), 'nearest_lamp_vertex_m': round(dmin, 3)}
+        if ov: LE.append('lamp intersects %s (%d tri pairs)' % (name, len(ov)))
+    # the crank's whole turn: the handle sweeps a disc about the drum axle
+    wc = mob['Winch_Coil']; wc0 = wc.matrix_world.copy(); dc = mob['Winch_Drum'].matrix_world.translation.copy(); crank_min = 9e9
+    for k in range(0, 360, 15):
+        wc.matrix_world = Matrix.Translation(dc) @ Matrix.Rotation(math.radians(k), 4, 'X') @ Matrix.Translation(-dc) @ wc0; bpy.context.view_layer.update()
+        cb = BVHTree.FromPolygons(*world_tris([wc]))
+        if lamp_bvh.overlap(cb): LE.append('crank at %d deg hits the lamp' % k)
+        crank_min = min(crank_min, min(cb.find_nearest(p)[3] for p in allv))
+    wc.matrix_world = wc0; bpy.context.view_layer.update()
+    LR['clip']['crank full turn nearest_m'] = round(crank_min, 3)
 
-    # ---- on the bow: same root spot as the mount
-    lroot = lby['BowLantern']; lroot.matrix_world = Matrix.Translation(MOUNT_AT) @ lroot.matrix_world; bpy.context.view_layer.update()
-    hullp = {n: o for n, o in parts.items() if not n.startswith('Lantern_Bow')}
-    hull_bvh = bvh(list(hullp.values()))
-    hv, _ = world_tris(list(hullp.values()))
-    beam_o = lby['BowLantern_Beam']; swing_o = [lby[n] for n in ('LanternBow_Chain', 'Lantern_Bow_Frame', 'Lantern_Bow_Glass') if n in lby]
-    body_o = [lby[n] for n in ('Lantern_Bow_Frame', 'Lantern_Bow_Glass') if n in lby]
-    P = lby['LanternBow_Pivot'].matrix_world.translation.copy()
-    def posed(objs, R):
-        v, f = world_tris(objs); return [P + R @ (p - P) for p in v], f
-    def poses(cone):
-        if cone == 0: return [Matrix.Identity(3)]
-        return [Matrix.Rotation(math.radians(cone), 3, Vector((math.cos(a), math.sin(a), 0))) for a in (k * math.pi / 4 for k in range(8))]
-    beam_bvh = bvh([beam_o]); bv_, _ = world_tris([beam_o])
-
-    # forward of the stem, below the muzzle (rest + the 10 deg cone)
-    mz0 = mob['Barb_Muzzle'].matrix_world.translation.copy()
-    sw_v = [p for R in poses(0) + poses(10) for p in posed(swing_o, R)[0]]
-    zlo, zhi = min(p.z for p in sw_v), max(p.z for p in sw_v)
-    hull_front = min(p.y for p in hv if zlo - .05 <= p.z <= zhi + .05)   # forward = -Y; the stem at the lantern's heights
-    LR['lantern_ahead_of_hull_front_m'] = round(hull_front - max(p.y for p in sw_v), 3)
-    if LR['lantern_ahead_of_hull_front_m'] <= 0: LE.append('the lantern swings back over the stem (%s m)' % LR['lantern_ahead_of_hull_front_m'])
-    LR['lantern_top_below_muzzle_m'] = round(mz0.z - max(p.z for p in sw_v), 3)
-    LR['beam_top_below_muzzle_m'] = round(mz0.z - max(p.z for p in bv_), 3)
-    if LR['lantern_top_below_muzzle_m'] <= 0 or LR['beam_top_below_muzzle_m'] <= 0: LE.append('beam/lantern not below the muzzle')
-    LR['glass_centre_above_sea_m'] = round(sum((lby['Lantern_Bow_Glass'].matrix_world @ v.co for v in lby['Lantern_Bow_Glass'].data.vertices), Vector()).z
-                                           / len(lby['Lantern_Bow_Glass'].data.vertices) - 0.20, 3)
-    # the beam is fixed in the stem: it meets the hull, and its root end sits just behind the stem face
-    if not BVHTree.FromPolygons(*world_tris([beam_o])).overlap(hull_bvh): LE.append('the beam does not meet the stem (floating)')
-    root_end = sorted(bv_, key=lambda p: -p.y)[:4]
-    fr = [hull_bvh.ray_cast(p, Vector((0, -1, 0)), 1.0)[3] for p in root_end]
-    LR['beam_root_end_behind_stem_face_m'] = [None if d is None else round(d, 3) for d in fr]
-    if any(d is None or d > .40 for d in fr): LE.append('beam root end is not inside the stem %s' % LR['beam_root_end_behind_stem_face_m'])
-    tip = Vector((MOUNT_AT.x, min(p.y for p in bv_) + .01, BEAM_TOP - .01))   # review z = game metres up (MOUNT_AT.z = deck 1.055)
-    hit = hull_bvh.ray_cast(tip, Vector((0, 1, 0)), 3.0)
-    LR['beam_sticks_out_of_stem_m'] = None if hit[0] is None else round(hit[3] + .01, 3)
-    # the swing never touches the hull or the beam (chain-in-eye excluded)
-    LR['swing_contacts'] = {}
-    for cone in (10, 20, 34):
-        hits = []
-        for R in poses(cone):
-            if BVHTree.FromPolygons(*posed(swing_o, R)).overlap(hull_bvh): hits.append('hull')
-            if BVHTree.FromPolygons(*posed(body_o, R)).overlap(beam_bvh): hits.append('beam')
-        LR['swing_contacts']['%d deg' % cone] = sorted(set(hits))
-        if cone == 10 and hits: LE.append('a 10 deg swing touches %s' % sorted(set(hits)))
-
-    # ---- the line of fire: muzzle -> targets on every bearing, straight (strained) and with the taut sag, rope radius
+    # ---- the rope never comes within 0.1 m of the lamp: muzzle -> (stem fairlead ->) sea-level target, every bearing
     look = json.load(open(HV + '/rope-look.json'))['states']
     rad = max(look['taut']['widthM'], look['strained']['widthM']) / 2
-    sags = sorted({0.0, look['taut']['sagFractionOfSpan'], look['strained']['sagFractionOfSpan'], 0.035})   # 0.035 = HarpoonLine's under-strain hang
-    ropes = []
-    hull_block = {}
-    for yaw in sorted(set(range(-45, 46, 5)) | set(range(-6, 7))):
+    sags = sorted({0.0, look['taut']['sagFractionOfSpan'], look['strained']['sagFractionOfSpan'], 0.035})
+    RANGES = (10, 15, 20, 25, 30, 35); GATE = 0.10
+    LR['rope_radius_m'] = rad; LR['sags_tested'] = sags; LR['ranges_m'] = RANGES; LR['yaw_deg'] = '-45..45 step 1'
+    LR['fairleads_bow_local_m'] = {k: v['fairlead'] for k, v in BOWS.items()}
+    worst = {}; routed_cases = {}
+    for bow, B in BOWS.items():
+        worst[bow] = {'straight': (9e9, ''), 'via_fairlead': (9e9, '')}; routed_cases[bow] = 0
+    for yaw in range(-45, 46):
         sw.matrix_world = Matrix.Translation(axis) @ Matrix.Rotation(math.radians(yaw), 4, 'Z') @ Matrix.Translation(-axis) @ sw0
         bpy.context.view_layer.update()
+        lb = BVHTree.FromPolygons(*world_tris([lamp_o, lens_o]))
+        LC_ = sum((lamp_o.matrix_world @ v.co for v in lamp_o.data.vertices), Vector()) / len(lamp_o.data.vertices)
         mz = mob['Barb_Muzzle'].matrix_world.translation.copy(); d = (mob['Barb_Muzzle'].matrix_world.to_3x3() @ Vector((0, -1, 0))); d.z = 0; d.normalize()
-        for rng in (10, 35):
-            for hgt in (0.0, 1.5, 3.0):
-                tgt = mz + d * rng; tgt.z = 0.20 + hgt; span = (tgt - mz).length
-                if hgt == 0.0:
-                    t = hull_bvh.ray_cast(mz, (tgt - mz).normalized(), span)
-                    if t[0] is not None: hull_block['%d@%dm' % (yaw, rng)] = True
-                # HarpoonLine (a44f586e): when the run would dip into the stem, straight muzzle -> fairlead
-                # (HarpoonGun.StemTopWorld, measured in play: bow-local (0, 2.619, 4.665) m), then the sag on to the
-                # barb; slack = its water-capped belly (mid stays 0.35 m over the low end, <= 0.35 x chord).
-                FL = Vector((MOUNT_AT.x, MOUNT_AT.y - (4.665 - MOUNT_M[2]), 2.619))
-                routed = hull_bvh.ray_cast(mz, (tgt - mz).normalized(), span)[0] is not None
-                a0 = FL if routed else mz; chord = (tgt - a0).length
-                slack_sag = max(0.0, min(.35 * chord, (a0.z + tgt.z) / 2 - min(a0.z, tgt.z) - .35))
-                for sag in sags + ['slack']:
-                    s_m = slack_sag if sag == 'slack' else sag * chord
-                    n = int(chord / .02); pts = []
-                    if routed:
-                        m_ = int((FL - mz).length / .02) + 1
-                        pts += [mz.lerp(FL, i / m_) for i in range(m_)]
-                    for i in range(n + 1):
-                        tt = i / n; p = a0.lerp(tgt, tt); p.z -= 4 * s_m * tt * (1 - tt); pts.append(p)
-                    pts = [p for p in pts if (p - P).length < 2.0]
-                    ropes.append(('%d deg %d m +%.1f sag %s%s' % (yaw, rng, hgt, sag, ' ROUTED' if routed else ''), pts))
+        for bow, B in BOWS.items():
+            FL = root.matrix_world.translation + bow_to_root(B['fairlead'], B['mount'])
+            sea = root.matrix_world.translation.z + (0.20 - B['mount'][1])
+            for rng in RANGES:
+                tgt = mz + d * rng; tgt.z = sea
+                # would the game lift it onto the fairlead? (the straight run passes under the fairlead's height there)
+                v = FL - mz; dirh = (tgt - mz); tt = max(0.0, min(1.0, v.dot(dirh) / dirh.length_squared))
+                if (mz.lerp(tgt, tt)).z < FL.z and tt > 0: routed_cases[bow] += 1
+                for mode, a0 in (('straight', mz), ('via_fairlead', FL)):
+                    chord = (tgt - a0).length
+                    for sag in sags:
+                        pts = []
+                        if mode == 'via_fairlead':
+                            m_ = int((FL - mz).length / .01) + 1; pts += [mz.lerp(FL, i / m_) for i in range(m_)]
+                        n = int(min(chord, 3.0) / .01)   # only the first 3 m can reach the lamp
+                        for i in range(n + 1):
+                            t_ = i * .01 / chord; p = a0.lerp(tgt, t_); p.z -= 4 * sag * chord * t_ * (1 - t_); pts.append(p)
+                        for p in pts:
+                            if (p - LC_).length > 1.5: continue
+                            h = lb.find_nearest(p)
+                            if h[0] is not None and h[3] - rad < worst[bow][mode][0]:
+                                worst[bow][mode] = (h[3] - rad, 'yaw %d, %d m, sag %.3f' % (yaw, rng, sag))
     sw.matrix_world = sw0; bpy.context.view_layer.update()
-    def clearance(bvh_):
-        best = (9e9, '')
-        for name, pts in ropes:
-            for p in pts:
-                hit = bvh_.find_nearest(p)
-                if hit[0] is not None and hit[3] < best[0]: best = (hit[3], name)
-        return round(best[0] - rad, 3), best[1]
-    LR['rope_radius_m'] = rad; LR['rope_sags_tested'] = sags
-    LR['line_clearance_m'] = {}
-    c, who = clearance(beam_bvh); LR['line_clearance_m']['beam'] = [c, who]
-    if c < .02: LE.append('line clears the beam by only %s m (%s)' % (c, who))
-    for cone in (0, 10, 20, 34):
-        worst = (9e9, '')
-        for R in poses(cone):
-            c, who = clearance(BVHTree.FromPolygons(*posed(swing_o, R)))
-            if c < worst[0]: worst = (c, who)
-        LR['line_clearance_m']['lantern+chain %d deg swing' % cone] = list(worst)
-        if cone <= 10 and worst[0] < .02 and 'slack' not in worst[1]: LE.append('line clears the lantern by only %s m at a %d deg swing (%s)' % (worst[0], cone, worst[1]))
-    LR['hull_blocks_line_at_sea_level_without_old_lantern'] = sorted(hull_block)
-    json.dump(LR, open(HV + '/lantern-verification.json', 'w'), indent=1)
-    print('CHECK_LANTERN tris %s | beam clear %s m | lantern clear %s m (10 deg swing) | ahead of hull %s m | top %s m below muzzle | errors %d: %s' % (
-        LR['tris'], LR['line_clearance_m']['beam'][0], LR['line_clearance_m'].get('lantern+chain 10 deg swing', ['?'])[0],
-        LR.get('lantern_ahead_of_hull_front_m'), LR.get('lantern_top_below_muzzle_m'), len(LE), '; '.join(LE[:8])))
+    LR['rope_clearance_to_lamp_m (surface minus rope radius)'] = {b: {m: [round(c, 3), w] for m, (c, w) in v.items()} for b, v in worst.items()}
+    LR['cases_the_game_routes_over_the_fairlead'] = routed_cases
+    for b, v in worst.items():
+        for m, (c, w) in v.items():
+            if c < GATE: LE.append('%s bow, %s: rope within %.3f m of the lamp (%s)' % (b, m, c, w))
+json.dump(LR, open(HV + '/lamp-verification.json', 'w'), indent=1)
+cl = LR.get('rope_clearance_to_lamp_m (surface minus rope radius)', {})
+print('CHECK_LAMP tris %s | local %s | lens %.3f m behind muzzle | rope clearance %s | errors %d: %s' % (
+    LR.get('tris', {}).get('total'), LR.get('lamp_local_under_Swivel_blender_m'), LR.get('lens_face_behind_muzzle_m', -1),
+    {b: min(x[0] for x in v.values()) for b, v in cl.items()}, len(LE), '; '.join(LE[:8])))

@@ -58,6 +58,9 @@ namespace SeaSick.Dev
         public const string Timber = "SS_Harpoon_Timber";
         public const string Rope = "SS_Harpoon_Rope";
         public const string Iron = "SS_Harpoon_Iron";
+        /// The gun lamp's lens: the toon shader untextured, so its warm vertex
+        /// colour shows and `HarpoonLamp` can light it through `_Ambient`.
+        public const string Lens = "SS_Harpoon_Lens";
 
         const float Tolerance = 0.01f;
 
@@ -79,7 +82,8 @@ namespace SeaSick.Dev
             { "Line_Attach", B(0f, 0.335f, 0f) },
         };
         /// The CONTRACT's mesh bounds, converted (min, max).
-        static readonly Bounds MountBounds = FromBlender(new Vector3(-0.899f, -0.802f, 0f), new Vector3(0.899f, 1.06f, 1.9f));
+        // Top 1.983 since the gun lamp (its chimney cap, 2026-10-04); was 1.9.
+        static readonly Bounds MountBounds = FromBlender(new Vector3(-0.899f, -0.802f, 0f), new Vector3(0.899f, 1.06f, 1.983f));
         static readonly Bounds BarbBounds = FromBlender(new Vector3(-0.19f, -0.55f, -0.067f), new Vector3(0.19f, 0.405f, 0.067f));
 
         static Bounds FromBlender(Vector3 min, Vector3 max)
@@ -165,8 +169,9 @@ namespace SeaSick.Dev
                 { Timber, Mat(Timber, paint, null) },
                 { Iron, Mat(Iron, paint, null) },
                 { Rope, Mat(Rope, toon, rope) },
+                { Lens, Mat(Lens, toon, null) },
             };
-            log.AppendLine($"materials: {Timber} + {Iron} on {PaintShader} (the hull's FCoasterPaint shader), {Rope} on {ToonShader} x {Path.GetFileName(RopeTile)}");
+            log.AppendLine($"materials: {Timber} + {Iron} on {PaintShader} (the hull's FCoasterPaint shader), {Rope} on {ToonShader} x {Path.GetFileName(RopeTile)}, {Lens} on {ToonShader} (untextured)");
             return set;
         }
 

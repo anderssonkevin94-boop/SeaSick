@@ -12,6 +12,11 @@ ModelImporter:
   - first:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule
+      name: SS_Harpoon_Lens
+    second: {fileID: 2100000, guid: 8603d905715d643ff94da3d8fac4aaed, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
       name: SS_Harpoon_Rope
     second: {fileID: 2100000, guid: 60c07e85aed84448f9f48ffa20457a14, type: 2}
   - first:

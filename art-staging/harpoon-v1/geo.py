@@ -13,7 +13,7 @@ DECK      = (0.47, 0.26, 0.12, 1)   # Foredeck_Floor
 IRON      = (0.04, 0.05, 0.06, 1)   # Forged_Straps iron / Lantern_Bow_Frame
 BRASS     = (0.32, 0.25, 0.13, 1)   # Forged_Straps brass bands
 ROPE      = (1.0, 1.0, 1.0, 1)      # rope tile texture carries the colour
-SLOT = {'timber': 0, 'rope': 1, 'iron': 2}
+SLOT = {'timber': 0, 'rope': 1, 'iron': 2, 'lens': 0}   # 'lens' = index 0 of Lamp_Lens's own single slot
 
 # Placement on CoasterFamily.Base (bow module BowLow), bow-local SOURCE units (+X bow, +Y port, +Z up), 0.5 m per unit
 MOUNT_SRC_U = (6.3, 0.0, 2.11)
@@ -24,76 +24,26 @@ def src_to_review(p, bow=True):
     return Vector((y * 0.5, -x * 0.5, z * 0.5))
 MOUNT_AT = src_to_review(MOUNT_SRC_U)   # (0, -8.05, 1.055)
 
-# ------------------------------------------------------------------ BowLantern (Kevin 2026-10-04)
-# A short chunky beam off the stem with the lantern hanging below its tip, in front of the stem and just under the
-# harpoon's line of fire. Authored in the SAME root frame as HarpoonMount (origin = deck on the swivel axis), so the
-# game puts both roots at BowLow-local (0, 1.055, 3.15) m. Numbers below are BowLow-local METRES in Unity axes
-# (x starboard, y up, z forward), i.e. kit.json's raw frame; L() converts them to the root's Blender frame.
-MOUNT_M = (0.0, 1.055, 3.15)
-def L(x, y, z): return Vector((-x, -(z - MOUNT_M[2]), y - MOUNT_M[1]))
-# Kevin 2026-10-04 (2nd note): "a little block that sticks out from the ship's nose", low on the stem, clearly under
-# the line of fire. The muzzle is at (0, 2.775, 3.95); the lowest line (taut, to the sea 10 m dead ahead) is ~2.3 m up
-# over the block, which tops out at 2.00 (check.py measures every bearing, range, sag and swing).
-BEAM_Z0, BEAM_Z1 = 4.60, 5.30         # root end buried in the stem -> tip (~0.5 m proud of the stem face)
-BEAM_TOP = 2.00                        # flat top, well under the stem cap (2.565) and every line of fire
-BEAM_W0, BEAM_H0, BEAM_W1, BEAM_H1 = .26, .24, .24, .22   # a chunky block, barely tapered
-def beam_h(z):
-    t = (z - BEAM_Z0) / (BEAM_Z1 - BEAM_Z0); return BEAM_H0 + (BEAM_H1 - BEAM_H0) * t
-def beam_w(z):
-    t = (z - BEAM_Z0) / (BEAM_Z1 - BEAM_Z0); return BEAM_W0 + (BEAM_W1 - BEAM_W0) * t
-def beam_mid_y(z):
-    t = (z - BEAM_Z0) / (BEAM_Z1 - BEAM_Z0); return BEAM_TOP - (BEAM_H0 + (BEAM_H1 - BEAM_H0) * t) / 2
-COLLAR_Z = 4.80                        # iron strap round the block where it leaves the stem
-PIVOT_U = (0.0, 1.75, 5.18)            # LanternBow_Pivot = chain top, in the iron eye under the tip band
-CHAIN_DROP = .12                       # pivot -> top of the lantern's own hook post (two links)
-# The kit's own bow lantern (BowLow Lantern_Bow_Frame/_Glass, kit.json), copied unchanged and only translated. Kept:
-# the lantern body + its hook post (bbox y >= 2.95 and z <= 4.50); dropped: the deck foot, the post, the knee and the
-# gallows arm -- that is the old post the line ran through.
-KIT_HOOK_TOP, KIT_LANTERN_Z = 3.737, 4.2785
-LANTERN_KEEP_YMIN, LANTERN_KEEP_ZMAX = 2.95, 4.50
-LANTERN_SHIFT = (0.0, PIVOT_U[1] - CHAIN_DROP - KIT_HOOK_TOP, PIVOT_U[2] - KIT_LANTERN_Z)
-# In the review/check scenes the BowLantern root sits at MOUNT_AT, exactly like the mount.
+# ------------------------------------------------------------------ Gun-lamp (Kevin 2026-10-04), mount frame (Blender metres)
+# A hooded bullseye lamp bolted to the barrel's starboard side (Blender -X = Unity +X; the winch crank is on Blender +X = port), lens looking down the bore.
+LAMP_C = (-0.33, -0.41, 1.72)      # casing centre (barrel axis height); the Lamp object's origin
+LAMP_BOX = (.24, .32, .28)         # casing x/y/z: closed back, sides, top and bottom
+LAMP_HOOD = .10                    # the hood (roof + two cheeks) projects this far ahead of the casing front
+LAMP_LENS_Y = -0.60                # lens face: 0.20 m BEHIND the muzzle face (-0.80), inside the hood (front -0.66)
+LAMP_RIM_R, LAMP_LENS_R = .105, .085
+LAMP_BAND_Y = -0.41                # iron band round the barrel + bracket arm out to the casing
+LENS_GLOW = (1.0, 0.78, 0.45, 1)   # warm glass (vertex colour; the importer makes SS_Harpoon_Lens emissive)
 
-def kit_part(model, name):
-    kit = json.load(open(ROOT + '/art-staging/f-coaster-runtime/kit.json'))
-    mo = next(m for m in kit['models'] if m['name'] == model)
-    return next(p for p in mo['parts'] if p['name'] == name)
-
-def kit_islands(p):
-    """Triangle islands of a kit part (joined by shared indices AND by position: the kit is flat-shaded soup)."""
-    v = p['vertices']; t = p['triangles']; n = len(v) // 3; par = list(range(n))
-    def f(a):
-        while par[a] != a: par[a] = par[par[a]]; a = par[a]
-        return a
-    seen = {}
-    for i in range(n):
-        k = (round(v[3 * i], 4), round(v[3 * i + 1], 4), round(v[3 * i + 2], 4))
-        if k in seen: par[f(i)] = f(seen[k])
-        else: seen[k] = i
-    for i in range(0, len(t), 3):
-        a = f(t[i]); par[f(t[i + 1])] = a; par[f(t[i + 2])] = a
-    isl = {}
-    for i in range(0, len(t), 3): isl.setdefault(f(t[i]), []).append((t[i], t[i + 1], t[i + 2]))
-    return list(isl.values())
-
-def add_kit_island(mb, p, tris, shift, slot):
-    """Add one kit island to an MB, welded by position, translated by `shift` (metres, Unity axes), in the root's
-    Blender frame. Winding = load_kit's (the Unity->Blender mirror flips it); colour = the kit's own vertex colour."""
-    v = p['vertices']; c = p['colors']; idx = {}; verts = []; faces = []
-    for a, b, d in tris:
-        face = []
-        for i in (a, d, b):   # mirror flips winding
-            k = (round(v[3 * i], 4), round(v[3 * i + 1], 4), round(v[3 * i + 2], 4))
-            if k not in idx:
-                idx[k] = len(verts); verts.append(L(v[3 * i] + shift[0], v[3 * i + 1] + shift[1], v[3 * i + 2] + shift[2]))
-            face.append(idx[k])
-        faces.append(tuple(face))
-    i0 = tris[0][0]; col = (c[4 * i0], c[4 * i0 + 1], c[4 * i0 + 2], 1)
-    mb.add(verts, faces, slot, col)
-
-def island_bbox(p, tris):
-    v = p['vertices']; ids = {i for t in tris for i in t}
-    return ([min(v[3 * i + k] for i in ids) for k in range(3)], [max(v[3 * i + k] for i in ids) for k in range(3)])
+# ------------------------------------------------------------------ the in-game fairlead (HarpoonGun.StemTopWorld)
+# = the stem cap's forward-most face at its top (HarpoonMount.ScanBow) + 0.12 m up (StemClearance). Bow-local METRES,
+# Unity axes (x starboard, y up, z forward). The mount root stands at x/z (0, 3.15) on the top deck the scan finds.
+BOWS = {
+    'low':    {'mount': (0.0, 1.055, 3.15), 'fairlead': (0.0, 2.685, 5.035)},   # BowLow foredeck
+    'raised': {'mount': (0.0, 3.08, 3.15),  'fairlead': (0.0, 4.621, 5.130)},   # raised bow's upper floor (muzzle +1.72)
+}
+def bow_to_root(p, mount):
+    """bow-local metres (Unity axes) -> the mount root's Blender frame (forward -Y, up +Z)."""
+    return Vector((-(p[0] - mount[0]), -(p[2] - mount[2]), p[1] - mount[1]))
 
 
 class MB:

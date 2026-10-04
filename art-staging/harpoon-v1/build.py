@@ -1,15 +1,11 @@
 # Harpoon v1 build (phase 0 of docs/PLAN-harpoon.md). Run (see RUN.md):
 #   Blender -b art-staging/lumber-mill-triangular-lvl1-v2/lumber-mill.blend --python art-staging/harpoon-v1/build.py
 # The mill blend is opened READ-ONLY (never saved) only to copy its approved material node setups + packed rope tile.
-# Writes ONLY into art-staging/harpoon-v1/: HarpoonMount.fbx, HarpoonBarb.fbx, BowLantern.fbx, harpoon-v1.blend.
-# `-- lantern` (Kevin's bow-lantern change, 2026-10-04): builds everything into the blend as usual but exports ONLY
-# BowLantern.fbx, so the imported mount/barb FBXs stay byte-identical.
+# Writes ONLY into art-staging/harpoon-v1/: HarpoonMount.fbx (incl. the gun-lamp), HarpoonBarb.fbx, harpoon-v1.blend.
 # Contract: CONTRACT.md.  Blender metres, Z up, forward = -Y (Unity +Z).
 import bpy, math, sys, json
 from mathutils import Vector, Matrix
 exec(compile(open('/Users/kevinandersson/Desktop/SeaSick/art-staging/harpoon-v1/geo.py').read(), 'geo.py', 'exec'))
-ARGS = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
-LANTERN_ONLY = 'lantern' in ARGS
 
 scene = bpy.data.scenes.new('SeaSick • Harpoon v1'); bpy.context.window.scene = scene
 def cp(src, new):
@@ -17,6 +13,7 @@ def cp(src, new):
 timber = cp('SS_LumberL1_Canvas_Endgrain_Stone.003', 'SS_Harpoon_Timber')     # GameColor only (the hull is untextured painted facets)
 rope = cp('SS_LumberL1_Hemp.003', 'SS_Harpoon_Rope')                          # rope tile x GameColor (same tile as Art/WallL1/Textures/rope-tile-512.png)
 iron = cp('SS_LumberL1_Canvas_Endgrain_Stone.003', 'SS_Harpoon_Iron')          # GameColor only, a touch of sheen
+lensm = cp('SS_LumberL1_Canvas_Endgrain_Stone.003', 'SS_Harpoon_Lens')         # Lamp_Lens only (its one slot); the importer makes it emissive
 for n in iron.node_tree.nodes:
     if n.type == 'BSDF_PRINCIPLED':
         n.inputs['Roughness'].default_value = 0.45; n.inputs['Metallic'].default_value = 0.35
@@ -121,39 +118,33 @@ bar = g.finish('Barb_Mesh', MATS, CB, parent=broot)
 bar.data.transform(Matrix.Translation((0, BARB_TUCK, 0)))   # tail 0.25 m behind the origin: loaded at Barb_Muzzle, the shaft sits in the bore
 line = empty('Line_Attach', (0, .085 + BARB_TUCK, 0), broot, CB, .06)   # centre of the rope eye
 
-# ------------------------------------------------------------------ BowLantern (root = the mount's origin; geo.py has the numbers)
-CL = coll('BowLantern • game')
-lroot = bpy.data.objects.new('BowLantern', None); CL.objects.link(lroot); lroot.empty_display_size = .3
-# static: the beam (flat top, slight taper), an iron strap where it leaves the stem, an iron band + eye at the tip
-bm_ = MB()
-r0, r1 = L(0, 0, BEAM_Z0), L(0, 0, BEAM_Z1)
-bm_.frustum_y(r0.y, r1.y, BEAM_W0, BEAM_H0, BEAM_W1, BEAM_H1, beam_mid_y(BEAM_Z0) - MOUNT_M[1], beam_mid_y(BEAM_Z1) - MOUNT_M[1],
-              slot='timber', color=TIMBER)
-bm_.box(L(0, beam_mid_y(COLLAR_Z), COLLAR_Z), (beam_w(COLLAR_Z) + .04, .10, beam_h(COLLAR_Z) + .04), slot='iron', color=IRON)        # root strap
-bm_.box(L(0, beam_mid_y(PIVOT_U[2]), PIVOT_U[2]), (beam_w(PIVOT_U[2]) + .03, .12, beam_h(PIVOT_U[2]) + .03), slot='iron', color=IRON)  # tip band
-bm_.box(L(0, PIVOT_U[1] + .015, PIVOT_U[2]), (.04, .06, .05), slot='iron', color=IRON)                     # eye under the band
-beam = bm_.finish('BowLantern_Beam', MATS, CL, parent=lroot)
-# swinging: everything under the pivot (LanternSwing turns it)
-pivot = empty('LanternBow_Pivot', L(*PIVOT_U), lroot, CL, .1)
-PV = L(*PIVOT_U)
-ch = MB()
-ch.torus(PV + Vector((0, 0, -.035)), (1, 0, 0), .035, .012, nR=6, nr=3, slot='iron', color=IRON)        # link 1 (in the eye)
-ch.torus(PV + Vector((0, 0, -.085)), (0, 1, 0), .035, .012, nR=6, nr=3, slot='iron', color=IRON)        # link 2 (turned 90)
-chain = ch.finish('LanternBow_Chain', MATS, CL, parent=pivot, origin=PV)
-kf, kg = kit_part('BowLow', 'Lantern_Bow_Frame'), kit_part('BowLow', 'Lantern_Bow_Glass')
-fr = MB(); kept = 0
-for tris in kit_islands(kf):
-    lo, hi = island_bbox(kf, tris)
-    if lo[1] >= LANTERN_KEEP_YMIN and hi[2] <= LANTERN_KEEP_ZMAX:
-        add_kit_island(fr, kf, tris, LANTERN_SHIFT, 'iron'); kept += 1
-frame = fr.finish('Lantern_Bow_Frame', MATS, CL, parent=pivot, origin=PV, recalc=False)
-gl = MB()
-for tris in kit_islands(kg): add_kit_island(gl, kg, tris, LANTERN_SHIFT, 'timber')
-glass = gl.finish('Lantern_Bow_Glass', MATS, CL, parent=pivot, origin=PV, recalc=False)
+# ------------------------------------------------------------------ Lamp (Kevin 2026-10-04): hooded bullseye gun-lamp, the ship's only bow light
+# "the lantern is attached to the side of the harpoon gun with a casing so it only lights forward. Like a flashlight type deal."
+# Bolted to the barrel's STARBOARD side (Blender -X = Unity +X; the winch crank is on Blender +X = port), under Swivel so it turns with the gun. The lens
+# looks down the bore (-Y = Unity +Z) and sits 0.20 m BEHIND the muzzle face, so the rope (which leaves the muzzle forward)
+# never reaches it. Numbers: geo.py LAMP_*.
+lk = MB()
+cx, cy, cz = LAMP_C
+lk.box(LAMP_C, LAMP_BOX, slot='iron', color=IRON)                                                       # closed casing: back, sides, top, bottom
+fy = cy - LAMP_BOX[1] / 2                                                                               # casing front face
+hx0, hx1 = cx - LAMP_BOX[0] / 2 - .015, cx + LAMP_BOX[0] / 2 + .015                                     # hood a touch wider than the box
+lk.box(((hx0 + hx1) / 2, fy - LAMP_HOOD / 2 + .02, cz + LAMP_BOX[2] / 2 + .02), (hx1 - hx0, LAMP_HOOD + .04, .045), slot='iron', color=IRON)   # hood roof
+for x in (hx0 + .0175, hx1 - .0175):
+    lk.box((x, fy - LAMP_HOOD / 2 + .02, cz + .02), (.035, LAMP_HOOD + .04, LAMP_BOX[2] + .04), slot='iron', color=IRON)   # hood cheeks
+lk.prism((cx, fy + .005, cz), (cx, LAMP_LENS_Y + .012, cz), LAMP_RIM_R, n=12, slot='iron', color=BRASS, rot=math.pi / 12)   # brass bezel
+lk.prism((cx, cy + .05, cz + LAMP_BOX[2] / 2 - .005), (cx, cy + .05, cz + LAMP_BOX[2] / 2 + .09), .05, .045, n=6, slot='iron', color=IRON)   # chimney
+lk.box((cx, cy + .05, cz + LAMP_BOX[2] / 2 + .105), (.13, .13, .035), slot='iron', color=IRON)          # chimney cap
+lk.box((cx, cy + LAMP_BOX[1] / 2 - .045, cz), (LAMP_BOX[0] + .03, .05, LAMP_BOX[2] + .03), slot='iron', color=BRASS)   # brass band round the back
+lk.prism((0, LAMP_BAND_Y + .05, BARREL_Z), (0, LAMP_BAND_Y - .05, BARREL_Z), .152, n=12, slot='iron', color=IRON, caps=False)   # barrel band
+xb = cx + LAMP_BOX[0] / 2
+lk.box(((-.155 + xb) / 2, LAMP_BAND_Y, BARREL_Z), (xb - (-.155) + .02, .09, .08), slot='iron', color=IRON)   # bracket arm band -> casing
+lamp = lk.finish('Lamp', MATS, CM, parent=swivel, origin=LAMP_C)
 bpy.context.view_layer.update()
-print('LANTERN bounds root-frame Blender', [round(min((o.matrix_world @ v.co)[k] for o in (beam, chain, frame, glass) for v in o.data.vertices), 4) for k in range(3)],
-      [round(max((o.matrix_world @ v.co)[k] for o in (beam, chain, frame, glass) for v in o.data.vertices), 4) for k in range(3)])
-print('LANTERN kit islands kept', kept, '(expect 8: bottom plate, 4 bars, top plate, roof, hook post)')
+LC = Vector((cx, LAMP_LENS_Y, cz))
+ln = MB()
+ln.prism((cx, LAMP_LENS_Y + .02, cz), (cx, LAMP_LENS_Y, cz), LAMP_LENS_R, n=12, slot='lens', color=LENS_GLOW, rot=math.pi / 12)   # proud of the bezel
+lens = ln.finish('Lamp_Lens', [lensm], CM, parent=lamp, origin=LC)
+lamp_light = empty('Lamp_Light', LC, lamp, CM, .1)   # identity = facing -Y (Unity +Z); the spot light goes here
 
 # ------------------------------------------------------------------ save + export
 for sc in list(bpy.data.scenes):
@@ -163,7 +154,7 @@ except Exception as e: print('purge', e)
 bpy.ops.wm.save_as_mainfile(filepath=HV + '/harpoon-v1.blend', copy=True)
 kw = dict(use_selection=True, axis_forward='-Z', axis_up='Y', colors_type='LINEAR', use_triangles=True, add_leaf_bones=False,
           bake_anim=False, object_types={'MESH', 'EMPTY'})
-for r, fbx in (((lroot, 'BowLantern.fbx'),) if LANTERN_ONLY else ((root, 'HarpoonMount.fbx'), (broot, 'HarpoonBarb.fbx'), (lroot, 'BowLantern.fbx'))):
+for r, fbx in ((root, 'HarpoonMount.fbx'), (broot, 'HarpoonBarb.fbx')):
     for o in scene.objects: o.select_set(False)
     for o in [r] + list(r.children_recursive): o.select_set(True)
     bpy.context.view_layer.objects.active = r
@@ -171,4 +162,4 @@ for r, fbx in (((lroot, 'BowLantern.fbx'),) if LANTERN_ONLY else ((root, 'Harpoo
 def tris(o): return sum(len(p.vertices) - 2 for p in o.data.polygons)
 print('BUILD_OK mount tris', sum(tris(o) for o in root.children_recursive if o.type == 'MESH'),
       'barb tris', sum(tris(o) for o in broot.children_recursive if o.type == 'MESH'),
-      'lantern tris', sum(tris(o) for o in lroot.children_recursive if o.type == 'MESH'), '(budget 600)')
+      'lamp tris', tris(lamp) + tris(lens), '(budget 300) | Lamp local under Swivel', [round(x, 3) for x in lamp.location])

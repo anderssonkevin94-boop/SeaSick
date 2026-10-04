@@ -1,0 +1,107 @@
+{
+ "errors": [],
+ "lamp_local_under_Swivel_blender_m": [
+  -0.33,
+  -0.41,
+  1.56
+ ],
+ "lamp_local_under_Swivel_unity_m": [
+  0.33,
+  1.56,
+  0.41
+ ],
+ "tris": {
+  "Lamp": 172,
+  "Lamp_Lens": 44,
+  "total": 216
+ },
+ "materials": {
+  "Lamp": [
+   "SS_Harpoon_Timber",
+   "SS_Harpoon_Rope",
+   "SS_Harpoon_Iron"
+  ],
+  "Lamp_Lens": [
+   "SS_Harpoon_Lens"
+  ]
+ },
+ "light_to_lens_face_centre_m": 0.0,
+ "lens_face_behind_muzzle_m": 0.2,
+ "lamp_front_behind_muzzle_m": 0.13,
+ "lamp_side_vs_crank": {
+  "lamp_centre_x_blender": -0.265,
+  "crank_tip_x_blender": 0.58
+ },
+ "clip": {
+  "Swivel_Body": {
+   "overlapping_tri_pairs": 0,
+   "nearest_lamp_vertex_m": 0.008
+  },
+  "Winch_Coil": {
+   "overlapping_tri_pairs": 0,
+   "nearest_lamp_vertex_m": 0.606
+  },
+  "Mount_Base": {
+   "overlapping_tri_pairs": 0,
+   "nearest_lamp_vertex_m": 1.36
+  },
+  "loaded barb": {
+   "overlapping_tri_pairs": 0,
+   "nearest_lamp_vertex_m": 0.085
+  },
+  "crank full turn nearest_m": 0.604
+ },
+ "rope_radius_m": 0.0375,
+ "sags_tested": [
+  0.0,
+  0.012,
+  0.035
+ ],
+ "ranges_m": [
+  10,
+  15,
+  20,
+  25,
+  30,
+  35
+ ],
+ "yaw_deg": "-45..45 step 1",
+ "fairleads_bow_local_m": {
+  "low": [
+   0.0,
+   2.685,
+   5.035
+  ],
+  "raised": [
+   0.0,
+   4.621,
+   5.13
+  ]
+ },
+ "rope_clearance_to_lamp_m (surface minus rope radius)": {
+  "low": {
+   "straight": [
+    0.197,
+    "yaw -41, 10 m, sag 0.000"
+   ],
+   "via_fairlead": [
+    0.156,
+    "yaw 45, 10 m, sag 0.000"
+   ]
+  },
+  "raised": {
+   "straight": [
+    0.197,
+    "yaw -41, 10 m, sag 0.000"
+   ],
+   "via_fairlead": [
+    0.159,
+    "yaw 45, 10 m, sag 0.000"
+   ]
+  }
+ },
+ "cases_the_game_routes_over_the_fairlead": {
+  "low": 335,
+  "raised": 323
+ }
+}

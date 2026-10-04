@@ -10,11 +10,11 @@ zsh note: type the arguments literally after `--` (for example `-- only barb`). 
 
 From `/Users/kevinandersson/Desktop/SeaSick`:
 
-1. **Build** → `HarpoonMount.fbx`, `HarpoonBarb.fbx`, `harpoon-v1.blend`. Takes about 2 s and ~300 MB. It prints `BUILD_OK mount tris N barb tris N`.
+1. **Build** → `HarpoonMount.fbx` (with the gun-lamp), `HarpoonBarb.fbx`, `harpoon-v1.blend`. Takes about 2 s and ~300 MB. It prints `BUILD_OK mount tris N barb tris N lamp tris N`, and the Lamp's local position under Swivel.
    ```
    /Applications/Blender.app/Contents/MacOS/Blender -b art-staging/lumber-mill-triangular-lvl1-v2/lumber-mill.blend --python art-staging/harpoon-v1/build.py
    ```
-2. **Check** (re-imports the FBXs and sweeps the gun over the real BowLow) → `export-verification.json`. Takes about 5 s and ~300 MB. It prints `CHECK … errors 0`.
+2. **Check** (re-imports the FBXs and sweeps the gun over the real BowLow) → `export-verification.json` + `lamp-verification.json`. Takes about 5 s and ~300 MB. It prints `CHECK … errors 0` and `CHECK_LAMP … errors 0`.
    ```
    /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup --python art-staging/harpoon-v1/check.py
    ```
@@ -35,16 +35,10 @@ To abort: Ctrl-C, or `pkill -f "Blender -b"`.
 
 `geo.py` is shared code. It holds the palette, the mesh builder, the read-only kit.json hull loader and the placement constants (`MOUNT_SRC_U`).
 
-## Bow lantern on a beam (Kevin 2026-10-04)
-
-Same rules (one Blender, at least 1 GB free, no play mode at the same time).
-
-1. **Build** → `BowLantern.fbx` only (the mount/barb FBXs are left untouched; the blend gets all three). Prints `LANTERN kit islands kept 8` and `lantern tris N (budget 600)`.
-   ```
-   /Applications/Blender.app/Contents/MacOS/Blender -b art-staging/lumber-mill-triangular-lvl1-v2/lumber-mill.blend --python art-staging/harpoon-v1/build.py -- lantern
-   ```
-2. **Check** (the plain check command above). With `BowLantern.fbx` present it also writes `lantern-verification.json` and prints `CHECK_LANTERN … errors 0`: hierarchy and names, pivot, ≤ 600 tris, kit winding kept, line clearance to beam/chain/lantern over yaw −45…45 (1° steps within ±6°), targets at 10/35 m at sea level, +1.5 m and +3 m, straight and with the taut sag, rope radius, lantern swung in a 10° cone (20° and 34° reported), lantern ahead of the hull front, below the muzzle, beam root inside the stem, swing contacts.
-3. **Renders**: `-- only lantern` writes `review-lantern-phone-high50.png`, `review-lantern-side-deadahead.png`, `review-lantern-close.png` (taut line 20 m dead ahead). Every other review shot also shows the new lantern once it is built.
-   ```
-   /Applications/Blender.app/Contents/MacOS/Blender -b art-staging/harpoon-v1/harpoon-v1.blend --python art-staging/harpoon-v1/render.py -- only lantern
-   ```
+## Gun-lamp (Kevin 2026-10-04)
+The hooded bullseye lamp on the gun's starboard side is part of `HarpoonMount.fbx` (step 1 builds it; there is no separate mode). The old `-- lantern` mode and `BowLantern.fbx` are gone.
+- **Check** (step 2) also writes `lamp-verification.json` and prints `CHECK_LAMP … errors 0`. It covers the hierarchy, the light empty at the lens centre, the lens behind the muzzle, the side away from the crank, and no clipping into the body, the crank over a full turn, the base or a loaded barb. It also sweeps the rope over yaw −45…45 in 1° steps to sea-level targets at 10–35 m, both straight and through the in-game stem fairlead, on the low and the raised bow. The gate is a clearance of at least 0.1 m.
+- **Renders**: `-- only lamp` writes `review-lamp-close.png` (3/4 front, 1000×1000), plus `review-lamp-phone-high50.png` and `review-lamp-phone-yaw30.png` (the sea camera at 1080×2340). Every other shot also shows the lamp.
+  ```
+  /Applications/Blender.app/Contents/MacOS/Blender -b art-staging/harpoon-v1/harpoon-v1.blend --python art-staging/harpoon-v1/render.py -- only lamp
+  ```

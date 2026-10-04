@@ -24,7 +24,36 @@
    0.86,
    0.3
   ],
+  "Lamp_Light": [
+   -0.33,
+   -0.6,
+   1.72
+  ],
   "meshes": {
+   "Lamp": {
+    "tris": 172,
+    "parent": "Swivel",
+    "materials": [
+     "SS_Harpoon_Timber",
+     "SS_Harpoon_Rope",
+     "SS_Harpoon_Iron"
+    ],
+    "colour_attrs": [
+     "GameColor"
+    ],
+    "zero_area_faces": 0
+   },
+   "Lamp_Lens": {
+    "tris": 44,
+    "parent": "Lamp",
+    "materials": [
+     "SS_Harpoon_Lens"
+    ],
+    "colour_attrs": [
+     "GameColor"
+    ],
+    "zero_area_faces": 0
+   },
    "Mount_Base": {
     "tris": 176,
     "parent": "HarpoonMount",
@@ -65,7 +94,7 @@
     "zero_area_faces": 0
    }
   },
-  "tris": 1728,
+  "tris": 1944,
   "bounds": [
    [
     -0.899,
@@ -75,7 +104,7 @@
    [
     0.899,
     1.06,
-    1.9
+    1.983
    ]
   ]
  },
@@ -205,14 +234,7 @@
    "Bow_Cap_Connector"
   ],
   "0@10m": [
-   "Bow_Cap_Connector",
-   "Lantern_Bow_Frame"
-  ],
-  "0@20m": [
-   "Lantern_Bow_Frame"
-  ],
-  "0@35m": [
-   "Lantern_Bow_Frame"
+   "Bow_Cap_Connector"
   ],
   "5@10m": [
    "Bow_Cap_Connector"

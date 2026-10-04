@@ -1,6 +1,7 @@
 # Harpoon v1 review renders. Run AFTER build.py (see RUN.md):
 #   Blender -b art-staging/harpoon-v1/harpoon-v1.blend --python art-staging/harpoon-v1/render.py [-- only <name>]
-#   `-- only lantern` = just the BowLantern shots (review-lantern-*.png); every shot shows the new lantern once it is built.
+#   `-- only lamp` = just the gun-lamp shots (review-lamp-*.png). The kit's old bow lantern is hidden (as in game):
+#   the gun-lamp (Lamp / Lamp_Lens / Lamp_Light under Swivel) is the ship's only bow light.
 # The REAL base coaster (CoasterFamily.Base = SternLow + BowLow + RotorLow) is rebuilt read-only from the game's
 # art-staging/f-coaster-runtime/kit.json; the bow cannons are the real cannon-astra-v1/cannon.fbx at the game's 1.35 u scale.
 # Never saves the blend. Writes review-*.png into art-staging/harpoon-v1/.
@@ -29,9 +30,7 @@ def srgb(hexs):
 
 ctx = bpy.data.collections.new('Review context'); scene.collection.children.link(ctx)
 hullmat = vc_mat('Review_Hull_VC')
-# Kevin 2026-10-04: the bow lantern moved onto a beam (BowLantern, built by build.py); the game hides the kit's old one.
-LANT = bpy.data.objects.get('BowLantern')
-hull = load_kit(coll=ctx, mat=hullmat, skip=('Lantern_Bow_Frame', 'Lantern_Bow_Glass') if LANT else ())
+hull = load_kit(coll=ctx, mat=hullmat, skip=('Lantern_Bow_Frame', 'Lantern_Bow_Glass'))   # the game hides the kit's bow lantern
 # bow cannons: the game's cannon at the BowLow Gun_0_-1 / Gun_0_1 sockets (source u (2.1, -+3.46, 2.11), yaw 0 / 180)
 cannons = []
 for side, yaw in ((-1, 0), (1, 180)):
@@ -62,13 +61,12 @@ def barb_copy(name):
         o = ch.copy(); ctx.objects.link(o); o.parent = root
     return root
 loaded = barb_copy('Loaded_Barb')
-if LANT:   # same root spot as the mount; glass glows, a warm point light like the game's (CoasterOutfitting)
-    LANT.location = MOUNT_AT; bpy.context.view_layer.update()
-    lglass = bpy.data.objects['Lantern_Bow_Glass']; lglass.data.materials.clear()
-    lglass.data.materials.append(flat_mat('Review_Lantern_Glow', (1.0, .55, .2), rough=.4, emit=(1.0, .55, .23), strength=6.0))
-    lamp = bpy.data.objects.new('Review_Lantern_Light', bpy.data.lights.new('Review_Lantern_Light', 'POINT')); ctx.objects.link(lamp)
-    lamp.data.energy = 40; lamp.data.color = (1, .55, .23); lamp.data.shadow_soft_size = .1
-    lamp.location = sum((lglass.matrix_world @ v.co for v in lglass.data.vertices), Vector()) / len(lglass.data.vertices)
+# gun-lamp: the lens glows (the importer makes SS_Harpoon_Lens emissive), a spot at Lamp_Light down the bore
+lens = bpy.data.objects['Lamp_Lens']; lens.data.materials.clear()
+lens.data.materials.append(flat_mat('Review_Lamp_Glow', (1.0, .78, .45), rough=.3, emit=(1.0, .72, .38), strength=8.0))
+spot = bpy.data.objects.new('Review_Lamp_Spot', bpy.data.lights.new('Review_Lamp_Spot', 'SPOT')); ctx.objects.link(spot)
+spot.data.energy = 60; spot.data.color = (1, .75, .42); spot.data.spot_size = math.radians(38); spot.data.spot_blend = .35; spot.data.shadow_soft_size = .05
+spot.parent = bpy.data.objects['Lamp_Light']; spot.location = (0, 0, 0); spot.rotation_euler = (math.radians(-90), 0, 0)   # spot -Z -> -Y (forward)
 barb.location = (0, 40, -20)   # park the original out of shot
 
 # lighting
@@ -97,6 +95,12 @@ M = MOUNT_AT
 set_yaw(0)
 shot('review-phone-high50.png', (0, -5.6, 1.0), 50, 0, 21, 540, 1170, lens=30)
 shot('review-hero.png', M + Vector((0, 0, .8)), 20, 145, 4.6, 1200, 900, lens=40)
+# gun-lamp: 3/4 front close-up (port side, daytime) and the sailing-camera view at the phone's full portrait size
+LW = bpy.data.objects['Lamp'].matrix_world.translation.copy()
+shot('review-lamp-close.png', LW + Vector((.10, -.05, -.05)), 12, -152, 2.0, 1000, 1000, lens=45)
+shot('review-lamp-phone-high50.png', (0, -5.6, 1.0), 50, 0, 21, 1080, 2340, lens=30)
+set_yaw(-30)
+shot('review-lamp-phone-yaw30.png', (0, -5.6, 1.0), 50, 0, 21, 1080, 2340, lens=30)
 set_yaw(-40)
 shot('review-bow-ports.png', M + Vector((0, 2.0, .6)), 42, -25, 7.5, 1000, 1000, lens=35)
 set_yaw(0)
@@ -115,29 +119,6 @@ def rope_mat(state):
     if st['emissionIntensity'] > 0:
         b.inputs['Emission Color'].default_value = (*srgb(st['emission']), 1); b.inputs['Emission Strength'].default_value = st['emissionIntensity']
     return m
-# ------------------------------------------------------------------ BowLantern shots (`-- only lantern`): the line out DEAD AHEAD over it
-if LANT:
-    def line_out(yaw, rng, state):
-        set_yaw(yaw); a = muzzle.matrix_world.translation.copy()
-        fwd = (muzzle.matrix_world.to_3x3() @ Vector((0, -1, 0))); fwd.z = 0; fwd.normalize()
-        end = a + fwd * rng; end.z = SEA_Z + .02; d = (end - a).normalized()
-        fb = barb_copy('Lantern_Shot_Barb')
-        fb.matrix_world = Matrix.Translation(end) @ d.to_track_quat('-Y', 'Z').to_matrix().to_4x4() @ Matrix.Translation((0, -.40, 0))
-        bpy.context.view_layer.update()
-        tail = bpy.data.objects.get('Line_Attach'); la = fb.matrix_world @ (tail.matrix_local.translation if tail else Vector())
-        st = LOOK['states'][state]; span = (la - a).length; sag = st['sagFractionOfSpan'] * span
-        pts = [a.lerp(la, i / 40) - Vector((0, 0, 4 * sag * (i / 40) * (1 - i / 40))) for i in range(41)]
-        mb = MB(); mb.tube(pts, st['widthM'] / 2, n=6)
-        return mb.finish('Lantern_Shot_Rope', [rope_mat(state)] * 3, ctx), fb
-    rope_o, fb = line_out(0, 20.0, 'taut')   # 20 m: dead ahead at 10-15 m the line already grazes the stem cap (CONTRACT)
-    PW = bpy.data.objects['LanternBow_Pivot'].matrix_world.translation.copy(); MZ = muzzle.matrix_world.translation.copy()
-    shot('review-lantern-phone-high50.png', (0, -5.6, 1.0), 50, 0, 21, 540, 1170, lens=30)
-    shot('review-lantern-side-deadahead.png', MZ.lerp(PW, .5) + Vector((0, -.9, -.2)), 6, -90, 6.5, 1000, 800, lens=35)
-    shot('review-lantern-close.png', PW + Vector((0, 0, -.25)), 14, -140, 3.4, 800, 1000, lens=40)
-    rope_o.hide_render = True
-    for o in [fb] + list(fb.children): o.hide_render = True
-    set_yaw(0)
-
 float_barb = barb_copy('Floating_Barb')
 for state, yaw in (('slack', 22), ('taut', 22), ('strained', 22)):
     set_yaw(yaw); a = muzzle.matrix_world.translation.copy()
@@ -162,7 +143,7 @@ for o in [float_barb] + list(float_barb.children): o.hide_render = True
 # ------------------------------------------------------------------ barb close-up (isolated, neutral backdrop)
 for o in list(ctx.objects):
     if o.type == 'MESH' and o.name != 'Sea': o.hide_render = True
-for o in mount.children_recursive + (LANT.children_recursive if LANT else []): o.hide_render = True
+for o in mount.children_recursive: o.hide_render = True
 sea.data.materials[0] = flat_mat('Review_Backdrop', (0.30, 0.34, 0.38), rough=.9)
 barb.location = (0, 0, 1.0); barb.rotation_euler = (0, 0, math.radians(-25)); bpy.context.view_layer.update()
 shot('review-barb.png', (0, -.10, 1.0), 28, 125, 2.3, 900, 700, lens=50)
