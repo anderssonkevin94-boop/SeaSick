@@ -125,8 +125,8 @@ namespace SeaSick.UI.ModularYard
             foreach (var c in cells) cols = Mathf.Max(cols, c.col + 1);
 
             var bowh = new VisualElement(); bowh.AddToClassList("ys-bowh");
-            bowh.Add(new Label(deck.sternLabel ?? "← STERN"));
-            bowh.Add(new Label(deck.bowLabel ?? "BOW →"));
+            bowh.Add(new Label(deck.sternLabel ?? "‹ STERN"));
+            bowh.Add(new Label(deck.bowLabel ?? "BOW ›"));
             plan.Add(bowh);
 
             foreach (YardRow row in new[] { YardRow.Port, YardRow.Mid, YardRow.Stbd })
@@ -189,7 +189,7 @@ namespace SeaSick.UI.ModularYard
                     cell.Add(n);
                 }
                 var del = new VisualElement(); del.AddToClassList("ys-del");
-                var dot = new Label("✕") { pickingMode = PickingMode.Ignore }; dot.AddToClassList("ys-del-dot");
+                var dot = new Label("×") { pickingMode = PickingMode.Ignore }; dot.AddToClassList("ys-del-dot");   // "×": in Nunito, "✕" was tofu
                 del.Add(dot);
                 del.RegisterCallback<PointerDownEvent>(e => e.StopPropagation());
                 del.RegisterCallback<ClickEvent>(e => { e.StopPropagation(); if (drag == null || !drag.TapSuppressed) onRemove?.Invoke(id); });

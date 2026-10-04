@@ -40,7 +40,7 @@ namespace SeaSick.UI.Sheets
         /// kept so `Refresh` re-writes the percentage in place.
         public VisualElement BuildHeader()
         {
-            var h = SheetKit.Header(null, HeadLine(Pending), SheetTheme.Timber, "⚒",
+            var h = SheetKit.Header(null, HeadLine(Pending), SheetTheme.Timber, "hammer",
                 () => Sheets.Close());
             titleLabel = h.Q<Label>(className: SheetTheme.Title);
             ringKey = -99;

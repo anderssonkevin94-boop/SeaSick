@@ -38,9 +38,7 @@ namespace SeaSick.UI.Sheets
             var disc = new VisualElement();
             disc.AddToClassList(SheetTheme.Badge);
             disc.style.backgroundColor = badge;
-            var g = new Label(string.IsNullOrEmpty(glyph) ? "" : glyph);
-            g.AddToClassList("sheet-badge-glyph");
-            disc.Add(g);
+            disc.Add(BadgeMark(glyph, new Color32(244, 232, 207, 255), 20f, "sheet-badge-glyph"));
             if (MidnightLandHud.Active)
             {
                 disc.Clear(); disc.style.backgroundColor = Color.clear;
@@ -58,7 +56,8 @@ namespace SeaSick.UI.Sheets
             words.Add(t);
             head.Add(words);
 
-            var x = new Button(() => close?.Invoke()) { text = "✕" };
+            // "×" (U+00D7): Nunito has it; "✕" drew as tofu on the phone.
+            var x = new Button(() => close?.Invoke()) { text = "×" };
             x.AddToClassList(SheetTheme.Close);
             if (MidnightLandHud.Active)
             {
@@ -68,6 +67,33 @@ namespace SeaSick.UI.Sheets
             }
             head.Add(x);
             return head;
+        }
+
+        /// **A badge's mark (2026-10-04).** `mark` is a drawn
+        /// `StationPage.Glyph` kind ("hammer", "anchor", "check"...) or plain
+        /// text from the sheet font (a letter, "·"). Never a symbol or emoji
+        /// character: Nunito has none and the phone draws them as tofu.
+        /// The returned element carries `cls` (the old label's class, so
+        /// the badge keeps its place and disc); a drawn mark is centred in it.
+        public static VisualElement BadgeMark(string mark, Color ink, float size, string cls)
+        {
+            if (!StationPage.Glyph.Knows(mark))
+            {
+                var l = new Label(mark ?? "");
+                l.AddToClassList(cls);
+                l.pickingMode = PickingMode.Ignore;
+                return l;
+            }
+            var box = new VisualElement { pickingMode = PickingMode.Ignore };
+            box.AddToClassList(cls);
+            box.style.alignItems = Align.Center;
+            box.style.justifyContent = Justify.Center;
+            var g = new StationPage.Glyph(mark, ink, "sheet-glyph");
+            g.style.width = size;
+            g.style.height = size;
+            g.style.flexShrink = 0f;
+            box.Add(g);
+            return box;
         }
 
         // ------------------------------------------------------------------
@@ -110,9 +136,7 @@ namespace SeaSick.UI.Sheets
 
             if (!string.IsNullOrEmpty(jobGlyph))
             {
-                var job = new Label(jobGlyph);
-                job.AddToClassList(SheetTheme.TokenJob);
-                tok.Add(job);
+                tok.Add(BadgeMark(jobGlyph, new Color32(31, 45, 56, 255), 14f, SheetTheme.TokenJob));
             }
 
             if (onClick != null)
@@ -512,8 +536,10 @@ namespace SeaSick.UI.Sheets
         {
             var box = new VisualElement();
             box.AddToClassList(SheetTheme.Note);
-            var glyph = new Label("✎");
-            glyph.AddToClassList("sheet-note-glyph");
+            var glyph = new StationPage.Glyph("pencil", new Color32(201, 147, 57, 255), "sheet-note-glyph");
+            glyph.style.width = 14f;
+            glyph.style.height = 14f;
+            glyph.style.flexShrink = 0f;
             box.Add(glyph);
             var l = new Label(text ?? "");
             l.AddToClassList("sheet-note-text");

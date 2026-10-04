@@ -181,7 +181,7 @@ namespace SeaSick.UI.ModularYard
             strip = new ShipStripView(); col.Add(strip);
             card = new SectionCardView(); col.Add(card);
             bin = new VisualElement(); bin.AddToClassList("ys-bin");
-            bin.Add(new Label("⤓  Drop here to return it to the store"));
+            bin.Add(new Label("Drop here to return it to the store"));
             col.Add(bin);
             totals = new TotalsStripView(); col.Add(totals);
             var spacer = new VisualElement(); spacer.AddToClassList("ys-spacer"); col.Add(spacer);

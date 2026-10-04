@@ -279,7 +279,7 @@ namespace SeaSick.UI.ModularYard
                 int from = Mathf.RoundToInt(f.current), to = Mathf.RoundToInt(f.proposed);
                 if (from == to) return;
                 int d = to - from;
-                lines.Add($"{(d > 0 ? "+" : "\u2212")}{Mathf.Abs(d)} {(Mathf.Abs(d) == 1 ? one : many)} ({from} \u2192 {to})");
+                lines.Add($"{(d > 0 ? "+" : "\u2212")}{Mathf.Abs(d)} {(Mathf.Abs(d) == 1 ? one : many)} ({from} to {to})");
             }
             FigureLine("sections", "middle section", "middle sections");
             FigureLine("crewBerths", "bunk", "bunks");

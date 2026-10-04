@@ -284,7 +284,7 @@ namespace SeaSick.UI.Sheets
                 if (from != to && b <= a) continue;
                 if (sb.Length > 0) sb.Append(" · ");
                 sb.Append(PlanLabel(c.planId)).Append(' ');
-                if (from == to) sb.Append(a); else sb.Append(a).Append('→').Append(b);
+                if (from == to) sb.Append(a); else sb.Append(a).Append(" to ").Append(b);
             }
             return sb.ToString();
         }

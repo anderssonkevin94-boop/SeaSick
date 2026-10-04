@@ -88,7 +88,7 @@ namespace SeaSick.UI.ModularYard
             removeBtn = SmallButton(sectionRow, "Remove section", RemoveSection);
             col.Add(sectionRow);
             bin = new VisualElement(); bin.AddToClassList("ys-bin");
-            bin.Add(new Label("⤓  Drop here to return it to the store"));
+            bin.Add(new Label("Drop here to return it to the store"));
             col.Add(bin);
             totals = new TotalsStripView(); col.Add(totals);
 

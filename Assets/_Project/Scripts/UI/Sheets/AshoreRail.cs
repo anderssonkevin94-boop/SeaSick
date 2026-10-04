@@ -191,14 +191,14 @@ namespace SeaSick.UI.Sheets
             isleCam.PanToWorld(point, CameraRig.IslandCam.BlueprintHeight, 0.6f);
         }
 
-        /// Short text glyphs, never emoji — the HUD's type is a serif and a
-        /// sans, and an emoji is neither and renders at whatever size the
-        /// platform font feels like.
+        /// Drawn marks (`StationPage.Glyph` kinds), never emoji or symbol
+        /// characters -- the sheet font has none and the phone drew them as
+        /// tofu (2026-10-04).
         static string Glyph(OutpostOrder order) => order switch
         {
-            OutpostOrder.Gather => "⚒",
-            OutpostOrder.Build => "⚑",
-            OutpostOrder.Work => "◆",
+            OutpostOrder.Gather => "axe",
+            OutpostOrder.Build => "hammer",
+            OutpostOrder.Work => "gear",
             _ => "·",
         };
     }

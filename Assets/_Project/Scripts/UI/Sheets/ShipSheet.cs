@@ -173,7 +173,7 @@ namespace SeaSick.UI.Sheets
             cargoLinkT.style.whiteSpace = WhiteSpace.Normal;
             cargoLinkT.style.flexShrink = 1f;
             cargoLinkT.style.minWidth = 0f;
-            cargoLinkArrow = new Label("→") { pickingMode = PickingMode.Ignore };
+            cargoLinkArrow = new Label("›") { pickingMode = PickingMode.Ignore };
             cargoLink.text = "";
             cargoLink.Add(cargoLinkT);
             cargoLink.Add(cargoLinkArrow);

@@ -88,7 +88,7 @@ namespace SeaSick.UI.ModularYard
     {
         public string name;           // "Deck"
         public YardCellVm[] cells;    // any order; laid out by row then col
-        public string sternLabel, bowLabel;   // null = "← STERN" / "BOW →"
+        public string sternLabel, bowLabel;   // null = "‹ STERN" / "BOW ›"
     }
 
     [Serializable]

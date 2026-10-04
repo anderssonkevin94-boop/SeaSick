@@ -440,9 +440,10 @@ namespace SeaSick.UI.Sheets
             box.style.justifyContent = Justify.Center;
             box.pickingMode = PickingMode.Position;
 
-            var g = new Label("🔥");
-            g.style.fontSize = 15f;
-            g.pickingMode = PickingMode.Ignore;
+            // A drawn flame (2026-10-04): the emoji drew as tofu on the phone.
+            var g = new StationPage.Glyph("fire", new Color32(242, 196, 109, 255), "sheet-glyph");
+            g.style.width = 18f;
+            g.style.height = 18f;
             // Hungry is the same flame, burnt down: dim it rather than
             // recolour it, so the three states read as one mark in three
             // conditions instead of three different marks.
@@ -451,7 +452,7 @@ namespace SeaSick.UI.Sheets
 
             if (isle.flame == FlameState.Raided)
             {
-                var x = new Label("✕");
+                var x = new Label("×");
                 x.style.position = Position.Absolute;
                 x.style.fontSize = 17f;
                 x.style.color = SheetTheme.Ember;

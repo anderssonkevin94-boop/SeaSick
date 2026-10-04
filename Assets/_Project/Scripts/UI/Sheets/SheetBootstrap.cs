@@ -329,14 +329,16 @@ namespace SeaSick.UI.Sheets
             if (h == null) return "·";
             switch (h.order)
             {
-                case OutpostOrder.Build: return "⚒";
+                // Drawn `StationPage.Glyph` kinds (2026-10-04): the emoji
+                // these were drew as tofu on the phone.
+                case OutpostOrder.Build: return "hammer";
                 case OutpostOrder.Gather:
-                    if (h.target == Res.Game) return "🏹";
-                    if (h.target == Res.Stone) return "⛏";
-                    if (h.target == Res.Food) return "🌾";
-                    return "🪓";
+                    if (h.target == Res.Game) return "bow";
+                    if (h.target == Res.Stone) return "pick";
+                    if (h.target == Res.Food) return "wheat";
+                    return "axe";
                 case OutpostOrder.Work:
-                    return h.target == OutpostLedger.WatchtowerId ? "👁" : "⚙";
+                    return h.target == OutpostLedger.WatchtowerId ? "eye" : "gear";
                 default: return "·";
             }
         }

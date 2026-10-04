@@ -53,7 +53,7 @@ namespace SeaSick.World
         }
 
         public const string DryDockNeedsHome =
-            "needs a home berth: tie up at your pier, then Ship → Make home berth";
+            "needs a home berth: tie up at your pier, then Ship › Make home berth";
 
         /// Skip this saved row? True for a dry dock row once the camp
         /// already stands as many as its cap allows (one).

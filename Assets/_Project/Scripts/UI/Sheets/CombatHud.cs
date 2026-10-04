@@ -127,7 +127,7 @@ namespace SeaSick.UI.Sheets
                 row.AddToClassList("combat-row");
                 wrap.Add(row);
 
-                portBtn = NewFire("◀ Fire port", "combat-fire--port", () => Fire(false),
+                portBtn = NewFire("‹ Fire port", "combat-fire--port", () => Fire(false),
                     out portTitle, out portFill);
                 row.Add(portBtn);
 
@@ -143,7 +143,7 @@ namespace SeaSick.UI.Sheets
                 lockBtn.Add(lockSub);
                 row.Add(lockBtn);
 
-                stbdBtn = NewFire("Fire stbd ▶", "combat-fire--stbd", () => Fire(true),
+                stbdBtn = NewFire("Fire stbd ›", "combat-fire--stbd", () => Fire(true),
                     out stbdTitle, out stbdFill);
                 row.Add(stbdBtn);
 
@@ -328,8 +328,8 @@ namespace SeaSick.UI.Sheets
                 SetFire(stbdBtn, stbdHas && !noneManned, stbdMan > 0, stbdReady > 0);
                 SetDisplay(noCrew, noneManned);
                 SetDisplay(spacer, noneManned);
-                portTitle.text = portMan > 0 ? "◀ Fire port" : "No crew";
-                stbdTitle.text = stbdMan > 0 ? "Fire stbd ▶" : "No crew";
+                portTitle.text = portMan > 0 ? "‹ Fire port" : "No crew";
+                stbdTitle.text = stbdMan > 0 ? "Fire stbd ›" : "No crew";
 
                 // The chip.
                 if (target != null)

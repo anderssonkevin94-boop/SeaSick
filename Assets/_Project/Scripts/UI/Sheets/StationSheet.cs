@@ -439,7 +439,7 @@ namespace SeaSick.UI.Sheets
                 var foot = new VisualElement(); foot.AddToClassList("st-store-foot");
                 storeHolds = StationPage.Text("", "st-store-holds");
                 foot.Add(storeHolds);
-                storeAll = new Button(() => Sheets.Open(new BackpackSheet(outpost))) { text = "All stores →" };
+                storeAll = new Button(() => Sheets.Open(new BackpackSheet(outpost))) { text = "All stores ›" };
                 storeAll.AddToClassList("st-link");
                 foot.Add(storeAll);
                 card.Add(foot);
@@ -1211,7 +1211,7 @@ namespace SeaSick.UI.Sheets
             detailFixF = fix;
             var fd = fix.Valid ? DisplayStyle.Flex : DisplayStyle.None;
             if (detailFix.style.display != fd) detailFix.style.display = fd;
-            if (fix.Valid) { string ft = fix.label + " →"; if (detailFix.text != ft) detailFix.text = ft; }
+            if (fix.Valid) { string ft = fix.label + " ›"; if (detailFix.text != ft) detailFix.text = ft; }
 
             FillThumb(l, st, sp, r);
         }
@@ -1543,7 +1543,7 @@ namespace SeaSick.UI.Sheets
             }
             string holds = held.Count == 0 ? "The store is empty" : "Kept in sacks, racks and bays";
             if (storeHolds.text != holds) storeHolds.text = holds;
-            string all = held.Count > storeTiles.Length ? $"All {held.Count} kinds →" : "All stores →";
+            string all = held.Count > storeTiles.Length ? $"All {held.Count} kinds ›" : "All stores ›";
             if (storeAll.text != all) storeAll.text = all;
         }
 
@@ -2166,7 +2166,7 @@ namespace SeaSick.UI.Sheets
                 if (pinBtn != null)
                 {
                     pinBtn.style.display = can ? DisplayStyle.None : DisplayStyle.Flex;
-                    string pt = pinned ? "Goal ✓ · clear" : "Set as goal";
+                    string pt = pinned ? "Goal set · clear" : "Set as goal";
                     if (pinBtn.text != pt) pinBtn.text = pt;
                     pinBtn.EnableInClassList("st-pin--on", pinned);
                 }
@@ -2205,6 +2205,17 @@ namespace SeaSick.UI.Sheets
         {
             readonly string kind;
             Color color;
+
+            /// The kinds this draws (anything else draws the arrow). A caller
+            /// handed a string that may be a kind or plain text asks here.
+            public static bool Knows(string kind) => kind != null && Kinds.Contains(kind);
+
+            static readonly HashSet<string> Kinds = new HashSet<string>
+            {
+                "menu", "close", "wall", "ladder", "road", "chart", "fire", "pier", "ship",
+                "grill", "cauldron", "smelter", "anvil", "lock", "plus", "spot", "clock", "grave", "arrow",
+                "check", "hammer", "axe", "pick", "bow", "wheat", "eye", "gear", "flag", "anchor", "pencil",
+            };
 
             public Glyph(string kind, Color color, string cls)
             {
@@ -2316,6 +2327,70 @@ namespace SeaSick.UI.Sheets
                         p.BeginPath();
                         p.Arc(new Vector2(12 * s, 8 * s), 3.5f * s, 180f, 360f);
                         p.Stroke();
+                        break;
+                    // An empty farm plot (2026-10-04): "+", choose a crop.
+                    case "plus": Line(12, 5, 12, 19); Line(5, 12, 19, 12); break;
+                    // **The glyphs that were font characters (2026-10-04).**
+                    // Nunito has no ✓ ⚒ ⚓ ✎ 🔥 ⚙ 👁 🏹 ⛏ 🪓 🌾 ⚑ ◆, and the
+                    // phone draws a missing glyph as tofu ("□"), so every
+                    // sheet badge and token mark is drawn here instead.
+                    case "check": Line(5, 13, 10, 18); Line(10, 18, 19, 7); break;
+                    case "hammer":
+                        Line(5, 20, 13, 12);
+                        Line(9, 8, 15, 14); Line(12, 5, 18, 11); Line(9, 8, 12, 5); Line(15, 14, 18, 11);
+                        break;
+                    case "axe":
+                        Line(6, 20, 15, 6);
+                        Line(13, 4, 19, 7); Line(19, 7, 17, 12); Line(17, 12, 14, 9);
+                        break;
+                    case "pick":
+                        Line(13, 9, 6, 20);
+                        Line(4, 10, 12, 5); Line(12, 5, 20, 10);
+                        break;
+                    case "bow":
+                        p.BeginPath();
+                        p.Arc(new Vector2(7 * s, 12 * s), 9f * s, -60f, 60f);
+                        p.Stroke();
+                        Line(11.5f, 4.2f, 11.5f, 19.8f);
+                        Line(4, 12, 20, 12); Line(20, 12, 17, 9.5f); Line(20, 12, 17, 14.5f);
+                        break;
+                    case "wheat":
+                        Line(12, 21, 12, 5);
+                        Line(12, 9, 8.5f, 6); Line(12, 9, 15.5f, 6);
+                        Line(12, 13, 8.5f, 10); Line(12, 13, 15.5f, 10);
+                        Line(12, 17, 8.5f, 14); Line(12, 17, 15.5f, 14);
+                        break;
+                    case "eye":
+                        p.BeginPath();
+                        p.MoveTo(new Vector2(3 * s, 12 * s));
+                        p.BezierCurveTo(new Vector2(8 * s, 5 * s), new Vector2(16 * s, 5 * s), new Vector2(21 * s, 12 * s));
+                        p.BezierCurveTo(new Vector2(16 * s, 19 * s), new Vector2(8 * s, 19 * s), new Vector2(3 * s, 12 * s));
+                        p.Stroke();
+                        p.BeginPath();
+                        p.Arc(new Vector2(12 * s, 12 * s), 2.6f * s, 0f, 360f);
+                        p.Stroke();
+                        break;
+                    case "gear":
+                        p.BeginPath();
+                        p.Arc(new Vector2(12 * s, 12 * s), 5f * s, 0f, 360f);
+                        p.Stroke();
+                        Line(12, 3, 12, 6.5f); Line(12, 17.5f, 12, 21); Line(3, 12, 6.5f, 12); Line(17.5f, 12, 21, 12);
+                        Line(5.6f, 5.6f, 8.1f, 8.1f); Line(15.9f, 15.9f, 18.4f, 18.4f);
+                        Line(18.4f, 5.6f, 15.9f, 8.1f); Line(8.1f, 15.9f, 5.6f, 18.4f);
+                        break;
+                    case "flag": Line(6, 21, 6, 3); Line(6, 4, 18, 7.5f); Line(18, 7.5f, 6, 11); break;
+                    case "anchor":
+                        Line(12, 6, 12, 20); Line(8, 9, 16, 9);
+                        p.BeginPath();
+                        p.Arc(new Vector2(12 * s, 13 * s), 7f * s, 0f, 180f);
+                        p.Stroke();
+                        p.BeginPath();
+                        p.Arc(new Vector2(12 * s, 4 * s), 2f * s, 0f, 360f);
+                        p.Stroke();
+                        break;
+                    case "pencil":
+                        Line(4, 20, 5.5f, 14.5f); Line(4, 20, 9.5f, 18.5f);
+                        Line(5.5f, 14.5f, 15.5f, 4.5f); Line(9.5f, 18.5f, 19.5f, 8.5f); Line(15.5f, 4.5f, 19.5f, 8.5f);
                         break;
                     case "spot":
                         p.BeginPath();

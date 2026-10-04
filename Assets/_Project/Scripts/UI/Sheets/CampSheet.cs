@@ -398,9 +398,9 @@ namespace SeaSick.UI.Sheets
                 indent.style.flexShrink = 0f;
                 row.Add(indent);
             }
-            var dot = new Label(r.state == GoalState.Ok ? "✓" : r.state == GoalState.Blocked ? "!" : "…")
-                { pickingMode = PickingMode.Ignore };
-            dot.AddToClassList("ov-dot");
+            // A drawn tick (2026-10-04): "✓" is not in Nunito and drew as tofu.
+            var dot = SheetKit.BadgeMark(r.state == GoalState.Ok ? "check" : r.state == GoalState.Blocked ? "!" : "…",
+                new Color32(11, 23, 32, 255), 14f, "ov-dot");
             row.Add(dot);
 
             var tex = ItemIconSet.Get(r.icon ?? (r.kind == GoalRowKind.Station ? Res.Boards : null));
@@ -549,14 +549,14 @@ namespace SeaSick.UI.Sheets
             if (note) SetText(fireNote, Cap(why) + ".");
         }
 
-        /// "Next: build sawmill for boards →", "Next: gather timber →".
+        /// "Next: build sawmill for boards ›", "Next: gather timber ›".
         static string LinkText(ShortFix.Fix f)
         {
             string label = f.label ?? "";
             string lower = label.Length > 0 ? char.ToLowerInvariant(label[0]) + label.Substring(1) : label;
             string tail = f.kind == ShortFix.Kind.Build && !string.IsNullOrEmpty(f.res)
                 ? " for " + ResDefs.Label(f.res).ToLowerInvariant() : "";
-            return "Next: " + lower + tail + " →";
+            return "Next: " + lower + tail + " ›";
         }
 
         CostRow MakeCostRow()

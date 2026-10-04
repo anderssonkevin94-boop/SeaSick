@@ -12,7 +12,9 @@ namespace SeaSick.World.Economy
         public float growSeconds;
         /// Units one harvest of one plot gives.
         public int yield;
-        public string icon;
+        // (No `icon` string since 2026-10-04: the emoji drew as tofu on the
+        // phone -- Nunito has none. A crop's icon is its item PNG,
+        // `ItemIconSet.Get(res)`.)
 
         public float PerHour => growSeconds > 0f ? yield * 3600f / growSeconds : 0f;
     }
@@ -39,11 +41,11 @@ namespace SeaSick.World.Economy
     {
         public static readonly CropDef[] Crops =
         {
-            new CropDef { res = Res.Potato, farmLevel = 1, growSeconds = 300f,  yield = 4,  icon = "🥔" },
-            new CropDef { res = Res.Carrot, farmLevel = 1, growSeconds = 480f,  yield = 5,  icon = "🥕" },
-            new CropDef { res = Res.Onion,  farmLevel = 2, growSeconds = 720f,  yield = 5,  icon = "🧅" },
-            new CropDef { res = Res.Wheat,  farmLevel = 2, growSeconds = 1200f, yield = 10, icon = "🌾" },
-            new CropDef { res = Res.Apple,  farmLevel = 3, growSeconds = 3600f, yield = 12, icon = "🍎" },
+            new CropDef { res = Res.Potato, farmLevel = 1, growSeconds = 300f,  yield = 4 },
+            new CropDef { res = Res.Carrot, farmLevel = 1, growSeconds = 480f,  yield = 5 },
+            new CropDef { res = Res.Onion,  farmLevel = 2, growSeconds = 720f,  yield = 5 },
+            new CropDef { res = Res.Wheat,  farmLevel = 2, growSeconds = 1200f, yield = 10 },
+            new CropDef { res = Res.Apple,  farmLevel = 3, growSeconds = 3600f, yield = 12 },
         };
 
         /// Cooked first, best first; raw at the end. `fill` of a raw row is
@@ -124,14 +126,6 @@ namespace SeaSick.World.Economy
             return c.growSeconds / SeaSick.World.TimeOfDay.WorkDaySeconds;
         }
 
-        public static string Icon(string res) => res switch
-        {
-            Res.Potato => "🥔", Res.Carrot => "🥕", Res.Onion => "🧅", Res.Wheat => "🌾", Res.Apple => "🍎",
-            Res.Fish => "🐟", Res.Meat => "🍖", Res.Flour => "🌾", Res.Food => "🫐",
-            Res.BakedPotato => "🥔", Res.GrilledFish => "🐟", Res.GrilledMeat => "🍖", Res.RoastCarrots => "🥕", Res.Bread => "🍞",
-            Res.VegStew => "🍲", Res.FishPie => "🥧", Res.HuntersStew => "🍲", Res.Meals => "🍪",
-            _ => "·",
-        };
 
         /// Short buff line for a sheet: "mood +0.1/day · work +10%".
         public static string BonusLine(string res)

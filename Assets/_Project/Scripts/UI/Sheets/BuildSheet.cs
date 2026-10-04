@@ -98,11 +98,11 @@ namespace SeaSick.UI.Sheets
             if (p.id == BuildPlans.Farm.id) return "Grows food";
             if (p.id == BuildPlans.FishingHut.id) return "Fish for food";
             if (p.id == BuildPlans.Kitchen.id) return "Cooks dishes";
-            if (p.id == BuildPlans.Sawmill.id) return "Logs → boards";
-            if (p.id == BuildPlans.Quarry.id) return "Stone → brick";
-            if (p.id == BuildPlans.Blacksmith.id) return "Ore → tools";
+            if (p.id == BuildPlans.Sawmill.id) return "Logs into boards";
+            if (p.id == BuildPlans.Quarry.id) return "Stone into brick";
+            if (p.id == BuildPlans.Blacksmith.id) return "Ore into tools";
             if (p.id == BuildPlans.Fletcher.id) return "Bows and arrows";
-            if (p.id == BuildPlans.Mill.id) return "Wheat → flour";
+            if (p.id == BuildPlans.Mill.id) return "Wheat into flour";
             if (p.id == BuildPlans.Watchtower.id) return "Lookout, defence";
             if (p.id == BuildPlans.Pier.id) return "Ship berth";
             if (p.id == BuildPlans.DryDock.id) return "Refit your ship";

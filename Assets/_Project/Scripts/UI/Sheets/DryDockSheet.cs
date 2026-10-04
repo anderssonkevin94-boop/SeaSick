@@ -34,7 +34,7 @@ namespace SeaSick.UI.Sheets
         public Color Accent => SheetTheme.Sea;
 
         public VisualElement BuildHeader() =>
-            SheetKit.Header("shipyard", Title, SheetTheme.Sea, "⚓", () => Sheets.Close());
+            SheetKit.Header("shipyard", Title, SheetTheme.Sea, "anchor", () => Sheets.Close());
 
         public Vector3 AnchorWorld => slip != null ? slip.ShipCenter : Vector3.zero;
 

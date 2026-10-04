@@ -53,7 +53,7 @@ namespace SeaSick.UI.Sheets
         public void SetTab(int index) { }
 
         public VisualElement BuildHeader() =>
-            SheetKit.Header("not built", Title, SheetTheme.Timber, "⚒", () => Sheets.Close());
+            SheetKit.Header("not built", Title, SheetTheme.Timber, "hammer", () => Sheets.Close());
 
         Button pinBtn, buildBtn;
 
@@ -169,7 +169,7 @@ namespace SeaSick.UI.Sheets
             if (pinBtn != null && kind != pinKind)
             {
                 pinKind = kind;
-                pinBtn.text = pinned ? "Goal ✓" : "Set as goal";
+                pinBtn.text = pinned ? "Goal set" : "Set as goal";
                 pinBtn.SetEnabled(unlocked);
             }
         }

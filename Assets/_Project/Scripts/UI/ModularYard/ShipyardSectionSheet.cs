@@ -551,7 +551,7 @@ namespace SeaSick.UI.ModularYard
 
             if (!hintShown && showTop)
             {
-                body.Add(SheetKit.Text("Tap a compartment to swap cargo ↔ bunks. Tap a gun to fit or unfit it.", false, true, 12f));
+                body.Add(SheetKit.Text("Tap a compartment to swap cargo and bunks. Tap a gun to fit or unfit it.", false, true, 12f));
                 hintShown = true;
                 PlayerPrefs.SetInt(HintPrefKey, 1); PlayerPrefs.Save();
             }

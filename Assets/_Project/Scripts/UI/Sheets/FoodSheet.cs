@@ -168,14 +168,14 @@ namespace SeaSick.UI.Sheets
             else ReadoutUi.SetText(big, (days >= 10f ? days.ToString("0") : days.ToString("0.#"))
                                       + (Mathf.Abs(days - 1f) < 0.05f ? " day" : " days"));
 
-            string arrow = trend > 0.05f ? "▲" : trend < -0.05f ? "▼" : "";
+            string arrow = trend > 0.05f ? "up" : trend < -0.05f ? "down" : "";
             string line;
             if (l.hands.Count == 0) line = "nobody to feed";
             else if (eat <= 1e-4f) line = l.rations == Rations.None ? "rations off: nobody eats" : "nobody is eating";
             else if (arrow.Length == 0) line = "steady";
             else
             {
-                line = $"{arrow} {CampReadouts.Signed(trend)} fill a day";
+                line = $"{CampReadouts.Signed(trend)} fill a day";
                 if (trend < 0f) line += $" · empty in {fillNow / -trend:0.#} days";
             }
             ReadoutUi.SetText(small, line);
