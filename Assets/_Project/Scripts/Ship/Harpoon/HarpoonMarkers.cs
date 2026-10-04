@@ -147,10 +147,7 @@ namespace SeaSick.Ship.Harpoon
         {
             if (SeaHud.Overlaps(r)) return true;
             if (CombatHud.Visible && CombatHud.Rect.Overlaps(r)) return true;
-            var issued = HudLayout.Issued;
-            for (int i = 0; i < issued.Count; i++)
-                if (issued[i].Overlaps(r)) return true;
-            return false;
+            return HudLayout.OverlapsReserved(r);
         }
 
         void DrawMarker(in Slot m, float ring)

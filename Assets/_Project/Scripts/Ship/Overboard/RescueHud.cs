@@ -291,10 +291,8 @@ namespace SeaSick.Ship.Overboard
             // Nor on a panel the layout reserved (the bottom stack's Wheel
             // slot: helm strip, bolt, harpoon row): a target floating low on
             // the screen sat its invisible steer button 168 x 37 px into it.
-            var issued = HudLayout.Issued;
-            for (int i = 0; i < issued.Count; i++)
-                if (issued[i].Overlaps(zone)) return false;
-            return true;
+            // (this frame's and last frame's: see `HudLayout.OverlapsReserved`)
+            return !HudLayout.OverlapsReserved(zone);
         }
 
         void DrawArrow(Vector2 at, Vector2 dir, float timeLeft01, float distanceMetres, int u)

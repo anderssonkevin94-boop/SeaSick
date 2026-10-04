@@ -348,11 +348,8 @@ namespace SeaSick.UI.Sheets
             Rect safe = HudLayout.Safe;
             float top = safe.yMax;
             top = Mathf.Min(top, HudLayout.BottomClustersTop);
-            var issued = HudLayout.Issued;
-            var names = HudLayout.IssuedTo;
-            string wheel = HudLayout.Slot.Wheel.ToString();
-            for (int i = 0; i < issued.Count && i < names.Count; i++)
-                if (names[i] == wheel && issued[i].height > 0f) top = Mathf.Min(top, issued[i].yMin);
+            if (HudLayout.TryIssued(HudLayout.Slot.Wheel.ToString(), out var wheel) && wheel.height > 0f)
+                top = Mathf.Min(top, wheel.yMin);
             top = MinTop(top, SeaHud.HelmRect);
             top = MinTop(top, SeaHud.HarpoonRect);
             top = MinTop(top, SeaHud.HarpoonDrawnRect);

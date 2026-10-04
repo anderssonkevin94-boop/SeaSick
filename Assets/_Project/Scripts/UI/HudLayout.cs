@@ -188,7 +188,38 @@ namespace SeaSick.UI
 
         static readonly List<Rect> issuedRects = new List<Rect>();
         static readonly List<string> issuedNames = new List<string>();
+        static readonly List<Rect> lastFrameRects = new List<Rect>();
+        static readonly List<string> lastFrameNames = new List<string>();
         static int issuedFrame = -1;
+
+        /// Does `r` touch any panel the layout handed out, this frame so far
+        /// OR the whole of last frame? `Issued` alone is the wrong question
+        /// for a reader that draws early in the frame: the list restarts at
+        /// the first panel that declares itself, so a reader running before
+        /// the bottom stack reserves sees this frame's half-built list
+        /// without it (RescueHud's steer zone sat 152 x 36 px in the Wheel
+        /// slot on the 1920x1080 desk, every frame, 2026-10-04).
+        public static bool OverlapsReserved(Rect r)
+        {
+            for (int i = 0; i < issuedRects.Count; i++)
+                if (issuedRects[i].Overlaps(r)) return true;
+            for (int i = 0; i < lastFrameRects.Count; i++)
+                if (lastFrameRects[i].Overlaps(r)) return true;
+            return false;
+        }
+
+        /// The rect a named panel was handed: this frame's if it has declared
+        /// already, else last frame's (same early-reader reason as
+        /// `OverlapsReserved`).
+        public static bool TryIssued(string name, out Rect r)
+        {
+            int at = issuedNames.IndexOf(name);
+            if (at >= 0) { r = issuedRects[at]; return true; }
+            at = lastFrameNames.IndexOf(name);
+            if (at >= 0) { r = lastFrameRects[at]; return true; }
+            r = default;
+            return false;
+        }
 
         /// Put a panel on the record without giving it a slot.
         ///
@@ -201,6 +232,10 @@ namespace SeaSick.UI
             if (issuedFrame != Time.frameCount)
             {
                 issuedFrame = Time.frameCount;
+                lastFrameRects.Clear();
+                lastFrameRects.AddRange(issuedRects);
+                lastFrameNames.Clear();
+                lastFrameNames.AddRange(issuedNames);
                 issuedRects.Clear();
                 issuedNames.Clear();
             }
