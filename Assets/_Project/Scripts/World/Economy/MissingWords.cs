@@ -213,6 +213,7 @@ namespace SeaSick.World.Economy
                 case "Sawmill": return "saw";
                 case "Quarry": return "cut";
                 case "FishingHut": return "catch";
+                case "Mine": return "dig";
                 default: return "make";
             }
         }

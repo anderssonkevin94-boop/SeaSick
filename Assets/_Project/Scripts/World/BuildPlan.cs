@@ -44,6 +44,15 @@ namespace SeaSick.World
         /// once, long enough for the longest ship on the ladder, and never
         /// resized per refit (Kevin, relayed 2026-09-25: "pick one size").
         DryDock,
+        /// **A shaft dug into a hillside, 2026-10-05.** Kevin's mine: sited
+        /// only against a face steeper than a man can walk, turned by the
+        /// ground (`Outpost.SnapMine`) the way a pier is turned by the sea,
+        /// and stood with its back buried in the slope. The pivot is the
+        /// entrance's front lip, +Z out of the hill -- so unlike every other
+        /// kind its footprint is NOT centred on its art (see
+        /// `BuildPlans.MineApronDepth`). Extruded only as the fallback when
+        /// `Resources/Buildings/MineShaft/MineShaftL1` is missing.
+        Mine,
     }
 
     public struct BuildPlan
@@ -259,6 +268,7 @@ namespace SeaSick.World
             "Watchtower" => 45f,
             "Sawmill" => 60f,
             "Quarry" => 60f,
+            "Mine" => 45f,
             "Pier" => 60f,
             "Blacksmith" => 75f,
             "DryDock" => 120f,
@@ -624,6 +634,76 @@ namespace SeaSick.World
             prefab = "Settlement/quarry",
             front = Vector3.forward,
         };
+
+        /// **The mine shaft, 2026-10-05.** Kevin's approved spec: a miner
+        /// walks into the hill, is gone a minute, and comes out with four
+        /// stone that count only when he drops them in the container at the
+        /// mouth. The fishing hut's shape exactly, the hill for the sea: a
+        /// station whose one recipe ("mine-stone") takes nothing, worked as
+        /// trips from the mouth (`HaulPlace.Shore`, `OutpostLedger.Mines`)
+        /// into the output rack, which the runners empty like any other.
+        ///
+        /// **Eight logs and no stone** (Kevin's price: the mine is how a camp
+        /// GETS stone, so pricing it in stone would price its own door, the
+        /// campfire's argument). Fire I, copies 1/1/2/2 like the quarry.
+        ///
+        /// The footprint is the shaft head's plot centred on the pivot (the
+        /// entrance lip): half of it in the hill, half the working apron.
+        /// `CanPlace` tests the hill and the apron by their own rules
+        /// (`Outpost.CanPlaceMine`), never the footprint's corners.
+        public static readonly BuildPlan Mine = new BuildPlan
+        {
+            id = "Mine",
+            kind = BuildKind.Mine,
+            baseStoneCost = 0,
+            label = "mine",
+            blurb = "a miner digs stone out of the hillside; it must stand against a cliff face",
+            resource = Res.Timber,
+            baseCost = 8,
+            footprint = new Vector2(4.4f, 4.4f),
+            ridge = 3.4f,
+            position = "miner",
+            inputSlots = 1,         // nothing comes in; 1 keeps the sheet's bay row sane
+            outputSlots = 12,       // three trips' worth before he (or a runner) carries it home
+            makes = Res.Stone,
+            // Informational only -- `Recipes.All` ("mine-stone") is what runs.
+            rate = 12f,
+            prefab = MinePrefab,
+            front = Vector3.forward,
+        };
+
+        /// The approved level 1 shaft (art lane, in parallel). Contract: root
+        /// pivot at ground level on the entrance's front lip, +Z out of the
+        /// hill; children `Visual`, `Mouth`, `Container`, `DropSpot`.
+        public const string MinePrefab = "Buildings/MineShaft/MineShaftL1";
+
+        /// **Seconds the miner is underground per trip** at level 1 and the
+        /// default feel (`Recipes` prices "mine-stone" off it; level 2's
+        /// `rateMul` 1.5 makes it 40 s, as every station's level 2 does).
+        public const float MineTripSeconds = 60f;
+        /// Stone he brings up per trip.
+        public const int MineLoad = 4;
+        /// **How far the pivot is pushed INTO the face from its foot**,
+        /// metres (Kevin: "part of the backside of the asset should clip into
+        /// the mountain side"). The art's back already extends behind the
+        /// pivot; this sinks the entrance lip itself a little into the toe
+        /// of the slope. 0 = lip exactly at the foot.
+        public const float MineBuryMetres = 0.35f;
+        /// How far behind the foot the rise is measured, metres: it must be
+        /// steeper than a man may walk (`Walkability.Grade(Man)`, 33°) over
+        /// this run.
+        public const float MineCliffProbe = 2.5f;
+        /// Depth of the flat, walkable apron in front of the lip, metres:
+        /// where the container and the drop spot stand.
+        public const float MineApronDepth = 3f;
+        /// How far from the tap the ghost looks for the foot of a face, metres.
+        public const float MineSnapReach = 8f;
+        /// Where the books stand the miner at the mouth: this far out from
+        /// the pivot on the apron (the body walks there, then vanishes).
+        public const float MineMouthStand = 0.9f;
+        /// The shaft head's solid behind the pivot (what walkers go round),
+        /// metres deep; its width is the footprint's.
+        public const float MineHeadDepth = 2.2f;
 
         /// **The fletcher's, 2026-09-22.** Kevin: *"build a fletcher's
         /// building as well for bow and arrow."*
@@ -996,7 +1076,7 @@ namespace SeaSick.World
         /// the store hut's levels now; an old save's Storehouse is taken
         /// down and refunded on load (`OutpostLedger.MergeStorehouses`).
         public static readonly BuildPlan[] AtACamp =
-            { Campfire, Storage, Hut, Farm, FishingHut, Sawmill, Quarry, Fletcher, Kitchen, Mill, Blacksmith, Watchtower, Pier, DryDock };
+            { Campfire, Storage, Hut, Farm, FishingHut, Sawmill, Quarry, Mine, Fletcher, Kitchen, Mill, Blacksmith, Watchtower, Pier, DryDock };
 
         /// Look a plan up by the id a ledger row carries. A save restores ids,
         /// not structs, and so does an assignment.

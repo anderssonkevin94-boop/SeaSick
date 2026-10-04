@@ -86,6 +86,8 @@ namespace SeaSick.World
             { why = "walls, gates, roads and ladders stay where they were built"; return false; }
             if (b.Kind == BuildKind.Pier) { why = "a pier stays where it was built"; return false; }
             if (b.Kind == BuildKind.DryDock) { why = "the dry dock stays where it was built"; return false; }
+            // Dug into its hill (2026-10-05): a new spot is a new mine.
+            if (b.Kind == BuildKind.Mine) { why = "a mine stays dug into its hill"; return false; }
             if (IsWallTower(b)) { why = "a tower on the wall is part of the wall"; return false; }
             return true;
         }

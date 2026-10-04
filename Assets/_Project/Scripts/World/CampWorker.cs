@@ -596,6 +596,7 @@ namespace SeaSick.World
             }
 
             var r = Row;
+            if (r != null) TickMineHide(r);
             if (r == null)
             {
                 // **The row is gone, so this body is not ours any more.**
@@ -1916,6 +1917,12 @@ namespace SeaSick.World
                     // found nothing and sent the load to the fire ring.
                     return StoreSpot(res, out face);
                 case HaulPlace.Shore:
+                    // **The mine's mouth (2026-10-05):** the books' own stand
+                    // on the apron (`OutpostLedger.MouthOf`), facing the
+                    // model's `Mouth` -- the body is hidden from the moment
+                    // he arrives (`TickMineHide`), so he never needs to walk
+                    // into the hill's solid.
+                    if (MineAt(station, out var mouth)) { face = mouth; return Grounded(at); }
                     // **The fisher's spot at the water's edge** (2026-09-30):
                     // the books' own point (`Outpost.SaveShoreSpots` found it
                     // on this very ground), facing out over the water.
@@ -2347,6 +2354,9 @@ namespace SeaSick.World
                 {
                     case "Input_Pickup": m.inPick = t; break;
                     case "Output_Dropoff": m.outDrop = t; break;
+                    // The mine shaft's contract (2026-10-05): where the miner
+                    // stands to unload into the container.
+                    case "DropSpot": if (m.outDrop == null) m.outDrop = t; break;
                     case "Worker_Stand": m.stand = t; break;
                     case "Input_Container": m.inGroup = t; break;
                     case "Output_Container": m.outGroup = t; break;

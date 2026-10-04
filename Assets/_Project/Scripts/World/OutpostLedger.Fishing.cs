@@ -30,9 +30,32 @@ namespace SeaSick.World
     /// any other pickup -- watched == unwatched.
     public partial class OutpostLedger
     {
-        /// Is this station worked at the water's edge rather than at a bench?
+        /// Is this station worked by trips from somewhere else rather than at
+        /// a bench? The fishing hut (the water's edge) and, since 2026-10-05,
+        /// the mine (its mouth: `Mines`) -- every reader of this treats both
+        /// alike: no bench, catch trips into the output box, the box home.
         public static bool FishesAtShore(StationStock s) =>
-            s != null && s.planId == BuildPlans.FishingHut.id;
+            s != null && (s.planId == BuildPlans.FishingHut.id || s.planId == BuildPlans.Mine.id);
+
+        /// **Is this station the mine (2026-10-05)?** Its "shore" is its own
+        /// mouth, worked out from the raised row alone (`MouthOf`), never
+        /// searched for by the scene -- so the books need no terrain to send
+        /// a miner in, watched or not.
+        public static bool Mines(StationStock s) =>
+            s != null && s.planId == BuildPlans.Mine.id;
+
+        /// Where the miner stands at the mouth of a mine raised at `row`
+        /// (`MineMouthStand` out on the apron from the pivot) and the point
+        /// inside the hill he faces (and vanishes toward).
+        public static void MouthOf(BuiltBuilding row, out Vector3 stand, out Vector3 inside)
+        {
+            var q = Quaternion.Euler(0f, row.yaw, 0f);
+            Vector3 fwd = q * Vector3.forward;
+            Vector3 at = row.At;
+            stand = at + fwd * BuildPlans.MineMouthStand;
+            inside = at - fwd * 1.5f;
+            stand.y = inside.y = 0f;
+        }
 
         /// The `raised` row station `index` stands on (its plan's row of the
         /// same ordinal), or null.
@@ -59,6 +82,13 @@ namespace SeaSick.World
             stand = water = default;
             var s = StationAt(index);
             if (s == null) return false;
+            if (Mines(s))
+            {
+                var row = StationRow(index);
+                if (row == null) return false;
+                MouthOf(row, out stand, out water);
+                return true;
+            }
             if (s.shore == 1)
             {
                 stand = new Vector3(s.shoreX, 0f, s.shoreZ);
@@ -146,6 +176,10 @@ namespace SeaSick.World
         /// store -- all of it, `Res.FishArmful` -- and comes back to fish.
         void CatchDay(OutpostHand h, StationStock s, int si, ref float budget)
         {
+            // **A mine never runs dry and never needs choosing (2026-10-05):**
+            // a manned mine with no order digs stone on repeat, so "assign a
+            // miner" is the whole of setting one going.
+            if (Mines(s) && !s.HasOrder) PlaceOrder(si, MineRecipeId, RepeatOrder);
             for (int guard = 0; guard < 64 && budget > Eps; guard++)
             {
                 if (h.Hauling) { if (!AdvanceHaul(h, ref budget)) break; continue; }
@@ -195,10 +229,25 @@ namespace SeaSick.World
             s.SyncLegacy();
         }
 
+        /// The mine's dig (`Recipes.All`).
+        public const string MineRecipeId = "mine-stone";
+
+        /// **Seconds left underground** for the miner on a trip from mine
+        /// `si`'s mouth: his work timer while he is at the pickup (the
+        /// sheet's "back in 0:42"), the whole trip's while he walks in, and
+        /// -1 when he is not on a dig at all.
+        public float MineSecondsLeft(OutpostHand h, int si)
+        {
+            if (h == null || !h.Hauling || h.haulFrom != HaulPlace.Shore || h.haulFromStation != si) return -1f;
+            if (h.haulPicked) return 0f;
+            if (h.Leg == TripLeg.AtPickup) return Mathf.Max(0f, h.workLeft);
+            return CatchSeconds(si);
+        }
+
         /// Why a fisher with an order is not fishing, or null.
         string CatchStallCause(StationStock s)
         {
-            if (s.shore == 2)
+            if (!Mines(s) && s.shore == 2)
                 return string.IsNullOrEmpty(s.shoreWhy) ? "no way to the water" : s.shoreWhy;
             var r = CatchRecipe(s);
             if (r != null && s.RackFull && StoreRoomNet(r.makes) <= 0)

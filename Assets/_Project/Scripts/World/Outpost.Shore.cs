@@ -60,6 +60,9 @@ namespace SeaSick.World
             {
                 var s = ledger.stations[i];
                 if (!OutpostLedger.FishesAtShore(s)) continue;
+                // The mine's "shore" is its own mouth, read off its row by
+                // the books (`OutpostLedger.MouthOf`): nothing to search for.
+                if (OutpostLedger.Mines(s)) continue;
                 var row = ledger.StationRow(i);
                 if (row == null) continue;
                 if (map == null) map = CampPath.For(this);

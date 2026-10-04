@@ -110,6 +110,10 @@ namespace SeaSick.World.Economy
                 cost = Cost.Of(Cost.I(Res.Brick, 4), Cost.I(Res.FineBoards, 3)) },
             new UpgradeStep { planId = "Quarry", toLevel = 2, campfireLevel = 2,
                 cost = Cost.Of(Cost.I(Res.Brick, 8), Cost.I(Res.FineBoards, 2)) },
+            // The mine (2026-10-05): the quarry's step -- level tint, rate
+            // x1.5 (a 40 s trip). Provisional price, Kevin to tune.
+            new UpgradeStep { planId = "Mine", toLevel = 2, campfireLevel = 2,
+                cost = Cost.Of(Cost.I(Res.Brick, 4), Cost.I(Res.FineBoards, 2)) },
             new UpgradeStep { planId = "Hut", toLevel = 2, campfireLevel = 2, rateMul = 1f, housesBonus = 1,
                 cost = Cost.Of(Cost.I(Res.Brick, 4), Cost.I(Res.FineBoards, 4)) },
             // **The store hut is runner progression (Kevin 2026-10-03; the
@@ -156,6 +160,7 @@ namespace SeaSick.World.Economy
             new BuildingCap { planId = "Mill",       copies = new[] { 1, 1, 1, 2 } },
             new BuildingCap { planId = "Fletcher",   copies = new[] { 1, 1, 2, 2 } },
             new BuildingCap { planId = "Quarry",     copies = new[] { 1, 1, 2, 2 } },
+            new BuildingCap { planId = "Mine",       copies = new[] { 1, 1, 2, 2 } },
         };
 
         /// The highest fire level the cap table speaks for (its widest row).

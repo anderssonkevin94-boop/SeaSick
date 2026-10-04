@@ -93,6 +93,7 @@ namespace SeaSick.World
                 // `Outpost.PlaceFireCache` sites it once the whole camp
                 // stands, clear of everything -- see `PutFireCache`.)
                 if (plan.kind == BuildKind.Fire) Firelight(root.transform);
+                else if (plan.kind == BuildKind.Mine) { MineMarks(root.transform, plan); Lamp(root.transform, plan, MineLampAt(plan)); }
                 else Lamp(root.transform, plan);
                 var dressed = root.AddComponent<Building>();
                 dressed.Configure(plan);
@@ -140,6 +141,17 @@ namespace SeaSick.World
             {
                 FletcherShop(root.transform, plan, footing);
                 Lamp(root.transform, plan);
+                root.AddComponent<Building>().Configure(plan);
+                Arm(root, plan);
+                return root;
+            }
+
+            if (plan.kind == BuildKind.Mine)
+            {
+                MineHead(root.transform, plan);
+                MineMarks(root.transform, plan);
+                Lamp(root.transform, plan, MineLampAt(plan));
+                root.AddComponent<StationStockView>();
                 root.AddComponent<Building>().Configure(plan);
                 Arm(root, plan);
                 return root;
@@ -1348,6 +1360,88 @@ namespace SeaSick.World
         /// middle of the clearing faces the working front at the village
         /// exactly as it faces a hut's door at it. Nothing about siting,
         /// footing or the corner test changes.
+        // --- the mine shaft (2026-10-05) ------------------------------------
+
+        /// The lamp on the mine's portal post, out of the hill.
+        static Vector3 MineLampAt(BuildPlan plan) =>
+            new Vector3(plan.footprint.x * 0.5f - 0.5f, 2.1f, 0.35f);
+
+        /// **The stand-in shaft head**, raised only when the approved model
+        /// (`BuildPlans.MinePrefab`) does not load: a timber portal on the
+        /// pivot (the lip), a dark adit running back into the hill behind
+        /// it, and a crate on the apron. Bulky on purpose -- it must read on
+        /// the phone -- and it carries the same four marks as the model
+        /// (`Visual`, `Mouth`, `Container`, `DropSpot`), so the miner's walk
+        /// and the stone pile work the same either way.
+        static void MineHead(Transform root, BuildPlan plan)
+        {
+            float w = plan.footprint.x;
+            var beam = Mat("beam", new Color(0.25f, 0.18f, 0.12f));
+            var dark = Mat("minedark", new Color(0.07f, 0.06f, 0.05f));
+            var crate = Mat("wall", new Color(0.42f, 0.31f, 0.20f));
+            var visual = new GameObject("Visual").transform;
+            visual.SetParent(root, false);
+            float open = w * 0.5f, high = 2.4f;
+            // The black of the adit, behind the lip and into the hill.
+            Box(visual, dark, new Vector3(open, high, BuildPlans.MineHeadDepth),
+                new Vector3(0f, high * 0.5f, -BuildPlans.MineHeadDepth * 0.5f - 0.1f));
+            // Two chunky posts and a lintel at the lip.
+            for (int s = -1; s <= 1; s += 2)
+                Box(visual, beam, new Vector3(0.4f, high + 0.2f, 0.4f),
+                    new Vector3(s * (open * 0.5f + 0.2f), (high + 0.2f) * 0.5f, 0f));
+            Box(visual, beam, new Vector3(open + 1.0f, 0.45f, 0.5f), new Vector3(0f, high + 0.3f, 0f));
+            // The container: an open crate on the apron, to the right of the door.
+            Box(visual, crate, new Vector3(1.2f, 0.6f, 1.0f), new Vector3(w * 0.5f - 0.6f, 0.3f, 1.3f));
+
+            Mark(root, "Mouth", new Vector3(0f, 0f, -1.0f));
+            Mark(root, "Container", new Vector3(w * 0.5f - 0.6f, 0.62f, 1.3f));
+            Mark(root, "DropSpot", new Vector3(w * 0.5f - 0.6f - 1.1f, 0f, 1.9f));
+        }
+
+        static Transform Mark(Transform root, string name, Vector3 local)
+        {
+            var t = new GameObject(name).transform;
+            t.SetParent(root, false);
+            t.localPosition = local;
+            return t;
+        }
+
+        /// **The mine's stone pile, on its `Container`.** `StationStockView`
+        /// shows a rack as numbered `Output_*_NN` children under
+        /// `Output_Container`; the shaft's contract names only `Container`
+        /// (the top of the box). A model that already carries numbered
+        /// output slots keeps its own; otherwise `outputSlots` chunky stones
+        /// are stacked on `Container` here, in a group `Output_Container`
+        /// that both the stock view and `CampWorker`'s marks find. No
+        /// `Container` at all: nothing is added (the rack still counts).
+        static void MineMarks(Transform root, BuildPlan plan)
+        {
+            Transform container = null;
+            foreach (var t in root.GetComponentsInChildren<Transform>(true))
+            {
+                string stem = Stem(t.name);
+                if (stem.StartsWith("Output_", System.StringComparison.Ordinal)
+                    && stem.Length > 7 && char.IsDigit(stem[stem.Length - 1])) return;
+                if (stem == "Container" && container == null) container = t;
+            }
+            if (container == null) return;
+            var group = new GameObject("Output_Container").transform;
+            group.SetParent(container, false);
+            var rock = Mat("minestone", Res.Colour(Res.Stone));
+            int n = Mathf.Max(1, plan.outputSlots);
+            // A low heap: a row of four, then the next layer on top, offset.
+            for (int i = 0; i < n; i++)
+            {
+                int layer = i / 4, k = i % 4;
+                float x = (k - 1.5f) * 0.26f + (layer % 2) * 0.13f;
+                float z = ((k % 2) - 0.5f) * 0.22f;
+                var go = Box(group, rock, new Vector3(0.24f, 0.18f, 0.22f),
+                    new Vector3(x, 0.09f + layer * 0.17f, z));
+                go.name = "Output_Stone_" + (i + 1).ToString("00");
+                go.transform.localRotation = Quaternion.Euler(0f, (i * 37) % 90 - 45f, (i * 23) % 20 - 10f);
+            }
+        }
+
         static void QuarryYard(Transform root, BuildPlan plan, float footing)
         {
             float len = plan.footprint.x;    // along the ridge, open at -X
