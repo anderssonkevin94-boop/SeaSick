@@ -18,6 +18,10 @@ namespace SeaSick.Ship.Harpoon
     /// `SkyDirector.Night01` swings the light from a faint day glimmer to
     /// full. The lens follows it through a property block, so a shared
     /// material is never edited.
+    ///
+    /// The ocean takes no additional lights, so the spot alone shows nothing
+    /// on the water: `HarpoonBeam` fakes the flashlight at night (a pool on
+    /// the sea ahead along the aim, a faint cone from the lens).
     public sealed class HarpoonLamp : MonoBehaviour
     {
         public const string LightName = "Lamp_Light";
@@ -45,6 +49,8 @@ namespace SeaSick.Ship.Harpoon
         MaterialPropertyBlock block;
         SeaSick.World.SkyDirector sky;
         float skyRetry;
+        HarpoonBeam beam;
+        float night;
 
         /// Fits the lamp to a freshly built mount (art or placeholder).
         public static HarpoonLamp Attach(GameObject mount)
@@ -74,6 +80,7 @@ namespace SeaSick.Ship.Harpoon
             lamp.lens = lensT != null ? lensT.GetComponent<Renderer>() : null;
             if (lamp.lens != null && !Drivable(lamp.lens.sharedMaterial)) lamp.lens.sharedMaterial = LensMaterial;
             lamp.block = new MaterialPropertyBlock();
+            lamp.beam = HarpoonBeam.Create(lightT);
             lamp.Apply(0f);
             return lamp;
         }
@@ -105,7 +112,25 @@ namespace SeaSick.Ship.Harpoon
                 sky = FindFirstObjectByType<SeaSick.World.SkyDirector>();
                 skyRetry = SkyRetrySeconds;
             }
-            Apply(sky != null ? sky.Night01 : 0f);
+            night = sky != null ? sky.Night01 : 0f;
+            Apply(night);
+        }
+
+        // After the gun has turned the swivel and the ship has moved.
+        void LateUpdate()
+        {
+            if (beam != null && spot != null) beam.Tick(night, spot.color, Time.deltaTime);
+        }
+
+        void OnDisable()
+        {
+            if (beam != null) beam.Hide();
+        }
+
+        void OnDestroy()
+        {
+            if (beam != null) beam.Destroy();
+            beam = null;
         }
 
         void Apply(float night)

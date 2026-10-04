@@ -105,5 +105,23 @@ namespace SeaSick.Ship.Harpoon
         public static float lampDayIntensity = 0.3f;
         /// Lens glow (0..1) in daylight; night is 1. Range 0..1.
         public static float lampLensDayGlow = 0.25f;
+
+        // --- the lamp's night beam (HarpoonBeam: a fake, the sea takes no spot) ---
+        /// m ahead of the lamp where the pool on the water starts. Range 0..10.
+        public static float lampPoolStart = 3f;
+        /// How far the pool reaches, as a fraction of lampRange. Range 0.3..1.5.
+        public static float lampPoolReach = 1f;
+        /// Pool width, times the spot's own cone. Range 0.3..2.
+        public static float lampPoolWiden = 1f;
+        /// Pool brightness (additive alpha) at full night. Range 0..1.
+        public static float lampPoolAlpha = 0.35f;
+        /// m above the mean water the pool floats (clears the ripples). Range 0..1.5.
+        public static float lampPoolLift = 0.35f;
+        /// m from the lens the air cone fades out. Range 2..20.
+        public static float lampConeLength = 9f;
+        /// Air cone width, times the spot's own cone. Range 0.1..1.5.
+        public static float lampConeWiden = 0.6f;
+        /// Air cone brightness (additive alpha) at the lens, full night. Range 0..1.
+        public static float lampConeAlpha = 0.25f;
     }
 }

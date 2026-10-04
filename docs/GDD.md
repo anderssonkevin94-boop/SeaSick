@@ -92,7 +92,7 @@ Generators: `tools/blender/seasick_style.py` (assets, contact sheet) and `tools/
 - **The pull.** A load pulls back on her: modestly (a crate is felt, it never tows her), on both drives. The steamer takes it as a real force at the bow; the servo hull loses target speed and yaws a little toward the load.
 - **The hold is finite.** Salvage comes aboard only if it fits under the same ceiling as other loot. Otherwise it is held alongside at the rail ("Hold full") until there is room, or until you cut it free. Castaways are crew, not cargo, and need no room.
 - **Crew.** A hand mans the gun when the crew side assigns one (`HarpoonGun.CrewSource`). The gun waits up to ~2 s for him to walk to the bow; with nobody free, the captain fires it from the helm, slower (work rate 0.6). Work rate scales the wind-up and the reel, and accuracy scales the lead error.
-- **Gun lamp.** A hooded bullseye lantern bolted to the side of the gun, shining forward like a flashlight (a warm spot that follows the gun's aim, brighter at night), is the ship's bow light; the old stem and post lanterns are gone.
+- **Gun lamp.** A hooded bullseye lantern bolted to the side of the gun, shining forward like a flashlight (a warm spot that follows the gun's aim, brighter at night), is the ship's bow light; the old stem and post lanterns are gone. The sea takes no spot lights (phone cost), so at night the beam is a stylised fake: a soft warm pool on the water ahead along the aim and a faint cone in the air from the lens, both fading in with dusk (`HarpoonBeam`, `HarpoonTuning.lampPool*`/`lampCone*`).
 - **Knobs:** `HarpoonTuning` (FeelLab).
 
 ### Seasickness — MVP
