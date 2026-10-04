@@ -682,8 +682,19 @@ namespace SeaSick.Ship
             // player had already chosen where to stop. `ShipMotor.Anchored`
             // took the anchor point where she was when it was set; that is
             // the berth.
-            if (gangway != null) gangway.Extend(CurrentIsland);
+            // The plank runs to the beach `DropAnchor` found (the one the
+            // "Land here" card offered), not to the outline on the line to
+            // the island's centre -- off a headland or in a bay that was the
+            // cliff. No terrain / no beach: the old radial aim.
+            if (gangway != null)
+            {
+                if (landingStepSet) gangway.ExtendTo(landingStep);
+                else gangway.Extend(CurrentIsland);
+            }
         }
+
+        bool landingStepSet;
+        Vector3 landingStep;
 
         /// **The island whose siting ring the overview has already been
         /// seated on.** The latch, not a measurement: see `UpdateCameraFocus`.
@@ -1022,6 +1033,11 @@ namespace SeaSick.Ship
         void DropAnchor(Island isle)
         {
             CurrentIsland = isle;
+            // **Ashore on the beach the card offered (2026-10-04).** Found
+            // once, here: from where she lies, else from where the held
+            // beach was last found (a sliver she has drifted a metre off).
+            landingStepSet = isle != null && (isle.TryLandingStep(transform.position, out landingStep)
+                || (isle == beachHeldIsle && beachHeldTime >= 0f && isle.TryLandingStep(beachHeldAt, out landingStep)));
 
             // Survey the ground the first time she anchors here.
             //
@@ -1071,6 +1087,7 @@ namespace SeaSick.Ship
                 ? CurrentDock.Landing
                 : (gangway != null && gangway.Ready
                     ? gangway.LandingPoint
+                    : landingStepSet ? landingStep
                     : CurrentIsland.ShorePoint(0, 1, transform.position));
         }
 

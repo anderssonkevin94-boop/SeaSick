@@ -175,6 +175,34 @@ namespace SeaSick.World
                 || now - heldTime <= BeachHoldSeconds;
         }
 
+        /// **Where a landing party steps ashore (2026-10-04)**: the beach
+        /// `FindBeach` offered from `from`, or false (no terrain, no beach).
+        /// The plank used to run to the island-centre bearing's outline
+        /// point, which off a headland or in a bay is the cliff the card
+        /// just said she was not landing on.
+        public bool TryLandingStep(Vector3 from, out Vector3 step)
+        {
+            step = from;
+            if (TerrainHeight == null) return false;
+            Vector3 d = transform.position - from; d.y = 0f;
+            if (!FindBeach(TerrainHeight, from, d.magnitude + 50f, LandingSlope, out Vector3 beach)) return false;
+            step = LandingStep(TerrainHeight, from, beach);
+            return true;
+        }
+
+        /// A beach's waterline point (`FindBeach`'s `beach`) moved
+        /// `LandingInland` metres on along the line from `from`, on the
+        /// ground: dry sand to step onto, not the shallows. Pure.
+        public const float LandingInland = 2f;
+        public static Vector3 LandingStep(System.Func<float, float, float> height, Vector3 from, Vector3 beach)
+        {
+            Vector3 dir = beach - from; dir.y = 0f;
+            dir = dir.sqrMagnitude > 1e-4f ? dir.normalized : Vector3.forward;
+            Vector3 p = beach + dir * LandingInland;
+            p.y = height(p.x, p.z);
+            return p.y >= beach.y ? p : beach;
+        }
+
         /// Rays round the whole compass for the landing check (10 deg apart).
         const int BeachRays = 36;
         /// A beach this far off (m, to its waterline) counts as "nearby"
@@ -303,6 +331,23 @@ namespace SeaSick.World
                 got = FindBeach((x, z) => z < 0f ? Deep : z * 0.8f, new Vector3(0f, 0f, -10f),
                                 1000f, LandingSlope, out _);
                 if (!got) pass++; else sb.Append("FAIL 0.8 slope at the landing slope: want false got true\n");
+            }
+            // The landing step is the found sand, not the cliff on the line
+            // to the centre: the headland case again, step taken from her.
+            {
+                System.Func<float, float, float> hl = (x, z) => z > 110f && x > 20f ? Sand(z - 110f)
+                        : Mathf.Abs(x) < 30f && z < 100f ? 20f : Deep;
+                Vector3 from = new Vector3(45f, 0f, 60f);
+                total++;
+                if (FindBeach(hl, from, 1000f, 0.5f, out Vector3 b))
+                {
+                    Vector3 st = LandingStep(hl, from, b);
+                    bool onSand = st.x > 20f && st.z > 110f && st.y >= 0f && st.y < 1f
+                                  && (st - b).magnitude <= LandingInland + 0.5f;
+                    if (onSand) pass++;
+                    else sb.Append($"FAIL landing step off the sand: ({st.x:F1},{st.y:F1},{st.z:F1})\n");
+                }
+                else sb.Append("FAIL landing step: no beach found\n");
             }
             // The hold: a sliver found at x = 0, lost a metre on.
             void Hold(string name, bool want, bool got) { total++; if (got == want) pass++; else sb.Append($"FAIL hold {name}: want {want} got {got}\n"); }
