@@ -152,31 +152,12 @@ namespace SeaSick.Ship.Overboard
             int u = HudLayout.Unit;
             float tapHalf = u * TapRadiusUnits;
 
-            // Every target within throw reach, PEOPLE FIRST then cargo
-            // (build brief item 1), nearest within each group — so two
-            // targets in reach at once (item 4) each get their own row
-            // below rather than only the single nearest winning a button.
-            inReach.Clear();
             foreach (var t in targets)
-            {
-                if (t == null || t.Resolved) continue;
-                DrawTarget(t, cam, u, tapHalf);
-
-                float rd = Vector3.Distance(t.NearestHullSide(), t.WorldPosition);
-                if (rd <= OverboardTuning.ThrowReachMetres + OverboardModules.ThrowReachBonusMetres()) inReach.Add(t);
-            }
-            inReach.Sort((a, b) =>
-            {
-                int p = a.RescuePriority.CompareTo(b.RescuePriority);
-                return p != 0 ? p : Vector3.Distance(a.NearestHullSide(), a.WorldPosition)
-                    .CompareTo(Vector3.Distance(b.NearestHullSide(), b.WorldPosition));
-            });
+                if (t != null && !t.Resolved) DrawTarget(t, cam, u, tapHalf);
 
             // "steering to X" and "X is climbing aboard" are the sea action
             // card's now (`OfferCard`, from Update).
         }
-
-        static readonly List<IOverboardTarget> inReach = new List<IOverboardTarget>();
 
         // ------------------------------------------------- per-target -----
 
@@ -303,8 +284,18 @@ namespace SeaSick.Ship.Overboard
         /// May a steer tap zone be centred on this GUI-space point? Not where
         /// its square would touch the harpoon button or the bolt. Public for
         /// `HarpoonTapCheck`.
-        public static bool TapZoneAllowed(Vector2 guiPoint) =>
-            !SeaSick.UI.Sheets.SeaHud.ButtonsOverlap(ZoneRect(guiPoint, HudLayout.Unit * TapRadiusUnits));
+        public static bool TapZoneAllowed(Vector2 guiPoint)
+        {
+            var zone = ZoneRect(guiPoint, HudLayout.Unit * TapRadiusUnits);
+            if (SeaSick.UI.Sheets.SeaHud.ButtonsOverlap(zone)) return false;
+            // Nor on a panel the layout reserved (the bottom stack's Wheel
+            // slot: helm strip, bolt, harpoon row): a target floating low on
+            // the screen sat its invisible steer button 168 x 37 px into it.
+            var issued = HudLayout.Issued;
+            for (int i = 0; i < issued.Count; i++)
+                if (issued[i].Overlaps(zone)) return false;
+            return true;
+        }
 
         void DrawArrow(Vector2 at, Vector2 dir, float timeLeft01, float distanceMetres, int u)
         {
@@ -404,78 +395,9 @@ namespace SeaSick.Ship.Overboard
 
         void CancelSteer() { if (helm != null) helm.CancelSteerToward(); }
 
-        // ------------------------------------------------- throw line -------
-
-        /// Hands already spoken for by a button drawn earlier this frame —
-        /// so two targets in reach at once (build brief item 4) each get
-        /// offered a DIFFERENT free hand rather than both buttons pointing
-        /// at the same nearest one.
-        static readonly HashSet<CrewAgent> claimedThisFrame = new HashSet<CrewAgent>();
-
-        /// One stacked row per target in reach (`inReach`, already ordered
-        /// people-first-then-cargo, nearest first within each) — growing
-        /// UPWARD from the same bottom-centre anchor the single button used
-        /// to sit at, so the first (highest-priority) row lands exactly
-        /// where "Throw line" always has.
-        /// "Anna is climbing aboard" with a filling bar, bottom-centre where
-        /// the Throw line button used to be. Not a button: nothing to press.
-        void DrawThrowLines(int u)
-        {
-            if (inReach.Count == 0 || helm == null) return;
-            var motor = helm.GetComponent<ShipMotor>();
-            float speed = motor != null ? motor.CurrentSpeed : 0f;
-
-            float btnH = Mathf.Max(u * 3.4f, 64f);
-            float btnW = Mathf.Min(HudLayout.Safe.width - HudLayout.Pad * 2f, u * 26f);
-            var safe = HudLayout.Safe;
-            float top = HudLayout.BottomClustersTop;
-
-            claimedThisFrame.Clear();
-            for (int i = 0; i < inReach.Count; i++)
-            {
-                var rect = new Rect(safe.x + (safe.width - btnW) * 0.5f,
-                    top - HudLayout.Gap - btnH * (i + 1) - HudLayout.Gap * i, btnW, btnH);
-                DrawThrowLine(inReach[i], rect, speed);
-            }
-        }
-
-        void DrawThrowLine(IOverboardTarget target, Rect rect, float speed)
-        {
-            if (speed > OverboardTuning.ThrowMaxSpeed)
-            {
-                // No button while she's making too much way — just the hint,
-                // sized the same as the button would be so it doesn't jump
-                // the moment she slows into reach.
-                int u = HudLayout.Unit;
-                var hintStyle = new GUIStyle(GUI.skin.label)
-                {
-                    fontSize = Mathf.RoundToInt(u * 0.9f),
-                    alignment = TextAnchor.MiddleCenter,
-                };
-                hintStyle.normal.textColor = new Color(1f, 0.8f, 0.3f);
-                GUI.Label(rect, "slow down to throw a line", hintStyle);
-                return;
-            }
-
-            UIBlocker.Block(rect);
-            var agent = FindNearestAvailableCrew(target);
-            if (agent != null)
-            {
-                claimedThisFrame.Add(agent);
-                if (GUI.Button(rect, "Throw line to " + target.Label)) agent.StartHaul(target);
-            }
-            else
-            {
-                bool wasEnabled = GUI.enabled;
-                GUI.enabled = false;
-                GUI.Button(rect, "No free hands");
-                GUI.enabled = wasEnabled;
-            }
-        }
-
         /// The nearest hand that is `Available` (station, not resting, not
-        /// already at the rail/hauling/ashore) and not already claimed by an
-        /// earlier row this frame, to the target's own side of the hull.
+        /// already at the rail/hauling/ashore) to the target's own side of
+        /// the hull -- named as the one who helped it aboard.
         static CrewAgent FindNearestAvailableCrew(IOverboardTarget target)
         {
             if (target.Hull == null) return null;
@@ -488,7 +410,6 @@ namespace SeaSick.Ship.Overboard
             foreach (var c in roster.All)
             {
                 if (c == null || !c.gameObject.activeInHierarchy || !c.Available) continue;
-                if (claimedThisFrame.Contains(c)) continue;
                 float d = Vector3.Distance(c.transform.position, rail);
                 if (d < bestDist) { bestDist = d; best = c; }
             }
