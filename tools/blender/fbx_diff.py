@@ -89,7 +89,13 @@ for n in sorted(gA):
 def types(p):
     r,_=parse_fbx.parse(p); o=[c for c in r.elems if c.id==b"Objects"][0]
     from collections import Counter
-    c=Counter(e.id.decode() for e in o.elems)
+    # Animation counts only LIVE curves (keys that change): the Blender round
+    # trip drops constant curves, which pin a node at the pose it already has.
+    def live(e):
+        v=[s for s in e.elems if s.id==b"KeyValueFloat"]
+        return bool(v) and len(v[0].props[0])>1 and max(v[0].props[0])-min(v[0].props[0])>1e-5
+    c=Counter(e.id.decode() for e in o.elems if e.id not in (b"AnimationCurve",b"AnimationCurveNode"))
+    c.update("AnimationCurve(live)" for e in o.elems if e.id==b"AnimationCurve" and live(e))
     c.update(("Material:"+e.props[1].split(b"\x00")[0].decode()) for e in o.elems if e.id in (b"Material",b"AnimationStack")); return c
 tA=types(A); tB=types(B)
 if tA!=tB: print("OBJECT TYPES DIFFER", dict(tA-tB), dict(tB-tA)); bad+=1

@@ -1697,10 +1697,12 @@ under `art-staging/winding-originals/<path>`.
 
 `DIFF_BAD 0` is required: same model names and local transforms, per mesh `maxdelta 0`, the same polygon
 count, every polygon `same` or `reversed` (none `other`), no normal/UV/colour/material mismatch, the same
-object types (animation curves included). The 2026-10-04 sweep (469 FBXs, 8 faulty) hit both failure kinds:
-`sawmill-lvl2.fbx` lost all 572 animation curves (the saw's take), and the Astra-scale files
-(`gull.fbx`, SettlementKitV1 `sawmill`/`blacksmith`) moved the 100x import scale onto the root
-(`Lcl Scaling 1 -> 100`), which would resize them in game. Those stay unfixed (4, 1 and 11 small faces);
-a raw FBX patch (reverse `PolygonVertexIndex` + the ByPolygonVertex layers in place) is the clean route if
-they ever matter. Clean fixes: the runner `Wheelbarrow` (146 faces), plus unused `AstraPlaytest/Kitchen`,
-`Ship/player_ship_hull`/`_sail` (only in `_Recovery` scenes), staged in `art-staging/winding-fixed/`.
+object types, and the same LIVE animation curves (constant curves are dropped by the round trip and are
+harmless; the grain mill 261 -> 1 and the L2 sawmill 432 -> 2 curves keep every live one). The 2026-10-04
+sweep (469 FBXs, 8 faulty) hit one real failure kind: the Astra-scale files (`gull.fbx`, SettlementKitV1
+`sawmill`/`blacksmith`) moved the 100x import scale onto the root (`Lcl Scaling 1 -> 100`), which would
+resize them in game. Those stay unfixed (1, 108 and 4 faces; the SettlementKitV1 sawmill is unused); a raw
+FBX patch (reverse `PolygonVertexIndex` + the ByPolygonVertex layers in place) is the clean route if they
+ever matter. Clean fixes, staged in `art-staging/winding-fixed/`: the runner `Wheelbarrow` (146 faces), the
+L2 sawmill (11), plus unused `AstraPlaytest/Kitchen`, `Ship/player_ship_hull`/`_sail` (only in
+`_Recovery` scenes).

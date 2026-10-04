@@ -299,7 +299,22 @@ namespace SeaSick.Ship
 
         /// You can only put a boat ashore on a beach — cliff faces drop sheer
         /// into the water, so the approach bearing matters.
-        bool CanLandHere(Island isle) => isle != null && isle.HasBeachToward(transform.position);
+        ///
+        /// **Held (2026-10-04):** a beach found at this island stays offered
+        /// within `Island.BeachHoldRadius` of where it was found or for
+        /// `Island.BeachHoldSeconds` (`Island.BeachHold`): at a narrow sand
+        /// sliver the raw answer was true on a ~1 m column and the card
+        /// blinked "Land here" / "Sheer cliff". Cliff -> beach is immediate.
+        bool CanLandHere(Island isle)
+        {
+            if (isle == null) return false;
+            if (isle != beachHeldIsle) { beachHeldIsle = isle; beachHeldTime = -1f; }
+            Vector3 at = transform.position;
+            return Island.BeachHold(isle.HasBeachToward(at), at, Time.time, ref beachHeldAt, ref beachHeldTime);
+        }
+        Island beachHeldIsle;
+        Vector3 beachHeldAt;
+        float beachHeldTime = -1f;
 
         /// The nearest berth, home's or a camp pier's, if she is close
         /// enough to take it.
@@ -667,8 +682,19 @@ namespace SeaSick.Ship
             // player had already chosen where to stop. `ShipMotor.Anchored`
             // took the anchor point where she was when it was set; that is
             // the berth.
-            if (gangway != null) gangway.Extend(CurrentIsland);
+            // The plank runs to the beach `DropAnchor` found (the one the
+            // "Land here" card offered), not to the outline on the line to
+            // the island's centre -- off a headland or in a bay that was the
+            // cliff. No terrain / no beach: the old radial aim.
+            if (gangway != null)
+            {
+                if (landingStepSet) gangway.ExtendTo(landingStep);
+                else gangway.Extend(CurrentIsland);
+            }
         }
+
+        bool landingStepSet;
+        Vector3 landingStep;
 
         /// **The island whose siting ring the overview has already been
         /// seated on.** The latch, not a measurement: see `UpdateCameraFocus`.
@@ -1007,6 +1033,11 @@ namespace SeaSick.Ship
         void DropAnchor(Island isle)
         {
             CurrentIsland = isle;
+            // **Ashore on the beach the card offered (2026-10-04).** Found
+            // once, here: from where she lies, else from where the held
+            // beach was last found (a sliver she has drifted a metre off).
+            landingStepSet = isle != null && (isle.TryLandingStep(transform.position, out landingStep)
+                || (isle == beachHeldIsle && beachHeldTime >= 0f && isle.TryLandingStep(beachHeldAt, out landingStep)));
 
             // Survey the ground the first time she anchors here.
             //
@@ -1056,6 +1087,7 @@ namespace SeaSick.Ship
                 ? CurrentDock.Landing
                 : (gangway != null && gangway.Ready
                     ? gangway.LandingPoint
+                    : landingStepSet ? landingStep
                     : CurrentIsland.ShorePoint(0, 1, transform.position));
         }
 
@@ -1369,11 +1401,19 @@ namespace SeaSick.Ship
             if (isle == null) return;
             bool beach = CanLandHere(isle);
             bool res = isle.HasResources;
-            if (OfferStale(isle, 16 | (slow ? 4 : 0) | desk | (beach ? 32 : 0) | (res ? 64 : 0)))
+            // **Sand past the walk (2026-10-04):** the cliff card says where
+            // it is, "Sand 60 m astern". Metres in 10 m buckets and four
+            // sides, so the key (and the string) changes only when the words do.
+            int sandM = 0, sandSide = 0;
+            Vector3 sandAt = default;
+            bool sand = !beach && isle.SandBeyondReach(transform.position, out sandAt);
+            if (sand) Island.SandPointer(transform.position, transform.forward, sandAt, out sandM, out sandSide);
+            int sandKey = sand ? ((sandM / 10) << 2 | sandSide) + 1 : 0;
+            if (OfferStale(isle, 16 | (slow ? 4 : 0) | desk | (beach ? 32 : 0) | (res ? 64 : 0) | sandKey << 8))
             {
                 offerEyebrow = Upper(isle);
                 offerTitle = beach ? TitleLand : TitleCliff;
-                offerDetail = !beach ? "Find a beach to land"
+                offerDetail = !beach ? (sand ? Island.SandPointerText(sandM, sandSide) : "Find a beach to land")
                     : !slow ? SlowText
                     : (res && !string.IsNullOrEmpty(isle.ResourceName) ? isle.ResourceName : "Rest ashore")
                       + KeyHint("  ·  space");
