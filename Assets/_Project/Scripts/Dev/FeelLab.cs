@@ -114,6 +114,8 @@ namespace SeaSick.Dev
             {"KrakenSpawnTuning.lootMeatUnits",        (1f, 60f)},
             {"KrakenSpawnTuning.lootMeatCrates",       (1f, 6f)},
             {"KrakenSpawnTuning.lootInkUnits",         (1f, 5f)},
+            {"KrakenSpawnTuning.lootMeatSpan",         (0.5f, 4f)},
+            {"KrakenSpawnTuning.lootInkSpan",          (0.5f, 4f)},
             // The kraken: a few knobs whose default*0.25..4 fallback is wrong
             // (negative, or needing zero).
             {"KrakenTuning.waterlineOffset",   (-6f, 3f)},

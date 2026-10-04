@@ -48,13 +48,13 @@ namespace SeaSick.Combat
                 left -= n;
                 // Even spread round the ring, one slot kept for the ink.
                 float a = a0 + (i + 1) * (Mathf.PI * 2f / (crates + 1));
-                var meatCrate = FloatingCargo.Spawn(Res.Meat, n, hull, At(at, a));
+                var meatCrate = FloatingCargo.Spawn(Res.Meat, n, hull, At(at, a), KrakenSpawnTuning.lootMeatSpan);
                 if (meatCrate != null) meatCrate.HarpoonKind = "loot";
             }
 
             // The trophy, in the slot the meat left open.
             int ink = Mathf.Max(1, Mathf.RoundToInt(KrakenSpawnTuning.lootInkUnits));
-            var inkCrate = FloatingCargo.Spawn(Res.KrakenInk, ink, hull, At(at, a0));
+            var inkCrate = FloatingCargo.Spawn(Res.KrakenInk, ink, hull, At(at, a0), KrakenSpawnTuning.lootInkSpan);
             if (inkCrate != null) inkCrate.HarpoonKind = "loot";
 
             Banner.Show("The kraken is gone. It left a haul on the water.", 5f);

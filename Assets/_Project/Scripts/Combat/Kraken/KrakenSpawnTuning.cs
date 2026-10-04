@@ -64,5 +64,11 @@ namespace SeaSick.Combat
         public static float lootMeatCrates = 3f;
         /// Units of kraken ink: the rare trophy, one crate of its own.        1..5
         public static float lootInkUnits = 1f;
+        /// How wide each loot crate is DRAWN, metres (the reward is the units
+        /// above, whatever the size). Measured 2026-10-04: the meat crates
+        /// drew 0.81 m and the ink 0.45 m against 1.61 m for an ordinary lost
+        /// crate, and the ink could not be seen from the sailing camera.   0.5..4
+        public static float lootMeatSpan = 1.6f;
+        public static float lootInkSpan = 0.9f;
     }
 }

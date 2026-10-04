@@ -36,6 +36,9 @@ namespace SeaSick.Ship.Overboard
         Transform ship;
         Vector3 driftVel;
         GameObject visual;
+        /// Visual scale of the crate's drawing (1 = the stack as drawn); the
+        /// hook point follows it. Display only: units, mass and reach do not.
+        float visualScale = 1f;
 
         const float SettleSeconds = 20f;
 
@@ -56,7 +59,7 @@ namespace SeaSick.Ship.Overboard
         /// "crate", or "loot" for the kraken's haul (`KrakenLoot` sets it).
         public string HarpoonKind { get; set; } = "crate";
         Transform IHarpoonable.Transform => transform;
-        public Vector3 HookPoint => transform.position + Vector3.up * 0.35f;
+        public Vector3 HookPoint => transform.position + Vector3.up * (0.35f * visualScale);
         string IHarpoonable.HarpoonLabel => HarpoonKind;
         public bool CanBeHarpooned => !Resolved && !BeingHauled;
         /// One unit is a crate's worth; a full stack of four drags.
@@ -64,8 +67,12 @@ namespace SeaSick.Ship.Overboard
         public int HarpoonHoldUnits => Units;
 
         /// **Spawn one.** `hull` is the ship she fell from — used for the
-        /// reach check and to find her again once recovered.
-        public static FloatingCargo Spawn(string resource, int units, Transform hull, Vector3 worldPos)
+        /// reach check and to find her again once recovered. `targetSpan`
+        /// (metres, 0 = as drawn) rescales the drawn stack so its widest
+        /// horizontal extent is that; a bigger drawing is the only change,
+        /// the reward (`Units`), `HarpoonMass` and the reach checks are not
+        /// touched.
+        public static FloatingCargo Spawn(string resource, int units, Transform hull, Vector3 worldPos, float targetSpan = 0f)
         {
             if (units <= 0 || string.IsNullOrEmpty(resource)) return null;
             var go = new GameObject("FloatingCargo_" + resource);
@@ -87,6 +94,7 @@ namespace SeaSick.Ship.Overboard
             c.driftVel = new Vector3(Mathf.Cos(ang), 0f, Mathf.Sin(ang)) * OverboardTuning.DriftSpeed;
 
             c.BuildVisual();
+            c.FitSpan(targetSpan);
             all.Add(c);
             HarpoonRegistry.Add(c);
             return c;
@@ -102,6 +110,21 @@ namespace SeaSick.Ship.Overboard
                 var unit = CargoVisual.Build(Resource, visual.transform);
                 unit.transform.localPosition = CargoVisual.StackSlot(i, 2, 0.55f, 0.4f);
             }
+        }
+
+        /// Scale the drawn stack so its widest horizontal extent is `span`.
+        /// Measured off the renderers while the root is still unrotated.
+        void FitSpan(float span)
+        {
+            if (span <= 0f || visual == null) return;
+            var rs = visual.GetComponentsInChildren<Renderer>();
+            if (rs.Length == 0) return;
+            Bounds b = rs[0].bounds;
+            for (int i = 1; i < rs.Length; i++) b.Encapsulate(rs[i].bounds);
+            float now = Mathf.Max(b.size.x, b.size.z);
+            if (now < 0.01f) return;
+            visualScale = span / now;
+            visual.transform.localScale = Vector3.one * visualScale;
         }
 
         void OnDestroy() { all.Remove(this); HarpoonRegistry.Remove(this); }
