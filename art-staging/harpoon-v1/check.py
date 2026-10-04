@@ -7,6 +7,7 @@
 import bpy, math, json, re
 from mathutils import Vector, Matrix
 from mathutils.bvhtree import BVHTree
+import sys; sys.path.insert(0, '/Users/kevinandersson/Desktop/SeaSick/tools/blender'); from check_winding import winding_report
 exec(compile(open('/Users/kevinandersson/Desktop/SeaSick/art-staging/harpoon-v1/geo.py').read(), 'geo.py', 'exec'))
 for o in list(bpy.data.objects): bpy.data.objects.remove(o, do_unlink=True)
 E = []; R = {'errors': E}
@@ -29,6 +30,7 @@ EXPECT = {'HarpoonMount.fbx': ('HarpoonMount', {'Swivel': (0, 0, .16), 'Barb_Muz
 objs = {}
 for fbx, (rootname, empties, budget) in EXPECT.items():
     obs = load(fbx); objs[fbx] = obs; r = R[fbx] = {}
+    E.extend('%s inside-out: %s' % (fbx, e) for e in winding_report(obs))   # tools/blender/check_winding.py
     by = {stem(o.name): o for o in obs}
     roots = [stem(o.name) for o in obs if o.parent is None]
     r['roots'] = roots

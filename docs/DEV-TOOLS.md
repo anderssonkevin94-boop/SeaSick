@@ -1640,3 +1640,36 @@ Traps:
 - **`WalkSlipProbe`** (`Scripts/Dev`, play mode, 2026-10-01): foot skate + turning. `Begin()`, wait, `Report()`: per locomotion state the STANCE foot's horizontal speed (lower foot bone, planted, in the body's parent frame so a deck counts as ground) mean/p50/p95, body speed and playback rate, sideways speed vs facing, yaw rate, and the first 90+ degree turn as a trace. `Drive(n, "WalkBrisk"|"Walk"|"WalkTired"|"Run"|"RunScared"|"Carry")` borrows n villagers (CampWorker off) and walks them round a 6 m/5 m triangle with the real `CampWorker.Walk`; `Release()`/`End()`. Before/after the planted-feet walk (Kevin's Day 307 camp): brisk slip mean 0.93 -> 0.07-0.14 m/s, carry 2.23 -> 0.20, sideways p95 2.0 -> 0.002 m/s, the same at the 1.5x cadence. Gait speeds live in `World/VillagerGaits.cs` (measured clip speeds x `Cadence`). Trap: editing a .cs while playing with the editor focused recompiles mid-play and wipes the probe's statics -- stop play first.
 - Trap: `capture_game_view --save_path` must be inside the project and lands under `Assets/` -- move it out and delete `Assets/Temp` + `.meta`.
 - Trap: Continue loads `SaveSlots.ResolveActivePath()` (the remembered active slot, often `m1`), not the newest file -- copy the save you want over every slot name in the override dir.
+
+## 2026-10-04 — inside-out faces: Blender shows them, Unity culls them
+
+**The trap.** Blender's approval renders (Eevee/Workbench) draw both sides of every face, so a kit whose
+stones are partly wound inward looks perfect in its review PNGs. Our world shaders (`SeaSick/Environment
+Toon`, `Environment Toon Textured`, `Crew *`, `Coaster Paint`) have no `Cull` line, i.e. **Cull Back**, so
+in game the same stones render as shattered shards with gaps. Only `Fleet Vertex Color` and `Boat Toon`
+are `Cull Off`. The level 2 wall/gate, kitchen V6 state kit, level 2 watchtower and grain mill level 1
+all shipped like this. `bmesh.ops.recalc_face_normals` on the raw import measures nothing: kits are
+flat-shaded, every face has its own vertices, so every face is its own "island".
+
+**The check** (exit 1 on any inside-out face; run it on every exported kit before import):
+
+    /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup \
+      --python tools/blender/check_winding.py -- <kit.fbx> [<kit.fbx> ...]
+
+It welds faces by position (1e-5 m), and on every CLOSED island demands consistent edge winding and a
+positive signed volume. Open islands (canvas, sails, glow cards, single planes) are skipped: which side
+shows is a design choice, and a single-sided sheet is invisible from behind in game (check it faces the
+camera, or make it a double layer like the storage hut canvas). Kit `check.py` scripts call
+`winding_report(objects)` (harpoon-v1, kitchen-grill-lvl1-v6).
+
+**The fix** (geometry, pivots, names, empties, colours, UVs, materials and the baked take unchanged; only
+face order and the matching flat normals flip):
+
+    Blender -b --factory-startup --python tools/blender/check_winding.py -- --fix <in.fbx> <out.fbx>
+
+then copy `out.fbx` over the art-staging source AND `Assets/_Project/Art/<Kit>/Models/` (never the
+.meta) and rerun that kit's `Dev/Editor/*Import.cs`. It re-exports with Blender's default FBX settings
+(-Z forward, Y up, FBX_SCALE_NONE, apply_unit_scale), which is what our kits use; colours go out linear
+when the source holds float colours above 1 (the kitchen). Constant animation curves are dropped (the
+grain mill's one live curve, the 1.5 s quern take, is kept). Never run it on a provided model (Meshy,
+Astra, characters): report those instead.
