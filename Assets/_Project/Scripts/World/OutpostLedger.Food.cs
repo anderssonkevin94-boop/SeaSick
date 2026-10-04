@@ -33,7 +33,54 @@ namespace SeaSick.World
         /// C): a farmhand only lifts what the store has room for and the
         /// rest stays in the field, ripe, until there is room -- nothing is
         /// carried that cannot be put down, nothing is lost. Old saves: 0.
+        /// **Legacy since 2026-10-03** (Kevin: infinite stacking): the
+        /// harvest now lifts the whole yield and `FarmDay` writes 0, so a
+        /// fresh game never sets it. Kept (and honoured by `RipeUnits`) only
+        /// so a save written in the few hours it was live still shows and
+        /// picks the units that are really standing, not the full yield.
         public int left;
+
+        /// **The crop queued behind a ripe harvest (2026-10-04, Kevin's farm
+        /// bug 2).** Picking another crop on a ripe (or part-ripe) plot used
+        /// to rewrite `crop` at once, so the standing wheat turned into
+        /// potatoes (same units, new label: goods invented/lost). Now `crop`
+        /// is only ever what is physically standing or growing; the pick
+        /// waits here and `Harvested()` swaps it in the moment the harvest is
+        /// picked, ready to be planted. Empty = nothing queued (every old
+        /// save: JsonUtility leaves a missing string at the initialiser).
+        public string nextCrop = "";
+
+        public bool HasNext => !string.IsNullOrEmpty(nextCrop);
+
+        /// **The harvest has been picked: bookkeeping for the bare plot.**
+        /// One door for `FarmDay` (and the self-test). A queued crop takes
+        /// the plot over (even with repeat off: the player asked for it);
+        /// otherwise a plot not on repeat is cleared, a plot on repeat keeps
+        /// its crop to be replanted. Returns the crop that was standing.
+        public string Harvested()
+        {
+            string was = crop;
+            left = 0;
+            state = PlotState.Empty;
+            grown = 0f;
+            work = 0f;
+            if (HasNext) { crop = nextCrop; nextCrop = ""; }
+            else if (!repeat) crop = "";
+            return was;
+        }
+
+        /// **The plot tile's second line** (and the one place any readout
+        /// of a plot's yield comes from, 2026-10-04, farm bug 1): a ripe
+        /// plot shows `RipeUnits`, what is actually still standing, never
+        /// the crop's full yield; a queued crop adds "next: potato".
+        public string StateLine(System.Func<string, string> label, string growClock)
+        {
+            string s = state == PlotState.Ripe ? $"ripe · {RipeUnits}"
+                : state == PlotState.Growing ? growClock
+                : string.IsNullOrEmpty(crop) ? "tap to plant" : "to plant";
+            if (HasNext && label != null) s += $"\nnext: {label(nextCrop)}";
+            return s;
+        }
 
         /// What a harvest of this ripe plot still gives (`left`, or the
         /// crop's whole yield when untouched).
@@ -383,17 +430,42 @@ namespace SeaSick.World
         static string Roman(int n) => n switch { 1 => "I", 2 => "II", 3 => "III", 4 => "IV", _ => n.ToString() };
 
         /// **The player picks a crop for a plot.** A growing plot is dug up
-        /// (nothing to harvest yet); a ripe one keeps its harvest and takes
-        /// the new crop after. Empty string clears the plot.
+        /// (nothing to harvest yet, nothing lost). **A ripe (or part-ripe)
+        /// plot never converts its standing harvest (2026-10-04 rule):** the
+        /// ripe crop keeps its identity and units, the pick is QUEUED in
+        /// `nextCrop` ("next: potato" on the tile) and is planted after the
+        /// farmhand picks the harvest (`FarmPlot.Harvested`). Picking the
+        /// crop that is already standing cancels a queued one. Empty string
+        /// = clear: instant on a bare/growing plot; on a ripe one the
+        /// harvest is still picked, then the plot is left bare (a queued
+        /// crop is dropped and repeat goes off).
         public bool SetPlotCrop(FarmPlot p, string crop, bool repeat)
         {
             if (p == null) return false;
-            if (!string.IsNullOrEmpty(crop) && !CropUnlocked(p, crop, out _)) return false;
+            crop = crop ?? "";
+            if (crop.Length > 0 && !CropUnlocked(p, crop, out _)) return false;
+            if (p.state == PlotState.Ripe)
+            {
+                if (crop.Length == 0) { p.nextCrop = ""; p.repeat = false; }
+                else if (crop == p.crop) p.nextCrop = "";
+                else p.nextCrop = crop;
+                if (crop.Length > 0) p.repeat = repeat;
+                return true;
+            }
+            p.nextCrop = "";
             if (p.state == PlotState.Growing && p.crop != crop) { p.state = PlotState.Empty; p.grown = 0f; }
-            if (p.state != PlotState.Ripe) p.work = 0f;
-            p.crop = crop ?? "";
+            p.work = 0f;
+            p.crop = crop;
             p.repeat = repeat;
             return true;
+        }
+
+        /// The "replant on repeat" switch alone (2026-10-04): it used to ride
+        /// on `SetPlotCrop(p, p.crop, ..)`, which now means "cancel the
+        /// queued crop" on a ripe plot, so the toggle has its own door.
+        public void SetPlotRepeat(FarmPlot p, bool repeat)
+        {
+            if (p != null) p.repeat = repeat;
         }
 
         FarmPlot NextPlotJob(int farm)
@@ -446,13 +518,12 @@ namespace SeaSick.World
                 // Review fix C had him lift only what the store had room for,
                 // leaving the rest ripe on the plot (`left`); the island store
                 // never fills now, so he harvests all of it and `left` stays 0.
-                string crop = p.crop;
                 int n = p.RipeUnits;
+                // `Harvested()` returns the crop that was STANDING (the
+                // basket's crop) and then applies a queued `nextCrop`
+                // (2026-10-04) before the plot is replanted.
+                string crop = p.Harvested();
                 if (n <= 0) continue;
-                p.left = 0;
-                p.state = PlotState.Empty;
-                p.grown = 0f;
-                if (!p.repeat) p.crop = "";
                 h.basket = n;
                 CarryBasket(h, crop, hasPost, postAt);
                 if (h.Hauling) return;

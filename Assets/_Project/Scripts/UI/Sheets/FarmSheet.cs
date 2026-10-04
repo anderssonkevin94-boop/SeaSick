@@ -119,7 +119,8 @@ namespace SeaSick.UI.Sheets
             long key = list.Count * 131L + pickedPlot;
             foreach (var p in list)
                 key = key * 31 + (p.crop?.GetHashCode() ?? 0) + (int)p.state * 7 + (p.repeat ? 1 : 0)
-                      + Mathf.CeilToInt(p.SecondsLeft) * 13;
+                      + Mathf.CeilToInt(p.SecondsLeft) * 13
+                      + (p.nextCrop?.GetHashCode() ?? 0) * 17 + (p.state == PlotState.Ripe ? p.RipeUnits * 19 : 0);
             int ripe = 0, growing = 0;
             float soonest = float.MaxValue;
             foreach (var p in list)
@@ -163,9 +164,10 @@ namespace SeaSick.UI.Sheets
                 tile.style.flexDirection = FlexDirection.Column;
                 if (idx == pickedPlot) tile.AddToClassList("st-seg-btn--on");
                 string name = string.IsNullOrEmpty(p.crop) ? "Empty" : StationPage.Cap(ResDefs.Label(p.crop));
-                string state = p.state == PlotState.Ripe ? $"ripe · {FoodBook.Crop(p.crop)?.yield ?? 0}"
-                    : p.state == PlotState.Growing ? Clock(p.SecondsLeft)
-                    : string.IsNullOrEmpty(p.crop) ? "tap to plant" : "to plant";
+                // 2026-10-04: the units STILL standing (`RipeUnits`), not the
+                // crop's full yield, and "next: potato" while a crop change
+                // waits behind the harvest -- both from `FarmPlot.StateLine`.
+                string state = p.StateLine(r => StationPage.Cap(ResDefs.Label(r)), Clock(p.SecondsLeft));
                 // No emoji: the sheet font (Nunito) has none, and the phone drew
                 // them as a stray "]". An empty plot gets a plain +.
                 tile.text = (string.IsNullOrEmpty(p.crop) ? "+ " : "") + $"{name}\n{state}"
@@ -184,7 +186,8 @@ namespace SeaSick.UI.Sheets
                 bedsLine.style.display = tilesOn;
             }
             if (pk == null) return;
-            pickerTitle.text = $"Plot {pickedPlot + 1} · " + (string.IsNullOrEmpty(pk.crop) ? "empty" : ResDefs.Label(pk.crop));
+            pickerTitle.text = $"Plot {pickedPlot + 1} · " + (string.IsNullOrEmpty(pk.crop) ? "empty" : ResDefs.Label(pk.crop))
+                + (pk.HasNext ? $" → {ResDefs.Label(pk.nextCrop)}" : "");
             cropRow.Clear();
             foreach (var c in FoodBook.Crops)
             {
@@ -207,12 +210,20 @@ namespace SeaSick.UI.Sheets
                     b.style.marginRight = Length.Percent(2f);
                     b.style.fontSize = 15f;
                 }
-                if (pk.crop == crop) b.AddToClassList("st-seg-btn--on");
+                // On a ripe plot the lit button is the crop that will be
+                // planted next (the queued one), not the one standing.
+                if ((pk.HasNext ? pk.nextCrop : pk.crop) == crop) b.AddToClassList("st-seg-btn--on");
                 cropRow.Add(b);
             }
             var def = FoodBook.Crop(pk.crop);
             pickerInfo.text = def == null ? "pick a crop; the farmhand plants it"
                 : $"{def.growSeconds / 60f:0.#} min · {def.yield} per harvest · {def.PerHour:0} an hour";
+            // Ripe plot: say plainly that the standing harvest is safe and
+            // when the pick takes effect (2026-10-04; text wraps, never cut).
+            if (pk.state == PlotState.Ripe && def != null)
+                pickerInfo.text = pk.HasNext
+                    ? $"{pk.RipeUnits} {ResDefs.Label(pk.crop)} ripe, picked first; then {ResDefs.Label(pk.nextCrop)} is planted"
+                    : $"{pk.RipeUnits} {ResDefs.Label(pk.crop)} ripe; another crop you pick is planted after the harvest";
             repeatBtn.text = pk.repeat ? "↻ Replant on repeat: on" : "↻ Replant on repeat: off";
         }
 
@@ -294,7 +305,7 @@ namespace SeaSick.UI.Sheets
             picker.Add(pickerInfo);
             var actions = new VisualElement();
             actions.style.flexDirection = FlexDirection.Row;
-            repeatBtn = FarmBtn("↻ Replant on repeat", () => { var p = Picked(); if (p != null) L?.SetPlotCrop(p, p.crop, !p.repeat); Refresh(); });
+            repeatBtn = FarmBtn("↻ Replant on repeat", () => { var p = Picked(); if (p != null) L?.SetPlotRepeat(p, !p.repeat); Refresh(); });
             repeatBtn.style.flexGrow = 1f;
             actions.Add(repeatBtn);
             actions.Add(FarmBtn("Clear plot", () => { var p = Picked(); if (p != null) L?.SetPlotCrop(p, "", p.repeat); Refresh(); }));
