@@ -12,7 +12,7 @@ namespace SeaSick.World.Life
     /// Mara (washed up on Island_6 day 650, lived on aboard to day 708),
     /// Mabel (washed up on Island_6 day 649, nobody since), Dorrit (a
     /// stranger CastawayField made up), Bo (lost at sea day 649, alive on
-    /// deck since), Ola (dead day 503, body switched off), Pip (dead day 19,
+    /// deck since), Ola (dead day 503, body switched off, log runs to 708), Pip (dead day 19,
     /// a home hand). Returns "PASS n/n" or the failures.
     public static class CastawayFixSelfTest
     {
@@ -110,7 +110,7 @@ namespace SeaSick.World.Life
             Check("a record left beside its own row is dropped, not walked twice",
                   changed3 == 1 && list3.Count == 0 && CountRows(world, "Mabel") == 1);
 
-            // ---- un-kill Bo; Ola stays dead (Kevin, 2026-10-04) -------------
+            // ---- un-kill Bo, Pip and Ola (Kevin, 2026-10-04) -----------------
             var boGrave = new GraveRecord { name = "Bo", diedDay = 649, cause = LifeEvents.LostAtSea };
             var olaGrave = new GraveRecord { name = "Ola", diedDay = 503, cause = LifeEvents.LostAtSea };
             var pipGrave = new GraveRecord { name = "Pip", diedDay = 19, cause = LifeEvents.LostAtSea };
@@ -124,31 +124,34 @@ namespace SeaSick.World.Life
 
             Check("Bo: switched on aboard, life goes on after day 649 -> death taken back",
                   DeathRepair.IsFalseDeath(boGrave, bo, true));
-            Check("Ola: her log runs past 503 but her body is switched off -> stays dead",
-                  !DeathRepair.IsFalseDeath(olaGrave, ola, false));
+            Check("Ola: her (switched-off) body is aboard and her log runs past 503 -> death taken back",
+                  DeathRepair.IsFalseDeath(olaGrave, ola, true));
             Check("Pip: a home hand whose log goes on after day 19 -> death taken back",
                   DeathRepair.IsFalseDeath(pipGrave, pip, false, true));
             Check("a ledger hand with nothing logged since the death -> still dead",
                   !DeathRepair.IsFalseDeath(tamDead, tam, false, true));
-            Check("a genuinely dead person (no body, no row) is untouched",
-                  !DeathRepair.IsFalseDeath(olaGrave, ola, false, false));
+            var kessGrave = new GraveRecord { name = "Kess", diedDay = 600, cause = LifeEvents.KilledInRaid };
+            var kess = Life("Kess", Ev(LifeEvents.Hungry, "Island_6", 650));
+            Check("a genuinely dead person (no body, no row) is untouched, even with a stray later event",
+                  !DeathRepair.IsFalseDeath(kessGrave, kess, false, false));
             Check("a body aboard with nothing logged since the death -> still dead",
                   !DeathRepair.IsFalseDeath(tamDead, tam, true));
             Check("a different person's record never un-kills (identity)",
                   !DeathRepair.IsFalseDeath(boGrave, ola, true));
-            Check("Ola's switched-off body in a Station state is not counted aboard",
+            Check("a switched-off body in a Station state is not counted aboard (until it is back on)",
                   !SeaSick.Crew.CrewRoster.CountsAboard(false, true)
                   && SeaSick.Crew.CrewRoster.CountsAboard(true, true));
 
-            var graves = new List<GraveRecord> { olaGrave, pipGrave, boGrave };
-            var livesNow = new Dictionary<string, LifeRecord> { { "Bo", bo }, { "Ola", ola }, { "Pip", pip } };
-            var onDeck = new HashSet<string> { "Bo", "Mara", "Tam", "Cass", "Ursa" };
+            var graves = new List<GraveRecord> { olaGrave, pipGrave, boGrave, kessGrave };
+            var livesNow = new Dictionary<string, LifeRecord> { { "Bo", bo }, { "Ola", ola }, { "Pip", pip }, { "Kess", kess } };
+            // Every body under the ship, switched on or not (Ola is off).
+            var onDeck = new HashSet<string> { "Bo", "Mara", "Tam", "Ola", "Cass", "Ursa" };
             var homeRows = new HashSet<string> { "Yara", "Nye", "Edda", "Finch", "Pip", "Gale" };
             LifeRecord LifeOf(string n) => livesNow.TryGetValue(n, out var r) ? r : null;
             var first = DeathRepair.FalseDeaths(graves, LifeOf, onDeck.Contains, homeRows.Contains);
             foreach (var g in first) graves.Remove(g);
-            Check("first pass on his save: Bo and Pip come back, Ola stays",
-                  first.Count == 2 && graves.Count == 1 && graves[0].name == "Ola", "took " + first.Count);
+            Check("first pass on his save: Bo, Pip and Ola come back, Kess stays dead",
+                  first.Count == 3 && graves.Count == 1 && graves[0].name == "Kess", "took " + first.Count);
             var second = DeathRepair.FalseDeaths(graves, LifeOf, onDeck.Contains, homeRows.Contains);
             Check("second pass takes nothing (idempotent)", second.Count == 0, "took " + second.Count);
 
@@ -165,7 +168,7 @@ namespace SeaSick.World.Life
                 // ManCrew's want is 1 and only the first scene body (Bo) is
                 // switched on at step 2; 5a2 repair, then stand-down.
                 var on = new Dictionary<string, bool> { { "Bo", true }, { "Mara", false }, { "Tam", false }, { "Ola", false } };
-                var brigGraves = new List<GraveRecord> { olaGrave, boGrave };
+                var brigGraves = new List<GraveRecord> { kessGrave, boGrave };
                 bool restoring = true;
                 if (SeaSick.Crew.CrewNames.RetireDuringMan(restoring))
                     foreach (var g in brigGraves) on[g.name] = false;
@@ -175,9 +178,19 @@ namespace SeaSick.World.Life
                 foreach (var g in brigGraves)
                     if (SeaSick.Crew.CrewNames.StandsDown(on.TryGetValue(g.name, out var a) && a, true)) on[g.name] = false;
                 Check("brig load: Bo keeps his name and stays on deck",
-                      on["Bo"] && brigGraves.Count == 1 && brigGraves[0].name == "Ola");
+                      on["Bo"] && brigGraves.Count == 1 && brigGraves[0].name == "Kess");
             }
-            Check("a switched-off body is never stood down again (Ola untouched)",
+            Check("Ola back on: switched off, alive, no row, has served, a hammock free",
+                  DeathRepair.ShouldReturn(false, false, false, true, true));
+            Check("a fresh voyage's never-posted fifth hand (no life yet) stays off",
+                  !DeathRepair.ShouldReturn(false, false, false, false, true));
+            Check("a stood-down dead or castaway name stays off",
+                  !DeathRepair.ShouldReturn(false, true, false, true, true));
+            Check("a hand living at a camp is not switched on aboard",
+                  !DeathRepair.ShouldReturn(false, false, true, true, true));
+            Check("no hammock free: stays off",
+                  !DeathRepair.ShouldReturn(false, false, false, true, false));
+            Check("a switched-off body is never stood down again",
                   !SeaSick.Crew.CrewNames.StandsDown(false, true));
 
             string head = "PASS " + pass + "/" + total;

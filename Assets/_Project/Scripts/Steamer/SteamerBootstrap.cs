@@ -382,6 +382,24 @@ namespace SeaSick.Steamer
         /// generator solved them against her own planking; `CannonBattery`
         /// mirrors the starboard side and then posts a hand to each gun
         /// itself.
+        /// **Re-post the hands she has switched on**, on this hull form's
+        /// deck stations -- a refit's crew step without the guns. Also
+        /// `DeathRepair.ReturnLivingHands` once a stood-down hand is back on.
+        public static void RepostHands(GameObject ship, HullFormData data, int minHands = 0)
+        {
+            if (ship == null || data == null) return;
+            var hands = ship.GetComponentsInChildren<SeaSick.Crew.CrewAgent>(true);
+            var aboard = new System.Collections.Generic.List<SeaSick.Crew.CrewAgent>();
+            foreach (var h in hands) if (h != null && h.gameObject.activeSelf) aboard.Add(h);
+            for (int i = 0; i < aboard.Count; i++)
+            {
+                DeckStation(data, i, Mathf.Max(minHands, aboard.Count), out Vector3 at, out Vector3 rail);
+                aboard[i].AssignStation(at, rail);
+            }
+            var crewList = ship.GetComponent<SeaSick.Crew.CrewRoster>();
+            if (crewList != null) crewList.Refresh();
+        }
+
         static void Man(GameObject ship, HullFormData data, BuildOptions o)
         {
             int Hands = o.hands;
@@ -396,15 +414,7 @@ namespace SeaSick.Steamer
                 // A refit: the same people, re-posted on the new deck. Nobody
                 // is made and nobody is stood down (the shipyard refuses a
                 // refit with more hands aboard than stations).
-                var aboard = new System.Collections.Generic.List<SeaSick.Crew.CrewAgent>();
-                foreach (var h in hands) if (h != null && h.gameObject.activeSelf) aboard.Add(h);
-                for (int i = 0; i < aboard.Count; i++)
-                {
-                    DeckStation(data, i, Mathf.Max(Hands, aboard.Count), out Vector3 at, out Vector3 rail);
-                    aboard[i].AssignStation(at, rail);
-                }
-                var crewList = ship.GetComponent<SeaSick.Crew.CrewRoster>();
-                if (crewList != null) crewList.Refresh();
+                RepostHands(ship, data, Hands);
             }
             else if (hands.Length > 0)
             {

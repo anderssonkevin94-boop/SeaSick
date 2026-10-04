@@ -557,6 +557,10 @@ namespace SeaSick.Save
             string deathFix = SeaSick.World.Life.DeathRepair.RunOnLoad(motor.transform);
             if (!string.IsNullOrEmpty(deathFix)) Debug.Log("SaveGame: death repair -- " + deathFix);
             CrewNames.RetireTakenNames(motor.transform);
+            // A living hand the steamer's 4-hand post stood down at scene
+            // load (Ola, un-killed above) comes back on and is posted.
+            string back = SeaSick.World.Life.DeathRepair.ReturnLivingHands(motor.transform);
+            if (!string.IsNullOrEmpty(back)) Debug.Log("SaveGame: " + back);
 
             var roster = motor.GetComponent<CrewRoster>();
             if (roster != null) roster.Refresh();
