@@ -107,21 +107,28 @@ namespace SeaSick.Ship.Harpoon
         public static float lampLensDayGlow = 0.25f;
 
         // --- the lamp's night beam (HarpoonBeam: a fake, the sea takes no spot) ---
-        /// m ahead of the lamp where the pool on the water starts. Range 0..10.
-        public static float lampPoolStart = 3f;
+        /// m ahead of the lamp's foot (its water projection) where the pool on the water starts. Range 0..10.
+        public static float lampPoolStart = 0.8f;
         /// How far the pool reaches, as a fraction of lampRange. Range 0.3..1.5.
         public static float lampPoolReach = 1f;
         /// Pool width, times the spot's own cone. Range 0.3..2.
         public static float lampPoolWiden = 1f;
-        /// Pool brightness (additive alpha) at full night. Range 0..1.
-        public static float lampPoolAlpha = 0.35f;
+        /// Pool opacity at its brightest, full night (the pool is an alpha blend, so
+        /// the sea's blue never tints the lamp's hue). Range 0..1.
+        public static float lampPoolAlpha = 0.5f;
         /// m above the mean water the pool floats (clears the ripples). Range 0..1.5.
         public static float lampPoolLift = 0.35f;
-        /// m from the lens the air cone fades out. Range 2..20.
-        public static float lampConeLength = 9f;
+        /// m ahead of the lamp's foot, along the water, where the air cone comes down
+        /// into the pool (the cone runs from the lens to that point, so it never
+        /// floats apart from the pool). Range 1..12.
+        public static float lampConeLength = 4f;
         /// Air cone width, times the spot's own cone. Range 0.1..1.5.
         public static float lampConeWiden = 0.6f;
-        /// Air cone brightness (additive alpha) at the lens, full night. Range 0..1.
-        public static float lampConeAlpha = 0.25f;
+        /// Air cone brightness (additive alpha) at the lens, full night; it eases to the
+        /// pool's own near brightness where it lands. Range 0..1.
+        public static float lampConeAlpha = 0.4f;
+        /// Pool brightness at its near end, as a fraction of lampPoolAlpha (the
+        /// cone fades into this). Range 0..1.
+        public static float lampPoolNear = 0.6f;
     }
 }

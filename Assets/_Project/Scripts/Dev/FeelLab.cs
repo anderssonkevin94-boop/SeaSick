@@ -239,9 +239,10 @@ namespace SeaSick.Dev
             {"HarpoonTuning.lampPoolWiden",         (0.3f, 2f)},
             {"HarpoonTuning.lampPoolAlpha",         (0f, 1f)},
             {"HarpoonTuning.lampPoolLift",          (0f, 1.5f)},
-            {"HarpoonTuning.lampConeLength",        (2f, 20f)},
+            {"HarpoonTuning.lampConeLength",        (1f, 12f)},
             {"HarpoonTuning.lampConeWiden",         (0.1f, 1.5f)},
             {"HarpoonTuning.lampConeAlpha",         (0f, 1f)},
+            {"HarpoonTuning.lampPoolNear",          (0f, 1f)},
 
             {"HelmTuning.holdGain",            (0.1f, 2f)},
             {"HelmTuning.holdMaxDegPerSec",    (0.5f, 10f)},

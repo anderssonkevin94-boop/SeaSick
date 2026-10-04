@@ -27,10 +27,11 @@ namespace SeaSick.Ship.Harpoon
         public const string LightName = "Lamp_Light";
         public const string LensName = "Lamp_Lens";
 
-        /// The bow lantern's warm light colour (CoasterOutfitting's lantern loop).
-        public static readonly Color WarmColor = new Color(1f, 0.55f, 0.23f);
+        /// The bow lantern's warm light colour, also the beam's: yellow-orange, since a
+        /// redder orange reads pink over the dark blue sea.
+        public static readonly Color WarmColor = new Color(1f, 0.78f, 0.38f);
         /// The lens colour at full glow: the hull lanterns' glass (CoasterOutfitting.Glass).
-        static readonly Color LensGlow = new Color(1.8f, 0.85f, 0.35f, 1f);
+        static readonly Color LensGlow = new Color(1.8f, 1.05f, 0.42f, 1f);
 
         /// m to the side, and m behind the muzzle, of a lamp the art did not place.
         const float FallbackSide = 0.25f;
