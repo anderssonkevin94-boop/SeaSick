@@ -19,7 +19,7 @@ namespace SeaSick.UI.Sheets
     ///    farm; "People" opens the roster when there is no free hand);
     /// 2. **plot cards**, three a row: the crop's icon (a drawn "+" on an
     ///    empty plot), its name, ONE state ("4:12 left" with a thin bar,
-    ///    "ripe · 4 to pick", "to plant", or "Choose crop" in ice on an empty
+    ///    "4 to pick" in moss, "to plant", or "Choose crop" in ice on an empty
     ///    plot) and "next: Potato" while a crop change waits behind the
     ///    harvest (`FarmPlot.nextCrop`) or "then empty" when it will not be
     ///    replanted. Tap a card: its detail. More than fit page through a
@@ -145,15 +145,17 @@ namespace SeaSick.UI.Sheets
         int pickedPlot = -1;
 
         /// Panel units one row of plot cards costs, for planning how many rows
-        /// fit the hugging frame BEFORE building. Measured on the 16 Pro shape
-        /// (2026-10-04): a two-line card is 56 + 7 gap, a three-line one
-        /// ("ripe · 10 to / pick") 75 + 7; planned at 78 so a page of mixed
-        /// cards fits. The farmer card: 6+6 pad + 4 border + 48 button + 8
+        /// fit the hugging frame BEFORE building. Planned for the WORST card,
+        /// three lines (name + "Choose / crop", or name + state + "next:
+        /// Potato"): 20.5 + 17.7 + 16.4 + 2 margins + 5+5 pad + 3 border = 70,
+        /// + 7 gap; rounded to 78. Measured 2026-10-04 on the 16 Pro shape: a
+        /// two-line card is 56. Three rows (+ the farmer card) = 302 of the
+        /// phone's 312. The farmer card: 4+4 pad + 4 border + 48 button + 8
         /// margin. The summary line (8 + ~20) shows only while the farmer card
         /// does not -- the card's own line says the same -- so one reserve
         /// covers either, and assigning a farmer never needs a re-plan.
         const float PlotRowPx = 78f;
-        const float FarmerRowPx = 72f;
+        const float FarmerRowPx = 68f;
 
         // --- the model -----------------------------------------------------------
 
@@ -628,6 +630,10 @@ namespace SeaSick.UI.Sheets
             string line = p.StateLine(CropName, Clock(p.SecondsLeft));
             int nl = line.IndexOf('\n');
             string state = nl >= 0 ? line.Substring(0, nl) : line;
+            // A ripe card says only the count ("10 to pick", one line in a
+            // third of the phone): its green edge and moss line say ripe, and
+            // the picked plot's head keeps the whole "ripe · 10 to pick".
+            if (p.state == PlotState.Ripe) state = $"{p.RipeUnits} to pick";
             int kind;
             if (p.state == PlotState.Ripe) kind = hasFarmer ? 0 : 1;
             else if (p.state == PlotState.Growing) kind = -1;
@@ -678,7 +684,10 @@ namespace SeaSick.UI.Sheets
                 }
                 else
                 {
-                    SetText(t.state, "needs " + StationPage.Cap(why ?? "a higher farm"));
+                    // "Farm III" never splits (Kevin 2026-10-04): its spaces
+                    // are no-break (U+00A0, which Nunito has), so the line
+                    // wraps as "needs" / "Farm III".
+                    SetText(t.state, "needs " + StationPage.Cap(why ?? "a higher farm").Replace(' ', '\u00a0'));
                     Tone(t.state, 1);
                     SetText(t.sub, "");
                 }

@@ -453,7 +453,7 @@
 
 .st-pgrid { flex-direction: row; flex-wrap: wrap; flex-shrink: 0; }
 .st .st-ptile {
-    width: 32%; min-height: 56px; margin: 0 2% 0 0; padding: 7px 6px 7px 8px;
+    width: 32%; min-height: 56px; margin: 0 2% 0 0; padding: 5px 3px 5px 5px;
     flex-direction: row; align-items: center; justify-content: flex-start; flex-shrink: 0;
     border-radius: 12px; border-width: 1.5px; border-color: rgb(44, 74, 94);
     background-color: rgb(28, 52, 70);
@@ -466,8 +466,13 @@
 .st .st-ptile--empty { border-color: rgb(164, 210, 232); background-color: rgb(22, 41, 58); }
 .st .st-ptile--locked { background-color: rgb(22, 41, 58); border-color: rgb(30, 51, 68); }
 .st .st-ptile--on { border-width: 2.5px; border-color: rgb(164, 210, 232); background-color: rgb(36, 62, 82); }
-.st-ptile-icon { width: 30px; height: 30px; flex-shrink: 0; margin-right: 7px; -unity-background-scale-mode: scale-to-fit; }
-.st-ptile-glyph { width: 26px; height: 26px; flex-shrink: 0; margin: 2px 9px 2px 2px; }
+/* The crop icon is the card's height (Kevin 2026-10-04: "they read tiny"):
+ * 36 against two text lines of ~38. A card is ~124 units wide on the 16 Pro,
+ * so 3+8 chrome + 36 + 5 leaves ~72 for the words: every plot line measured
+ * in Nunito fits one line ("next: Potato" 68, "16:25 left" 61, "10 to pick"
+ * 62); only "Choose crop" (78) wraps, at its space. */
+.st-ptile-icon { width: 36px; height: 36px; flex-shrink: 0; margin-right: 5px; -unity-background-scale-mode: scale-to-fit; }
+.st-ptile-glyph { width: 28px; height: 28px; flex-shrink: 0; margin: 4px 9px 4px 4px; }
 .st .st-ptile--locked .st-ptile-icon { opacity: 0.35; }
 .st-ptile-words { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-width: 0; }
 .st .st-ptile-name {
@@ -491,7 +496,7 @@
 
 /* --- no farmer: the line and its fix ----------------------------------- */
 
-.st-farmer { border-color: rgb(110, 52, 46); margin-bottom: 8px; padding: 6px 8px 6px 14px; }
+.st-farmer { border-color: rgb(110, 52, 46); margin-bottom: 8px; padding: 4px 8px 4px 14px; }
 .st-farmer-words { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-width: 0; }
 .st .st-farmer-title {
     font-size: 16px; color: rgb(246, 146, 128); white-space: normal;
@@ -525,7 +530,8 @@
 .st .st-ptile .st-tone--wait { color: rgb(242, 196, 109); }
 .st .st-ptile .st-tone--bad { color: rgb(246, 146, 128); }
 .st .st-ptile .st-ptile-act { color: rgb(164, 210, 232); }
-/* the crop cards in a picked plot: a smaller icon, so "10 in 20 min" fits a third of the phone */
-.st .st-ptile--crop { padding: 6px 4px 6px 6px; }
-.st .st-ptile--crop .st-ptile-icon { width: 22px; height: 22px; margin-right: 5px; }
+/* The crop cards in a picked plot: icon 34 beside three lines, the time line
+ * at 12 so "10 in 20 min" (71 units) fits the ~75 left beside it. */
+.st .st-ptile--crop .st-ptile-icon { width: 34px; height: 34px; margin-right: 4px; }
+.st .st-ptile--crop .st-ptile-state { font-size: 12px; }
 .st .st-pinfo { font-size: 13px; }
