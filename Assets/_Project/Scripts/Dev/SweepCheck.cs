@@ -1172,19 +1172,27 @@ namespace SeaSick.Dev
                         new Vector3(sp.x, sea + 2f, sp.z),
                         new Vector3(sp.x, sea + 2f, sp.z) + ShipFwd * half,
                         new Vector3(sp.x, sea + 2f, sp.z) - ShipFwd * half,
+                        // and her hull where it meets the water, bow and stern
+                        new Vector3(sp.x, sea, sp.z) + ShipFwd * half,
+                        new Vector3(sp.x, sea, sp.z) - ShipFwd * half,
                     };
                     foreach (var kv in HudRects())
                         foreach (var w in pts)
-                            if (kv.Value.Contains(Gui(w))) shipHits[kv.Key] = R(kv.Value) + " holds " + Gui(w).ToString("F0");
+                            // The Wheel slot is the IMGUI reservation over the
+                            // drawn bottom stack (combat row, helm strip), not a
+                            // panel: the ship may sit under its empty top part.
+                            if (kv.Key != "HudLayout:Wheel" && kv.Value.Contains(Gui(w))) shipHits[kv.Key] = R(kv.Value) + " holds " + Gui(w).ToString("F0");
                 }
                 if (n == 0) { Fail("measured", "the kraken left before a frame was measured"); yield break; }
                 float ship01 = shipSum / n;
-                float wantShip = desk ? KrakenTuning.camShip01Desk : KrakenTuning.camShip01;
+                // The line the game asks for: the shape's tuned line, raised
+                // over the bottom stack (`Kraken.ShipLine01`).
+                float wantShip = Kraken.ShipLine01();
                 Info("camera: " + CamPose());
                 Check(chase.SeaFocus.HasValue && chase.SeaFocusLevel >= 0.98f, "the kraken's SeaFocus framing is on and settled",
                       "level " + F(chase.SeaFocusLevel) + ", SeaFocusShip01 " + F(chase.SeaFocusShip01) + ", SeaFocusTop01 " + F(chase.SeaFocusTop01));
                 Check(Mathf.Abs(chase.SeaFocusShip01 - wantShip) < 0.005f, "the framing asks for this shape's ship height",
-                      "SeaFocusShip01 " + F(chase.SeaFocusShip01) + " vs " + (desk ? "camShip01Desk " : "camShip01 ") + F(wantShip));
+                      "SeaFocusShip01 " + F(chase.SeaFocusShip01) + " vs Kraken.ShipLine01 " + F(wantShip) + " (tuned " + F(desk ? KrakenTuning.camShip01Desk : KrakenTuning.camShip01) + ")");
                 Check(Mathf.Abs(ship01 - wantShip) <= 0.04f, "her deck (2 m over the sea) sits at the intended screen height",
                       "deck at " + F(ship01, "F3") + " of the height from the bottom (want " + F(wantShip) + " +-0.04)");
                 Check(topMax <= chase.SeaFocusTop01 + 0.02f, "the kraken's top (highest bone or mantle dome) fits under SeaFocusTop01",
@@ -1195,7 +1203,7 @@ namespace SeaSick.Dev
                 else Info("top bar not showing; the camTop01 fallback is the ceiling");
                 var sh = new StringBuilder();
                 foreach (var kv in shipHits) sh.Append("\n     " + kv.Key + ": " + kv.Value);
-                Check(shipHits.Count == 0, "her deck, bow and stern are clear of every HUD rect",
+                Check(shipHits.Count == 0, "her deck, bow and stern (deck and waterline) are clear of every drawn HUD rect",
                       shipHits.Count == 0 ? "clear" : shipHits.Count + " rect(s):" + sh);
                 Shot("framed");
                 yield return DismissAndWait();

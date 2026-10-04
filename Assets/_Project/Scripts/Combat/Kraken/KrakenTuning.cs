@@ -68,6 +68,12 @@ namespace SeaSick.Combat
         /// Highest the ship's deck may be raised to clear the bottom HUD
         /// stack (wheel, helm row, combat row); `Kraken.ShipLine01`.            0.3..0.6
         public static float camShipMax01 = 0.50f;
+        /// How far her hull reaches below the deck line on the screen, as a
+        /// fraction of the height, kept clear of the bottom stack as well:
+        /// the deck alone cleared the combat row but her stern and the row's
+        /// hint line overlapped (1080x2340 portrait, 2026-10-04: hull bottom
+        /// ~130 px under the deck).                                             0..0.15
+        public static float camShipHull01 = 0.07f;
         /// Highest the kraken's top may reach, fraction from the bottom, when
         /// the HUD's top bar is not up to measure against (it is read live
         /// when it is).                                                          0.6..0.95

@@ -648,7 +648,9 @@ namespace SeaSick.Combat
         /// 2026-10-04 on the 1080x2340 portrait screen: 0.27 put her deck at
         /// GUI y 1810, under the combat row (top 1711) and inside the wheel
         /// reserve (top 1368). Held below `camShipMax01` so the kraken's own
-        /// top limit keeps room; when both cannot fit, the ship wins.
+        /// top limit keeps room; when both cannot fit, the ship wins. The
+        /// line clears the stack by `camShipHull01` more, for the hull that
+        /// hangs below the deck on the screen.
         public static float ShipLine01()
         {
             float line = SeaSick.UI.HudLayout.Wide ? KrakenTuning.camShip01Desk : KrakenTuning.camShip01;
@@ -659,7 +661,7 @@ namespace SeaSick.Combat
             if (helm.height > 1f) stackTop = Mathf.Min(stackTop, helm.yMin);
             if (SeaSick.UI.Sheets.CombatHud.Visible && SeaSick.UI.Sheets.CombatHud.Rect.height > 1f)
                 stackTop = Mathf.Min(stackTop, SeaSick.UI.Sheets.CombatHud.Rect.yMin);
-            float clear = 1f - (stackTop - SeaSick.UI.HudLayout.Unit) / h;
+            float clear = 1f - (stackTop - SeaSick.UI.HudLayout.Unit) / h + KrakenTuning.camShipHull01;
             return Mathf.Clamp(Mathf.Max(line, clear), line, Mathf.Max(line, KrakenTuning.camShipMax01));
         }
 

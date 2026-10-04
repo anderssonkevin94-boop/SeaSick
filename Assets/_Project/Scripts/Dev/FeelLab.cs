@@ -125,6 +125,7 @@ namespace SeaSick.Dev
             {"KrakenTuning.camShip01",         (0.15f, 0.5f)},
             {"KrakenTuning.camShip01Desk",     (0.15f, 0.6f)},
             {"KrakenTuning.camShipMax01",      (0.3f, 0.6f)},
+            {"KrakenTuning.camShipHull01",     (0f, 0.15f)},
             {"KrakenTuning.camTop01",          (0.6f, 0.95f)},
             {"KrakenTuning.camElevDeg",        (8f, 45f)},
             {"KrakenTuning.camSwingDeg",       (0f, 120f)},
