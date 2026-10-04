@@ -503,6 +503,12 @@ namespace SeaSick.World
         /// (`CampWorker`) mime each ledger trip exactly once.
         [System.NonSerialized] public int haulSerial;
 
+        /// The share of `haulSerial` bound for a build site, never saved and
+        /// read by nothing in the game (2026-10-04): `StationStockSelfTest`'s
+        /// "at most 4 trips to stock the site" gate, which `haulSerial` stopped
+        /// answering once idle builders also run store top-up trips (c6e38515).
+        [System.NonSerialized] public int siteTripSerial;
+
         /// What to call what they are doing, for the list on the right.
         public string Doing
         {

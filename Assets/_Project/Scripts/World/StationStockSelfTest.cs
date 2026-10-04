@@ -40,7 +40,7 @@ namespace SeaSick.World
     ///     ceiling and every log is accounted; with the store full a gatherer
     ///     says so and helps build / hauls for the stations, then resumes.
     /// (l) Clearing a plot is seconds of builder time: 2 trees = 10 s,
-    ///     a rock = 8 s (the rest of an 18 s tick goes on building).
+    ///     a rock = 8 s (plus the walk to the store with what came off it; the hammering starts after).
     /// (m) Tempo, Kevin's phone playtest 2026-09-24: one log -> 3 boards in
     ///     45 s (15 s a plank), all 3 onto the rack together; a rack short of
     ///     room takes what fits and the rest wait on the bench, blocking it;
@@ -70,7 +70,29 @@ namespace SeaSick.World
     ///     (b)'s old "full rack blocks the bench" is now "the spot pauses".
     public static class StationStockSelfTest
     {
+        /// **The gates run on an hourless camp (2026-10-04).** Every ledger
+        /// here starts at second 0, which the sky clock reads as 00:00 --
+        /// asleep until 01:00 since the day/night ladder (8099268f,
+        /// 2026-09-28) -- and its awake hours work at 24/20 = 1.2x. The gates
+        /// price walks and benches at 1x from the first quantum, so the camp
+        /// is held awake at scale 1 for the run (`CampLifeTuning.
+        /// OverrideForTest`) and the statics the run touches are put back.
+        /// The day/night ladder itself is not what these gates are about.
         public static bool Run()
+        {
+            float hour = OutpostLedger.ActiveHour;
+            bool hourKnown = OutpostLedger.ActiveHourKnown;
+            Life.CampLifeTuning.OverrideForTest(true);
+            try { return RunGates(); }
+            finally
+            {
+                Life.CampLifeTuning.OverrideForTest(false);
+                OutpostLedger.ActiveHour = hour;
+                OutpostLedger.ActiveHourKnown = hourKnown;
+            }
+        }
+
+        static bool RunGates()
         {
             var sb = new StringBuilder("StationStockSelfTest\n");
             int fails = 0;
@@ -314,22 +336,26 @@ namespace SeaSick.World
 
             // --- (k) gathering is trips (Kevin, 2026-09-23) -----------------
             {
-                // (1) one gatherer, trees 20 m from the store: walk 7.7 s,
-                // cut 1 + 2 x 5 s, walk back 7.7 s -- the first armful is
-                // counted at ~26 s; at 36 s he is cutting the second (both
-                // logs still standing: nothing leaves the island early).
+                // (1) one gatherer, trees 20 m from the store: walk out, cut
+                // 1 + 2 x 5 s, walk back -- the first armful is counted at
+                // `firstIn`; the gate looks at the first quantum after it.
+                // (2026-10-04: was a fixed 36 s, which assumed 2.6 m/s; since
+                // 734b3dc1, 2026-10-01, the off-screen walk is 0.75 m/s and the
+                // first armful lands at ~65 s.)
                 var gt = Gatherers(1, 20);
                 var gh = gt.hands[0];
                 double ng = gt.lastTicked;
                 float leg = 20f / OutpostLedger.WalkMetresPerSecond;
                 float cutS = OutpostLedger.HandleSeconds + 2f * Playtest.CutSecondsPerLog;
                 float firstIn = 2f * leg + cutS;
-                Advance(gt, ref ng, 0.2);                    // 36 s
-                bool secondPicked = 36f >= firstIn + leg + cutS;
+                double qg = OutpostLedger.QuantumDays * (double)TimeOfDay.WorkDaySeconds;
+                double lookAt = System.Math.Ceiling(firstIn / qg) * qg;
+                Advance(gt, ref ng, lookAt / TimeOfDay.WorkDaySeconds);
+                bool secondPicked = lookAt >= firstIn + leg + cutS;
                 Gate(sb, ref fails, "gather-trip-2-logs-walked",
                     gt.StoreCountOf(Res.Timber) == 2 && gt.CarriedOf(Res.Timber) == (secondPicked ? 2 : 0)
                     && Mathf.Abs(gt.Stock(Res.Timber).standing - (secondPicked ? 36f : 38f)) < 1e-3f,
-                    $"first armful lands at {firstIn:0.0} s; at 36 s store {gt.StoreCountOf(Res.Timber)}, "
+                    $"first armful lands at {firstIn:0.0} s; at {lookAt:0.0} s store {gt.StoreCountOf(Res.Timber)}, "
                     + $"arms {gt.CarriedOf(Res.Timber)}, standing {gt.Stock(Res.Timber).standing:0.#}, leg {gh.Leg}");
 
                 // A gatherer leaving mid-trip (`RemoveHand`) before he has
@@ -379,7 +405,10 @@ namespace SeaSick.World
                 double nc2 = c2.lastTicked;
                 string clearRes = rock ? Res.Stone : Res.Timber;
                 int before = c2.StoreCountOf(clearRes);
-                Advance(c2, ref nc2, 0.1);                    // 18 s
+                // (2026-10-04) 0.3 d (54 s), was 0.1 d (18 s): carrying the
+                // cleared logs to the store at the 0.75 m/s off-screen walk
+                // (734b3dc1, 2026-10-01) no longer fits in 18 s.
+                Advance(c2, ref nc2, 0.3);                    // 54 s
                 bool clearedFirst = p.Cleared;
                 int landed = c2.StoreCountOf(clearRes) + c2.CarriedOf(clearRes) - before;
                 Advance(c2, ref nc2, 0.1);
@@ -389,7 +418,7 @@ namespace SeaSick.World
                 // seconds plus those walks, and the hammering starts after.
                 Gate(sb, ref fails, rock ? "clear-rock-8s-carried" : "clear-2-trees-10s-carried",
                     clearedFirst && landed == 2 && c2.StoreCountOf(clearRes) - before == 2 && p.built > 0f,
-                    $"{(rock ? "1 rock" : "2 trees")} ({clearSec:0} s of cutting) cleared in the first 18 s {clearedFirst}, "
+                    $"{(rock ? "1 rock" : "2 trees")} ({clearSec:0} s of cutting) cleared in the first 54 s {clearedFirst}, "
                     + $"{landed} {clearRes} carried to the store, then {p.built * TimeOfDay.WorkDaySeconds:0.0} s of hammering");
             }
 
@@ -444,10 +473,22 @@ namespace SeaSick.World
                 + l.Stock(Res.Stone).standing + l.sites[0].stoneDone + l.sites[0].stoneDonePart;
         }
 
+        /// Trips that stocked the site. (2026-10-04) Was every trip
+        /// (`haulSerial`); since the store top-up (c6e38515, 2026-09-28) idle
+        /// builders also walk Field -> Store trips, which are not the site's.
         static int Trips(OutpostLedger l)
         {
             int n = 0;
-            foreach (var h in l.hands) n += h.haulSerial;
+            foreach (var h in l.hands) n += h.siteTripSerial;
+            return n;
+        }
+
+        /// Units in arms (picked up) on their way to a build site.
+        static int ToSite(OutpostLedger l, string res)
+        {
+            int n = 0;
+            foreach (var h in l.hands)
+                if (h.Hauling && h.haulPicked && h.haulTo == HaulPlace.Site && h.haulRes == res) n += h.haulCount;
             return n;
         }
 
@@ -464,7 +505,11 @@ namespace SeaSick.World
             for (int i = 0; i < ticks && !p.Complete; i++)
             {
                 Advance(l, ref now, stepDays);
-                int tIn = p.done + l.CarriedOf(Res.Timber), sIn = p.stoneDone + l.CarriedOf(Res.Stone);
+                // (2026-10-04) Only loads walking TO THE SITE count against its
+                // cost: since the store top-up (c6e38515, 2026-09-28) a builder
+                // with nothing left to fetch for the site cuts wood for the
+                // store, and those logs in his arms are not site stock.
+                int tIn = p.done + ToSite(l, Res.Timber), sIn = p.stoneDone + ToSite(l, Res.Stone);
                 if (over == null && (p.done > p.needed || p.stoneDone > p.stoneNeeded || tIn > p.needed || sIn > p.stoneNeeded))
                     over = $"tick {i}: timber {p.done}+{l.CarriedOf(Res.Timber)} carried of {p.needed}, stone {p.stoneDone}+{l.CarriedOf(Res.Stone)} of {p.stoneNeeded}";
                 string line = p.PhaseLine;
@@ -633,7 +678,8 @@ namespace SeaSick.World
                 string recovering = l.StallReason(h) ?? "";
                 Gate(sb, ref fails, "slow-work-says-why",
                     content == null && Mathf.Abs(pace - OutpostLedger.StarvingWorkFloor) < 1e-4f
-                    && starving == "working slowly — hungry (35% pace)"
+                    // 80 %, was 35 %: StarvingWorkFloor 0.35 -> 0.8 (3485b85c, 2026-10-02).
+                    && starving == "working slowly — hungry (80% pace)"
                     && recovering == "working slowly — low spirits (80% pace)",
                     $"content '{content ?? "(nothing)"}', mood 0.175 unfed '{starving}', mood 0.4 fed '{recovering}'");
             }
@@ -1112,7 +1158,11 @@ namespace SeaSick.World
                               && l.TransferPending(T, true) && leftWhileAway == 10 - aboard
                               && l.TransferStall(T, true) == OutpostLedger.StallAway;
                 ship.present = true;
-                Advance(l, ref now, 2.0);
+                // Three days, not two (2026-10-04): ten timber is five 30 m
+                // round trips of ~81 s at the 0.75 m/s off-screen walk
+                // (734b3dc1, 2026-10-01), ~2.3 days -- timing, not the
+                // pause/resume this gate is about (as transfer-hold-full-waits).
+                Advance(l, ref now, 3.0);
                 bool resumed = ship.HeldOf(T) == 10 && Ashore(l, T) == 0 && l.CarriedOf(T) == 0;
                 Gate(sb, ref fails, "transfer-ship-leaves-to-ship-conserves", paused && resumed,
                     $"{inArms} in arms when she left; then aboard {aboard} + ashore {Ashore(l, T)}, left {leftWhileAway}; "

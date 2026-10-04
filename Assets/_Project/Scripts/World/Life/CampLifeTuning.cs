@@ -81,9 +81,24 @@ namespace SeaSick.World.Life
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         static void Boot() { looked = false; active = null; }
 
-        public static float EveningStartHour => Active != null ? Active.eveningStartHour : 21f;
-        public static float SleepHour => Active != null ? Active.sleepHour : 23f;
-        public static float WakeHour => Active != null ? Active.wakeHour : 1f;
+        /// **TEST SEAM ONLY (2026-10-04), never set by gameplay.** While true,
+        /// the camp is awake round the clock (wake 0, evening 24, sleep 24),
+        /// so `AwakeWorkScale` is exactly 1 and no hour is ever off the clock.
+        /// Plain-C# self-tests that tick fresh ledgers from second 0 (00:00,
+        /// asleep until `wakeHour`) and price trips at 1x set it around their
+        /// run with a try/finally (`StationStockSelfTest.Run`). Since the
+        /// day/night ladder (8099268f, 2026-09-28) those ledgers otherwise
+        /// slept their first 20 s and then worked at 1.2x, which failed every
+        /// walk-timing gate in edit mode.
+        static bool alwaysAwakeForTest;
+
+        /// Turn the test seam above on or off. Internal: game code has no
+        /// reason to call it, and nothing outside this assembly can.
+        internal static void OverrideForTest(bool alwaysAwake) => alwaysAwakeForTest = alwaysAwake;
+
+        public static float EveningStartHour => alwaysAwakeForTest ? 24f : Active != null ? Active.eveningStartHour : 21f;
+        public static float SleepHour => alwaysAwakeForTest ? 24f : Active != null ? Active.sleepHour : 23f;
+        public static float WakeHour => alwaysAwakeForTest ? 0f : Active != null ? Active.wakeHour : 1f;
         public static float FireRingRadius => Active != null ? Active.fireRingRadius : 3.2f;
         public static float SwayDegrees => Active != null ? Active.swayDegrees : 6f;
         public static float SwayHz => Active != null ? Active.swayHz : 0.35f;

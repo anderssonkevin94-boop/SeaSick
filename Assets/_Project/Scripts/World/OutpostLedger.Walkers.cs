@@ -88,6 +88,7 @@ namespace SeaSick.World
             HaulPlace to, int toStation, bool fromBay = false)
         {
             h.haulSerial++;
+            if (to == HaulPlace.Site) h.siteTripSerial++;   // self-test bookkeeping only
             h.haulFromBay = fromBay;
             h.haulRes = res;
             h.haulCount = n;

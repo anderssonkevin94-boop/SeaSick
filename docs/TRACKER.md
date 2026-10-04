@@ -27,7 +27,7 @@ Last on the phone and pushed: **f581a046** (2026-10-04).
 ## Villager session: queue (in order)
 
 1. Spit removal at Kevin's home island (branch spit-edit): before/after shots on a COPY of his save → Kevin's OK → land.
-2. StationStockSelfTest: 19 of ~90 fail (walking legs). Baseline at f581a046, then fix to green.
+2. StationStockSelfTest: GREEN 93/93 on branch stationstock-green (old failures: day/night harness gap since 8099268f + stale timings; no regression) -- awaiting landing. Minor ordering note (top-up vs hammering) in DEV-TOOLS.
 3. Harpooner crew role (IHarpoonCrewSource; the captain fallback is live until then).
 4. Farm-sheet bugs: a half-picked field reports the full yield; a crop change relabels a ripe harvest.
 5. Loose-ends sweep:
