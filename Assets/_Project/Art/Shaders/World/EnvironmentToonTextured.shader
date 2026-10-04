@@ -16,7 +16,7 @@ Shader "SeaSick/Environment Toon Textured"
         // with the raw value. The level 2 wall is vertex colour only, and raw it
         // drew far paler than its Blender source (Kevin 2026-10-04: "so light it
         // almost looks like a blueprint").
-        [Toggle] _VertexSRGB ("Vertex colour is sRGB", Float) = 0
+        _VertexSRGB ("Vertex colour is sRGB (0/1)", Range(0,1)) = 0
     }
     SubShader
     {
