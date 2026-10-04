@@ -64,6 +64,7 @@ namespace SeaSick.Combat
         Material material;
         MaterialPropertyBlock block;
         float builtHalfDeg = -1f;
+        SeaSick.Ship.ShipMotor motor;
         float shown;
         float waterY;
         bool haveWaterY;
@@ -178,7 +179,12 @@ namespace SeaSick.Combat
             if (root == null) return;
             float dt = Time.deltaTime;
 
-            bool want = battery.isActiveAndEnabled && battery.TotalGuns > 0
+            // Not at anchor, at a berth, or under the island view (2026-10-04:
+            // a raider in range of the home pier drew both wedges over the bay
+            // in the island camera at noon) -- the arcs are a sea-fight aid.
+            if (motor == null) motor = GetComponentInParent<SeaSick.Ship.ShipMotor>();
+            bool atSea = !(motor != null && motor.Anchored) && !SeaSick.CameraRig.IslandCam.Engaged;
+            bool want = atSea && battery.isActiveAndEnabled && battery.TotalGuns > 0
                         && battery.ArcRange > 1f && battery.EnemyInRangeNow;
             shown = Mathf.MoveTowards(shown, want ? 1f : 0f, dt / Mathf.Max(0.01f, fadeSeconds));
             if (shown <= 0f)
