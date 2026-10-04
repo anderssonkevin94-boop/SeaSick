@@ -12,7 +12,7 @@ A feature is **CLOSED** only when every one of these holds:
 
 Unapproved visuals stay on a branch until Kevin OKs the shots. Sessions end every report with **"loose ends:"**.
 
-Last on the phone and pushed: **c08ee639** (2026-10-04, 19:23): the farm rework + glyph sweep, the Storehouse merged into the store hut, the harpooner role, station work in place, L2 walls + kitchen/tower/mill winding fixed, pathing, kraken no-cancel + HUD framing/chevron. Before it: 0053f72f (fire button, gun lamp, docking/castaways, spit, arcs, stall lines, icon).
+Last on the phone and pushed: **5758a26f** (2026-10-05). BOTH SESSIONS STOPPED; their queues are done. Open: Kevin's play verdicts; grain mill vertex colour (Kevin's call); Xcode signing profile expires Oct 6 (open Xcode to renew).
 
 ## Sailing session: queue (in order)
 
