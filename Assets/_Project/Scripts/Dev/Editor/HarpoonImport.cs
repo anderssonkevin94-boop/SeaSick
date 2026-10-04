@@ -40,13 +40,6 @@ namespace SeaSick.Dev
     ///   measured from the anchors (+Z forward, +Y up, metres, origin = deck
     ///   on the swivel axis / the barb's muzzle point).
     ///
-    /// - **BowLantern** (Kevin 2026-10-04, when `BowLantern.fbx` is built):
-    ///   the bow lantern on its beam, same import + wrapper recipe, into
-    ///   `Resources/Harpoon/BowLantern.prefab` (root = the mount's origin;
-    ///   `LanternBow_Pivot` squared like the mount's empties, so
-    ///   `LanternSwing` swings it about the hull's axes).
-    ///   `CoasterOutfitting` hangs it on every low bow and hides the kit's.
-    ///
     /// Run: `return SeaSick.Dev.HarpoonImport.Run();` Idempotent.
     public static class HarpoonImport
     {
@@ -54,11 +47,9 @@ namespace SeaSick.Dev
         const string ResDir = "Assets/_Project/Resources/Harpoon";
         const string MountPath = ModelDir + "/HarpoonMount.fbx";
         const string BarbPath = ModelDir + "/HarpoonBarb.fbx";
-        const string LanternPath = ModelDir + "/BowLantern.fbx";
         const string JsonPath = ResDir + "/rope-look.json";
         public const string MountWrapper = ResDir + "/HarpoonMount.prefab";
         public const string BarbWrapper = ResDir + "/HarpoonBarb.prefab";
-        public const string LanternWrapper = ResDir + "/BowLantern.prefab";
         const string RopeTile = "Assets/_Project/Art/WallL1/Textures/rope-tile-512.png";
         const string PaintShader = "SeaSick/Coaster Paint";
         const string ToonShader = "SeaSick/Environment Toon Textured";
@@ -87,17 +78,6 @@ namespace SeaSick.Dev
         {
             { "Line_Attach", B(0f, 0.335f, 0f) },
         };
-        /// BowLantern (art-staging/harpoon-v1/geo.py: PIVOT_U (0, 1.75, 5.18)
-        /// bow-local metres = (0, -2.03, 0.695) in the mount's root frame).
-        static readonly Dictionary<string, Vector3> LanternMarks = new Dictionary<string, Vector3>
-        {
-            { "LanternBow_Pivot", B(0f, -2.03f, 0.695f) },
-        };
-        /// build.py's printed bounds (root frame, Blender): lantern roof
-        /// +/-0.205 wide and 5.385 m forward, nose block root 4.60, lantern
-        /// bottom 0.875 m up, root strap top 2.02 m (bow-local metres; the
-        /// root is at (0, 1.055, 3.15)).
-        static readonly Bounds LanternBounds = FromBlender(new Vector3(-0.2051f, -2.2352f, -0.1796f), new Vector3(0.2051f, -1.45f, 0.965f));
         /// The CONTRACT's mesh bounds, converted (min, max).
         static readonly Bounds MountBounds = FromBlender(new Vector3(-0.899f, -0.802f, 0f), new Vector3(0.899f, 1.06f, 1.9f));
         static readonly Bounds BarbBounds = FromBlender(new Vector3(-0.19f, -0.55f, -0.067f), new Vector3(0.19f, 0.405f, 0.067f));
@@ -124,13 +104,6 @@ namespace SeaSick.Dev
                 var frame = MeasureFrame(log);
                 Wrap(MountPath, MountWrapper, "HarpoonMount", frame, MountMarks, MountBounds, log);
                 Wrap(BarbPath, BarbWrapper, "HarpoonBarb", frame, BarbMarks, BarbBounds, log);
-                if (File.Exists(LanternPath))
-                {
-                    ImportModel(LanternPath, mats, log);
-                    Wrap(LanternPath, LanternWrapper, "BowLantern", frame, LanternMarks, LanternBounds, log);
-                    CheckLantern(log);
-                }
-                else log.AppendLine("BowLantern.fbx not built yet: skipped (the game keeps the hull's own bow lantern)");
                 AssetDatabase.SaveAssets();
                 log.AppendLine("HARPOON_IMPORT_OK");
             }
@@ -152,10 +125,9 @@ namespace SeaSick.Dev
             EnsureFolder(ResDir);
             bool any = false;
             foreach (var (file, dst) in new[]
-                { ("HarpoonMount.fbx", MountPath), ("HarpoonBarb.fbx", BarbPath), ("rope-look.json", JsonPath), ("BowLantern.fbx", LanternPath) })
+                { ("HarpoonMount.fbx", MountPath), ("HarpoonBarb.fbx", BarbPath), ("rope-look.json", JsonPath) })
             {
                 string from = Path.Combine(src, file);
-                if (file == "BowLantern.fbx" && !File.Exists(from)) continue;   // optional until built
                 if (!File.Exists(from)) throw new System.Exception("missing " + from);
                 string to = Path.Combine(project, dst);
                 if (File.Exists(to) && File.ReadAllBytes(to).SequenceEqual(File.ReadAllBytes(from)))
@@ -387,22 +359,6 @@ namespace SeaSick.Dev
                 log.AppendLine("wrapped " + wrapper);
             }
             finally { PrefabUtility.UnloadPrefabContents(contents); }
-        }
-
-        /// The game's contract on the lantern wrapper: `CoasterOutfitting` lights
-        /// every renderer named *Lantern*_Glass (exactly one here, under the
-        /// pivot so the light swings with it) and swings `LanternBow_Pivot`.
-        static void CheckLantern(StringBuilder log)
-        {
-            var go = AssetDatabase.LoadAssetAtPath<GameObject>(LanternWrapper);
-            if (go == null) throw new System.Exception("no " + LanternWrapper);
-            var pivot = Find(go.transform, "LanternBow_Pivot");
-            var glass = go.GetComponentsInChildren<MeshRenderer>(true).Where(r => r.name.Contains("Lantern") && r.name.Contains("_Glass")).ToList();
-            if (glass.Count != 1) throw new System.Exception($"BowLantern has {glass.Count} *Lantern*_Glass renderers, the light loop wants 1");
-            foreach (var n in new[] { "Lantern_Bow_Frame", "Lantern_Bow_Glass", "LanternBow_Chain" })
-                if (!Find(go.transform, n).IsChildOf(pivot)) throw new System.Exception(n + " is not under LanternBow_Pivot (it would not swing)");
-            if (Find(go.transform, "BowLantern_Beam").IsChildOf(pivot)) throw new System.Exception("BowLantern_Beam swings with the lantern");
-            log.AppendLine($"BowLantern contract: 1 glass under the pivot, frame + chain swing, beam static; {Tris(go.transform)} tris (budget 600)");
         }
 
         /// Top-down: give every transform without a mesh the root's rotation

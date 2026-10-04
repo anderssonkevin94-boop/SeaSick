@@ -228,6 +228,12 @@ namespace SeaSick.Dev
             {"HarpoonTuning.releaseIdleSeconds",    (0.2f, 5f)},
             {"HarpoonTuning.swivelDegPerSec",       (30f, 720f)},
             {"HarpoonTuning.drumTurnsPerMetre",     (0f, 3f)},
+            {"HarpoonTuning.lampSpotAngleDeg",      (10f, 90f)},
+            {"HarpoonTuning.lampInnerAngleDeg",     (0f, 60f)},
+            {"HarpoonTuning.lampRange",             (5f, 60f)},
+            {"HarpoonTuning.lampNightIntensity",    (0f, 12f)},
+            {"HarpoonTuning.lampDayIntensity",      (0f, 4f)},
+            {"HarpoonTuning.lampLensDayGlow",       (0f, 1f)},
 
             {"HelmTuning.holdGain",            (0.1f, 2f)},
             {"HelmTuning.holdMaxDegPerSec",    (0.5f, 10f)},

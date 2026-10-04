@@ -11,6 +11,7 @@ namespace SeaSick.Ship.Harpoon
     /// - mount: `Swivel` (yaw pivot; everything that turns is under it),
     ///   `Barb_Muzzle` (+forward, where the barb leaves and the line starts),
     ///   `Winch_Drum` (spins on local X while reeling), `Harpooner_Stand`.
+    /// - lamp (`HarpoonLamp`): `Lamp_Light` (spot, +Z), `Lamp_Lens` (glows).
     /// - barb: `Line_Attach`.
     public static class HarpoonMount
     {
@@ -28,6 +29,7 @@ namespace SeaSick.Ship.Harpoon
             }
             else go = PlaceholderMount(parent);
             go.name = "HarpoonMount";
+            HarpoonLamp.Attach(go);
             return go;
         }
 
@@ -232,7 +234,7 @@ namespace SeaSick.Ship.Harpoon
         /// **Reads the bow module's real meshes, once per drawn module**
         /// (cached on its GameObject, which a refit replaces; the gun only
         /// calls this from its fit). Every readable mesh under the module,
-        /// minus the lanterns (kit or harpoon beam: they hang ahead of the
+        /// minus the lanterns (kit lanterns: they hang ahead of the
         /// stem and are not the cap) and the merged draw batch (a copy of the
         /// same triangles, lanterns included), brought into module space.
         ///
@@ -369,8 +371,7 @@ namespace SeaSick.Ship.Harpoon
         }
 
         /// Lantern pieces (any "Lantern" in the name up to the module: the
-        /// kit's `Lantern_Bow_*`, the harpoon's `BowLantern` beam, chain and
-        /// glass) and the merged draw batch are not the hull's shape.
+        /// kit's `Lantern_Bow_*`, its chain and glass) and the merged draw batch are not the hull's shape.
         static bool Skipped(Transform t, Transform host)
         {
             if (t.GetComponent<SeaSick.Ship.Modular.CoasterOwnedMesh>() != null) return true;
@@ -423,6 +424,17 @@ namespace SeaSick.Ship.Harpoon
             var muzzle = new GameObject("Barb_Muzzle").transform;
             muzzle.SetParent(swivel, false);
             muzzle.localPosition = new Vector3(0f, 0.18f, 0.72f);
+
+            // The gun lamp: a hooded casing bolted to the barrel's starboard side, lens facing +Z.
+            var casing = Box(swivel, "Lamp", PrimitiveType.Cylinder, new Vector3(0.24f, 0.2f, 0.5f),
+                new Vector3(0.14f, 0.09f, 0.14f), Iron);
+            casing.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            var lens = Box(swivel, HarpoonLamp.LensName, PrimitiveType.Cylinder, new Vector3(0.24f, 0.2f, 0.595f),
+                new Vector3(0.11f, 0.01f, 0.11f), HarpoonLamp.LensMaterial);
+            lens.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            var lampLight = new GameObject(HarpoonLamp.LightName).transform;
+            lampLight.SetParent(swivel, false);
+            lampLight.localPosition = new Vector3(0.24f, 0.2f, 0.6f);
 
             var drum = new GameObject("Winch_Drum").transform;
             drum.SetParent(swivel, false);

@@ -24,8 +24,6 @@ namespace SeaSick.Dev
     /// `Rope("slack"|"taut"|"strained")`, `Aim(bearing, range)`,
     /// `Shot(path)` (game view + HUD), `Close(path, yaw, dist, height, fov)`
     /// (temp camera, phone portrait, no HUD), `Info()`, `End()`.
-    /// Bow lantern on its beam (Kevin 2026-10-04): `Lantern(dir)` = the line
-    /// out dead ahead over it, three shots + its clearance to the line;
     /// `Passage(path)` = high view of the foredeck nose the mount blocks.
     public class HarpoonLookShot : MonoBehaviour
     {
@@ -140,26 +138,9 @@ namespace SeaSick.Dev
             return "wrote " + path;
         }
 
-        /// **The bow lantern on its beam** (CoasterOutfitting hangs
-        /// `Resources/Harpoon/BowLantern` on the low bow): crate dead ahead at
-        /// `rangeM`, taut line, then a starboard side close-up, a high
-        /// close-up from ahead-starboard and the game view (HUD), plus where
-        /// the lantern hangs and how far the line passes from each of its parts.
-        public static string Lantern(string dir, float rangeM = 20f)
-        {
-            if (inst == null) return "not running";
-            inst.bearing = 0f; inst.range = rangeM; inst.state = "taut";
-            inst.LateUpdate();
-            var sb = new StringBuilder(inst.LanternReport());
-            sb.AppendLine(Close(Path.Combine(dir, "lantern_side_deadahead.png"), 90f, 5.5f, 0.3f, 40f, 0.10f));
-            sb.AppendLine(Close(Path.Combine(dir, "lantern_close_high.png"), 150f, 4.0f, 2.2f, 45f, 0.05f));
-            sb.AppendLine(Shot(Path.Combine(dir, "lantern_game_deadahead.png")));
-            return sb.ToString();
-        }
-
         /// **The crew passage at the nose** (e_crew_passage_bow.png): high 3/4
         /// from astern over the foredeck, phone portrait, no HUD, so the mount's
-        /// footprint (and the lantern beam's root at the stem) reads against
+        /// footprint (and the stem) reads against
         /// the deck the hands walk. Reports the nearest crew hand for scale.
         public static string Passage(string path, float height = 6.5f, float back = 3.2f, float fov = 42f)
         {
@@ -177,34 +158,6 @@ namespace SeaSick.Dev
                 if (d < best) { best = d; hand = $"nearest animated hand {a.name} {d:F1} m from the mount"; }
             }
             return Render(path, eye, aim, fov) + "; " + hand;
-        }
-
-        string LanternReport()
-        {
-            Transform lantern = null;
-            foreach (var t in ship.GetComponentsInChildren<Transform>()) if (t.name == "BowLantern") { lantern = t; break; }
-            if (lantern == null) return "no BowLantern on the ship (not imported yet, or a raised bow): the kit's own lantern is up\n";
-            var pivot = Find(lantern, "LanternBow_Pivot");
-            Vector3 m = mount.InverseTransformPoint(muzzle.position), pv = mount.InverseTransformPoint(pivot.position);
-            var sb = new StringBuilder($"BowLantern: pivot {pv.z - m.z:F2} m ahead of and {m.y - pv.y:F2} m below the muzzle (mount frame; art says 1.23 / 1.025), " +
-                                       $"swing {(pivot.GetComponent<SeaSick.Ship.LanternSwing>() != null ? "on" : "OFF")}, lights on the pivot {pivot.GetComponentsInChildren<Light>().Length}\n");
-            var pts = new Vector3[rope.positionCount];
-            rope.GetPositions(pts);
-            float half = rope.widthMultiplier * 0.5f;
-            sb.Append("line clearance (world AABB, rope radius off):");
-            foreach (var r in lantern.GetComponentsInChildren<MeshRenderer>())
-            {
-                float best = float.MaxValue;
-                var b = r.bounds;
-                for (int i = 0; i + 1 < pts.Length; i++)
-                    for (int k = 0; k <= 40; k++)
-                    {
-                        var q = Vector3.Lerp(pts[i], pts[i + 1], k / 40f);
-                        best = Mathf.Min(best, Vector3.Distance(q, b.ClosestPoint(q)));
-                    }
-                sb.Append($" {r.name} {best - half:F3} m;");
-            }
-            return sb.AppendLine().ToString();
         }
 
         public static string Info() => inst == null ? "not running" : inst.report + "\nnow: " + inst.Now();
@@ -248,7 +201,7 @@ namespace SeaSick.Dev
             Transform bowHost = null;
             foreach (Transform t in view.transform) if (t.name.StartsWith("bow (")) { bowHost = t; break; }
             if (bowHost == null) return report + "no bow module under " + view.name;
-            foreach (Transform t in bowHost) if (t.GetComponentInChildren<MeshRenderer>() != null && t.name != "Connections" && t.name != "BowLantern") { bowVis = t; break; }
+            foreach (Transform t in bowHost) if (t.GetComponentInChildren<MeshRenderer>() != null && t.name != "Connections") { bowVis = t; break; }
             if (bowVis == null) return report + "no bow visual under " + bowHost.name;
             report.AppendLine($"bow visual {bowHost.name}/{bowVis.name}, lossyScale {bowVis.lossyScale.x:F3}, fwd vs ship {Vector3.Angle(bowVis.forward, ship.forward):F1} deg, up vs ship {Vector3.Angle(bowVis.up, ship.up):F1} deg");
 
@@ -466,7 +419,7 @@ namespace SeaSick.Dev
                     var p = new Vector3[lr.positionCount];
                     lr.GetPositions(p);
                     rope.positionCount = p.Length;
-                    rope.SetPositions(p);   // hidden copy: LineCheck / LanternReport read it
+                    rope.SetPositions(p);   // hidden copy: LineCheck reads it
                     rope.widthMultiplier = lr.startWidth;
                 }
                 return;

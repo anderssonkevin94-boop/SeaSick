@@ -91,5 +91,19 @@ namespace SeaSick.Ship.Harpoon
         public static float swivelDegPerSec = 160f;
         /// Revolutions/s of the winch drum per m/s of line hauled. Range 0..3.
         public static float drumTurnsPerMetre = 0.8f;
+
+        // --- the gun lamp (the ship's bow light; HarpoonLamp) ---
+        /// Full cone of the lamp's spot, degrees. Range 10..90.
+        public static float lampSpotAngleDeg = 40f;
+        /// Bright core of the cone, degrees (never past the full cone). Range 0..60.
+        public static float lampInnerAngleDeg = 20f;
+        /// m the beam reaches. Range 5..60.
+        public static float lampRange = 28f;
+        /// Spot intensity at full night. Range 0..12.
+        public static float lampNightIntensity = 4f;
+        /// Spot intensity in full daylight (a faint glimmer, as the hull lanterns). Range 0..4.
+        public static float lampDayIntensity = 0.3f;
+        /// Lens glow (0..1) in daylight; night is 1. Range 0..1.
+        public static float lampLensDayGlow = 0.25f;
     }
 }
