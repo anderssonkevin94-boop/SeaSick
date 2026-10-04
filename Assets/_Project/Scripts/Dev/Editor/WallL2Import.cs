@@ -108,6 +108,8 @@ namespace SeaSick.Dev
             m.SetTextureOffset("_BaseMap", Vector2.zero);
             m.SetColor("_BaseColor", Color.white);
             m.SetFloat("_Ambient", 0f);
+            // Blender's vertex colours are sRGB; the project renders in Linear.
+            m.SetFloat("_VertexSRGB", 1f);
             m.enableInstancing = true;
             EditorUtility.SetDirty(m);
             log.AppendLine("material: " + path);

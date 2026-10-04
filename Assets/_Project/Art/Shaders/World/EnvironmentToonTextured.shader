@@ -11,6 +11,12 @@ Shader "SeaSick/Environment Toon Textured"
         _BaseMap ("Colour map", 2D) = "white" {}
         _BaseColor ("Base tint", Color) = (1,1,1,1)
         _Ambient ("Ambient floor", Range(0,1)) = 0.0
+        // 1 = the vertex colours are sRGB (Blender's FBX colours) and are
+        // linearised before use. Off by default: the textured kits were tuned
+        // with the raw value. The level 2 wall is vertex colour only, and raw it
+        // drew far paler than its Blender source (Kevin 2026-10-04: "so light it
+        // almost looks like a blueprint").
+        [Toggle] _VertexSRGB ("Vertex colour is sRGB", Float) = 0
     }
     SubShader
     {
@@ -39,6 +45,7 @@ Shader "SeaSick/Environment Toon Textured"
                 float4 _BaseMap_ST;
                 float4 _BaseColor;
                 float _Ambient;
+                float _VertexSRGB;
             CBUFFER_END
 
             struct Attributes
@@ -79,8 +86,14 @@ Shader "SeaSick/Environment Toon Textured"
             {
                 UNITY_SETUP_INSTANCE_ID(i);
                 float3 n = normalize(i.normalWS);
+                // The project renders in Linear; a vertex colour is not converted
+                // on import, so an sRGB one is linearised here when the material
+                // says so (`_VertexSRGB`).
+                float3 vc = i.color.rgb;
+                if (_VertexSRGB > 0.5)
+                    vc = vc <= 0.04045 ? vc / 12.92 : pow((vc + 0.055) / 1.055, 2.4);
                 float3 albedo = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, i.uv).rgb
-                              * i.color.rgb * _BaseColor.rgb;
+                              * vc * _BaseColor.rgb;
 
                 float4 shadowCoord = TransformWorldToShadowCoord(i.positionWS);
                 Light light = GetMainLight(shadowCoord);

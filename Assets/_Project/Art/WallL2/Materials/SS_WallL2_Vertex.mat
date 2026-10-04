@@ -30,6 +30,7 @@ Material:
     m_Ints: []
     m_Floats:
     - _Ambient: 0
+    - _VertexSRGB: 1
     m_Colors:
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
   m_BuildTextureStacks: []
