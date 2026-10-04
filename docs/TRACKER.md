@@ -53,6 +53,10 @@ Landed, not on the phone yet (rides the next build): the stall lines name every 
 
 Its kraken steps 1-4 are on the phone. Its unverified items moved to the Sailing sweep above.
 
+## Mine shaft (2026-10-05)
+
+On branch `mine-shaft`, UNPLAYED, awaiting Kevin's shots verdict. Code: `Outpost.Mine.cs`, `CampWorker.Mine.cs`, `MineSelfTest.cs`; art: Meshy Lantern Mine Entrance prefab `MineShaftL1`. Loose ends: (1) 18 inside-out faces on 3 small rock islands flagged by `check_winding.py`, not fixed until Kevin OKs; (2) L2 cost (4 brick + 2 fine boards) is provisional, Kevin to set; (3) the crate is the plain carry-crate stand-in.
+
 ## Waiting on KEVIN
 
 **Open questions:**
