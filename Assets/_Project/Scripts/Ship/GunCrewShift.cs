@@ -237,6 +237,40 @@ namespace SeaSick.Ship
                  new[] { 0, 1, 2 }, new[] { true, true, true }, new[] { 0, 1, 2 },
                  Port, None, new[] { 3, 1, 5 });
 
+            // 2026-10-04: mid-walk. `handCurrent` is the gun a hand is
+            // mapped to, which is his walk TARGET while he is still on the
+            // way (`CannonBattery.GunOf`), so these are the walking cases.
+            Case("mid-walk, lock flips to the side they left: both turn back home",
+                 four, fourZ, new[] { 0, 1 }, new[] { true, true }, new[] { 2, 3 },
+                 Port, Starboard, new[] { 0, 1 });
+            Case("long walk: the 1 Hz re-plan while still walking changes nothing",
+                 new[] { Starboard, Port, Starboard, Port, Starboard, Port, Starboard, Port },
+                 new[] { 6f, 6f, 2f, 2f, -2f, -2f, -6f, -6f },
+                 new[] { 0, 1, 2 }, new[] { true, true, true }, new[] { 3, 1, 5 },
+                 Port, None, new[] { 3, 1, 5 });
+
+            // A side sequence (each answer fed back as the next `current`):
+            // a hand's gun changes only on the step the side changes, and
+            // a flip back lands him on the same gun as before (no drift, no
+            // ping-pong between covers).
+            {
+                total++;
+                int[] home = { 0, 1 }, cur = { 0, 1 }, got = new int[2];
+                int[] seq = { Starboard, Starboard, Port, Port, Starboard, Starboard, None, None };
+                int[][] want = { new[] { 2, 3 }, new[] { 2, 3 }, new[] { 0, 1 }, new[] { 0, 1 },
+                                 new[] { 2, 3 }, new[] { 2, 3 }, new[] { 0, 1 }, new[] { 0, 1 } };
+                bool ok = true;
+                for (int i = 0; i < seq.Length && ok; i++)
+                {
+                    Assign(4, four, fourZ, 2, home, new[] { true, true }, cur, seq[i], None,
+                           got, new bool[4], new bool[2]);
+                    ok = got[0] == want[i][0] && got[1] == want[i][1];
+                    if (!ok) sb.Append($"FAIL side sequence step {i}: want [{want[i][0]},{want[i][1]}] got [{got[0]},{got[1]}]\n");
+                    cur[0] = got[0]; cur[1] = got[1];
+                }
+                if (ok) pass++;
+            }
+
             sb.Insert(0, $"{(pass == total ? "PASS" : "FAIL")} {pass}/{total}\n");
             return sb.ToString().TrimEnd();
         }

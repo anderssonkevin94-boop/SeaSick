@@ -276,6 +276,12 @@ namespace SeaSick.UI.Sheets
                 // the row now says what is in the way and what to do.
                 bool landBlocked = SeaActions.HasOffer && SeaActions.Current.priority == SeaActions.PriorityLand;
                 key |= landBlocked ? 1 << 24 : 0;
+                // Gunners crossing the deck (2026-10-04): 0 none, 1 port,
+                // 2 starboard, 3 back to their own guns.
+                int shift = guns ? bat.CrewShiftSide : SeaSick.Ship.GunCrewShift.None;
+                int shiftCode = shift == SeaSick.Ship.GunCrewShift.None ? 0
+                    : bat.CrewShiftHome ? 3 : shift == SeaSick.Ship.GunCrewShift.Port ? 1 : 2;
+                key |= shiftCode << 25;
                 int roundDist = Mathf.RoundToInt(dist);
                 bool textDue = key != stateKey || (now >= nextText && roundDist != lastDist);
                 if (textDue)
@@ -283,7 +289,7 @@ namespace SeaSick.UI.Sheets
                     nextText = now + 0.25f;
                     lastDist = roundDist;
                     Apply(key, target, locked, slip, roundDist, guns, portHas, stbdHas,
-                          portMan, stbdMan, portReady, stbdReady, archers, landBlocked);
+                          portMan, stbdMan, portReady, stbdReady, archers, landBlocked, shiftCode);
                 }
 
                 // Reload bars, quantised to 2 %.
@@ -310,7 +316,7 @@ namespace SeaSick.UI.Sheets
             /// distance did (at most 4 Hz).
             void Apply(int key, IHittable target, bool locked, bool slip, int dist, bool guns,
                        bool portHas, bool stbdHas, int portMan, int stbdMan, int portReady,
-                       int stbdReady, int archers, bool landBlocked)
+                       int stbdReady, int archers, bool landBlocked, int shiftCode)
             {
                 stateKey = key;
 
@@ -351,6 +357,14 @@ namespace SeaSick.UI.Sheets
                     string who = (target is EnemyShip) ? "Raider" : (target is SeaMonster) ? "Sea beast"
                         : IsKraken(target) ? "Kraken" : "Enemy";
                     line = who + " near · drive it off to land" + (line.Length > 0 ? " · " + line : "");
+                }
+                // Gunners walking to the engaged side (or held 3 s before
+                // they set off): say so, first -- it explains a silent side.
+                if (shiftCode != 0)
+                {
+                    string shiftLine = shiftCode == 3 ? "Gun crew back to their own guns"
+                        : "Gun crew shifting to " + (shiftCode == 1 ? "port" : "starboard");
+                    line = shiftLine + (line.Length > 0 ? " · " + line : "");
                 }
                 note.text = line;
             }

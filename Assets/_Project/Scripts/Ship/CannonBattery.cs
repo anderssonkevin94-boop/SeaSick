@@ -565,9 +565,12 @@ namespace SeaSick.Ship
         /// back from the buckets, the crew grew).
         void TickCrewShift()
         {
-            if (!built || allGuns.Count == 0) return;
             if (roster == null) roster = GetComponent<Crew.CrewRoster>();
-            if (roster == null) return;
+            if (!built || allGuns.Count == 0 || roster == null)
+            {
+                CrewShiftSide = GunCrewShift.None;
+                return;
+            }
             // Fitted before the roster existed: post now.
             if (!crewsPosted || gunHand.Length != allGuns.Count) PostGunCrews();
 
@@ -587,11 +590,98 @@ namespace SeaSick.Ship
                     engagedSecondary = pendSecondary;
                     nextRebalance = 0f;
                 }
+                cueDue = true;
             }
 
-            if (now < nextRebalance) return;
-            nextRebalance = now + rebalanceInterval;
-            RebalanceCrews();
+            if (now >= nextRebalance)
+            {
+                nextRebalance = now + rebalanceInterval;
+                RebalanceCrews();
+            }
+            if (cueDue) { cueDue = false; UpdateShiftCue(); }
+        }
+
+        // ---- the shift cue (2026-10-04) --------------------------------
+        //
+        // Kevin: during the 3 s hold nothing said what was happening. The
+        // combat row's note now reads "Gun crew shifting to port" from the
+        // moment a held side change WOULD walk somebody (a dry plan of the
+        // pending sides, `PlanMovesTo`) until the last walker arrives
+        // (`IsRelocating`). A side change that moves nobody (a full crew)
+        // says nothing: the cue is only ever about a real walk.
+
+        bool cueDue;
+
+        /// The side gunners are shifting to (held side change about to
+        /// walk somebody, or a walk under way), `GunCrewShift.None` when
+        /// nobody is. Read by `UI.Sheets.CombatHud`'s note.
+        public int CrewShiftSide { get; private set; } = GunCrewShift.None;
+        /// True when that shift is the walk back to the home guns after the
+        /// fight (no engaged side), not toward one.
+        public bool CrewShiftHome { get; private set; }
+
+        void UpdateShiftCue()
+        {
+            int side = GunCrewShift.None;
+            bool home = false;
+            // Holding: say it only if the held plan would move someone.
+            if (pendPrimary != engagedPrimary || pendSecondary != engagedSecondary)
+            {
+                side = PlanMovesTo(pendPrimary, pendSecondary);
+                home = pendPrimary == GunCrewShift.None;
+            }
+            // Else (or the held change moves nobody): a walk under way.
+            if (side == GunCrewShift.None)
+            {
+                home = engagedPrimary == GunCrewShift.None;
+                for (int i = 0; i < gunHand.Length && i < allGuns.Count; i++)
+                {
+                    var hand = StandingCrew(i);
+                    if (hand == null || !hand.IsRelocating) continue;
+                    int sd = PairSide(i);
+                    if (side == GunCrewShift.None || sd == engagedPrimary) side = sd;
+                }
+            }
+            CrewShiftSide = side;
+            CrewShiftHome = home && side != GunCrewShift.None;
+        }
+
+        /// A dry run of the re-plan for sides `primary` / `secondary`: the
+        /// side of a gun some gunner would walk to (the primary side when
+        /// any walk goes there), or `None` when nobody would move. Moves
+        /// nobody and leaves the gun map alone.
+        int PlanMovesTo(int primary, int secondary)
+        {
+            if (roster == null || allGuns.Count == 0) return GunCrewShift.None;
+            EnsureShiftBuffers();
+            int found = GunCrewShift.None;
+            if (authoredBattery)
+            {
+                int g = allGuns.Count;
+                for (int k = 0; 2 * k < g; k++)
+                {
+                    var hand = roster.GunCrew(k);
+                    if (hand == null || !hand.CanCrewGun || hand.HarpoonPosted) continue;
+                    int target = AuthoredTarget(k, primary, secondary);
+                    if (allGuns[target] == null || target == GunOf(hand)) continue;
+                    int sd = PairSide(target);
+                    if (found == GunCrewShift.None || sd == primary) found = sd;
+                }
+                return found;
+            }
+
+            int h = ReadDeck();
+            GunCrewShift.Assign(allGuns.Count, shiftGunSide, shiftGunZ, h, shiftHome, shiftEligible,
+                shiftCurrent, primary, secondary, shiftTarget, shiftGunTaken, shiftPlaced);
+            for (int k = 0; k < h; k++)
+            {
+                shiftHands[k] = null;
+                int t = shiftTarget[k];
+                if (t < 0 || t == shiftCurrent[k] || allGuns[t] == null) continue;
+                int sd = shiftGunSide[t];
+                if (found == GunCrewShift.None || sd == primary) found = sd;
+            }
+            return found;
         }
 
         /// The engaged side: the lock's, else the nearest hostile's; plus
@@ -659,8 +749,33 @@ namespace SeaSick.Ship
         {
             if (roster == null || allGuns.Count == 0) return;
             EnsureShiftBuffers();
-            if (authoredBattery) { RebalanceAuthored(); return; }
+            if (authoredBattery) { RebalanceAuthored(); cueDue = true; return; }
 
+            int g = allGuns.Count;
+            int h = ReadDeck();
+
+            GunCrewShift.Assign(g, shiftGunSide, shiftGunZ, h, shiftHome, shiftEligible,
+                shiftCurrent, engagedPrimary, engagedSecondary,
+                shiftTarget, shiftGunTaken, shiftPlaced);
+
+            for (int i = 0; i < g; i++) gunHand[i] = null;
+            for (int k = 0; k < h; k++)
+            {
+                int t = shiftTarget[k];
+                var hand = shiftHands[k];
+                shiftHands[k] = null;   // hold no stale reference
+                if (t < 0 || allGuns[t] == null) continue;
+                gunHand[t] = hand;
+                if (t != shiftCurrent[k]) SendTo(hand, t);
+            }
+            cueDue = true;
+        }
+
+        /// The live deck into the `shift*` arrays `GunCrewShift.Assign`
+        /// reads; returns the number of hands listed (`shiftHands[0..h)`,
+        /// which the caller nulls again).
+        int ReadDeck()
+        {
             int g = allGuns.Count, h = 0;
             for (int i = 0; i < g; i++)
             {
@@ -682,21 +797,7 @@ namespace SeaSick.Ship
                 shiftCurrent[h] = GunOf(hand);
                 h++;
             }
-
-            GunCrewShift.Assign(g, shiftGunSide, shiftGunZ, h, shiftHome, shiftEligible,
-                shiftCurrent, engagedPrimary, engagedSecondary,
-                shiftTarget, shiftGunTaken, shiftPlaced);
-
-            for (int i = 0; i < g; i++) gunHand[i] = null;
-            for (int k = 0; k < h; k++)
-            {
-                int t = shiftTarget[k];
-                var hand = shiftHands[k];
-                shiftHands[k] = null;   // hold no stale reference
-                if (t < 0 || allGuns[t] == null) continue;
-                gunHand[t] = hand;
-                if (t != shiftCurrent[k]) SendTo(hand, t);
-            }
+            return h;
         }
 
         /// Authored hulls (`FitAuthored`): one hand works a PAIR of guns
@@ -717,21 +818,29 @@ namespace SeaSick.Ship
                     if (current >= 0) gunHand[current] = null;
                     continue;
                 }
-                int a = 2 * k, b = 2 * k + 1;
-                int home = b < g && allGuns[b] != null ? b : a;
-                int target = home;
-                int want = engagedPrimary;
-                for (int pass = 0; pass < 2 && want != GunCrewShift.None; pass++)
-                {
-                    if (PairSide(a) == want) { target = a; break; }
-                    if (b < g && PairSide(b) == want) { target = b; break; }
-                    want = engagedSecondary;
-                }
+                int target = AuthoredTarget(k, engagedPrimary, engagedSecondary);
                 if (allGuns[target] == null || target == current) continue;
                 if (current >= 0) gunHand[current] = null;
                 gunHand[target] = hand;
                 SendTo(hand, target);
             }
+        }
+
+        /// Pair `k`'s gun on the engaged side (`primary`, else
+        /// `secondary`), else its home gun.
+        int AuthoredTarget(int k, int primary, int secondary)
+        {
+            int g = allGuns.Count;
+            int a = 2 * k, b = 2 * k + 1;
+            int target = b < g && allGuns[b] != null ? b : a;
+            int want = primary;
+            for (int pass = 0; pass < 2 && want != GunCrewShift.None; pass++)
+            {
+                if (PairSide(a) == want) { target = a; break; }
+                if (b < g && PairSide(b) == want) { target = b; break; }
+                want = secondary;
+            }
+            return target;
         }
 
         int PairSide(int i) => allGuns[i] == null ? GunCrewShift.None
