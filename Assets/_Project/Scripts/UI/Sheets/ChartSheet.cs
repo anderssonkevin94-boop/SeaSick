@@ -122,10 +122,16 @@ namespace SeaSick.UI.Sheets
 
         VisualElement trackOn, trackOff;
         CardKit.Tile pickTile;
+        VisualElement colEl, hintEl, segEl;     // for sizing the map to the room left
+        VisualElement campGrid;                 // one row per camp, under the pick tile
+        readonly Dictionary<Island, CardKit.Tile> campTiles = new Dictionary<Island, CardKit.Tile>();
+        long campKey = long.MinValue;
 
         public VisualElement Build()
         {
             var root = CardKit.Page(out var col);
+            colEl = col;
+            col.RegisterCallback<GeometryChangedEvent>(_ => AdaptMapHeight());
 
             chart = new VisualElement();
             chart.AddToClassList("ck-map");
@@ -147,6 +153,7 @@ namespace SeaSick.UI.Sheets
 
             var hint = StationPage.Text("Tap an island for its name. Tap a flame, then Set course.", "ck-note");
             col.Add(hint);
+            hintEl = hint;
 
             // Track: last day / off, Station.uss's segmented control.
             var seg = WatchTiles.Box("st-seg");
@@ -161,10 +168,22 @@ namespace SeaSick.UI.Sheets
             seg.Add(off);
             trackOn = on; trackOff = off;
             col.Add(seg);
+            segEl = seg;
             SetTrack(showTrack);
 
-            // What "Set course" would do; a tap drops the pick.
-            var grid = CardKit.Grid(col);
+            // The list under the map: what "Set course" would do (a tap
+            // drops the pick), then one row per camp with its ledger. It
+            // scrolls, so a short desk card keeps the map and the thumb row.
+            var list = new ScrollView(ScrollViewMode.Vertical);
+            list.style.flexGrow = 1f;
+            list.style.flexShrink = 1f;
+            list.style.minHeight = 0f;
+            list.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+            list.verticalScrollerVisibility = ScrollerVisibility.Hidden;
+            list.touchScrollBehavior = ScrollView.TouchScrollBehavior.Clamped;
+            col.Add(list);
+
+            var grid = CardKit.Grid(list);
             grid.style.marginTop = 8f;
             pickTile = new CardKit.Tile(_ => { selected = null; wordsKey = long.MinValue; Refresh(); }, false);
             pickTile.Root.AddToClassList("ck-tile--wide");
@@ -173,6 +192,8 @@ namespace SeaSick.UI.Sheets
             compass.style.height = Length.Percent(100f);
             pickTile.Ico.Add(compass);
             grid.Add(pickTile.Root);
+
+            campGrid = CardKit.Grid(list);
 
             var acts = CardKit.Acts(root);
             CardKit.Act(acts, "Close", () => Sheets.Close());
@@ -193,17 +214,33 @@ namespace SeaSick.UI.Sheets
         void OnGeometry(GeometryChangedEvent evt)
         {
             vw = evt.newRect.width;
-            // A chart is a wide thing. On the docked phone card the body is
-            // wider than it is allowed to be tall, and on the desk column it
-            // is 400 px — both want the same ratio and a floor under it.
-            float want = Mathf.Clamp(vw / 1.5f, 170f, 260f);
-            if (!Mathf.Approximately(chart.style.height.value.value, want))
-                chart.style.height = want;
+            AdaptMapHeight();
             vh = evt.newRect.height;
             fitted = default;         // the pixels moved; refit unconditionally
             Fit();
             PlaceWords(true);
             chart.MarkDirtyRepaint();
+        }
+
+        /// A chart is a wide thing. On the docked phone card the body is
+        /// wider than it is allowed to be tall, and on the desk column it
+        /// is 400 px — both want the same ratio and a floor under it. On a
+        /// short card (the desk) the map also gives up height so the pick
+        /// tile and the first camp row keep room under the controls.
+        void AdaptMapHeight()
+        {
+            if (chart == null || vw <= 1f) return;
+            float want = Mathf.Clamp(vw / 1.5f, 170f, 260f);
+            float colH = colEl != null ? colEl.layout.height : 0f;
+            if (colH > 1f)
+            {
+                float hintH = hintEl != null && hintEl.layout.height > 1f ? hintEl.layout.height + 6f : 46f;
+                float segH = segEl != null && segEl.layout.height > 1f ? segEl.layout.height + 8f : 72f;
+                float room = colH - 8f - hintH - segH - 120f;
+                want = Mathf.Min(want, Mathf.Max(150f, room));
+            }
+            if (!Mathf.Approximately(chart.style.height.value.value, want))
+                chart.style.height = want;
         }
 
         // --- refresh ---------------------------------------------------------------
@@ -228,8 +265,59 @@ namespace SeaSick.UI.Sheets
 
             Fit();
             PlaceWords(false);
+            CampRows(isles);
             Footer(isles);
             chart.MarkDirtyRepaint();
+        }
+
+        /// **One row per camp, under the map.** The ledger line used to be
+        /// printed on the map, where it ran across rings, flames and other
+        /// islands; here it has the width of the card and wraps. Rows are
+        /// kept and updated in place (a rebuilt row loses a press), and are
+        /// only rebuilt when the set of camps changes. A row is a 44 pt+
+        /// button that picks the camp, the same as tapping its flame.
+        void CampRows(IReadOnlyList<ChartIsland> isles)
+        {
+            if (campGrid == null) return;
+            long k = 17;
+            foreach (var i in isles)
+                if (i.outpost != null && i.island != null) k = k * 31 + i.island.GetInstanceID();
+            if (k != campKey)
+            {
+                campKey = k;
+                campGrid.Clear();
+                campTiles.Clear();
+                for (int pass = 0; pass < 2; pass++)       // home first
+                    foreach (var i in isles)
+                    {
+                        if (i.outpost == null || i.island == null) continue;
+                        if ((pass == 0) != i.island.IsHome) continue;
+                        var pick = i.island;
+                        var tile = new CardKit.Tile(_ =>
+                        {
+                            selected = pick;
+                            wordsKey = long.MinValue;
+                            Refresh();
+                        }, false);
+                        tile.Root.AddToClassList("ck-tile--wide");
+                        var fire = new StationPage.Glyph("fire", new Color32(242, 196, 109, 255), "sheet-glyph");
+                        fire.style.width = Length.Percent(100f);
+                        fire.style.height = Length.Percent(100f);
+                        tile.Ico.Add(fire);
+                        campGrid.Add(tile.Root);
+                        campTiles[pick] = tile;
+                    }
+            }
+            foreach (var i in isles)
+            {
+                if (i.island == null || !campTiles.TryGetValue(i.island, out var tile)) continue;
+                string name = string.IsNullOrEmpty(i.name) ? ChartData.PlaceName(i.island) : i.name;
+                tile.Set(name, i.ledgerLine);
+                tile.State(i.island == selected);
+                tile.Root.EnableInClassList("ck-tile--short", i.flame != FlameState.Fed);
+                tile.Root.EnableInClassList("ck-tile--ok", i.flame == FlameState.Fed);
+                tile.Ico.style.opacity = i.flame == FlameState.Hungry ? 0.45f : 1f;
+            }
         }
 
         void Footer(IReadOnlyList<ChartIsland> isles)
@@ -244,7 +332,7 @@ namespace SeaSick.UI.Sheets
                 foreach (var i in isles)
                 {
                     if (i.island != selected) continue;
-                    label = i.seen == Seen.Landed ? i.name : "Unseen land";
+                    label = i.seen == Seen.Landed ? i.name : "unseen";
                     sub = Km(Vector2.Distance(ChartData.ShipPos, i.centre))
                         + (i.outpost != null ? " · tap to drop" : " · no camp · tap to drop");
                     canSet = i.outpost != null;
@@ -358,10 +446,15 @@ namespace SeaSick.UI.Sheets
 
         // --- the words ------------------------------------------------------------------
 
-        /// Names, ledger lines and flames. Rebuilt only when the set of
-        /// things to say has changed (or the fit moved), because a rebuilt
-        /// label is a label that loses the press happening on it — the same
-        /// rule every other sheet in this folder keeps.
+        /// Island names and flames. Rebuilt only when the set of things to
+        /// say has changed (or the fit moved), because a rebuilt label is a
+        /// label that loses the press happening on it — the same rule every
+        /// other sheet in this folder keeps.
+        ///
+        /// **What is on the map (2026-10-04):** a name beside each landed
+        /// island and a flame on each camp, nothing else. The camp ledger
+        /// lives in the rows under the map (`CampRows`); "unseen" is not
+        /// printed (a tap on an unseen island says it in the pick tile).
         void PlaceWords(bool force)
         {
             if (words == null || vw <= 1f) return;
@@ -373,113 +466,152 @@ namespace SeaSick.UI.Sheets
                 key = key * 31 + (i.island != null ? i.island.GetInstanceID() : 0);
                 key = key * 31 + (int)i.seen;
                 key = key * 31 + (int)i.flame;
-                key = key * 31 + (i.ledgerLine != null ? i.ledgerLine.GetHashCode() : 0);
                 key = key * 31 + (i.island == selected ? 7 : 0);
             }
             if (!force && key == wordsKey) return;
             wordsKey = key;
 
             words.Clear();
-            // Labels are gathered first and placed afterwards: names, ledger
-            // lines and "unseen" sit on top of each other where islands are
-            // close, so each is nudged to a free row (`Settle`) before it is drawn.
             taken.Clear();
-            pending.Clear();
+            shapes.Clear();
+            names.Clear();
 
-            // The two marks that belong to the frame rather than to the sea.
-            // Fixed: they are placed first and everything else steers round them.
+            // The marks that belong to the frame rather than to the sea.
+            // Fixed: they are placed first and every name steers round them.
             Word("N", new Vector2(vw - 16f, 6f), SheetTheme.Ink, 11f, true);
             Take(new Vector2(vw - 16f, 6f), 14f, 16f);
+            Take(new Vector2(vw - 16f, 33f), 14f, 24f);                 // the arrow
             var scalePos = new Vector2(14f + ScaleBarPx() * 0.5f, vh - 26f);
             Word(ScaleLabel(), scalePos, SheetTheme.Ink, 9f, true);
             Take(scalePos, ScaleLabel().Length * 9f * 0.62f + 6f, 9f * 1.35f);
+            Take(new Vector2(14f + ScaleBarPx() * 0.5f, vh - 16f), ScaleBarPx() + 4f, 6f);   // the bar
+            Take(P(ChartData.ShipPos), 18f, 18f);
+            foreach (var r in ChartData.Raiders()) Take(P(r.pos), 14f, 14f);
 
             var flames = new List<VisualElement>();
             foreach (var isle in isles)
             {
-                Vector2 c = P(isle.centre);
-                float r = (isle.island != null ? isle.island.MaxRadius : isle.meanRadius) * scale;
-
+                shapes.Add(ShapeBounds(isle));
                 if (isle.seen == Seen.Landed && !string.IsNullOrEmpty(isle.name))
-                    pending.Add(new Pending(isle.name, c + new Vector2(0f, -r - 16f), SheetTheme.Ink, 11f, true, 1, -1));
-                else if (isle.seen == Seen.Glimpsed)
-                    pending.Add(new Pending("unseen", c + new Vector2(0f, r + 4f), SheetTheme.InkDim, 10f, false, 2, 1));
+                    names.Add(new NameWord { text = isle.name, shape = shapes.Count - 1, camp = isle.outpost != null });
 
                 if (isle.outpost == null) continue;
-
                 var camp = isle.outpost.CampCentre;
                 Vector2 f = P(new Vector2(camp.x, camp.z));
                 flames.Add(Flame(isle, f));
                 Take(f, 24f, 24f);
-                if (!string.IsNullOrEmpty(isle.ledgerLine))
-                    pending.Add(new Pending((isle.seen == Seen.Landed ? isle.name.ToUpperInvariant() + " · " : "")
-                         + isle.ledgerLine,
-                         f + new Vector2(0f, 14f), FlameInk(isle.flame), 10f, true, 0, 1));
             }
 
-            // Most important first (a camp's ledger line, then island names,
-            // then "unseen"); a stable sort keeps the scene order otherwise.
-            for (int i = 1; i < pending.Count; i++)
-            {
-                var x = pending[i];
-                int j = i - 1;
-                while (j >= 0 && pending[j].pri > x.pri) { pending[j + 1] = pending[j]; j--; }
-                pending[j + 1] = x;
-            }
-            foreach (var w in pending)
-            {
-                if (Settle(w, out Vector2 at))
-                    Word(w.text, at, w.col, w.size, w.bold);
-            }
+            // Camps first, then the other named islands; scene order inside each.
+            foreach (var n in names) if (n.camp) PlaceName(n);
+            foreach (var n in names) if (!n.camp) PlaceName(n);
             foreach (var f in flames) words.Add(f);
         }
 
-        struct Pending
-        {
-            public string text; public Vector2 at; public Color col; public float size;
-            public bool bold; public int pri; public float dir;
-            public Pending(string text, Vector2 at, Color col, float size, bool bold, int pri, float dir)
-            { this.text = text; this.at = at; this.col = col; this.size = size; this.bold = bold; this.pri = pri; this.dir = dir; }
-        }
+        struct NameWord { public string text; public int shape; public bool camp; }
 
-        readonly List<Pending> pending = new List<Pending>();
-        readonly List<Rect> taken = new List<Rect>();
+        const float NameSize = 11f;
+
+        readonly List<NameWord> names = new List<NameWord>();
+        readonly List<Rect> shapes = new List<Rect>();     // every island's projected bounds
+        readonly List<Rect> taken = new List<Rect>();      // labels and marks already placed
 
         void Take(Vector2 centre, float w, float h) =>
             taken.Add(new Rect(centre.x - w * 0.5f, centre.y - h * 0.5f, w, h));
 
-        /// **Overlap avoidance.** Tries the label's own spot, then rows above
-        /// and below it (the side the label prefers first), always kept inside
-        /// the frame, and takes the first spot that touches nothing already
-        /// placed. A label is never shortened: the only thing that gives way is
-        /// an "unseen" tag that has no free row at all. A camp's ledger line
-        /// or an island's name that cannot fit stays where it was (a little
-        /// overlap beats losing what it says).
-        bool Settle(Pending w, out Vector2 at)
+        /// An island's outline, projected, as a rect (a little padded so a
+        /// name never touches the coast). Bounds, not the polygon: a label
+        /// that clears the box clears the shape, and the test stays cheap.
+        Rect ShapeBounds(ChartIsland isle)
         {
-            float tw = w.text.Length * w.size * (w.bold ? 0.62f : 0.56f) + 6f;
-            float th = w.size * 1.35f;
-            float half = tw * 0.5f;
-            float x = vw > tw + 6f ? Mathf.Clamp(w.at.x, half + 3f, vw - half - 3f) : w.at.x;
-            for (int k = 0; k < 9; k++)
+            Vector2 lo = new Vector2(float.MaxValue, float.MaxValue);
+            Vector2 hi = new Vector2(float.MinValue, float.MinValue);
+            if (isle.island != null)
             {
-                // 0, +1, -1, +2, -2 ... rows, preferred side first.
-                int row = (k + 1) / 2 * ((k & 1) == 1 ? 1 : -1);
-                float y = w.at.y + row * w.dir * th;
-                y = Mathf.Clamp(y, th * 0.5f + 2f, Mathf.Max(th * 0.5f + 2f, vh - th * 0.5f - 2f));
-                var r = new Rect(x - half, y - th * 0.5f, tw, th);
-                bool hit = false;
-                foreach (var t in taken)
-                    if (r.Overlaps(t)) { hit = true; break; }
-                if (hit) continue;
-                taken.Add(r);
-                at = new Vector2(x, y);
-                return true;
+                var outline = ChartData.OutlineOf(isle.island);
+                for (int i = 0; i < 24; i++)
+                {
+                    float deg = i * 15f;
+                    float rad = deg * Mathf.Deg2Rad;
+                    var q = P(isle.centre + new Vector2(Mathf.Sin(rad), Mathf.Cos(rad)) * outline(deg));
+                    Grow(ref lo, ref hi, q);
+                }
             }
-            at = new Vector2(x, w.at.y);
-            if (w.pri >= 2) return false;
-            taken.Add(new Rect(x - half, at.y - th * 0.5f, tw, th));
-            return true;
+            else
+            {
+                float r = isle.meanRadius * scale;
+                Vector2 c = P(isle.centre);
+                Grow(ref lo, ref hi, c - Vector2.one * r);
+                Grow(ref lo, ref hi, c + Vector2.one * r);
+            }
+            const float pad = 2f;
+            return new Rect(lo.x - pad, lo.y - pad, Mathf.Max(4f, hi.x - lo.x + 2f * pad), Mathf.Max(4f, hi.y - lo.y + 2f * pad));
+        }
+
+        static float Overlap(Rect a, Rect b)
+        {
+            float w = Mathf.Min(a.xMax, b.xMax) - Mathf.Max(a.xMin, b.xMin);
+            float h = Mathf.Min(a.yMax, b.yMax) - Mathf.Max(a.yMin, b.yMin);
+            return w > 0f && h > 0f ? w * h : 0f;
+        }
+
+        /// **A name goes beside its island, never on it.** Candidate spots
+        /// round the shape's bounds (right, left, above, below, the corners
+        /// and the aligned-above/below ones), at three distances; any spot
+        /// that touches its own island is out. Of the rest the cheapest wins:
+        /// overlap with labels and marks counts most, overlap with other
+        /// islands' bounds less, a nearer spot and a more usual side (right
+        /// first) break ties. A name is never shortened and never dropped:
+        /// when the sea is full the cheapest spot is still beside its island.
+        void PlaceName(NameWord n)
+        {
+            float tw = n.text.Length * NameSize * 0.62f + 6f;
+            float th = NameSize * 1.35f;
+            Rect own = shapes[n.shape];
+            float cx = own.center.x, cy = own.center.y;
+            float[] rings = { 2f, 10f, 22f };
+            bool fitsW = vw > tw + 6f;
+
+            float bestCost = float.MaxValue;
+            Rect best = default;
+            for (int ri = 0; ri < rings.Length; ri++)
+            {
+                float g = rings[ri];
+                for (int d = 0; d < 12; d++)
+                {
+                    float x, y;
+                    switch (d)
+                    {
+                        case 0: x = own.xMax + g; y = cy - th * 0.5f; break;                  // right
+                        case 1: x = own.xMin - g - tw; y = cy - th * 0.5f; break;             // left
+                        case 2: x = cx - tw * 0.5f; y = own.yMin - g - th; break;             // above
+                        case 3: x = cx - tw * 0.5f; y = own.yMax + g; break;                  // below
+                        case 4: x = own.xMax + g; y = own.yMin - g - th; break;               // above right
+                        case 5: x = own.xMin - g - tw; y = own.yMin - g - th; break;          // above left
+                        case 6: x = own.xMax + g; y = own.yMax + g; break;                    // below right
+                        case 7: x = own.xMin - g - tw; y = own.yMax + g; break;              // below left
+                        case 8: x = own.xMin; y = own.yMin - g - th; break;                   // above, left-aligned
+                        case 9: x = own.xMax - tw; y = own.yMin - g - th; break;              // above, right-aligned
+                        case 10: x = own.xMin; y = own.yMax + g; break;                       // below, left-aligned
+                        default: x = own.xMax - tw; y = own.yMax + g; break;                  // below, right-aligned
+                    }
+                    if (fitsW) x = Mathf.Clamp(x, 2f, vw - tw - 2f);
+                    y = Mathf.Clamp(y, 2f, Mathf.Max(2f, vh - th - 2f));
+                    var r = new Rect(x, y, tw, th);
+                    if (Overlap(r, own) > 0.5f) continue;
+
+                    float cost = ri * 8f + d * 1.5f;
+                    foreach (var t in taken) cost += Overlap(r, t) * 50f;
+                    for (int s = 0; s < shapes.Count; s++)
+                        if (s != n.shape) cost += Overlap(r, shapes[s]) * 2f;
+                    if (cost < bestCost) { bestCost = cost; best = r; }
+                }
+            }
+            if (bestCost == float.MaxValue)
+                best = new Rect(Mathf.Clamp(cx - tw * 0.5f, 2f, Mathf.Max(2f, vw - tw - 2f)),
+                                Mathf.Max(2f, own.yMin - th - 2f), tw, th);
+            taken.Add(best);
+            Word(n.text, best.center, SheetTheme.Ink, NameSize, true);
         }
 
         /// A label centred on a point in the drawing. Absolute, inert, and
@@ -565,13 +697,6 @@ namespace SeaSick.UI.Sheets
             });
             return box;
         }
-
-        static Color FlameInk(FlameState f) => f switch
-        {
-            FlameState.Raided => SheetTheme.Ember,
-            FlameState.Hungry => SheetTheme.Timber,
-            _ => SheetTheme.Ink,
-        };
 
         // --- the press ---------------------------------------------------------------------
 

@@ -43,7 +43,8 @@ namespace SeaSick.UI.Sheets
         public Color tint;
         public FlameState flame;
         public Outpost outpost;
-        /// "23 timber · 4 hands · fed", or empty when this is not a camp.
+        /// "23 timber · 4 hands · fed", or empty when this is not a camp. Shown
+        /// in the camp rows under the map, never on the map itself.
         public string ledgerLine;
     }
 
@@ -169,7 +170,7 @@ namespace SeaSick.UI.Sheets
                     seen = seen,
                     // **A glimpse has no name.** The shape is what you saw;
                     // knowing what it is called is what landing buys.
-                    name = seen == Seen.Landed ? PrettyName(isle) : "",
+                    name = seen == Seen.Landed ? PlaceName(isle) : "",
                     tint = TintFor(isle),
                     flame = Flame(camp),
                     outpost = camp,
@@ -201,6 +202,13 @@ namespace SeaSick.UI.Sheets
                 });
             }
         }
+
+        /// What the chart calls a place the player has been to: the home
+        /// island reads "Home", every other one its `PrettyName`. The map
+        /// label and the camp row under the map both use this, so a camp is
+        /// never "Island 0" in one place and "Home" in the other.
+        public static string PlaceName(Island isle) =>
+            isle == null ? "" : isle.IsHome ? "Home" : PrettyName(isle);
 
         /// "Island_3" is a scene name, not a place. The chart prints places.
         public static string PrettyName(Island isle)
