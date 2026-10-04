@@ -380,31 +380,106 @@ namespace SeaSick.UI.Sheets
             wordsKey = key;
 
             words.Clear();
+            // Labels are gathered first and placed afterwards: names, ledger
+            // lines and "unseen" sit on top of each other where islands are
+            // close, so each is nudged to a free row (`Settle`) before it is drawn.
+            taken.Clear();
+            pending.Clear();
+
+            // The two marks that belong to the frame rather than to the sea.
+            // Fixed: they are placed first and everything else steers round them.
+            Word("N", new Vector2(vw - 16f, 6f), SheetTheme.Ink, 11f, true);
+            Take(new Vector2(vw - 16f, 6f), 14f, 16f);
+            var scalePos = new Vector2(14f + ScaleBarPx() * 0.5f, vh - 26f);
+            Word(ScaleLabel(), scalePos, SheetTheme.Ink, 9f, true);
+            Take(scalePos, ScaleLabel().Length * 9f * 0.62f + 6f, 9f * 1.35f);
+
+            var flames = new List<VisualElement>();
             foreach (var isle in isles)
             {
                 Vector2 c = P(isle.centre);
                 float r = (isle.island != null ? isle.island.MaxRadius : isle.meanRadius) * scale;
 
                 if (isle.seen == Seen.Landed && !string.IsNullOrEmpty(isle.name))
-                    Word(isle.name, c + new Vector2(0f, -r - 16f), SheetTheme.Ink, 11f, true);
+                    pending.Add(new Pending(isle.name, c + new Vector2(0f, -r - 16f), SheetTheme.Ink, 11f, true, 1, -1));
                 else if (isle.seen == Seen.Glimpsed)
-                    Word("unseen", c + new Vector2(0f, r + 4f), SheetTheme.InkDim, 10f, false);
+                    pending.Add(new Pending("unseen", c + new Vector2(0f, r + 4f), SheetTheme.InkDim, 10f, false, 2, 1));
 
                 if (isle.outpost == null) continue;
 
                 var camp = isle.outpost.CampCentre;
                 Vector2 f = P(new Vector2(camp.x, camp.z));
-                words.Add(Flame(isle, f));
+                flames.Add(Flame(isle, f));
+                Take(f, 24f, 24f);
                 if (!string.IsNullOrEmpty(isle.ledgerLine))
-                    Word((isle.seen == Seen.Landed ? isle.name.ToUpperInvariant() + " · " : "")
+                    pending.Add(new Pending((isle.seen == Seen.Landed ? isle.name.ToUpperInvariant() + " · " : "")
                          + isle.ledgerLine,
-                         f + new Vector2(0f, 14f), FlameInk(isle.flame), 10f, true);
+                         f + new Vector2(0f, 14f), FlameInk(isle.flame), 10f, true, 0, 1));
             }
 
-            // The two marks that belong to the frame rather than to the sea.
-            Word("N", new Vector2(vw - 16f, 6f), SheetTheme.Ink, 11f, true);
-            Word(ScaleLabel(), new Vector2(14f + ScaleBarPx() * 0.5f, vh - 26f),
-                SheetTheme.Ink, 9f, true);
+            // Most important first (a camp's ledger line, then island names,
+            // then "unseen"); a stable sort keeps the scene order otherwise.
+            for (int i = 1; i < pending.Count; i++)
+            {
+                var x = pending[i];
+                int j = i - 1;
+                while (j >= 0 && pending[j].pri > x.pri) { pending[j + 1] = pending[j]; j--; }
+                pending[j + 1] = x;
+            }
+            foreach (var w in pending)
+            {
+                if (Settle(w, out Vector2 at))
+                    Word(w.text, at, w.col, w.size, w.bold);
+            }
+            foreach (var f in flames) words.Add(f);
+        }
+
+        struct Pending
+        {
+            public string text; public Vector2 at; public Color col; public float size;
+            public bool bold; public int pri; public float dir;
+            public Pending(string text, Vector2 at, Color col, float size, bool bold, int pri, float dir)
+            { this.text = text; this.at = at; this.col = col; this.size = size; this.bold = bold; this.pri = pri; this.dir = dir; }
+        }
+
+        readonly List<Pending> pending = new List<Pending>();
+        readonly List<Rect> taken = new List<Rect>();
+
+        void Take(Vector2 centre, float w, float h) =>
+            taken.Add(new Rect(centre.x - w * 0.5f, centre.y - h * 0.5f, w, h));
+
+        /// **Overlap avoidance.** Tries the label's own spot, then rows above
+        /// and below it (the side the label prefers first), always kept inside
+        /// the frame, and takes the first spot that touches nothing already
+        /// placed. A label is never shortened: the only thing that gives way is
+        /// an "unseen" tag that has no free row at all. A camp's ledger line
+        /// or an island's name that cannot fit stays where it was (a little
+        /// overlap beats losing what it says).
+        bool Settle(Pending w, out Vector2 at)
+        {
+            float tw = w.text.Length * w.size * (w.bold ? 0.62f : 0.56f) + 6f;
+            float th = w.size * 1.35f;
+            float half = tw * 0.5f;
+            float x = vw > tw + 6f ? Mathf.Clamp(w.at.x, half + 3f, vw - half - 3f) : w.at.x;
+            for (int k = 0; k < 9; k++)
+            {
+                // 0, +1, -1, +2, -2 ... rows, preferred side first.
+                int row = (k + 1) / 2 * ((k & 1) == 1 ? 1 : -1);
+                float y = w.at.y + row * w.dir * th;
+                y = Mathf.Clamp(y, th * 0.5f + 2f, Mathf.Max(th * 0.5f + 2f, vh - th * 0.5f - 2f));
+                var r = new Rect(x - half, y - th * 0.5f, tw, th);
+                bool hit = false;
+                foreach (var t in taken)
+                    if (r.Overlaps(t)) { hit = true; break; }
+                if (hit) continue;
+                taken.Add(r);
+                at = new Vector2(x, y);
+                return true;
+            }
+            at = new Vector2(x, w.at.y);
+            if (w.pri >= 2) return false;
+            taken.Add(new Rect(x - half, at.y - th * 0.5f, tw, th));
+            return true;
         }
 
         /// A label centred on a point in the drawing. Absolute, inert, and
@@ -414,9 +489,11 @@ namespace SeaSick.UI.Sheets
         {
             var l = new Label(text ?? "");
             l.style.position = Position.Absolute;
-            l.style.left = at.x - 110f;
+            // Wide enough for the whole text (a long ledger line is never wrapped or cut).
+            float w = Mathf.Max(220f, (text ?? "").Length * size * 0.7f);
+            l.style.left = at.x - w * 0.5f;
             l.style.top = at.y - size * 0.75f;
-            l.style.width = 220f;
+            l.style.width = w;
             l.style.unityTextAlign = TextAnchor.MiddleCenter;
             l.style.fontSize = size;
             l.style.color = col;

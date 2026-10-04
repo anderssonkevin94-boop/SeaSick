@@ -45,7 +45,8 @@
 .st-head { flex-direction: row; align-items: center; margin-bottom: 10px; }
 .st-head-words { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-width: 0; margin-left: 12px; margin-right: 8px; }
 .st .st-title { font-size: 29px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); white-space: normal; }
-.st .st-sub { font-size: 17px; color: rgb(166, 186, 198); margin-top: 2px; }
+/* Wraps, never cut (2026-10-02 rule): the chart's "Day N, ... islands seen, ... camps" line was clipped at "two ca". */
+.st .st-sub { font-size: 17px; color: rgb(166, 186, 198); margin-top: 2px; white-space: normal; }
 
 .st .st-square {
     width: 56px;
