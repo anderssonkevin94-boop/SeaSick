@@ -630,7 +630,7 @@ namespace SeaSick.Combat
             MeasureAboveWater(out float height, out float radius);
             chaseCam.SeaFocusHeight = height;
             chaseCam.SeaFocusRadius = radius;
-            chaseCam.SeaFocusShip01 = SeaSick.UI.HudLayout.Wide ? KrakenTuning.camShip01Desk : KrakenTuning.camShip01;
+            chaseCam.SeaFocusShip01 = ShipLine01();
             float top01 = KrakenTuning.camTop01;
             var bar = SeaSick.UI.Sheets.SeaHud.TopRect;
             if (bar.height > 1f && Screen.height > 0)
@@ -639,6 +639,28 @@ namespace SeaSick.Combat
             chaseCam.SeaFocusElevDeg = KrakenTuning.camElevDeg;
             chaseCam.SeaFocusSwingDeg = KrakenTuning.camSwingDeg;
             chaseCam.SeaFocusMaxBack = KrakenTuning.camMaxBack;
+        }
+
+        /// Where the ship's deck sits on the screen while the kraken shot is
+        /// up, fraction of the height from the bottom: the tuned line for the
+        /// screen shape, raised when the bottom stack (the wheel reserve, the
+        /// helm row, the combat row) would otherwise stand on her. Measured
+        /// 2026-10-04 on the 1080x2340 portrait screen: 0.27 put her deck at
+        /// GUI y 1810, under the combat row (top 1711) and inside the wheel
+        /// reserve (top 1368). Held below `camShipMax01` so the kraken's own
+        /// top limit keeps room; when both cannot fit, the ship wins.
+        public static float ShipLine01()
+        {
+            float line = SeaSick.UI.HudLayout.Wide ? KrakenTuning.camShip01Desk : KrakenTuning.camShip01;
+            float h = Screen.height;
+            if (h < 1f) return line;
+            float stackTop = SeaSick.UI.HudLayout.BottomClustersTop;
+            var helm = SeaSick.UI.Sheets.SeaHud.HelmRect;
+            if (helm.height > 1f) stackTop = Mathf.Min(stackTop, helm.yMin);
+            if (SeaSick.UI.Sheets.CombatHud.Visible && SeaSick.UI.Sheets.CombatHud.Rect.height > 1f)
+                stackTop = Mathf.Min(stackTop, SeaSick.UI.Sheets.CombatHud.Rect.yMin);
+            float clear = 1f - (stackTop - SeaSick.UI.HudLayout.Unit) / h;
+            return Mathf.Clamp(Mathf.Max(line, clear), line, Mathf.Max(line, KrakenTuning.camShipMax01));
         }
 
         /// Height of its highest point over the sea and the horizontal

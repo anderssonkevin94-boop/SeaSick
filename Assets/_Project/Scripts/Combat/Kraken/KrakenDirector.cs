@@ -445,7 +445,7 @@ namespace SeaSick.Combat
             ownsCam = true;
             cam.SeaFocusHeight = 6f;
             cam.SeaFocusRadius = 22f;
-            cam.SeaFocusShip01 = SeaSick.UI.HudLayout.Wide ? KrakenTuning.camShip01Desk : KrakenTuning.camShip01;
+            cam.SeaFocusShip01 = Kraken.ShipLine01();
             cam.SeaFocusTop01 = KrakenTuning.camTop01;
             cam.SeaFocusElevDeg = KrakenTuning.camElevDeg;
             cam.SeaFocusSwingDeg = KrakenTuning.camSwingDeg;

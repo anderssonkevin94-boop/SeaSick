@@ -65,6 +65,9 @@ namespace SeaSick.Combat
         /// the bottom centre: 0.27 put her stern behind the Lock button
         /// (step-3 desktop capture).                                            0.15..0.6
         public static float camShip01Desk = 0.40f;
+        /// Highest the ship's deck may be raised to clear the bottom HUD
+        /// stack (wheel, helm row, combat row); `Kraken.ShipLine01`.            0.3..0.6
+        public static float camShipMax01 = 0.50f;
         /// Highest the kraken's top may reach, fraction from the bottom, when
         /// the HUD's top bar is not up to measure against (it is read live
         /// when it is).                                                          0.6..0.95
