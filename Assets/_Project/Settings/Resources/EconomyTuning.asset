@@ -58,6 +58,11 @@ MonoBehaviour:
     stone: 4
     brick: 0
     hammerSeconds: 45
+  - planId: Mill
+    timber: 18
+    stone: 6
+    brick: 0
+    hammerSeconds: 0
   - planId: Blacksmith
     timber: 24
     stone: 8
@@ -78,16 +83,15 @@ MonoBehaviour:
     stone: 8
     brick: 0
     hammerSeconds: 120
-  - planId: Storehouse
-    timber: 25
-    stone: 4
-    brick: 0
-    hammerSeconds: 60
   copyPriceStep: 0.25
   metresPerPalisadeLog: 2
   ladderTimberPerMetre: 2
+  roadMetresPerStone: 4
+  roadSpeedMultiplier: 1.3
   hammerSecondsPerLineLog: 3
   crewExponent: 0.75
+  crewMarginalFloor: 0.5
+  campStockReserve: 20
   fire:
   - level: 1
     cost: []
@@ -124,6 +128,38 @@ MonoBehaviour:
     - res: FineBoards
       n: 4
     rateMul: 1.5
+  - planId: Kitchen
+    toLevel: 3
+    cost:
+    - res: Brick
+      n: 8
+    - res: FineBoards
+      n: 6
+    rateMul: 1.5
+  - planId: Farm
+    toLevel: 2
+    cost:
+    - res: Brick
+      n: 4
+    - res: Boards
+      n: 6
+    rateMul: 1
+  - planId: Farm
+    toLevel: 3
+    cost:
+    - res: Brick
+      n: 8
+    - res: FineBoards
+      n: 4
+    rateMul: 1
+  - planId: Mill
+    toLevel: 2
+    cost:
+    - res: Brick
+      n: 6
+    - res: FineBoards
+      n: 3
+    rateMul: 1.5
   - planId: Fletcher
     toLevel: 2
     cost:
@@ -153,14 +189,6 @@ MonoBehaviour:
     cost:
     - res: Brick
       n: 4
-    - res: FineBoards
-      n: 4
-    rateMul: 1
-  - planId: Storehouse
-    toLevel: 2
-    cost:
-    - res: Brick
-      n: 8
     - res: FineBoards
       n: 4
     rateMul: 1
@@ -172,73 +200,45 @@ MonoBehaviour:
     - res: FineBoards
       n: 2
     rateMul: 1
+  - planId: Storage
+    toLevel: 3
+    cost:
+    - res: Brick
+      n: 14
+    - res: FineBoards
+      n: 8
+    rateMul: 1
+  - planId: Watchtower
+    toLevel: 2
+    cost:
+    - res: Brick
+      n: 6
+    - res: FineBoards
+      n: 4
+    rateMul: 1
   caps:
   - planId: Hut
-    copies: 
-    - 2
-    - 3
-    - 4
-    - 5
+    copies: 02000000030000000400000005000000
   - planId: Storage
-    copies: 
-    - 1
-    - 2
-    - 3
-    - 3
-  - planId: Storehouse
-    copies: 
-    - 1
-    - 1
-    - 2
-    - 2
+    copies: 01000000020000000300000003000000
   - planId: Watchtower
-    copies: 
-    - 2
-    - 4
-    - 6
-    - 8
+    copies: 02000000040000000600000008000000
   - planId: Farm
-    copies: 
-    - 1
-    - 2
-    - 2
-    - 3
+    copies: 01000000020000000200000003000000
   - planId: FishingHut
-    copies: 
-    - 1
-    - 2
-    - 2
-    - 3
+    copies: 01000000020000000200000003000000
   - planId: Sawmill
-    copies: 
-    - 1
-    - 1
-    - 2
-    - 2
+    copies: 01000000010000000200000002000000
   - planId: Blacksmith
-    copies: 
-    - 1
-    - 1
-    - 2
-    - 2
+    copies: 01000000010000000200000002000000
   - planId: Kitchen
-    copies: 
-    - 1
-    - 1
-    - 2
-    - 2
+    copies: 01000000010000000200000002000000
+  - planId: Mill
+    copies: 01000000010000000100000002000000
   - planId: Fletcher
-    copies: 
-    - 1
-    - 1
-    - 2
-    - 2
+    copies: 01000000010000000200000002000000
   - planId: Quarry
-    copies: 
-    - 1
-    - 1
-    - 2
-    - 2
+    copies: 01000000010000000200000002000000
   recipes:
   - recipeId: boards
     yield: 3
@@ -254,6 +254,90 @@ MonoBehaviour:
     takes:
     - res: Boards
       n: 2
+  - recipeId: baked-potato
+    yield: 1
+    ratePerDay: 12
+    toolWear: 0
+    takes:
+    - res: Potato
+      n: 1
+  - recipeId: grilled-fish
+    yield: 1
+    ratePerDay: 9
+    toolWear: 0
+    takes:
+    - res: Fish
+      n: 1
+  - recipeId: grilled-meat
+    yield: 1
+    ratePerDay: 9
+    toolWear: 0
+    takes:
+    - res: Meat
+      n: 1
+  - recipeId: roast-carrots
+    yield: 1
+    ratePerDay: 9
+    toolWear: 0
+    takes:
+    - res: Carrot
+      n: 2
+  - recipeId: bread
+    yield: 3
+    ratePerDay: 12
+    toolWear: 0
+    takes:
+    - res: Flour
+      n: 2
+  - recipeId: veg-stew
+    yield: 3
+    ratePerDay: 9
+    toolWear: 0
+    takes:
+    - res: Potato
+      n: 2
+    - res: Carrot
+      n: 1
+    - res: Onion
+      n: 1
+  - recipeId: ships-biscuit
+    yield: 4
+    ratePerDay: 12
+    toolWear: 0
+    takes:
+    - res: Flour
+      n: 2
+  - recipeId: fish-pie
+    yield: 4
+    ratePerDay: 8
+    toolWear: 0
+    takes:
+    - res: Fish
+      n: 2
+    - res: Potato
+      n: 2
+    - res: Flour
+      n: 1
+  - recipeId: hunters-stew
+    yield: 4
+    ratePerDay: 8
+    toolWear: 0
+    takes:
+    - res: Meat
+      n: 1
+    - res: Potato
+      n: 2
+    - res: Carrot
+      n: 1
+    - res: Onion
+      n: 1
+  - recipeId: flour
+    yield: 1
+    ratePerDay: 6
+    toolWear: 0
+    takes:
+    - res: Wheat
+      n: 2
   - recipeId: fish
     yield: 1
     ratePerDay: 4
@@ -265,6 +349,15 @@ MonoBehaviour:
     toolWear: 0
     takes:
     - res: Timber
+      n: 1
+  - recipeId: bow
+    yield: 1
+    ratePerDay: 1
+    toolWear: 0
+    takes:
+    - res: FineBoards
+      n: 1
+    - res: Hide
       n: 1
   - recipeId: spear
     yield: 1
@@ -327,5 +420,16 @@ MonoBehaviour:
   hidePerAnimal: 1
   stoneSpearAnimals: 4
   ironSpearAnimals: 12
+  bowAnimals: 12
+  bowHuntReachScale: 5
+  crops: []
+  dishes: []
+  hungryBelow: 0.4
+  fedTogetherMood: 0.05
+  rawFill: 0.25
+  rawMoodPerDay: -0.1
+  plantSeconds: 4
+  harvestSeconds: 4
+  plotsPerFarmLevel: 06000000090000000c000000
   warmHutRadius: 30
   warmMoodBonusPerDay: 0.1
