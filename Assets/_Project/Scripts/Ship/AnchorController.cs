@@ -171,7 +171,7 @@ namespace SeaSick.Ship
                     var isle = IslandInRange();
                     if (isle != null && CanLandHere(isle)
                         && motor.CurrentSpeed <= approachSpeedLimit)
-                        Land(isle);
+                        Land(isle, out _);
                     break;
                 }
 
@@ -308,13 +308,26 @@ namespace SeaSick.Ship
         bool CanLandHere(Island isle)
         {
             if (isle == null) return false;
-            if (isle != beachHeldIsle) { beachHeldIsle = isle; beachHeldTime = -1f; }
+            if (isle != beachHeldIsle) { beachHeldIsle = isle; beachHold.Reset(); }
             Vector3 at = transform.position;
-            return Island.BeachHold(isle.HasBeachToward(at), at, Time.time, ref beachHeldAt, ref beachHeldTime);
+            bool found = isle.HasBeachToward(at);
+            Vector3 step = default;
+            bool stepFound = found && isle.BeachStepToward(at, out step);
+            return beachHold.Update(found, stepFound, step, at, Time.time);
         }
         Island beachHeldIsle;
-        Vector3 beachHeldAt;
-        float beachHeldTime = -1f;
+        Island.BeachHoldState beachHold = new Island.BeachHoldState { heldTime = -1f };
+
+        /// The step ashore for a landing at `isle` now: the one stored when
+        /// the held beach was FOUND (never re-asked: at a sliver a metre off
+        /// it is gone), else -- no hold, e.g. a load -- asked from her.
+        bool LandingStepFor(Island isle, out Vector3 step)
+        {
+            step = default;
+            if (isle == null) return false;
+            if (isle == beachHeldIsle && beachHold.hasStep) { step = beachHold.step; return true; }
+            return isle.TryLandingStep(transform.position, out step);
+        }
 
         /// The nearest berth, home's or a camp pier's, if she is close
         /// enough to take it.
@@ -1019,25 +1032,32 @@ namespace SeaSick.Ship
             if (!CanLandHere(isle)) { why = $"{isle.name}: sheer cliff on this bearing"; return false; }
             if (motor.CurrentSpeed > approachSpeedLimit)
             { why = $"too fast ({motor.CurrentSpeed:F1} > {approachSpeedLimit})"; return false; }
-            Land(isle);
+            if (!Land(isle, out why)) return false;
             why = isle.name;
             return true;
         }
 
-        void Land(Island isle)
+        /// Anchor and go ashore at the stored beach step. **No step, no
+        /// landing**: refused, never a plank run at the island's centre
+        /// line (Island_28: that was the cliff foot).
+        bool Land(Island isle, out string why)
         {
+            if (!LandingStepFor(isle, out Vector3 step))
+            { why = $"{isle.name}: no beach step to land on"; return false; }
             DropAnchor(isle);
+            landingStep = step; landingStepSet = true;
             landingPending = true;
+            why = "";
+            return true;
         }
 
         void DropAnchor(Island isle)
         {
             CurrentIsland = isle;
-            // **Ashore on the beach the card offered (2026-10-04).** Found
-            // once, here: from where she lies, else from where the held
-            // beach was last found (a sliver she has drifted a metre off).
-            landingStepSet = isle != null && (isle.TryLandingStep(transform.position, out landingStep)
-                || (isle == beachHeldIsle && beachHeldTime >= 0f && isle.TryLandingStep(beachHeldAt, out landingStep)));
+            // **Ashore on the beach the card offered (2026-10-04).** `Land`
+            // sets the stored step after this; a load (`MoorAt`) asks from
+            // where she lies, and with none keeps the old radial plank.
+            landingStepSet = LandingStepFor(isle, out landingStep);
 
             // Survey the ground the first time she anchors here.
             //

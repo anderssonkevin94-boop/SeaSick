@@ -85,7 +85,7 @@ namespace SeaSick.World
         /// Max rise per metre over the 12 m inland of the waterline for a
         /// landing to count as a beach (terrain-backed islands).
         public static float BeachMaxSlope = 0.5f;
-        int beachCacheFrame = -1; Vector3 beachCachePos; bool beachCache, beachCacheBeyond; Vector3 beachCacheAt;
+        int beachCacheFrame = -1; Vector3 beachCachePos; bool beachCache, beachCacheBeyond, beachCacheFound; Vector3 beachCacheAt;
 
         /// True only when the profile is fully populated. The arrays are what
         /// every query below indexes into, so a half-built profile must fall
@@ -141,10 +141,44 @@ namespace SeaSick.World
                 bool result = len < 1f ? profile.hasBeach[0]
                     : FindBeach(TerrainHeight, worldPos, len + 50f, LandingSlope, out at, out beyond);
                 beachCacheFrame = Time.frameCount; beachCachePos = worldPos; beachCache = result;
-                beachCacheBeyond = beyond; beachCacheAt = at;
+                beachCacheBeyond = beyond; beachCacheAt = at; beachCacheFound = result && len >= 1f;
                 return result;
             }
             return profile.hasBeach[SectorOf(BearingTo(worldPos, transform.position))];
+        }
+
+        /// **The step ashore for the beach `HasBeachToward(worldPos)` just
+        /// found** (2026-10-04): 2 m inland of its waterline. False when it
+        /// found none (or answered from the sector table). Read at the
+        /// moment of finding and KEPT (`BeachHoldState`): at a sand sliver
+        /// a metre off, asking again finds nothing.
+        public bool BeachStepToward(Vector3 worldPos, out Vector3 step)
+        {
+            step = worldPos;
+            if (TerrainHeight == null || !HasBeachToward(worldPos) || !beachCacheFound) return false;
+            step = LandingStep(TerrainHeight, worldPos, beachCacheAt);
+            return true;
+        }
+
+        /// **A held beach and the step ashore it was found with.** `Update`
+        /// each time the landing is asked (`found`: this frame's raw answer;
+        /// `stepFound`/`step`: `BeachStepToward`'s). The card stays on by
+        /// `BeachHold`; the landing uses `Step`, the last FOUND step, never
+        /// a fresh query from wherever she has drifted to. `Reset` on a new
+        /// island.
+        public struct BeachHoldState
+        {
+            public Vector3 heldAt, step;
+            public float heldTime;
+            public bool hasStep;
+            public void Reset() { heldAt = step = Vector3.zero; heldTime = -1f; hasStep = false; }
+            public bool Update(bool found, bool stepFound, Vector3 foundStep, Vector3 pos, float now)
+            {
+                if (found && stepFound) { step = foundStep; hasStep = true; }
+                bool on = BeachHold(found, pos, now, ref heldAt, ref heldTime);
+                if (!on) hasStep = false;
+                return on;
+            }
         }
 
         /// **Sand on this coast, but past the walk** (2026-10-04): when
@@ -424,6 +458,20 @@ namespace SeaSick.World
             Hold("20 m on but 0.5 s after (fast)", true, BeachHold(false, new Vector3(30f, 0f, 0f), 5.5f, ref hAt, ref hT));
             Hold("20 m on, 2 s after: cliff", false, BeachHold(false, new Vector3(30f, 0f, 0f), 7f, ref hAt, ref hT));
             Hold("found again at once", true, BeachHold(true, new Vector3(30f, 0f, 0f), 7.1f, ref hAt, ref hT));
+            // The held step: found once at a sliver, then lost -- the landing
+            // still has the step found then (Island_28, 2026-10-04: asking
+            // again from the ship and from the held spot both found nothing
+            // and the plank fell back onto the cliff foot).
+            {
+                var hs = new BeachHoldState(); hs.Reset();
+                Vector3 sandStep = new Vector3(3f, 0.2f, 12f);
+                Hold("state: nothing yet, no step", false, hs.Update(false, false, default, Vector3.zero, 0f) || hs.hasStep);
+                Hold("state: found with its step", true, hs.Update(true, true, sandStep, Vector3.zero, 1f) && hs.hasStep);
+                Hold("state: lost 0.5 m on, held, SAME step", true,
+                     hs.Update(false, false, default, new Vector3(0.5f, 0f, 0f), 1.2f) && hs.hasStep && hs.step == sandStep);
+                Hold("state: hold over, no step left", false,
+                     hs.Update(false, false, default, new Vector3(40f, 0f, 0f), 9f) || hs.hasStep);
+            }
             sb.Insert(0, $"{(pass == total ? "PASS" : "FAIL")} {pass}/{total}\n");
             return sb.ToString().TrimEnd();
         }
