@@ -257,7 +257,13 @@ namespace SeaSick.UI.Sheets
                 if (sp.z > 0f)
                 {
                     float gx = sp.x, gy = Screen.height - sp.y;
-                    if (gx > onMargin && gx < Screen.width - onMargin && gy > onMargin && gy < Screen.height - onMargin) continue;
+                    if (gx > onMargin && gx < Screen.width - onMargin && gy > onMargin && gy < Screen.height - onMargin)
+                    {
+#if UNITY_EDITOR
+                        if (m.kind == Kind.Kraken) DevKraken("on screen");
+#endif
+                        continue;
+                    }
                     dir = new Vector2(gx, gy) - screenC;
                     if (dir.sqrMagnitude < 1f) dir = Vector2.up;
                 }
@@ -291,10 +297,22 @@ namespace SeaSick.UI.Sheets
                 }
 
                 var box = new Rect(at.x - half, at.y - half, half * 2f, half * 2f);
-                if (SeaHud.Overlaps(box)) continue;
+                if (SeaHud.Overlaps(box))
+                {
+#if UNITY_EDITOR
+                    if (m.kind == Kind.Kraken) DevKraken("skipped: the box touches the sea HUD");
+#endif
+                    continue;
+                }
                 bool taken = false;
                 for (int j = 0; j < placedN; j++) if (placed[j].Overlaps(box)) { taken = true; break; }
-                if (taken) continue;
+                if (taken)
+                {
+#if UNITY_EDITOR
+                    if (m.kind == Kind.Kraken) DevKraken("skipped: another marker holds the spot");
+#endif
+                    continue;
+                }
                 placed[placedN++] = box;
 
                 Color col = m.kind == Kind.Course ? Gold
@@ -309,7 +327,10 @@ namespace SeaSick.UI.Sheets
                 GUI.DrawTexture(new Rect(at.x - size * 0.5f, at.y - size * 0.5f, size, size), arrow, ScaleMode.ScaleToFit, true);
                 GUI.matrix = prevMatrix;
 
-                DrawLabel(at, size, band, bottom, m.label, col, m.locked || m.kind == Kind.Kraken);
+                var labelRect = DrawLabel(at, size, band, bottom, m.label, col, m.locked || m.kind == Kind.Kraken);
+#if UNITY_EDITOR
+                if (m.kind == Kind.Kraken) { DevKraken("drawn"); DevKrakenBox = box; DevKrakenLabel = labelRect; }
+#endif
             }
 
             GUI.matrix = prevMatrix;
@@ -343,7 +364,7 @@ namespace SeaSick.UI.Sheets
 
         /// The distance, on the inward side of the chevron so it never runs
         /// off the screen, with a dark drop shadow for bright water.
-        void DrawLabel(Vector2 at, float size, Rect band, float bottom, string text, Color col, bool bold)
+        Rect DrawLabel(Vector2 at, float size, Rect band, float bottom, string text, Color col, bool bold)
         {
             int u = HudLayout.Unit;
             float w = u * 5.4f, h = u * 1.5f;
@@ -374,7 +395,23 @@ namespace SeaSick.UI.Sheets
             GUI.color = Color.white;
             style.normal.textColor = col;
             GUI.Label(r, text, style);
+            return r;
         }
+
+#if UNITY_EDITOR
+        /// Dev seam (`Dev/SweepCheck` "chevron"): what the kraken's marker did
+        /// on the last repaint that reached it, and where it drew (GUI space).
+        internal static string DevKrakenWhy = "";
+        internal static int DevKrakenFrame = -1;
+        internal static Rect DevKrakenBox, DevKrakenLabel;
+
+        static void DevKraken(string why)
+        {
+            DevKrakenWhy = why;
+            DevKrakenFrame = Time.frameCount;
+            if (why != "drawn") { DevKrakenBox = new Rect(); DevKrakenLabel = new Rect(); }
+        }
+#endif
 
         static Vector2 ClampToRectEdge(Vector2 origin, Vector2 dir, Rect r)
         {

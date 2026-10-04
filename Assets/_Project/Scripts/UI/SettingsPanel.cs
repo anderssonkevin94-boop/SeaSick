@@ -205,6 +205,9 @@ namespace SeaSick.UI
                     e.Use();
                 }
             }
+#if UNITY_EDITOR
+            if (e.type == EventType.Repaint) { DevRows.Clear(); DevView = view; DevScrollAtDraw = scroll; DevRowsFrame = Time.frameCount; }
+#endif
             scroll = GUI.BeginScrollView(view, scroll, content, false, false,
                                          GUIStyle.none, GUI.skin.verticalScrollbar);
             inScroll = true;
@@ -261,6 +264,9 @@ namespace SeaSick.UI
             y += u * 0.9f;
             GUI.Label(new Rect(body.x, y, body.width, u * 1.4f),
                       "TUNING — editor and dev builds only", UITheme.Small);
+#if UNITY_EDITOR
+            DevRow("tuning header", new Rect(body.x, y, body.width, u * 1.4f), "TUNING — editor and dev builds only", UITheme.Small, false);
+#endif
             y += u * 1.8f;
 
             // The kraken, first in the dev list because the drawer does not
@@ -277,6 +283,10 @@ namespace SeaSick.UI
                 krakenNote = SeaSick.Combat.Kraken.DevSummon();
             if (GUI.Button(dismiss, "Dismiss kraken", UITheme.Button))
                 krakenNote = SeaSick.Combat.Kraken.DevDismiss();
+#if UNITY_EDITOR
+            DevRow("summon kraken", summon, "Summon kraken", UITheme.Button, false);
+            DevRow("dismiss kraken", dismiss, "Dismiss kraken", UITheme.Button, false);
+#endif
             y += rowH + u * 0.3f;
             // The wild spawn's whole path (shadow, toast, chevron, rise) on
             // demand, and the deep-water test for where she is now.
@@ -285,6 +295,9 @@ namespace SeaSick.UI
             if (GUI.Button(wild, "Wild spawn now", SeaSick.Combat.KrakenDirector.Warning
                     ? UITheme.ButtonPressed : UITheme.Button))
                 krakenNote = SeaSick.Combat.KrakenDirector.DevWarnNow();
+#if UNITY_EDITOR
+            DevRow("wild spawn now", wild, "Wild spawn now", UITheme.Button, false);
+#endif
             y += rowH + u * 0.15f;
             if (Time.unscaledTime >= krakenStatusAt)
             {
@@ -297,6 +310,9 @@ namespace SeaSick.UI
             var kw = body.width - u * 0.3f;
             float kh = krakenWrap.CalcHeight(new GUIContent(kline), kw);
             GUI.Label(new Rect(body.x + u * 0.3f, y, kw, kh), kline, krakenWrap);
+#if UNITY_EDITOR
+            DevRow("kraken status", new Rect(body.x + u * 0.3f, y, kw, kh), kline, krakenWrap, true);
+#endif
             y += kh + u * 0.4f;
 
             // The rest of the old floating LIFE panel (Kevin: "move the other
@@ -307,9 +323,16 @@ namespace SeaSick.UI
                 var lifeRow = new Rect(body.x, y, body.width, rowH);
                 BlockRow(lifeRow);
                 if (GUI.Button(lifeRow, life.ToolName + "  ▶", UITheme.Button)) DevTools.Open = life;
+#if UNITY_EDITOR
+                DevRow("LIFE page", lifeRow, life.ToolName + "  ▶", UITheme.Button, false);
+#endif
                 y += rowH + u * 0.15f;
                 GUI.Label(new Rect(body.x + u * 0.3f, y, body.width, u * 1.3f),
                           "hands, raids, weather, overboard, castaways", UITheme.Small);
+#if UNITY_EDITOR
+                DevRow("LIFE note", new Rect(body.x + u * 0.3f, y, body.width, u * 1.3f),
+                       "hands, raids, weather, overboard, castaways", UITheme.Small, false);
+#endif
                 y += u * 1.6f;
             }
 
@@ -444,6 +467,46 @@ namespace SeaSick.UI
 
         Vector2 scroll;
         float listHeight;
+
+#if UNITY_EDITOR
+        /// Dev seam (`Dev/SweepCheck` "settings"): the TUNING rows as last
+        /// repainted, in the scroll view's content space, with the room their
+        /// text needs (`CalcSize` width, or the wrapped `CalcHeight`).
+        internal struct DevRowInfo
+        {
+            public string name, text;
+            public Rect local;
+            public float needW, needH;
+            public bool wrap;
+        }
+        internal static readonly System.Collections.Generic.List<DevRowInfo> DevRows =
+            new System.Collections.Generic.List<DevRowInfo>();
+        internal static int DevRowsFrame = -1;
+        /// The list's scroll view, GUI space, and the scroll it was drawn at.
+        internal static Rect DevView;
+        internal static Vector2 DevScrollAtDraw;
+        internal static Vector2 DevScroll
+        {
+            get => Instance != null ? Instance.scroll : Vector2.zero;
+            set { if (Instance != null) Instance.scroll = value; }
+        }
+        internal static void DevClose()
+        {
+            if (Instance != null) Instance.open = false;
+        }
+
+        static void DevRow(string name, Rect r, string text, GUIStyle style, bool wrap)
+        {
+            if (Event.current == null || Event.current.type != EventType.Repaint || style == null) return;
+            var c = new GUIContent(text);
+            DevRows.Add(new DevRowInfo
+            {
+                name = name, text = text, local = r, wrap = wrap,
+                needW = style.CalcSize(c).x,
+                needH = wrap ? style.CalcHeight(c, r.width) : style.CalcSize(c).y,
+            });
+        }
+#endif
         float dragTravel;
         static bool inScroll;
         static readonly string[] LookSpeedNames = { "Slow", "Normal", "Fast" };

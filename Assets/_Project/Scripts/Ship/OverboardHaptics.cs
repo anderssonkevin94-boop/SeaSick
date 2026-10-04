@@ -23,9 +23,19 @@ namespace SeaSick.Ship
         [DllImport("__Internal")] static extern void SeaSick_HapticNotifyError();
 #endif
 
+#if UNITY_EDITOR
+        /// Dev seam (`Dev/SweepCheck` "warning"): calls to `Warning()` this
+        /// session, counted before the switch. The editor has no Taptic
+        /// engine, so the call is the only thing a check can see.
+        internal static int DevWarningCalls;
+#endif
+
         /// "Hold on!" -- the rail-grab warning.
         public static void Warning()
         {
+#if UNITY_EDITOR
+            DevWarningCalls++;
+#endif
             if (!JuiceTuning.overboardHapticsOn) return;
 #if UNITY_IOS && !UNITY_EDITOR
             SeaSick_HapticNotifyWarning();
