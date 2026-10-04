@@ -29,6 +29,9 @@ namespace SeaSick.Combat
             // hull has one from the start, a fixed fitting on her stem.
             if (GetComponent<SeaSick.Ship.Harpoon.HarpoonGun>() == null)
                 gameObject.AddComponent<SeaSick.Ship.Harpoon.HarpoonGun>();
+            // ...and a crew member mans it (the harpooner, 2026-10-04).
+            if (GetComponent<SeaSick.Ship.Harpoon.HarpoonCrewSource>() == null)
+                gameObject.AddComponent<SeaSick.Ship.Harpoon.HarpoonCrewSource>();
         }
 
         /// The capsule a ball has to cross, from the hull she actually wears.

@@ -456,6 +456,9 @@ namespace SeaSick.Ship
                 // their pairing: one hand works both guns of his pair
                 // (`AssignedCrew`) and only his standing spot moves.
                 var hand = authoredBattery ? AssignedCrew(i) : StandingCrew(i);
+                // 2026-10-04: a hand posted at the bow harpoon is standing
+                // at the harpoon, not at this gun (`CrewAgent.HarpoonPosted`).
+                if (hand != null && hand.HarpoonPosted) hand = null;
                 gun.Manned = hand != null && hand.Available;
                 gun.ReloadScale = hand != null ? hand.WorkRate01 : 0f;
             }
@@ -672,7 +675,10 @@ namespace SeaSick.Ship
                 if (hand == null) continue;
                 shiftHands[h] = hand;
                 shiftHome[h] = i;
-                shiftEligible[h] = hand.CanCrewGun;
+                // At the bow harpoon (2026-10-04): out of the map like a
+                // hand on a haul -- his gun is free to cover, and he is
+                // planned again the moment the harpooner role lets him go.
+                shiftEligible[h] = hand.CanCrewGun && !hand.HarpoonPosted;
                 shiftCurrent[h] = GunOf(hand);
                 h++;
             }
@@ -706,7 +712,7 @@ namespace SeaSick.Ship
                 var hand = roster.GunCrew(k);
                 if (hand == null) continue;
                 int current = GunOf(hand);
-                if (!hand.CanCrewGun)
+                if (!hand.CanCrewGun || hand.HarpoonPosted)
                 {
                     if (current >= 0) gunHand[current] = null;
                     continue;
@@ -730,6 +736,52 @@ namespace SeaSick.Ship
 
         int PairSide(int i) => allGuns[i] == null ? GunCrewShift.None
             : starboard.Contains(allGuns[i]) ? GunCrewShift.Starboard : GunCrewShift.Port;
+
+        /// The side (`GunCrewShift.Port` / `.Starboard`) of one of this
+        /// battery's guns, `None` for null or a gun that is not ours. Read
+        /// by the harpooner role (2026-10-04) to find a gunner on the
+        /// disengaged side.
+        public int SideOfGun(Cannon c)
+        {
+            if (c == null) return GunCrewShift.None;
+            if (starboard.Contains(c)) return GunCrewShift.Starboard;
+            return port.Contains(c) ? GunCrewShift.Port : GunCrewShift.None;
+        }
+
+        /// **How many gunners the fight needs right now (2026-10-04, the
+        /// harpooner role).** 0 out of a fight; otherwise the guns on the
+        /// engaged side(s) the crews are working to (`EngagedSide`, after
+        /// the 3 s hold) -- on an authored hull, the pairs with a gun on an
+        /// engaged side, since one hand works a pair. The bow harpoon may
+        /// borrow a gunner only while the gunners able to stand at a gun,
+        /// minus him, still cover this many (`HarpoonCrewRules`).
+        public int HandsForFight
+        {
+            get
+            {
+                int p = engagedPrimary, q = engagedSecondary;
+                if (p == GunCrewShift.None) return 0;
+                int g = allGuns.Count, n = 0;
+                if (authoredBattery)
+                {
+                    for (int k = 0; 2 * k < g; k++)
+                    {
+                        int a = PairSide(2 * k);
+                        int b = 2 * k + 1 < g ? PairSide(2 * k + 1) : GunCrewShift.None;
+                        if (a == p || a == q && q != GunCrewShift.None
+                            || b == p || b == q && q != GunCrewShift.None) n++;
+                    }
+                    return n;
+                }
+                for (int i = 0; i < g; i++)
+                {
+                    int sd = PairSide(i);
+                    if (sd == GunCrewShift.None) continue;
+                    if (sd == p || sd == q) n++;
+                }
+                return n;
+            }
+        }
 
         void SendTo(Crew.CrewAgent hand, int gunIndex)
         {

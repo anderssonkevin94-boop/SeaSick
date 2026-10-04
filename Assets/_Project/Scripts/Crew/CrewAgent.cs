@@ -256,6 +256,21 @@ namespace SeaSick.Crew
         /// Walking across the deck to a different gun (`RelocateStation`).
         public bool IsRelocating => state == State.Relocating;
 
+        /// His post and its rail, ship-local (where `AssignStation` /
+        /// `RelocateStation` last put him). Read by the harpooner
+        /// (`Ship.Harpoon.HarpoonCrewSource`) to walk him back to exactly
+        /// where he came from.
+        public Vector3 StationLocal => stationLocal;
+        public Vector3 RailLocal => railLocal;
+
+        /// **Posted at the bow harpoon (2026-10-04).** Set and cleared only
+        /// by `Ship.Harpoon.HarpoonCrewSource`. The one shared notion of
+        /// "he is at the harpoon": `CannonBattery.RebalanceCrews` treats a
+        /// posted hand as unavailable for a gun (his gun stands empty and
+        /// may be covered) and `ServiceGuns` never mans a gun from him.
+        /// Runtime only, never saved.
+        public bool HarpoonPosted { get; set; }
+
         /// **Can the battery count on this body for a gun at all
         /// (2026-10-03)?** Aboard this deck and not tied up in something
         /// that takes him out of the ship's own work for a long while: a
