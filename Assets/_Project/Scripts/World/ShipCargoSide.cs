@@ -36,7 +36,11 @@ namespace SeaSick.World
         static AnchorController A => anchor != null ? anchor : (anchor = Object.FindFirstObjectByType<AnchorController>());
         static Gangway G => gangway != null ? gangway : (gangway = Object.FindFirstObjectByType<Gangway>());
 
-        public bool Present => CampLoading.Alongside(camp) && V != null && !V.AtHome;
+        /// She is lying at this camp. **Home included since 2026-10-04**: the
+        /// old `!AtHome` exclusion dated from before home was a camp, and it
+        /// shut the home camp's own unloading off -- the hold was banked into
+        /// a number the camp never read instead (Kevin's vanished ore).
+        public bool Present => CampLoading.Alongside(camp) && V != null;
 
         public int Room => CampLoading.RoomAboard(V);
 
@@ -64,7 +68,7 @@ namespace SeaSick.World
             n = Mathf.Min(n, Room);
             if (n <= 0) return 0;
             // Measured, not assumed (the `LoadNow` rule): `AddLoot` refuses
-            // silently at home or stuffed.
+            // silently when she is stuffed.
             int before = v.TotalHeld;
             v.AddLoot(n, res);
             int got = Mathf.Max(0, v.TotalHeld - before);

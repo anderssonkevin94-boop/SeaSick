@@ -48,7 +48,7 @@ namespace SeaSick.World
         /// Seconds between one unit and the next -- of the RETIRED coroutine
         /// (2026-09-24: hands carry armfuls now). Kept for `CampLoadProbe`.
         ///
-        /// A shade quicker than the 0.18 s `VoyageManager.UnloadAshore` uses
+        /// A shade quicker than the 0.18 s the retired `VoyageManager.UnloadAshore` used
         /// coming the other way, because a hold takes more than a beach keeps
         /// and nobody should have to watch sixty of them. **Scaled time, the
         /// same clock the unload uses** -- a dev tool that slows the world
@@ -221,7 +221,9 @@ namespace SeaSick.World
         /// past her marks with nobody having chosen to.
         public static int RoomAboard(VoyageManager v)
         {
-            if (v == null || v.AtHome) return 0;
+            // No `AtHome` refusal since 2026-10-04: home is a camp, and its
+            // hands load and unload her like any camp's.
+            if (v == null) return 0;
             int limit = v.TakeDeckCargo ? v.MaxHold : v.HoldCapacity;
             return Mathf.Max(0, limit - v.TotalHeld);
         }

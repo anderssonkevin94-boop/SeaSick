@@ -360,9 +360,8 @@ namespace SeaSick.UI.Sheets
             var chosen = a.CurrentDock;
             SeaSick.World.Dock.SetHome(chosen);
             var isle = SeaSick.World.Island.Nearest(chosen.Berth);
-            // The voyage banks its homecoming into home's pile; a camp that has
-            // never had anything set down on it has none yet.
-            SeaSick.World.Stockpile.EnsureOn(isle);
+            // (No home `Stockpile` any more, 2026-10-04: the homecoming is
+            // carried into the home camp's store like any camp's.)
             string label = isle != null ? isle.name : "this island";
             SeaSick.Save.SaveGame.Autosave("home moved to " + label);
             homeFeedback = "Home: " + label;

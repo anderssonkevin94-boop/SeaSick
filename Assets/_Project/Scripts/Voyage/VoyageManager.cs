@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Text;
 using SeaSick.Crew;
 using SeaSick.Ship;
 using UnityEngine;
@@ -74,22 +73,34 @@ namespace SeaSick.Voyage
         public bool Overloaded => TotalHeld > holdCapacity;
 
         readonly Dictionary<string, int> held = new Dictionary<string, int>();
+        /// **RETIRED 2026-10-04 -- a save's old home bank, waiting to be
+        /// repaired into the home camp's store.** Until then home docking
+        /// banked the hold here (plus crate piles on the beach), a number the
+        /// home CAMP never read: Kevin's ore and stone "vanished when I
+        /// docked". Nothing adds to it any more. It is filled only by
+        /// `RestoreStores` from an old save's `banked` rows and emptied by
+        /// `RepairLegacyBank` (`HomeBankRepair`) into `Outpost.Home`'s ledger
+        /// on load / homecoming. While there is no home camp to take it
+        /// (a home pier gone), it is carried through saves untouched and
+        /// nothing reads or spends it.
         readonly Dictionary<string, int> banked = new Dictionary<string, int>();
 
-        /// The hold and the stores, read-only, for the save. Every other
-        /// reader asks by name (`AmountOf`, `Banked`); a save has to walk them.
+        /// The hold, read-only, for the save. Every other reader asks by
+        /// name (`AmountOf`, `HeldOf`); a save has to walk it.
         public IReadOnlyDictionary<string, int> HeldStores => held;
+        /// The UNREPAIRED old home bank (see `banked`), for the save to carry
+        /// until a home camp can take it. Empty in any game since 2026-10-04.
         public IReadOnlyDictionary<string, int> BankedStores => banked;
 
-        /// **Put a saved hold and saved stores back**, and make the pictures
-        /// agree: the stack at the stern and the piles on the beach are both
-        /// rebuilt from the numbers, because neither re-syncs by itself.
+        /// **Put a saved hold back**, and make the picture agree: the stack
+        /// at the stern is rebuilt from the numbers, because it does not
+        /// re-sync by itself. `legacyBank` is an old save's `banked` rows,
+        /// kept only until `RepairLegacyBank` moves them into the home camp.
         ///
         /// Runs AFTER `Start` and after the yard has applied the saved rung,
-        /// so `BeginVoyage` has already had its one chance to wipe the hold
-        /// and `SetHoldCapacity` has already been told the saved size.
+        /// so `SetHoldCapacity` has already been told the saved size.
         public void RestoreStores(IEnumerable<KeyValuePair<string, int>> hold,
-                                  IEnumerable<KeyValuePair<string, int>> stores)
+                                  IEnumerable<KeyValuePair<string, int>> legacyBank)
         {
             held.Clear();
             TotalHeld = 0;
@@ -113,19 +124,41 @@ namespace SeaSick.Voyage
             }
 
             banked.Clear();
-            if (stores != null)
-                foreach (var kv in stores)
+            if (legacyBank != null)
+                foreach (var kv in legacyBank)
                 {
                     if (string.IsNullOrEmpty(kv.Key) || kv.Value <= 0) continue;
-                    banked[kv.Key] = kv.Value;
+                    banked.TryGetValue(kv.Key, out int cur);
+                    banked[kv.Key] = cur + kv.Value;
                 }
-            var pile = World.Stockpile.Instance;
-            if (pile != null)
+            // No crate piles on the beach any more (no ground piles, Kevin
+            // 2026-10-02): take down any an earlier session drew.
+            ClearHomePile();
+        }
+
+        /// **The one-time repair** (2026-10-04): the old home bank goes into
+        /// the home camp's store and is cleared. Idempotent -- with nothing
+        /// left in `banked` it changes nothing. A no-op while there is no
+        /// home camp; the bank waits. Returns the units moved.
+        public int RepairLegacyBank()
+        {
+            var home = World.Outpost.Home;
+            int moved = HomeBankRepair.Apply(banked, home != null ? home.Ledger : null);
+            if (moved > 0)
             {
-                pile.Clear();
-                foreach (var kv in banked)
-                    for (int i = 0; i < kv.Value; i++) pile.Deposit(kv.Key);
+                ClearHomePile();
+                Debug.Log("VoyageManager: repaired the old home bank -- " + moved
+                    + " units moved into " + home.name + "'s store");
             }
+            return moved;
+        }
+
+        /// The retired `Stockpile` crates on the home island, taken down.
+        static void ClearHomePile()
+        {
+            var isle = World.Island.Home;
+            var pile = isle != null ? World.Stockpile.Of(isle) : null;
+            if (pile != null) pile.Clear();
         }
 
         CrewAgent[] crew;
@@ -231,9 +264,13 @@ namespace SeaSick.Voyage
             TakeDeckCargo = false;
             hasLeftHome = false;
             voyageStartTime = Time.time;
-            held.Clear();
-            TotalHeld = 0;
-            if (ship != null) ship.CargoLoad = 0f;
+            // **The hold is NOT emptied here any more** (2026-10-04). Home
+            // is a camp: whatever its hands have not carried ashore yet is
+            // still aboard when she casts off, and leaving the pier must
+            // never wipe it. (It used to be a no-op -- `CompleteVoyage`
+            // had already banked and cleared the hold -- and that banking is
+            // what lost Kevin's ore.)
+            if (ship != null) ship.CargoLoad = HoldFill;
             // Casting off is a moment worth keeping. A no-op until the player
             // has chosen New or Continue, so the call from `Start` cannot
             // overwrite a save with a fresh world.
@@ -243,7 +280,9 @@ namespace SeaSick.Voyage
         /// Loot into the hold, from a shore party or salvaged from the sea.
         public void AddLoot(int amount, string resource)
         {
-            if (phase == Phase.Home || amount <= 0) return;
+            // Open at home too since 2026-10-04: home is a camp, and its
+            // hands load her through `ShipCargoSide.Give` like any camp's.
+            if (amount <= 0) return;
             int room = MaxHold - TotalHeld;
             if (room <= 0) return;
             amount = Mathf.Min(amount, room);
@@ -451,71 +490,44 @@ namespace SeaSick.Voyage
             }
         }
 
+        /// **Home is a camp like any other** (2026-10-04). The hold stays
+        /// aboard; the home camp's hands (its runners, once it has any) carry
+        /// it ashore armful by armful into the home camp's store through the
+        /// ordinary transfer path (`OutpostLedger.OrderTransfer`, ship end
+        /// `World.ShipCargoSide`) -- a good counts only when a villager has
+        /// delivered it. Homecoming places one "all of it, ashore" order per
+        /// kind aboard, which the player can stop or reverse on the Backpack
+        /// sheet like any order. Until 2026-10-04 this banked the hold into
+        /// a home-only number (`banked`) the home camp never read, drew crate
+        /// piles on the beach and emptied the hold -- Kevin's ore and stone
+        /// "vanished when I docked".
         void CompleteVoyage()
         {
-            // What home can KEEP is not what she can carry. The hold takes
-            // 40 to the marked line and 64 with deck cargo; the open beach
-            // keeps 30 until somebody builds somewhere to put it. The
-            // surplus is not a penalty message, it is the reason the first
-            // building exists — and you have to see it land short once
-            // before the storehouse means anything.
-            //
-            // **N OF EACH, not N in total.** This used to pool one
-            // `StoreCapacity - BankedTotal` across the whole hold and walk the
-            // `held` dictionary in whatever order it felt like, so a hold with
-            // thirty logs and twelve boards in it banked the logs, filled the
-            // beach with them and left the boards — a week of a sawyer's work
-            // — on the sand, with the panel saying only "12 left on the sand"
-            // and no hint that the LOGS were what ate the room. Camps have
-            // kept N of each since 2026-09-19 (`Outpost.KeepsOfEach`, Kevin:
-            // *"crew on the island can gather resources up to 10 of each"*);
-            // home is the same place under a different name and now keeps the
-            // same way. It is also what makes carrying a second thing home
-            // worth the passage instead of a competitor for the first's slots.
-            // **No island cap since 2026-10-03** (Kevin: "remove storage
-            // limits. infinite stacking is allowed"): home is an ISLAND store,
-            // so it banks the whole hold and nothing is lost on the sand. Only
-            // this landing side changed -- the ship's own hold limits are
-            // untouched ("the ship will not have infinite storage"). The
-            // spoil bookkeeping stays and now always reads 0.
-            var spoil = new StringBuilder();
-            var landed = new List<string>();
             completedSpoiled = 0;
-            foreach (var res in InOrder(held))
-            {
-                int got = held[res];
-                // Room is asked PER RESOURCE, against what is already in that
-                // pile — so a beach full of timber costs the timber nothing
-                // it was not already going to lose, and costs the boards
-                // nothing at all.
-                int take = got;
-                int lost = got - take;
-
-                if (lost > 0)
-                {
-                    completedSpoiled += lost;
-                    if (spoil.Length > 0) spoil.Append(" · ");
-                    spoil.Append($"{lost} {res.ToLowerInvariant()}");
-                }
-                if (take <= 0) continue;
-                banked.TryGetValue(res, out int cur);
-                banked[res] = cur + take;
-                for (int i = 0; i < take; i++) landed.Add(res);
-            }
-            completedSpoiledDetail = spoil.ToString();
-
-            // Carry it ashore piece by piece so the pile visibly grows rather
-            // than the haul evaporating into a number.
-            if (landed.Count > 0) StartCoroutine(UnloadAshore(landed));
-
-            held.Clear();
-            TotalHeld = 0;
-            ship.CargoLoad = 0f;
+            completedSpoiledDetail = "";
             // Re-read: hands left at camps since Start are not aboard, and
             // hands the yard cloned since are.
             crew = ship != null ? ship.GetComponentsInChildren<CrewAgent>(true) : new CrewAgent[0];
             RestAboard();
             phase = Phase.Home;
+            OrderHomeUnload();
+            // An old save's bank, if a home camp has appeared since the load.
+            RepairLegacyBank();
+        }
+
+        /// One TransferAll ship -> store order per kind aboard, on the home
+        /// camp. Refused (she is not alongside after all, no camp) = nothing
+        /// moves and nothing is lost: the cargo stays aboard and the
+        /// Backpack sheet can order it later.
+        void OrderHomeUnload()
+        {
+            var home = World.Outpost.Home;
+            var l = home != null ? home.Ledger : null;
+            if (l == null || held.Count == 0) return;
+            World.ShipCargoSide.BindTo(home);
+            var kinds = new List<string>(InOrder(held));
+            foreach (var res in kinds)
+                l.OrderTransfer(res, World.OutpostLedger.TransferAll, toShip: false);
         }
 
         // --- The stores, and what they buy ----------------------------------
@@ -536,16 +548,34 @@ namespace SeaSick.Voyage
         public int StoreCapacity => World.Outpost.Home != null
             ? World.Outpost.Home.KeepsOfEach : fallbackStoreCapacity;
 
-        /// Everything in every pile added up. **Not a capacity question** —
-        /// there is no total ceiling any more — so this is a readout and a
-        /// convenience for probes, never the thing room is measured against.
-        public int BankedTotal
+        /// **The home camp's store** (2026-10-04): what the yard and the home
+        /// buildings are paid from. `SpendableOf` -- store, racks, finished
+        /// benches; never a station's bay -- the same gate every camp cost
+        /// reads, and exactly what `SpendFromHome` can take. 0 with no home
+        /// camp: a new game has no home pier, no yard and nothing to pay.
+        public int HomeStoreOf(string resource)
         {
-            get { int n = 0; foreach (var kv in banked) n += kv.Value; return n; }
+            if (string.IsNullOrEmpty(resource)) return 0;
+            var home = World.Outpost.Home;
+            var l = home != null ? home.Ledger : null;
+            return l != null ? l.SpendableOf(resource) : 0;
         }
 
-        public int Banked(string resource) =>
-            banked.TryGetValue(resource, out int n) ? n : 0;
+        /// Everything in the home camp's store, all kinds. A readout for
+        /// probes, never a capacity question.
+        public int HomeStoreTotal
+        {
+            get
+            {
+                var home = World.Outpost.Home;
+                return home != null && home.Ledger != null ? home.Ledger.Total : 0;
+            }
+        }
+
+        /// Old names, kept so the probes compile: both read the HOME CAMP
+        /// store now (`HomeStoreOf`), not the retired `banked`.
+        public int Banked(string resource) => HomeStoreOf(resource);
+        public int BankedTotal => HomeStoreTotal;
 
         /// What the last homecoming could not keep, and which piles it was.
         /// Read-only, and read by `SinkProbe`: a gate that re-derived the
@@ -564,53 +594,32 @@ namespace SeaSick.Voyage
         {
             var village = World.Outpost.Home;
             if (village == null) return false;
-            if (Banked(plan.resource) < plan.cost) return false;
+            if (HomeStoreOf(plan.resource) < plan.cost) return false;
 
             var raised = village.Raise(plan);
             if (raised == null) return false;
 
-            SpendBanked(plan.resource, plan.cost);
+            SpendFromHome(plan.resource, plan.cost);
             return true;
         }
 
-        /// Off the beach and into the building. The visible pile has to come
-        /// down with the number, or the stores read as spent in the panel and
-        /// untouched on the ground two metres away.
-        ///
-        /// Public since the yard began charging for rungs (`ShipPrices`): a
-        /// hull is the second thing the stores buy, and it has to be paid for
-        /// through the same call the buildings use or the pile and the number
-        /// part company again. It does not check — `ShipPrices.TrySpend` and
-        /// `TryBuild` check, and both clamp here anyway.
-        public void SpendBanked(string resource, int amount)
+        /// **Pay out of the home camp's store** (2026-10-04; was the retired
+        /// `banked`). `OutpostLedger.Take` -- store first, then racks and
+        /// finished benches, never a bay -- settled to now first, as every
+        /// other spend of a camp's goods is. It does not check:
+        /// `ShipPrices.TrySpend` and `TryBuild` check, and `Take` clamps to
+        /// what is there. Returns what was taken.
+        public int SpendFromHome(string resource, int amount)
         {
-            banked.TryGetValue(resource, out int have);
-            int take = Mathf.Min(have, amount);
-            banked[resource] = have - take;
-            if (banked[resource] <= 0) banked.Remove(resource);
-            var pile = World.Stockpile.Instance;
-            if (pile != null) pile.Withdraw(resource, take);
+            if (string.IsNullOrEmpty(resource) || amount <= 0) return 0;
+            var home = World.Outpost.Home;
+            if (home == null || home.Ledger == null) return 0;
+            home.CatchUp();
+            return home.Ledger.Take(resource, amount);
         }
 
-        /// **The HOMECOMING's unload only** (2026-09-24). Home is not a camp
-        /// ledger: the voyage banks the hold into `banked` + `Stockpile` in
-        /// `CompleteVoyage`, and this only paces the visible pile. A hold
-        /// emptied at a CAMP never comes here -- that is carried, armful by
-        /// armful, by the camp's hands through transfer orders
-        /// (`OutpostLedger.OrderTransfer(res, n, toShip: false)`, the ship end
-        /// bound by `World.ShipCargoSide`). This instant version is kept for
-        /// the one place with no camp and no hands: the home dock.
-        System.Collections.IEnumerator UnloadAshore(List<string> units)
-        {
-            var pile = World.Stockpile.Instance;
-            var shipHold = ship != null ? ship.GetComponent<Ship.ShipHold>() : null;
-            foreach (var resource in units)
-            {
-                if (shipHold != null) shipHold.RemoveVisual();
-                if (pile != null) pile.Deposit(resource);
-                yield return new WaitForSeconds(0.18f);
-            }
-        }
+        /// Old name, kept so the probes compile. See `SpendFromHome`.
+        public void SpendBanked(string resource, int amount) => SpendFromHome(resource, amount);
 
         /// Alongside her own pier, which is the arrival. Falls back to a
         /// plain distance if the anchor controller is missing.

@@ -14,9 +14,12 @@ namespace SeaSick.World
     {
         static readonly List<Stockpile> all = new List<Stockpile>();
 
-        /// Home's pile. Kept because the voyage loop still banks at home
-        /// specifically; anything asking about the island the ship is AT must
-        /// use `Of`.
+        /// Home's pile. **RETIRED as a store 2026-10-04**: home docking no
+        /// longer banks or draws crates here (it unloads into the home camp's
+        /// store like any camp; no ground piles). The game only `Clear`s it
+        /// (`VoyageManager.RestoreStores` / `RepairLegacyBank`); kept for the
+        /// populator and the older probes. Anything asking about the island
+        /// the ship is AT must use `Of`.
         /// Derived from the home berth (2026-09-29): the pile on
         /// `Island.Home`, null before the player has made a home.
         /// Made on first ask, so a load (which rebuilds the island without
