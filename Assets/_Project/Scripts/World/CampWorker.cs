@@ -1705,6 +1705,9 @@ namespace SeaSick.World
                 }
                 case TripLeg.AtPickup:
                 {
+                    // Down the mine: the walk in through the doorway, then
+                    // out of sight (`CampWorker.Mine`).
+                    if (TickMineIn(r, view, dt)) return;
                     // **His tree went over under somebody else's armful
                     // (2026-10-03).** A timber armful is 2 logs and a tree
                     // 1, so a pickup fells his tree AND the next in the
@@ -1738,6 +1741,8 @@ namespace SeaSick.World
                     mimeLoaded = true;
                     if (mimeEating) acting?.Set(VillagerActing.Mode.Reach, view.resource, 1);
                     else acting?.Set(VillagerActing.Mode.Carry, view.resource, Mathf.Max(1, view.count));
+                    // Up out of the mine: back through the doorway first.
+                    if (TickMineOut(view, dt)) return;
                     if (!Walk(mimeDrop, dt))
                     {
                         // Loaded and no way to the drop-off (2026-10-05):

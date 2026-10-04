@@ -105,6 +105,26 @@ namespace SeaSick.World
             return true;
         }
 
+        // The ghost asks every frame: one route search per new spot (or wall
+        // layer), not one a frame -- a refused search floods the grid.
+        Vector3 mineWalkFrom = new Vector3(float.NaN, 0f, 0f), mineWalkTo;
+        int mineWalkRev;
+        bool mineWalkOk;
+
+        /// Can a hand walk from the mouth stand to the drop spot? The grid's
+        /// route when it is built, else the fire's region (`Reachable`).
+        bool MineDropWalk(Vector3 stand, Vector3 drop)
+        {
+            var map = CampPath.For(this);
+            if (map == null) return true;
+            if (!map.Built) return CampPath.Reachable(this, drop);
+            if ((stand - mineWalkFrom).sqrMagnitude < 0.01f && (drop - mineWalkTo).sqrMagnitude < 0.01f
+                && mineWalkRev == map.WallRevision) return mineWalkOk;
+            mineWalkFrom = stand; mineWalkTo = drop; mineWalkRev = map.WallRevision;
+            mineWalkOk = map.HasRoute(stand, drop, CampPath.Walker.Hand);
+            return mineWalkOk;
+        }
+
         /// **Can a mine stand with its lip at `at`, facing `yaw`?** Four
         /// rules, the first that fails says why:
         /// <list type="number">
@@ -160,6 +180,22 @@ namespace SeaSick.World
             if (!CampPath.Reachable(this, apron))
             {
                 why = "the camp cannot walk to the mine's mouth";
+                return false;
+            }
+            // **The drop walk (2026-10-05):** from the mouth stand out to the
+            // model's own `DropSpot` (read off the prefab), on ground a man
+            // stands on, by a route the camp's grid can walk.
+            Vector3 stand = at + fwd * BuildPlans.MineMouthStand;
+            Vector3 drop = at + facing * BuildingFactory.MineMarkLocal("DropSpot");
+            drop.y = 0f;
+            if (!Walkability.Standable(height, drop.x, drop.z, Walkability.Feet.Man))
+            {
+                why = "the container's spot is on ground too steep to stand on";
+                return false;
+            }
+            if (!MineDropWalk(stand, drop))
+            {
+                why = "no walk from the mouth to the container";
                 return false;
             }
             float halfDiag = 0.5f * Mathf.Sqrt(plan.footprint.x * plan.footprint.x + depth * depth);

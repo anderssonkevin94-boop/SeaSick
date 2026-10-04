@@ -1364,7 +1364,7 @@ namespace SeaSick.World
 
         /// The lamp on the mine's portal post, out of the hill.
         static Vector3 MineLampAt(BuildPlan plan) =>
-            new Vector3(plan.footprint.x * 0.5f - 0.5f, 2.1f, 0.35f);
+            new Vector3(1.4f, 2.1f, 0.35f);
 
         /// **The stand-in shaft head**, raised only when the approved model
         /// (`BuildPlans.MinePrefab`) does not load: a timber portal on the
@@ -1381,7 +1381,7 @@ namespace SeaSick.World
             var crate = Mat("wall", new Color(0.42f, 0.31f, 0.20f));
             var visual = new GameObject("Visual").transform;
             visual.SetParent(root, false);
-            float open = w * 0.5f, high = 2.4f;
+            float open = Mathf.Min(1.9f, w * 0.5f), high = 2.6f;
             // The black of the adit, behind the lip and into the hill.
             Box(visual, dark, new Vector3(open, high, BuildPlans.MineHeadDepth),
                 new Vector3(0f, high * 0.5f, -BuildPlans.MineHeadDepth * 0.5f - 0.1f));
@@ -1390,12 +1390,43 @@ namespace SeaSick.World
                 Box(visual, beam, new Vector3(0.4f, high + 0.2f, 0.4f),
                     new Vector3(s * (open * 0.5f + 0.2f), (high + 0.2f) * 0.5f, 0f));
             Box(visual, beam, new Vector3(open + 1.0f, 0.45f, 0.5f), new Vector3(0f, high + 0.3f, 0f));
-            // The container: an open crate on the apron, to the right of the door.
-            Box(visual, crate, new Vector3(1.2f, 0.6f, 1.0f), new Vector3(w * 0.5f - 0.6f, 0.3f, 1.3f));
+            // The container: an open crate out on the camp side (the
+            // approved model's `FillCrate` spot, so both wear one layout).
+            Vector3 box = MineStandInMarks[1];
+            Box(visual, crate, new Vector3(1.46f, 0.56f, 0.94f), new Vector3(box.x, 0.28f, box.z));
 
-            Mark(root, "Mouth", new Vector3(0f, 0f, -1.0f));
-            Mark(root, "Container", new Vector3(w * 0.5f - 0.6f, 0.62f, 1.3f));
-            Mark(root, "DropSpot", new Vector3(w * 0.5f - 0.6f - 1.1f, 0f, 1.9f));
+            for (int i = 0; i < MineMarkNames.Length; i++) Mark(root, MineMarkNames[i], MineStandInMarks[i]);
+        }
+
+        static readonly string[] MineMarkNames = { "Mouth", "Container", "DropSpot" };
+        /// The stand-in's own marks: the approved shaft's contract layout
+        /// (mouth 0.5 m inside the lip, the crate and its drop spot on the
+        /// camp side). Only for the stand-in -- the model's are READ
+        /// (`MineMarkLocal`), never assumed.
+        static readonly Vector3[] MineStandInMarks =
+            { new Vector3(0f, 0f, -0.5f), new Vector3(-2.4f, 0.56f, 2.2f), new Vector3(-2.4f, 0f, 3.4f) };
+
+        static readonly Dictionary<string, Vector3> mineMarkCache = new Dictionary<string, Vector3>();
+
+        /// **Where the mine's `stem` mark ("Mouth", "Container",
+        /// "DropSpot") stands in the shaft's own frame**, read off the
+        /// approved prefab (`BuildPlans.MinePrefab`) and remembered; the
+        /// stand-in's layout when the prefab or the mark is missing. What
+        /// `Outpost.CanPlaceMine` tests the drop walk against before there is
+        /// a building to ask.
+        public static Vector3 MineMarkLocal(string stem)
+        {
+            if (mineMarkCache.TryGetValue(stem, out var v)) return v;
+            int k = System.Array.IndexOf(MineMarkNames, stem);
+            v = k >= 0 ? MineStandInMarks[k] : Vector3.zero;
+            var asset = Has(BuildPlans.MinePrefab) ? Resources.Load<GameObject>(BuildPlans.MinePrefab) : null;
+            if (asset != null)
+            {
+                foreach (var t in asset.GetComponentsInChildren<Transform>(true))
+                    if (Stem(t.name) == stem) { v = asset.transform.InverseTransformPoint(t.position); break; }
+                mineMarkCache[stem] = v;     // only a real read is remembered
+            }
+            return v;
         }
 
         static Transform Mark(Transform root, string name, Vector3 local)

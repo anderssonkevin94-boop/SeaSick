@@ -177,9 +177,16 @@ namespace SeaSick.World
         void CatchDay(OutpostHand h, StationStock s, int si, ref float budget)
         {
             // **A mine never runs dry and never needs choosing (2026-10-05):**
-            // a manned mine with no order digs stone on repeat, so "assign a
-            // miner" is the whole of setting one going.
-            if (Mines(s) && !s.HasOrder) PlaceOrder(si, MineRecipeId, RepeatOrder);
+            // a NEWLY assigned miner at a mine with no order starts it
+            // digging stone on repeat, so "assign a miner" is the whole of
+            // setting one going. Once per assignment (`mineAutoFor`): a Stop
+            // the player gives afterwards sticks.
+            if (Mines(s) && !s.HasOrder && s.mineAutoFor != h.name)
+            {
+                PlaceOrder(si, MineRecipeId, RepeatOrder);
+                s.mineAutoFor = h.name ?? "";
+            }
+            else if (Mines(s) && s.HasOrder && string.IsNullOrEmpty(s.mineAutoFor)) s.mineAutoFor = h.name ?? "";
             for (int guard = 0; guard < 64 && budget > Eps; guard++)
             {
                 if (h.Hauling) { if (!AdvanceHaul(h, ref budget)) break; continue; }
@@ -227,6 +234,23 @@ namespace SeaSick.World
             // A count order runs down on the catch's own spot (2026-09-30).
             CountDown(s.SpotAt(StationSpots.SpotIndexOf(r)), r, n);
             s.SyncLegacy();
+        }
+
+        /// **Is `h` down a mine right now?** On a dig from a mine's mouth, at
+        /// the pickup, the stone not yet in his arms. The raid alarm leaves
+        /// him there (`Combat.RaidAlarm`): underground is as hidden as a
+        /// hut, and the trip finishes as normal.
+        public bool Underground(OutpostHand h) =>
+            h != null && h.Hauling && h.haulFrom == HaulPlace.Shore && !h.haulPicked
+            && h.Leg == TripLeg.AtPickup && Mines(StationAt(h.haulFromStation));
+
+        /// A mine nobody works forgets whom it auto-started for, so the
+        /// next miner assigned starts it again (`CatchDay`). Once a step.
+        void ForgetMineStarts()
+        {
+            if (stations == null) return;
+            foreach (var s in stations)
+                if (Mines(s) && !string.IsNullOrEmpty(s.mineAutoFor) && !Manned(s)) s.mineAutoFor = "";
         }
 
         /// The mine's dig (`Recipes.All`).

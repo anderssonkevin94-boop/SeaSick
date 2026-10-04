@@ -660,8 +660,11 @@ namespace SeaSick.World
             blurb = "a miner digs stone out of the hillside; it must stand against a cliff face",
             resource = Res.Timber,
             baseCost = 8,
-            footprint = new Vector2(4.4f, 4.4f),
-            ridge = 3.4f,
+            // The approved shaft (art-staging/mine-shaft-v1/contract.json):
+            // 7.2 m wide, rock 4.7 m back into the hill, apron 2 m out, the
+            // crate and its drop spot further out on the camp side.
+            footprint = new Vector2(7.2f, 4.4f),
+            ridge = 4.1f,
             position = "miner",
             inputSlots = 1,         // nothing comes in; 1 keeps the sheet's bay row sane
             outputSlots = 12,       // three trips' worth before he (or a runner) carries it home
@@ -695,7 +698,7 @@ namespace SeaSick.World
         public const float MineCliffProbe = 2.5f;
         /// Depth of the flat, walkable apron in front of the lip, metres:
         /// where the container and the drop spot stand.
-        public const float MineApronDepth = 3f;
+        public const float MineApronDepth = 3.6f;
         /// How far from the tap the ghost looks for the foot of a face, metres.
         public const float MineSnapReach = 8f;
         /// Where the books stand the miner at the mouth: this far out from
@@ -703,7 +706,7 @@ namespace SeaSick.World
         public const float MineMouthStand = 0.9f;
         /// The shaft head's solid behind the pivot (what walkers go round),
         /// metres deep; its width is the footprint's.
-        public const float MineHeadDepth = 2.2f;
+        public const float MineHeadDepth = 4.5f;
 
         /// **The fletcher's, 2026-09-22.** Kevin: *"build a fletcher's
         /// building as well for bow and arrow."*

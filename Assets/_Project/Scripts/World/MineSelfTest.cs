@@ -16,6 +16,7 @@ namespace SeaSick.World
     ///     dig timer is `MineTripSeconds` of work, carries 4 stone that are NOT in
     ///     the books while in his arms, and the rack gains exactly 4 the step
     ///     he drops them (delivery on arrival);
+    ///     A Stop sticks for that miner; a newly assigned one restarts it.
     /// (c) away == watched: the same mine ticked in 0.01-day steps and in one
     ///     2-day tick books the same stone, within one load;
     /// (d) no runners: a full container goes to the store on his own back;
@@ -122,6 +123,18 @@ namespace SeaSick.World
                 sawUnder && Mathf.Abs(timer - BuildPlans.MineTripSeconds) <= 0.5f,
                 $"dig timer {timer:0.0} s of work at feel x1 (want {BuildPlans.MineTripSeconds:0}); "
                 + $"this camp's clock had him below {under:0.0} s");
+            // The player's Stop sticks: no auto-restart for the same miner;
+            // a newly assigned one starts it again.
+            l.StopOrder(si);
+            for (int i = 0; i < 50; i++) Advance(l, ref now, Step);
+            bool stuck = !st.HasOrder;
+            var other = new OutpostHand { name = "Second", order = OutpostOrder.Work, target = Id };
+            h.order = OutpostOrder.Idle; h.target = null;
+            for (int i = 0; i < 5; i++) Advance(l, ref now, Step);
+            l.hands.Add(other);
+            for (int i = 0; i < 50; i++) Advance(l, ref now, Step);
+            Gate(sb, ref fails, "mine-stop-sticks", stuck && st.HasOrder,
+                $"stopped and stayed stopped {stuck}; a newly assigned miner restarted it {st.HasOrder}");
             Gate(sb, ref fails, "mine-stone-booked-at-drop",
                 carriedUnbooked && firstGain == BuildPlans.MineLoad,
                 $"carried {BuildPlans.MineLoad} unbooked {carriedUnbooked}, rack's first gain {firstGain}");

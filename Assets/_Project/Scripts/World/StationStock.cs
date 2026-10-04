@@ -168,6 +168,13 @@ namespace SeaSick.World
         /// looked for again.
         public float shoreForX, shoreForZ;
         public string shoreWhy = "";
+        /// **The mine's auto-start, once per assignment (2026-10-05).** The
+        /// name of the miner the dig was last started for on its own: a
+        /// manned mine with no order starts digging only for a hand it has
+        /// not started for, so the player's Stop sticks; cleared when the
+        /// mine stands unmanned, so the next miner assigned starts it again.
+        /// Saved with the row (old saves: empty, the dig starts once).
+        public string mineAutoFor = "";
         /// `CampPath.WallRevision` the spot was checked against. Not saved:
         /// a loaded camp re-checks once against its fresh grid.
         [System.NonSerialized] public int shoreRev = int.MinValue;
