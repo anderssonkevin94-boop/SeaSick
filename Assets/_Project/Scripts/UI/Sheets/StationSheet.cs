@@ -1475,6 +1475,7 @@ namespace SeaSick.UI.Sheets
                     : under ? $"back in {Clock(left)}"
                     : left > 0f ? "walking in"
                     : hand.Hauling && hand.haulPicked && hand.haulFrom == HaulPlace.Shore ? "bringing stone up"
+                    : st.RackFull ? "crate full"
                     : "at the mine";
                 benchLabel.text = "in the mine";
             }
@@ -1961,6 +1962,16 @@ namespace SeaSick.UI.Sheets
                 Root.Add(off);
             }
 
+            /// "miner · content · +1 more", empty parts left out (2026-10-05:
+            /// an empty mood word left "miner ·" dangling).
+            static string SubLine(string role, string mood, int others)
+            {
+                string line = role ?? "";
+                if (!string.IsNullOrEmpty(mood)) line = line.Length > 0 ? line + " · " + mood : mood;
+                if (others > 0) line = line.Length > 0 ? line + $" · +{others} more" : $"+{others} more";
+                return line;
+            }
+
             public void Update(OutpostLedger l, OutpostHand hand, int others)
             {
                 current = hand;
@@ -1979,7 +1990,7 @@ namespace SeaSick.UI.Sheets
                     bool idleBench = handWord == "Idle at the bench";
                     sub.text = waiting ? "Waiting for a runner"
                         : idleBench ? "Idle at the bench · pick a recipe"
-                        : $"{role} · {hand.MoodWord}" + (others > 0 ? $" · +{others} more" : "");
+                        : SubLine(role, hand.MoodWord, others);
                     sub.style.color = waiting || idleBench ? new StyleColor(Amber) : new StyleColor(StyleKeyword.Null);
                     main.text = "Swap";
                     main.style.display = free != null ? DisplayStyle.Flex : DisplayStyle.None;

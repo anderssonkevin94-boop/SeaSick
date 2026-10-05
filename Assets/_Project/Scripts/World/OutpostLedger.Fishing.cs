@@ -253,6 +253,10 @@ namespace SeaSick.World
                 if (Mines(s) && !string.IsNullOrEmpty(s.mineAutoFor) && !Manned(s)) s.mineAutoFor = "";
         }
 
+        /// The mine's stall line while its crate is full and waiting to be
+        /// carried home.
+        public const string MineCrateFullWords = "crate full · waiting to be carried home";
+
         /// The mine's dig (`Recipes.All`).
         public const string MineRecipeId = "mine-stone";
 
@@ -280,6 +284,11 @@ namespace SeaSick.World
             var r = CatchRecipe(s);
             if (r != null && s.RackFull && StoreRoomNet(r.makes) <= 0)
                 return $"box and store are full of {Friendly(r.makes)}";
+            // **The mine's crate full (2026-10-05 fix round, Kevin's mine
+            // 160 m out):** he stops digging until it is carried home -- said,
+            // not silent. A crate the store cannot reach says THAT instead
+            // (`StationCutOffWords`, next in `StationStallCause`).
+            if (Mines(s) && s.RackFull && StationReachable(s)) return MineCrateFullWords;
             return null;
         }
 
