@@ -2462,6 +2462,7 @@ namespace SeaSick.World
             if (r.isWall || IsRoadRow(r)) return ClearShape.Line(r.postA, r.postB);
             var plan = PlanFor(r.planId, r.length);
             if (plan.kind == BuildKind.Pier || plan.kind == BuildKind.DryDock) { skip = true; return default; }
+            if (plan.kind == BuildKind.Mine) return MineClearShape(r, plan);
             return ClearShape.Rect(r.At, r.yaw, plan.footprint);
         }
 

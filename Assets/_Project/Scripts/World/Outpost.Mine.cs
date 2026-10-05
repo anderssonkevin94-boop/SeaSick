@@ -355,5 +355,24 @@ namespace SeaSick.World
             if (!Clear(apron, halfDiag, out string blocked)) { why = blocked; return false; }
             return true;
         }
-    }
+    
+        /// **The ground a mine's hands clear (2026-10-05, GDD §9).** The
+        /// plain footprint rect sat on the lip, so the apron the miner works
+        /// on, the crate and its drop spot stuck out in front of it and a
+        /// tree there was never felled. The rect runs from the footprint's
+        /// back out past the apron and the drop spot, and wide enough for the
+        /// crate's side.
+        Outpost.ClearShape MineClearShape(PendingBuild r, BuildPlan plan)
+        {
+            Vector3 drop = BuildingFactory.MineMarkLocal("DropSpot");
+            Vector3 crate = BuildingFactory.MineMarkLocal("Container");
+            float back = 0.5f * plan.footprint.y;
+            float front = Mathf.Max(back, BuildPlans.MineBuryMetres + BuildPlans.MineApronDepth + 0.2f,
+                                    Mathf.Max(drop.z, crate.z) + 0.6f);
+            float halfX = Mathf.Max(0.5f * plan.footprint.x,
+                                    Mathf.Max(Mathf.Abs(drop.x), Mathf.Abs(crate.x)) + 0.8f);
+            Vector3 centre = r.At + Quaternion.Euler(0f, r.yaw, 0f) * new Vector3(0f, 0f, 0.5f * (front - back));
+            return Outpost.ClearShape.Rect(centre, r.yaw, new Vector2(2f * halfX, front + back));
+        }
+}
 }
