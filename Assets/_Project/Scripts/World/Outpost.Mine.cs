@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace SeaSick.World
@@ -36,15 +37,79 @@ namespace SeaSick.World
             return (height(q.x, q.z) - height(p.x, p.z)) / run >= Walkability.Grade(Walkability.Feet.Man);
         }
 
-        /// **Where a mine would go if the player points HERE.** The nearest
-        /// foot of a face within `MineSnapReach` of the tap: up the ground's
-        /// own gradient first, then every `MineBearings` bearing; a tap ON
-        /// the face walks back down it to the foot. The heading is the
-        /// face's downhill direction (its gradient a pace up the face, on a
-        /// 1.5 m stencil so a ripple does not swing it), and the pivot is the
-        /// foot pushed `MineBuryMetres` into the hill at the foot's height.
-        /// False with `MineNeedsCliff` and the tap itself when there is no
-        /// face in reach -- the ghost stays red where the player pointed.
+        /// What the ghost says when there is a face but too little hill to
+        /// sink the mine's back into across its width (a spur, a lone knoll).
+        public const string MineNeedsHillBehind = "too little hill behind it to dig into";
+
+        /// A site the snap may offer: lip, heading, and its distance from
+        /// the tap (the gradient's own bearing a little nearer).
+        struct MineSite { public Vector3 pivot; public float yaw, dist; }
+        readonly List<MineSite> mineSites = new List<MineSite>(24);
+
+        // The snap's answer for the last tap, kept while the thumb is still
+        // and the walls are unchanged: the ghost asks every frame.
+        Vector3 mineSnapTap = new Vector3(float.NaN, 0f, 0f), mineSnapPivot;
+        float mineSnapYaw;
+        string mineSnapWhy;
+        bool mineSnapOk;
+        int mineSnapRev;
+
+        int MineRev()
+        {
+            var map = CampPath.For(this);
+            return unchecked((map != null ? map.WallRevision * 65599 : 0) + built.Count);
+        }
+
+        /// From `from` along `dir`, the first point within `MineSnapReach`
+        /// where the ground ahead rises steeper than a man may walk.
+        bool MineFaceAlong(Vector3 from, Vector3 dir, out Vector3 foot, out float t)
+        {
+            for (t = 0f; t <= BuildPlans.MineSnapReach; t += MineStep)
+            {
+                foot = from + dir * t;
+                if (MineSteepAhead(foot, dir)) return true;
+            }
+            foot = from;
+            return false;
+        }
+
+        /// A face found at `foot` going up `uphill`: squared to the face,
+        /// walked up to where the hill starts rising (`MineFootRise`), the
+        /// lip pushed `MineBuryMetres` in and stood at the foot's height.
+        void AddMineSite(Vector3 foot, Vector3 uphill, Vector3 picked, float bias)
+        {
+            Vector3 onFace = foot + uphill * 1.5f;
+            Vector3 faceUp = -Downhill(onFace, 1.5f);
+            if (faceUp.sqrMagnitude > 0.5f && Vector3.Dot(faceUp, uphill) > 0.3f) uphill = faceUp;
+            float h0 = height(foot.x, foot.z);
+            for (float s = 0.25f; s <= BuildPlans.MineCliffProbe; s += 0.25f)
+            {
+                Vector3 q = foot + uphill * 0.25f;
+                if (height(q.x, q.z) - h0 > BuildPlans.MineFootRise) break;
+                foot = q;
+            }
+            Vector3 outward = -uphill;
+            var site = new MineSite { yaw = Mathf.Atan2(outward.x, outward.z) * Mathf.Rad2Deg };
+            site.pivot = foot + uphill * BuildPlans.MineBuryMetres;
+            site.pivot.y = height(foot.x, foot.z);
+            Vector3 d = site.pivot - picked;
+            d.y = 0f;
+            site.dist = d.magnitude + bias;
+            foreach (var o in mineSites)
+                if ((o.pivot - site.pivot).sqrMagnitude < 0.09f && Mathf.Abs(Mathf.DeltaAngle(o.yaw, site.yaw)) < 5f)
+                    return;
+            mineSites.Add(site);
+        }
+
+        /// **Where a mine would go if the player points HERE.** Every foot
+        /// of a face within `MineSnapReach` of the tap -- up the ground's own
+        /// gradient, every `MineBearings` bearing, and the gradient's site
+        /// slid along the face -- nearest first, and the first that
+        /// `CanPlace` accepts is the answer (2026-10-05 fix round: the snap
+        /// only ever offers a site placement will stand, so dragging along a
+        /// good face no longer flickers green/red). None accepted: false,
+        /// with the nearest site and its refusal (the ghost stays red THERE,
+        /// saying why); no face at all: `MineNeedsCliff` at the tap.
         public bool SnapMine(Vector3 picked, out Vector3 pivot, out float yaw, out string why)
         {
             pivot = picked;
@@ -53,12 +118,21 @@ namespace SeaSick.World
             if (!Sited || height == null) { why = "this ground was never surveyed"; return false; }
             pivot.y = height(picked.x, picked.z);
 
-            Vector3 up = -Downhill(picked, 2f);
-            Vector3 foot = picked, uphill = Vector3.zero;
-            float best = float.MaxValue;
+            int rev = MineRev();
+            Vector3 moved = picked - mineSnapTap;
+            moved.y = 0f;
+            if (moved.sqrMagnitude < 0.0225f && rev == mineSnapRev)
+            {
+                pivot = mineSnapPivot; yaw = mineSnapYaw; why = mineSnapWhy;
+                return mineSnapOk;
+            }
 
-            // A tap on the face itself: down it to the foot.
-            if (up.sqrMagnitude > 0.5f && MineSteepAhead(picked, up))
+            mineSites.Clear();
+            Vector3 up = -Downhill(picked, 2f);
+            bool hasUp = up.sqrMagnitude > 0.5f;
+            Vector3 from = picked;
+            // A tap on the face itself: down it to the foot first.
+            if (hasUp && MineSteepAhead(picked, up))
             {
                 Vector3 p = picked;
                 for (float t = 0f; t <= BuildPlans.MineSnapReach; t += MineStep)
@@ -66,50 +140,66 @@ namespace SeaSick.World
                     p = picked - up * t;
                     if (!MineSteepAhead(p, up)) break;
                 }
-                foot = p; uphill = up; best = 0f;
+                from = p;
+                AddMineSite(p, up, picked, -0.75f);
             }
-            else
+            for (int k = -1; k < MineBearings; k++)
             {
-                for (int k = -1; k < MineBearings; k++)
+                Vector3 dir;
+                if (k < 0) { if (!hasUp) continue; dir = up; }
+                else
                 {
-                    Vector3 dir;
-                    if (k < 0) { if (up.sqrMagnitude < 0.5f) continue; dir = up; }
-                    else
-                    {
-                        float a = k * Mathf.PI * 2f / MineBearings;
-                        dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
-                    }
-                    for (float t = 0f; t <= BuildPlans.MineSnapReach && t < best; t += MineStep)
-                    {
-                        Vector3 p = picked + dir * t;
-                        if (!MineSteepAhead(p, dir)) continue;
-                        // The gradient's own bearing wins a near-tie: it is
-                        // the face the player is looking at.
-                        float score = k < 0 ? t - 0.75f : t;
-                        if (score < best) { best = score; foot = p; uphill = dir; }
-                        break;
-                    }
+                    float a = k * Mathf.PI * 2f / MineBearings;
+                    dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
+                }
+                if (MineFaceAlong(from, dir, out Vector3 foot, out _))
+                    AddMineSite(foot, dir, picked, k < 0 ? -0.75f : 0f);
+            }
+            // Slid along the face: a stretch too narrow right here may be
+            // wide enough a few metres over.
+            if (mineSites.Count > 0)
+            {
+                MineSite near = mineSites[0];
+                foreach (var o in mineSites) if (o.dist < near.dist) near = o;
+                var q = Quaternion.Euler(0f, near.yaw, 0f);
+                Vector3 fwd = q * Vector3.forward, right = q * Vector3.right;
+                for (int s = -2; s <= 2; s++)
+                {
+                    if (s == 0) continue;
+                    Vector3 start = near.pivot + right * (s * 1.5f) + fwd * BuildPlans.MineCliffProbe;
+                    if (MineFaceAlong(start, -fwd, out Vector3 foot, out _))
+                        AddMineSite(foot, -fwd, picked, 0f);
                 }
             }
-            if (best == float.MaxValue) { why = MineNeedsCliff; return false; }
 
-            // Square to the face: its gradient a pace up it.
-            Vector3 onFace = foot + uphill * 1.5f;
-            Vector3 faceUp = -Downhill(onFace, 1.5f);
-            if (faceUp.sqrMagnitude > 0.5f && Vector3.Dot(faceUp, uphill) > 0.3f) uphill = faceUp;
-
-            Vector3 outward = -uphill;
-            yaw = Mathf.Atan2(outward.x, outward.z) * Mathf.Rad2Deg;
-            pivot = foot + uphill * BuildPlans.MineBuryMetres;
-            pivot.y = height(foot.x, foot.z);
-            return true;
+            bool ok = false;
+            if (mineSites.Count == 0) why = MineNeedsCliff;
+            else
+            {
+                mineSites.Sort((a, b) => a.dist.CompareTo(b.dist));
+                string first = null;
+                for (int i = 0; i < mineSites.Count && !ok; i++)
+                {
+                    var c = mineSites[i];
+                    if (CanPlace(BuildPlans.Mine, c.pivot, c.yaw, out string w))
+                    {
+                        ok = true; pivot = c.pivot; yaw = c.yaw; why = "";
+                    }
+                    else if (first == null) { first = w; pivot = c.pivot; yaw = c.yaw; }
+                }
+                if (!ok) why = first;
+            }
+            mineSnapTap = picked; mineSnapRev = rev;
+            mineSnapPivot = pivot; mineSnapYaw = yaw; mineSnapWhy = why; mineSnapOk = ok;
+            return ok;
         }
 
         // The ghost asks every frame: one route search per new spot (or wall
-        // layer), not one a frame -- a refused search floods the grid.
-        Vector3 mineWalkFrom = new Vector3(float.NaN, 0f, 0f), mineWalkTo;
-        int mineWalkRev;
-        bool mineWalkOk;
+        // layer), not one a frame -- a refused search floods the grid. Since
+        // the snap tries several sites, the last few answers are kept.
+        struct MineWalkAnswer { public Vector3 from, to; public bool ok; }
+        readonly List<MineWalkAnswer> mineWalks = new List<MineWalkAnswer>(32);
+        int mineWalkRev = int.MinValue;
 
         /// Can a hand walk from the mouth stand to the drop spot? The grid's
         /// route when it is built, else the fire's region (`Reachable`).
@@ -118,11 +208,71 @@ namespace SeaSick.World
             var map = CampPath.For(this);
             if (map == null) return true;
             if (!map.Built) return CampPath.Reachable(this, drop);
-            if ((stand - mineWalkFrom).sqrMagnitude < 0.01f && (drop - mineWalkTo).sqrMagnitude < 0.01f
-                && mineWalkRev == map.WallRevision) return mineWalkOk;
-            mineWalkFrom = stand; mineWalkTo = drop; mineWalkRev = map.WallRevision;
-            mineWalkOk = map.HasRoute(stand, drop, CampPath.Walker.Hand);
-            return mineWalkOk;
+            if (mineWalkRev != map.WallRevision) { mineWalks.Clear(); mineWalkRev = map.WallRevision; }
+            foreach (var w in mineWalks)
+                if ((stand - w.from).sqrMagnitude < 0.01f && (drop - w.to).sqrMagnitude < 0.01f) return w.ok;
+            bool ok = map.HasRoute(stand, drop, CampPath.Walker.Hand);
+            if (mineWalks.Count >= 32) mineWalks.RemoveAt(0);
+            mineWalks.Add(new MineWalkAnswer { from = stand, to = drop, ok = ok });
+            return ok;
+        }
+
+        // The ghost's store note, kept per spot (one long route search).
+        Vector3 mineNoteAt = new Vector3(float.NaN, 0f, 0f);
+        float mineNoteYaw;
+        int mineNoteRev;
+        string mineNote;
+
+        /// **The ghost's non-blocking note (2026-10-05 fix round):** a mine
+        /// may stand where the store's runners cannot walk (Kevin's only
+        /// cliffs were 160 m out, past his palisade) -- it is placed, as any
+        /// station is, but the ghost says so: `MissingWords.WalledOffFromStore`
+        /// when a wall is the cause, `NoWayFromStore` otherwise, null when
+        /// the store's door routes to the container's drop spot (or there is
+        /// no grid to ask). The same question `SaveStationReach` asks of the
+        /// standing mine, which then raises "Mine · walled off from the store".
+        public string MineStoreNote(Vector3 at, float yaw)
+        {
+            var map = CampPath.For(this);
+            if (map == null || !map.Built) return null;
+            int rev = MineRev();
+            Vector3 d = at - mineNoteAt;
+            d.y = 0f;
+            if (d.sqrMagnitude < 0.25f && Mathf.Abs(Mathf.DeltaAngle(yaw, mineNoteYaw)) < 10f && rev == mineNoteRev)
+                return mineNote;
+            mineNoteAt = at; mineNoteYaw = yaw; mineNoteRev = rev;
+            var store = CampPiles.StoreBuildingOf(this);
+            Vector3 from = store != null ? CampWorker.WorkSpot(this, store) : CampCentre;
+            Vector3 drop = at + Quaternion.Euler(0f, yaw, 0f) * BuildingFactory.MineMarkLocal("DropSpot");
+            drop.y = height(drop.x, drop.z);
+            if (map.HasRoute(from, CampPath.FreeSpot(this, drop), CampPath.Walker.Hand)) mineNote = null;
+            else mineNote = walls.Count > 0 && map.Reachable(drop)
+                ? Economy.MissingWords.WalledOffFromStore : Economy.MissingWords.NoWayFromStore;
+            return mineNote;
+        }
+
+        /// The hill test of `CanPlaceMine` (see there), from the lip's foot
+        /// `foot` at height `h0`. `face`: the middle at least has a steep
+        /// face behind it (so a refusal is about the width or the height).
+        public bool MineHillBehind(Vector3 foot, Vector3 fwd, Vector3 right, float h0, out bool face)
+        {
+            face = false;
+            float run = BuildPlans.MineCliffProbe;
+            float need = Walkability.Grade(Walkability.Feet.Man) * run;
+            float w = BuildPlans.MineBackHalfWidth;
+            for (int i = 0; i < 3; i++)
+            {
+                int s = i == 0 ? 0 : i == 1 ? -1 : 1;     // the middle first
+                Vector3 b = foot + right * (s * w);
+                Vector3 q = b - fwd * run;
+                if (height(q.x, q.z) - height(b.x, b.z) < need) return false;
+                if (s == 0) face = true;
+                Vector3 n = b - fwd * BuildPlans.MineBackNearDepth;
+                if (height(n.x, n.z) - h0 < BuildPlans.MineBackNearRise) return false;
+                Vector3 f = b - fwd * BuildPlans.MineBackFarDepth;
+                if (height(f.x, f.z) - h0 < BuildPlans.MineBackFarRise) return false;
+            }
+            return true;
         }
 
         /// **Can a mine stand with its lip at `at`, facing `yaw`?** Four
@@ -130,9 +280,10 @@ namespace SeaSick.World
         /// <list type="number">
         /// <item>the foot (the lip pulled back out of the bury) is above the
         ///   island's building floor;</item>
-        /// <item>behind it the ground rises steeper than `Walkability.Grade
-        ///   (Man)` over `MineCliffProbe` -- at the middle of the doorway and
-        ///   at least one of its two sides -- else `MineNeedsCliff`;</item>
+        /// <item>behind it the hill fills the art's back across its width
+        ///   (`MineHillBehind`: steep, and high enough at two depths, at the
+        ///   middle and both sides) -- else `MineNeedsCliff` /
+        ///   `MineNeedsHillBehind`;</item>
         /// <item>the apron in front (`MineApronDepth` deep, the footprint's
         ///   width) passes the ordinary corner test and is standable ground
         ///   the camp can walk to (`CampPath.Reachable`);</item>
@@ -149,21 +300,21 @@ namespace SeaSick.World
             lo = hi = h0;
             if (h0 < minHeight) { why = "the mouth would be down on the beach"; return false; }
 
-            float run = BuildPlans.MineCliffProbe;
-            float need = Walkability.Grade(Walkability.Feet.Man) * run;
-            float side = plan.footprint.x * 0.3f;
-            bool mid = false;
-            int sides = 0;
-            for (int s = -1; s <= 1; s++)
+            // **The hill fills the art's back across its whole width
+            // (2026-10-05 fix round).** At the middle and both sides
+            // (`MineBackHalfWidth`): steeper than a man may walk over
+            // `MineCliffProbe` behind the lip line, and standing at least
+            // `MineBackNearRise` / `MineBackFarRise` above the lip at
+            // `MineBackNearDepth` / `MineBackFarDepth` back -- so the rock
+            // mass reads as sunk into the hill, never stood in front of a
+            // spur with a flank on the grass. The middle first: no face there
+            // at all is `MineNeedsCliff`; a face too narrow or too low is
+            // `MineNeedsHillBehind`.
+            if (!MineHillBehind(foot, fwd, right, h0, out bool face))
             {
-                Vector3 b = foot + right * (s * side);
-                float hb = height(b.x, b.z);
-                Vector3 q = b - fwd * run;
-                bool steep = height(q.x, q.z) - hb >= need;
-                if (s == 0) mid = steep;
-                else if (steep) sides++;
+                why = face ? MineNeedsHillBehind : MineNeedsCliff;
+                return false;
             }
-            if (!mid || sides < 1) { why = MineNeedsCliff; return false; }
 
             float depth = BuildPlans.MineApronDepth;
             Vector3 apron = foot + fwd * (depth * 0.5f + 0.2f);

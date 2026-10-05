@@ -108,6 +108,7 @@ namespace SeaSick.UI
         /// What `ClearLine` was last built from; -1 = nothing built.
         int clearTrees = -1, clearRocks = -1;
         bool clearOnWall;
+        string clearNote;
 
         /// **"clears N trees, M rocks", singular/plural correct, or "" when
         /// nothing stands in the way.** Shared with `WallSiting`, which sums
@@ -964,18 +965,25 @@ namespace SeaSick.UI
             if (valid && outpost != null)
             {
                 outpost.CountObstructions(sited, at, Yaw, out int trees, out int rocks);
-                if (trees != clearTrees || rocks != clearRocks || onWall != clearOnWall)
+                // **A mine the store cannot walk to (2026-10-05)** is still
+                // placed, as any station is; the ghost says so, not refuses.
+                string note = IsMine ? outpost.MineStoreNote(at, Yaw) : null;
+                if (trees != clearTrees || rocks != clearRocks || onWall != clearOnWall
+                    || !string.Equals(note, clearNote))
                 {
-                    clearTrees = trees; clearRocks = rocks; clearOnWall = onWall;
+                    clearTrees = trees; clearRocks = rocks; clearOnWall = onWall; clearNote = note;
                     ClearLine = FormatClearLine(trees, rocks);
                     if (onWall)
                         ClearLine = string.IsNullOrEmpty(ClearLine) ? OnWallLine : OnWallLine + " · " + ClearLine;
+                    if (note != null)
+                        ClearLine = string.IsNullOrEmpty(ClearLine) ? note : note + " · " + ClearLine;
                 }
             }
             else if (clearTrees != -1)
             {
                 ClearLine = "";
                 clearTrees = clearRocks = -1;
+                clearNote = null;
             }
 
             // **Warmth (2026-09-27).** A Hut only: whether this spot falls

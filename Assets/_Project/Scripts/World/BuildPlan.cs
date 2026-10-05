@@ -690,8 +690,28 @@ namespace SeaSick.World
         /// metres (Kevin: "part of the backside of the asset should clip into
         /// the mountain side"). The art's back already extends behind the
         /// pivot; this sinks the entrance lip itself a little into the toe
-        /// of the slope. 0 = lip exactly at the foot.
-        public const float MineBuryMetres = 0.35f;
+        /// of the slope. 0 = lip exactly at the foot. Since 2026-10-05's fix
+        /// round the snap finds the foot itself (`MineFootRise`), so the lip
+        /// only needs a nudge in: the face rises within a metre behind it.
+        public const float MineBuryMetres = 0.2f;
+        /// **The foot of the face** (2026-10-05 fix round): the snap walks
+        /// up the slope from where it first turns steep while the ground has
+        /// risen less than this, metres -- the lip stands where the hill
+        /// starts rising, not up to a probe's length in front of it.
+        public const float MineFootRise = 0.3f;
+        /// **The hill must fill the art's back across its whole width**
+        /// (2026-10-05, Kevin's save: a narrow spur passed with a flank on
+        /// flat grass). The rock mass spans x +/-3.6 m and 4.7 m back; the
+        /// ground is sampled at x = -this, 0, +this behind the lip.
+        public const float MineBackHalfWidth = 3f;
+        /// Behind the lip at `MineBackNearDepth` metres the ground must stand
+        /// at least `MineBackNearRise` above the lip, at every sampled x...
+        public const float MineBackNearDepth = 1.5f;
+        public const float MineBackNearRise = 1.2f;
+        /// ...and at `MineBackFarDepth` at least `MineBackFarRise` (the rock
+        /// is 4.1 m tall: over half of it sunk into the hill there).
+        public const float MineBackFarDepth = 3f;
+        public const float MineBackFarRise = 2.2f;
         /// How far behind the foot the rise is measured, metres: it must be
         /// steeper than a man may walk (`Walkability.Grade(Man)`, 33°) over
         /// this run.
