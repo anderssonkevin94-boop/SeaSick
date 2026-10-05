@@ -55,7 +55,7 @@ Its kraken steps 1-4 are on the phone. Its unverified items moved to the Sailing
 
 ## Mine shaft (2026-10-05)
 
-On branch `mine-shaft`, UNPLAYED, awaiting Kevin's shots verdict. Code: `Outpost.Mine.cs`, `CampWorker.Mine.cs`, `MineSelfTest.cs`; art: Meshy Lantern Mine Entrance prefab `MineShaftL1`. Loose ends: (1) 18 inside-out faces on 3 small rock islands flagged by `check_winding.py`, not fixed until Kevin OKs; (2) L2 cost (4 brick + 2 fine boards) is provisional, Kevin to set; (3) the crate is the plain carry-crate stand-in.
+BRANCH BUILD 9ec1f519 ON KEVIN'S PHONE 2026-10-05 14:12 (alive 4/4); Kevin plays it on the western hill (option B), awaiting his verdict. Code: `Outpost.Mine.cs`, `CampWorker.Mine.cs`, `MineSelfTest.cs` (13/13); art: Meshy Lantern Mine Entrance prefab `MineShaftL1` + TunnelInterior + DoorShade + carry crate. Done: winding fixed (18 faces, 64944ab9); L2 cost 4 brick + 2 fine boards KEPT by Kevin; angled-gate walk fix LANDED on ships-into-unity 7826e78b (also fixes 'Fishing hut walled off'). Unverified in game: threshold fix 9ec1f519, miner walking in, L2 tint, save/reload mid-trip, stone reaching the store, apron tree felled. Loose ends: crate is a plain carry-crate stand-in; south gate pocket by hut (-684,254); remove worktree .claude/worktrees/mine-code when closed.
 
 ## Waiting on KEVIN
 
