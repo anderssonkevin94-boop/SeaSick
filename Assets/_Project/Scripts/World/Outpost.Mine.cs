@@ -163,10 +163,12 @@ namespace SeaSick.World
                 foreach (var o in mineSites) if (o.dist < near.dist) near = o;
                 var q = Quaternion.Euler(0f, near.yaw, 0f);
                 Vector3 fwd = q * Vector3.forward, right = q * Vector3.right;
-                for (int s = -2; s <= 2; s++)
+                // 0.75 m steps to 3 m each way (2026-10-05 re-verify: 1.5 m
+                // steps left gaps where a tap between two good sites went red).
+                for (int s = -4; s <= 4; s++)
                 {
                     if (s == 0) continue;
-                    Vector3 start = near.pivot + right * (s * 1.5f) + fwd * BuildPlans.MineCliffProbe;
+                    Vector3 start = near.pivot + right * (s * 0.75f) + fwd * BuildPlans.MineCliffProbe;
                     if (MineFaceAlong(start, -fwd, out Vector3 foot, out _))
                         AddMineSite(foot, -fwd, picked, 0f);
                 }
