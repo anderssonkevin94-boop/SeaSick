@@ -1155,13 +1155,24 @@ namespace SeaSick.World
                     Raster(ia, ib, rasterCells);
 
                     float mx = 0.5f * (w.A.x + w.B.x), mz = 0.5f * (w.A.z + w.B.z);
+                    // **Along the line, not round the midpoint (2026-10-05).**
+                    // A 45-degree gate centred on a cell opened that one
+                    // cell only: its supercover neighbours sit 2 m off by
+                    // distance but 1.41 m along the line, and stayed
+                    // palisade -- sealing every way through (Kevin's east
+                    // gate). Measured along the segment, a straight gate
+                    // opens exactly what it did before.
+                    float ux = w.B.x - w.A.x, uz = w.B.z - w.A.z;
+                    float ul = Mathf.Sqrt(ux * ux + uz * uz);
+                    if (ul > 1e-4f) { ux /= ul; uz /= ul; } else { ux = 1f; uz = 0f; }
                     for (int c = 0; c < rasterCells.Count; c++)
                     {
                         int i = rasterCells[c];
                         if (!w.IsGate) { wall[i] |= BlockBoth; continue; }
                         float dx = origin.x + (i % n) * cell - mx;
                         float dz = origin.y + (i / n) * cell - mz;
-                        bool inModule = dx * dx + dz * dz <= open2;
+                        float along = dx * ux + dz * uz;
+                        bool inModule = along * along <= open2;
                         if (pass == 0)
                         {
                             wall[i] |= BlockRaider;
