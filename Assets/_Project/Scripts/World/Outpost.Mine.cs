@@ -92,6 +92,28 @@ namespace SeaSick.World
             var site = new MineSite { yaw = Mathf.Atan2(outward.x, outward.z) * Mathf.Rad2Deg };
             site.pivot = foot + uphill * BuildPlans.MineBuryMetres;
             site.pivot.y = height(foot.x, foot.z);
+            // **A clear threshold (2026-10-05, Kevin's camp).** The rock may
+            // sink into the hill but the doorway may not: ground rising
+            // inside the frame stood in front of `DoorShade` and showed as a
+            // pale mound in the opening. Step the lip out until the ground
+            // across the door plane is no higher than the lip, and stand the
+            // lip at the highest point of its own line so neither post is
+            // buried.
+            Vector3 side = new Vector3(outward.z, 0f, -outward.x);
+            for (int i = 0; i < 20; i++)
+            {
+                float lipH = float.MinValue, doorH = float.MinValue;
+                for (int k = -1; k <= 1; k++)
+                {
+                    Vector3 l = site.pivot + side * (k * BuildPlans.MineDoorHalfWidth);
+                    Vector3 dp = l - outward * BuildPlans.MineDoorDepth;
+                    lipH = Mathf.Max(lipH, height(l.x, l.z));
+                    doorH = Mathf.Max(doorH, height(dp.x, dp.z));
+                }
+                site.pivot.y = lipH;
+                if (doorH <= lipH + BuildPlans.MineDoorSlack) break;
+                site.pivot += outward * 0.1f;
+            }
             Vector3 d = site.pivot - picked;
             d.y = 0f;
             site.dist = d.magnitude + bias;
@@ -299,7 +321,15 @@ namespace SeaSick.World
             Vector3 fwd = facing * Vector3.forward, right = facing * Vector3.right;
             Vector3 foot = at + fwd * BuildPlans.MineBuryMetres;
             float h0 = height(foot.x, foot.z);
-            lo = hi = h0;
+            // The root stands at the highest point of the lip line, the
+            // height the snap gave it (`AddMineSite`), so no post is buried.
+            float lipH = h0;
+            for (int k = -1; k <= 1; k += 2)
+            {
+                Vector3 l = at + right * (k * BuildPlans.MineDoorHalfWidth);
+                lipH = Mathf.Max(lipH, height(l.x, l.z), height(at.x, at.z));
+            }
+            lo = hi = lipH;
             if (h0 < minHeight) { why = "the mouth would be down on the beach"; return false; }
 
             // **The hill fills the art's back across its whole width

@@ -699,6 +699,15 @@ namespace SeaSick.World
         /// risen less than this, metres -- the lip stands where the hill
         /// starts rising, not up to a probe's length in front of it.
         public const float MineFootRise = 0.3f;
+        /// **The doorway stays clear of the hill** (2026-10-05): the snap
+        /// steps the lip out until the ground at `MineDoorDepth` behind it
+        /// (the `DoorShade` plane, 0.12 m in, with margin), sampled at the
+        /// middle and +-`MineDoorHalfWidth`, stands no more than
+        /// `MineDoorSlack` above the lip. The rock still sinks in; the
+        /// opening does not.
+        public const float MineDoorDepth = 0.3f;
+        public const float MineDoorHalfWidth = 1.0f;
+        public const float MineDoorSlack = 0.05f;
         /// **The hill must fill the art's back across its whole width**
         /// (2026-10-05, Kevin's save: a narrow spur passed with a flank on
         /// flat grass). The rock mass spans x +/-3.6 m and 4.7 m back; the
