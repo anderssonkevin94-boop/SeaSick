@@ -137,6 +137,18 @@ namespace SeaSick.World.Economy
                 blurb = "Villager defense equipment", category = ResCategory.Armor },
             new ResDef { id = "LeatherBoots", label = "leather boots", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 1,
                 blurb = "Villager defense equipment", category = ResCategory.Armor },
+            new ResDef { id = "IronHelmet", label = "iron helmet", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 2,
+                blurb = "Forged villager equipment", category = ResCategory.Armor },
+            new ResDef { id = "IronArmor", label = "iron breastplate", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 2,
+                blurb = "Forged villager equipment", category = ResCategory.Armor },
+            new ResDef { id = "IronPants", label = "iron greaves", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 2,
+                blurb = "Forged villager equipment", category = ResCategory.Armor },
+            new ResDef { id = "IronBoots", label = "iron boots", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 2,
+                blurb = "Forged villager equipment", category = ResCategory.Armor },
+            new ResDef { id = "IronShield", label = "iron shield", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 2,
+                blurb = "Forged villager equipment", category = ResCategory.Armor },
+            new ResDef { id = "IronSword", label = "iron sword", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 2,
+                blurb = "Forged villager equipment", category = ResCategory.Gear },
             // --- items ---
             // --- dishes (food rework, 2026-09-27; fill values in `FoodBook`) ---
             new ResDef { id = Res.BakedPotato, label = "baked potato", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 1,

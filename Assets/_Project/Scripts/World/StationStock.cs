@@ -260,6 +260,25 @@ namespace SeaSick.World
         public bool EnsureSpotRows()
         {
             if (spots == null) spots = new List<SpotState>();
+            // Recipes can move between buildings while saved spot names stay the same.
+            // Preserve completed output; refund inputs for an unfinished batch once.
+            bool moved = false;
+            foreach (var sp in spots)
+            {
+                if (sp == null) continue;
+                if (sp.BenchRecipe != null && sp.BenchRecipe.station != planId)
+                {
+                    if (sp.benchState != BenchState.Empty)
+                        PutBenchBack(sp.benchRecipe, sp.benchState, sp.benchOut);
+                    sp.EmptyBench();
+                    moved = true;
+                }
+                if (sp.Recipe != null && sp.Recipe.station != planId)
+                {
+                    sp.Stop();
+                    moved = true;
+                }
+            }
             var names = StationSpots.SpotsFor(planId);
             bool same = spots.Count == names.Count;
             for (int i = 0; same && i < names.Count; i++)
@@ -268,7 +287,8 @@ namespace SeaSick.World
             {
                 // JsonUtility loads a null string as "": back to null = idle.
                 foreach (var sp in spots) if (sp.recipeId != null && sp.recipeId.Length == 0) sp.recipeId = null;
-                return false;
+                if (moved) SyncLegacy();
+                return moved;
             }
             if (names.Count == 0) return false;
 

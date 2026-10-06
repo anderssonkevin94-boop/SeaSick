@@ -233,9 +233,9 @@ namespace SeaSick.Combat
                 strikeLanded=true;
                 bool blocked=false;
                 var body=camp.BodyNamed(fightTarget.name);
-                if(body!=null && fightTarget.equipment?.offHand=="WoodShield") {
+                if(body!=null && (fightTarget.equipment?.ShieldBlockChance ?? 0f)>0f) {
                     var toward=transform.position-body.transform.position; toward.y=0f;
-                    blocked=Vector3.Dot(body.transform.forward,toward.normalized)>.25f && Random.value<.4f;
+                    blocked=Vector3.Dot(body.transform.forward,toward.normalized)>.25f && Random.value<fightTarget.equipment.ShieldBlockChance;
                 }
                 RaidAlarm.Begin(camp);
                 if(!blocked && dist<=reach && VillageDefense.ClearSight(camp,here+Vector3.up,at+Vector3.up))

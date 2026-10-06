@@ -5,6 +5,7 @@ public static class RunVillageDefensePlay
 {
     public static void Batch() {
         VillageDefenseCheck.Run();
+        EquipmentCraftCheck.Run();
         PortraitGameView.Execute();
         EditorSceneManager.NewScene(NewSceneSetup.EmptyScene,NewSceneMode.Single);
         SessionState.SetBool("DefenseProbe",true);

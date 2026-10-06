@@ -29,17 +29,20 @@ namespace SeaSick.World
         public static bool Fits(EquipmentSlot slot, string id) {
             if (string.IsNullOrEmpty(id)) return false;
             return slot switch {
-                EquipmentSlot.MainHand => id == Res.Spear || id == Res.IronSpear || id == Res.Bow,
-                EquipmentSlot.OffHand => id == "WoodShield",
-                EquipmentSlot.Helmet => id == "LeatherHelmet",
-                EquipmentSlot.UpperBody => id == "LeatherVest",
-                EquipmentSlot.Pants => id == "LeatherPants",
-                EquipmentSlot.Shoes => id == "LeatherBoots", _ => false };
+                EquipmentSlot.MainHand => id == Res.Spear || id == Res.IronSpear || id == Res.Bow || id == "IronSword",
+                EquipmentSlot.OffHand => IsShield(id),
+                EquipmentSlot.Helmet => id == "LeatherHelmet" || id == "IronHelmet",
+                EquipmentSlot.UpperBody => id == "LeatherVest" || id == "IronArmor",
+                EquipmentSlot.Pants => id == "LeatherPants" || id == "IronPants",
+                EquipmentSlot.Shoes => id == "LeatherBoots" || id == "IronBoots", _ => false };
         }
-        public float Protection => (helmet == "LeatherHelmet" ? .08f : 0f)
-            + (upperBody == "LeatherVest" ? .18f : 0f)
-            + (pants == "LeatherPants" ? .09f : 0f)
-            + (shoes == "LeatherBoots" ? .05f : 0f);
+        public static bool IsShield(string id) => id == "WoodShield" || id == "IronShield";
+        public float ShieldBlockChance => mainHand == Res.Bow ? 0f : offHand == "IronShield" ? .55f : offHand == "WoodShield" ? .4f : 0f;
+        public float Protection => (helmet == "IronHelmet" ? .12f : helmet == "LeatherHelmet" ? .08f : 0f)
+            + (upperBody == "IronArmor" ? .28f : upperBody == "LeatherVest" ? .18f : 0f)
+            + (pants == "IronPants" ? .13f : pants == "LeatherPants" ? .09f : 0f)
+            + (shoes == "IronBoots" ? .07f : shoes == "LeatherBoots" ? .05f : 0f);
+
     }
 
     public partial class OutpostLedger

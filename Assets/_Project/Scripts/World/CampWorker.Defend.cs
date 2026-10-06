@@ -120,7 +120,8 @@ namespace SeaSick.World
 
             if(meleeMark!=foe) { meleeMark=foe; defendJabClock=0f; jabLanded=false; }
             Vector3 foePos = foe.transform.position;
-            float reach = RaidFightTuning.JabReach;
+            bool sword = r.defendSpear == "IronSword";
+            float reach = sword ? RaidFightTuning.JabReach * .8f : RaidFightTuning.JabReach;
             var props = HunterProps.On(gameObject);
             string spear = r.defendSpear;
 
@@ -139,12 +140,12 @@ namespace SeaSick.World
             float cycle=Mathf.Max(.3f,RaidFightTuning.JabSeconds);
             defendJabClock += dt;
             float progress=Mathf.Clamp01(defendJabClock/cycle);
-            acting?.CombatPose(VillagerActing.Mode.SpearAttack,progress);
+            acting?.CombatPose(sword ? VillagerActing.Mode.SwordAttack : VillagerActing.Mode.SpearAttack,progress);
             props.Drive(spear, progress>=.3f && progress<.6f ? HunterProps.Pose.Thrust : HunterProps.Pose.Upright, foePos + Vector3.up);
             if(!jabLanded && progress>=.45f) {
                 jabLanded=true;
                 if(Near(foePos,reach) && VillageDefense.ClearSight(camp,transform.position+Vector3.up,foePos+Vector3.up)) {
-                    float dmg=spear==Res.IronSpear ? RaidFightTuning.IronDamage : RaidFightTuning.StoneDamage;
+                    float dmg=spear==Res.IronSpear || sword ? RaidFightTuning.IronDamage : RaidFightTuning.StoneDamage;
                     foe.TakeHit(dmg,r);
                 }
             }

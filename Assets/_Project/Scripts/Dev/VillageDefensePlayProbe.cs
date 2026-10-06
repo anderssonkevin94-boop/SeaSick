@@ -34,9 +34,10 @@ public class VillageDefensePlayProbe : MonoBehaviour
         var agent=body.GetComponent<CrewAgent>() ?? body.AddComponent<CrewAgent>();
         agent.SetDef(CrewNames.MakeDef(hand.name,null)); agent.enabled=false;
         CampWorker.Attach(camp,agent); worker=body.GetComponent<CampWorker>(); worker.enabled=false;
-        hand.equipment.mainHand=Res.Spear;
-        hand.equipment.offHand="WoodShield";
-        var enemy=Instantiate(prefab); enemy.name="Raider"; enemy.transform.position=new Vector3(0,0,1.3f);
+        hand.equipment.mainHand="IronSword";
+        hand.equipment.helmet="IronHelmet";hand.equipment.upperBody="IronArmor";hand.equipment.pants="IronPants";hand.equipment.shoes="IronBoots";
+        hand.equipment.offHand="IronShield";
+        var enemy=Instantiate(prefab); enemy.name="Raider"; enemy.transform.position=new Vector3(0,0,1.1f);
         var ea=enemy.GetComponent<CrewAgent>() ?? enemy.AddComponent<CrewAgent>(); ea.enabled=false;
         foe=enemy.AddComponent<RaidWalker>(); foe.enabled=false; foe.camp=camp;
         VillagerActing.On(ea); Set(foe,"hp",30f);
@@ -49,7 +50,7 @@ public class VillageDefensePlayProbe : MonoBehaviour
         foe.transform.position=new Vector3(0,0,80f);
         VillageDefense.Detect(party);
         Gate(!RaidAlarm.IsActive(camp),"distant raider does not trigger alarm");
-        foe.transform.position=new Vector3(0,0,1.3f);
+        foe.transform.position=new Vector3(0,0,1.1f);
         VillageDefense.Detect(party);
         Gate(RaidAlarm.IsActive(camp),"one visible raider raises shared alarm");
         cameraView=new GameObject("Preview camera").AddComponent<Camera>(); cameraView.clearFlags=CameraClearFlags.SolidColor; cameraView.backgroundColor=new Color(.13f,.18f,.22f);
@@ -69,7 +70,11 @@ public class VillageDefensePlayProbe : MonoBehaviour
                 Call(worker,"TickDefend",hand,Time.deltaTime);
                 if(time>.65f) {
                     Gate(Hp<health,"melee contact damages actual raid walker");
-                    Capture("melee-phone",720,1560);
+                    Gate(worker.transform.Find("Equipment_IronSword")!=null,"sword placeholder in actual combat");
+                    var props=(GameObject[])typeof(VillagerActing).GetField("tools",Flags).GetValue(worker.GetComponent<VillagerActing>());
+                    Gate(props[(int)VillagerActing.Mode.MeleeAttack]==null || !props[(int)VillagerActing.Mode.MeleeAttack].activeSelf,"sword does not spawn a second hammer");
+                    Capture("melee-phone",720,1560); Capture("melee-desktop",1280,720);
+                    hand.equipment.helmet="LeatherHelmet";hand.equipment.upperBody="LeatherVest";hand.equipment.pants="LeatherPants";hand.equipment.shoes="LeatherBoots";
                     hand.defending=false; hand.equipment.mainHand=Res.Bow; hand.equipment.offHand=null; hand.equipment.arrows=6;
                     foe.transform.position=new Vector3(0,0,6); Set(foe,"hp",30f);
                     UnityEngine.Random.InitState(4);
@@ -124,7 +129,7 @@ public class VillageDefensePlayProbe : MonoBehaviour
     void CheckRaiderStrike() {
         worker.transform.position=Vector3.zero;
         ledger.BodyAt(hand,worker.transform.position);
-        foe.transform.position=new Vector3(0,0,1.3f);
+        foe.transform.position=new Vector3(0,0,1.1f);
         hand.equipment.offHand=null;
         Set(foe,"fightTarget",hand); Set(foe,"hitClock",0f); Set(foe,"strikeLanded",false);
         float wounds=hand.combatDamage;

@@ -148,13 +148,13 @@ namespace SeaSick.World.Economy
 
             new Recipe { id = "WoodShield", station = "Fletcher", makes = "WoodShield", yield = 1,
                 takes = Cost.Of(Cost.I(Res.Boards, 2), Cost.I(Res.Hide, 1)), ratePerDay = 1f },
-            new Recipe { id = "LeatherHelmet", station = "Blacksmith", spot = "Forge", makes = "LeatherHelmet", yield = 1,
+            new Recipe { id = "LeatherHelmet", station = "Fletcher", makes = "LeatherHelmet", yield = 1,
                 takes = Cost.Of(Cost.I(Res.Hide, 1)), ratePerDay = 1f },
-            new Recipe { id = "LeatherVest", station = "Blacksmith", spot = "Forge", makes = "LeatherVest", yield = 1,
+            new Recipe { id = "LeatherVest", station = "Fletcher", makes = "LeatherVest", yield = 1,
                 takes = Cost.Of(Cost.I(Res.Hide, 3)), ratePerDay = 1f },
-            new Recipe { id = "LeatherPants", station = "Blacksmith", spot = "Forge", makes = "LeatherPants", yield = 1,
+            new Recipe { id = "LeatherPants", station = "Fletcher", makes = "LeatherPants", yield = 1,
                 takes = Cost.Of(Cost.I(Res.Hide, 2)), ratePerDay = 1f },
-            new Recipe { id = "LeatherBoots", station = "Blacksmith", spot = "Forge", makes = "LeatherBoots", yield = 1,
+            new Recipe { id = "LeatherBoots", station = "Fletcher", makes = "LeatherBoots", yield = 1,
                 takes = Cost.Of(Cost.I(Res.Hide, 1)), ratePerDay = 1f },
             // --- forge ---
             // The first thing a forge makes needs no ore at all: Kevin's
@@ -171,6 +171,19 @@ namespace SeaSick.World.Economy
             new Recipe { id = "iron-spear", station = "Blacksmith", spot = "Forge", makes = Res.IronSpear, yield = 1,
                 takes = Cost.Of(Cost.I(Res.Boards, 1), Cost.I(Res.Iron, 1)), ratePerDay = 1f,
                 campfireLevel = 2, stationLevel = 2 },
+
+            new Recipe { id = "IronHelmet", station = "Blacksmith", spot = "Forge", makes = "IronHelmet", yield = 1,
+                takes = Cost.Of(Cost.I(Res.Iron, 2), Cost.I(Res.Hide, 1)), ratePerDay = 1f, campfireLevel = 2 },
+            new Recipe { id = "IronArmor", station = "Blacksmith", spot = "Forge", makes = "IronArmor", yield = 1,
+                takes = Cost.Of(Cost.I(Res.Iron, 4), Cost.I(Res.Hide, 1)), ratePerDay = 1f, campfireLevel = 2 },
+            new Recipe { id = "IronPants", station = "Blacksmith", spot = "Forge", makes = "IronPants", yield = 1,
+                takes = Cost.Of(Cost.I(Res.Iron, 3), Cost.I(Res.Hide, 1)), ratePerDay = 1f, campfireLevel = 2 },
+            new Recipe { id = "IronBoots", station = "Blacksmith", spot = "Forge", makes = "IronBoots", yield = 1,
+                takes = Cost.Of(Cost.I(Res.Iron, 2), Cost.I(Res.Hide, 1)), ratePerDay = 1f, campfireLevel = 2 },
+            new Recipe { id = "IronShield", station = "Blacksmith", spot = "Forge", makes = "IronShield", yield = 1,
+                takes = Cost.Of(Cost.I(Res.Iron, 2), Cost.I(Res.Boards, 1)), ratePerDay = 1f, campfireLevel = 2 },
+            new Recipe { id = "IronSword", station = "Blacksmith", spot = "Forge", makes = "IronSword", yield = 1,
+                takes = Cost.Of(Cost.I(Res.Iron, 2), Cost.I(Res.Boards, 1)), ratePerDay = 1f, campfireLevel = 2 },
 
             // --- quarry ---
             new Recipe { id = "brick", station = "Quarry", makes = Res.Brick, yield = 1,

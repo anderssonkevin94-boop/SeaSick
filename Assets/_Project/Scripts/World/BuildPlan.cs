@@ -759,7 +759,7 @@ namespace SeaSick.World
             kind = BuildKind.Fletcher,
             baseStoneCost = 2,
             label = "hunting lodge",
-            blurb = "the hunting lodge makes arrows from timber, and bows from fine boards and hide; the hunt, the watch and the ship want them",
+            blurb = "the fletcher makes bows, arrows, wooden shields and leather armor for your villagers",
             resource = Res.Timber,
             baseCost = 14,
             footprint = new Vector2(4.84f, 4.93f),

@@ -1,70 +1,96 @@
+using System.Collections.Generic;
 using UnityEngine;
-
 namespace SeaSick.World
 {
-    /// Shield presentation reads equipment ownership; it never creates items.
-    /// Props live under the body root to avoid the rig's enlarged bone scale.
+    /// Gear is presentation only. Instances stay under the body root, avoiding
+    /// the imported rig's enlarged bone scale; live bone poses drive attachments.
     [DefaultExecutionOrder(210)]
     public sealed class EquipmentVisuals : MonoBehaviour
     {
         CampWorker worker;
-        Transform wrist;
-        GameObject shield;
-        static Material wood, boss;
-
+        readonly GameObject[] worn=new GameObject[5];
+        readonly string[] ids=new string[5];
+        readonly List<Attachment> attachments=new();
+        Transform wrist,head,chest,leftLeg,rightLeg,leftFoot,rightFoot;
+        bool bound;
+        sealed class Attachment
+        {
+            public Transform prop,bone;
+            public Quaternion bind;
+            public Vector3 offset,fallback;
+        }
         void LateUpdate()
         {
-            if (worker == null) worker = GetComponent<CampWorker>();
-            var hand = worker != null ? worker.HandRow : null;
-            bool show = hand?.equipment?.offHand == "WoodShield" && hand.equipment.mainHand != Res.Bow
-                && !hand.hiddenInHut && !hand.recovering;
-            if (!show) { if (shield != null) shield.SetActive(false); return; }
-            if (shield == null) Build();
-            shield.SetActive(true);
-            bool fighting = hand.defending;
-            float scale = transform.lossyScale.y;
-            Vector3 position = fighting && wrist != null
-                ? wrist.position + transform.forward * .12f * scale
-                : transform.TransformPoint(new Vector3(0f, 1.05f, -.24f));
-            shield.transform.SetPositionAndRotation(position, transform.rotation * Quaternion.Euler(90f, 0f, 0f));
-        }
-
-        void Build()
-        {
-            // The left hand is selected by body-space position, not mirrored rig names.
-            float leftmost = float.MaxValue;
-            foreach (var bone in GetComponentsInChildren<Transform>(true)) {
-                string name = bone.name.ToLowerInvariant();
-                if (!name.StartsWith("hand") || name.Contains("finger")) continue;
-                float x = transform.InverseTransformPoint(bone.position).x;
-                if (x < leftmost) { wrist = bone; leftmost = x; }
+            if(worker==null)worker=GetComponent<CampWorker>();
+            var hand=worker!=null?worker.HandRow:null;
+            bool visible=hand?.equipment!=null && !hand.hiddenInHut && !hand.recovering;
+            if(!visible) { foreach(var go in worn)if(go!=null)go.SetActive(false);return; }
+            if(!bound)Bind();
+            var gear=hand.equipment;
+            for(int i=0;i<5;i++)
+            {
+                string id=gear.Get((EquipmentSlot)(i+1));
+                if(i==0 && (gear.mainHand==Res.Bow || !VillagerEquipment.IsShield(id)))id=null;
+                if(ids[i]!=id)Rebuild(i,id);
+                if(worn[i]!=null)worn[i].SetActive(true);
             }
-            if (wood == null) wood = MakeMaterial(new Color(.39f, .23f, .11f));
-            if (boss == null) boss = MakeMaterial(new Color(.25f, .29f, .31f));
-            shield = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            shield.name = "Equipped shield";
-            Destroy(shield.GetComponent<Collider>());
-            shield.transform.SetParent(transform, false);
-            shield.transform.localScale = new Vector3(.64f, .045f, .64f);
-            shield.GetComponent<Renderer>().sharedMaterial = wood;
-            var centre = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            centre.name = "Shield boss";
-            Destroy(centre.GetComponent<Collider>());
-            centre.transform.SetParent(shield.transform, false);
-            centre.transform.localPosition = new Vector3(0f, 1f, 0f);
-            centre.transform.localScale = new Vector3(.28f, 1.8f, .28f);
-            centre.GetComponent<Renderer>().sharedMaterial = boss;
+            float scale=transform.lossyScale.y;
+            foreach(var a in attachments)
+            {
+                if(a.prop==null)continue;
+                Quaternion rot=a.bone!=null?a.bone.rotation*Quaternion.Inverse(a.bind):transform.rotation;
+                Vector3 at=a.bone!=null?a.bone.position:transform.TransformPoint(a.fallback);
+                a.prop.SetPositionAndRotation(at+rot*a.offset*scale,rot);
+            }
+            if(worn[0]!=null)
+            {
+                Vector3 at=hand.defending && wrist!=null?wrist.position+transform.forward*.12f*scale
+                    :transform.TransformPoint(new Vector3(0,.65f,-.20f));
+                worn[0].transform.SetPositionAndRotation(at,transform.rotation);
+            }
         }
-
-        static Material MakeMaterial(Color color)
+        void Rebuild(int slot,string id)
         {
-            var material = new Material(Shader.Find(WorldArtStyle.Instance != null
-                ? "SeaSick/Environment Toon" : "Universal Render Pipeline/Lit"));
-            material.SetColor("_BaseColor", color);
-            if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", .05f);
-            return material;
+            if(worn[slot]!=null)Destroy(worn[slot]);
+            attachments.RemoveAll(a=>a.prop==null || (worn[slot]!=null && a.prop.IsChildOf(worn[slot].transform)));
+            worn[slot]=null;ids[slot]=id;if(string.IsNullOrEmpty(id))return;
+            var root=EquipmentPlaceholder.Create(id,transform);worn[slot]=root;
+            if(slot==1)Attach(root.transform,head,new Vector3(0,.26f,0),new Vector3(0,1.4f,0));
+            if(slot==2)Attach(root.transform,chest,new Vector3(0,.13f,0),new Vector3(0,.6f,0));
+            if(slot==3 || slot==4)
+            {
+                bool boots=slot==4;
+                var left=root.transform.Find("Left");var right=root.transform.Find("Right");
+                if(left!=null && right!=null)
+                {
+                    Attach(left,boots?leftFoot:leftLeg,boots?new Vector3(0,.015f,.04f):new Vector3(0,-.10f,0),new Vector3(-.15f,boots?.1f:.65f,0));
+                    Attach(right,boots?rightFoot:rightLeg,boots?new Vector3(0,.015f,.04f):new Vector3(0,-.10f,0),new Vector3(.15f,boots?.1f:.65f,0));
+                }
+                else Attach(root.transform,chest,Vector3.zero,new Vector3(0,1,0));
+            }
         }
-        void OnDisable() { if (shield != null) shield.SetActive(false); }
-        void OnDestroy() { if (shield != null) Destroy(shield); }
+        void Attach(Transform prop,Transform bone,Vector3 offset,Vector3 fallback)
+        {
+            attachments.Add(new Attachment { prop=prop,bone=bone,offset=offset,fallback=fallback,
+                bind=bone!=null?Quaternion.Inverse(transform.rotation)*bone.rotation:Quaternion.identity });
+        }
+        void Bind()
+        {
+            bound=true;float min=float.MaxValue;
+            foreach(var t in GetComponentsInChildren<Transform>(true))
+            {
+                string n=t.name.ToLowerInvariant();
+                if(n=="head")head=t;
+                if(n=="chest" || n=="spine")chest=t;
+                if(n=="leg_l" || n.Contains("thigh.l"))leftLeg=t;
+                if(n=="leg_r" || n.Contains("thigh.r"))rightLeg=t;
+                if(n=="foot_l" || n.Contains("foot.l"))leftFoot=t;
+                if(n=="foot_r" || n.Contains("foot.r"))rightFoot=t;
+                if(n.StartsWith("hand") && !n.Contains("finger"))
+                { float x=transform.InverseTransformPoint(t.position).x;if(x<min){min=x;wrist=t;} }
+            }
+        }
+        void OnDisable(){foreach(var go in worn)if(go!=null)go.SetActive(false);}
+        void OnDestroy(){foreach(var go in worn)if(go!=null)Destroy(go);}
     }
 }

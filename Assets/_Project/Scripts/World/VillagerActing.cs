@@ -50,7 +50,7 @@ namespace SeaSick.World
         /// it used to be (`CodePose`).
         public enum Mode { None, Chop, Saw, Hammer, Hoe, Stir, Carry, Dangle, Land, Bend, Mine, Lookout,
             Forage, Build, PickUp, SetDown, HuntWalk, Hunt, Farm, Smith, Cook, Mill, Quarry, Fletcher, Fisher,
-            Reach, Eat, Crank, SpearAttack, BowAttack, MeleeAttack, DragBody, HitReact }
+            Reach, Eat, Crank, SpearAttack, BowAttack, MeleeAttack, DragBody, HitReact, SwordAttack }
 
         /// **The code pose a clip mode falls back to** on a rig whose
         /// controller lacks the state (what each job looked like before the
@@ -1069,6 +1069,7 @@ namespace SeaSick.World
                     if(CombatPhase>.65f) armRPitch+=35f*(CombatPhase-.65f)/.35f;
                     break;
                 case Mode.MeleeAttack:
+                case Mode.SwordAttack:
                     float swing=CombatPhase<.5f ? CombatPhase*2f : (1f-CombatPhase)*2f;
                     armRPitch=-35f-110f*swing; chestYaw=30f*(1f-2f*CombatPhase); chestPitch=8f;
                     break;
@@ -1246,7 +1247,7 @@ namespace SeaSick.World
             // +X side. A positive roll about +Z swings a hanging arm toward
             // +X, so the sign of "in" flips with the side the arm is on.
             bool tool = HasTool(shown);
-            if (shown == Mode.SpearAttack || shown == Mode.BowAttack)
+            if (shown == Mode.SpearAttack || shown == Mode.BowAttack || shown == Mode.MeleeAttack || shown == Mode.SwordAttack)
             {
                 // ToolArm resolves mirrored rig names into the actual weapon hand.
                 Turn(ToolArm, shown == Mode.BowAttack ? -85f : armRPitch, 0f, 0f, w);

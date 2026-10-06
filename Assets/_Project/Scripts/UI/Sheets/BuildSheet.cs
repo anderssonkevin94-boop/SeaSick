@@ -101,8 +101,8 @@ namespace SeaSick.UI.Sheets
             if (p.id == BuildPlans.Sawmill.id) return "Logs into boards";
             if (p.id == BuildPlans.Quarry.id) return "Stone into brick";
             if (p.id == BuildPlans.Mine.id) return "Digs stone";
-            if (p.id == BuildPlans.Blacksmith.id) return "Ore into tools";
-            if (p.id == BuildPlans.Fletcher.id) return "Bows and arrows";
+            if (p.id == BuildPlans.Blacksmith.id) return "Iron tools, weapons and armor";
+            if (p.id == BuildPlans.Fletcher.id) return "Bows, leather armor and shields";
             if (p.id == BuildPlans.Mill.id) return "Wheat into flour";
             if (p.id == BuildPlans.Watchtower.id) return "Lookout, defence";
             if (p.id == BuildPlans.Pier.id) return "Ship berth";

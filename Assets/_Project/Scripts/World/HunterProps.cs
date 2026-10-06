@@ -179,6 +179,15 @@ namespace SeaSick.World
             float s = BodyScale;
             Vector3 grip = Grip(s);
 
+            if (spearFor == "IronSword")
+            {
+                // Follow the attack phase instead of posing the sword as a spear.
+                var acting = GetComponent<VillagerActing>();
+                float phase = acting != null ? acting.CombatPhase : 0f;
+                float swing = pose == Pose.Thrust ? Mathf.Lerp(-65f, 70f, Mathf.Clamp01((phase-.3f)/.3f)) : -15f;
+                spear.transform.SetPositionAndRotation(grip,body.rotation * Quaternion.Euler(swing,0f,-15f));
+                return;
+            }
             // **The bow (2026-09-30)**: stave upright in his fist. At rest it
             // hangs flat along his side; drawn (`Pose.Thrust` = aiming) his
             // arm is out toward the mark and the string faces him.
@@ -329,6 +338,7 @@ namespace SeaSick.World
             if (spear != null) Destroy(spear);
             spearFor = res;
             if (res == Res.Bow) { spear = BuildBow(); return; }
+            if (res == "IronSword") { spear = EquipmentPlaceholder.Create(res, transform); return; }
             bool iron = res == Res.IronSpear;
 
             var root = new GameObject(iron ? "HunterSpear_Iron" : "HunterSpear_Stone");
