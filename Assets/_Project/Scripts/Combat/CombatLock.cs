@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using ET = UnityEngine.InputSystem.EnhancedTouch;
 using SeaSick.CameraRig;
 using SeaSick.UI;
 using UnityEngine;
@@ -174,24 +176,42 @@ namespace SeaSick.Combat
         Vector2 tapStart;
         float tapStartTime = -1f;
 
-        /// A short tap on an enemy ANYWHERE on screen locks it (2026-09-27;
-        /// this used to be restricted to the top half, out of the helm's
-        /// zone, when the lock button lived in the shared prompt slot and
-        /// needed the bottom half kept clear for it). What still makes this
-        /// safe against the floating stick and against reintroducing
-        /// tap-to-sail is the SAME gesture gate as before: only a release
-        /// that was short (`tapMaxSeconds`) and barely moved (`tapMaxMove01`)
-        /// counts as a tap at all -- a drag that starts on a ship is still a
-        /// drag, and a tap that lands on open water hits nothing and does
-        /// nothing, same as always. A tap on the ship you already have
-        /// locked is a no-op (`LockOn` below refuses it): release is the
-        /// button's job only, so a stray tap near the target can't drop it.
+        struct EnemyTap { public Vector2 start; public float at; }
+        readonly Dictionary<int, EnemyTap> enemyTaps = new Dictionary<int, EnemyTap>();
+
+        /// Each finger owns its own tap, so a second thumb can select an
+        /// enemy while the steering thumb stays down. UI and helm touches
+        /// cannot acquire a lock. Tapping the selected enemy releases it.
         void TapToLock()
         {
+            if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked
+                || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None)
+            { enemyTaps.Clear(); tapStartTime = -1f; return; }
+            if (ET.EnhancedTouchSupport.enabled && ET.Touch.activeTouches.Count > 0)
+            {
+                foreach (var touch in ET.Touch.activeTouches)
+                {
+                    var phase = touch.phase;
+                    if (phase == UnityEngine.InputSystem.TouchPhase.Began)
+                    {
+                        enemyTaps.Remove(touch.touchId);
+                        if (TapAllowedAt(touch.screenPosition))
+                            enemyTaps[touch.touchId] = new EnemyTap { start = touch.screenPosition, at = Time.unscaledTime };
+                    }
+                    else if (phase == UnityEngine.InputSystem.TouchPhase.Ended || phase == UnityEngine.InputSystem.TouchPhase.Canceled)
+                    {
+                        if (enemyTaps.TryGetValue(touch.touchId, out var tap)
+                            && phase == UnityEngine.InputSystem.TouchPhase.Ended)
+                            FinishEnemyTap(tap.start, touch.screenPosition, tap.at);
+                        enemyTaps.Remove(touch.touchId);
+                    }
+                }
+                tapStartTime = -1f;
+                return;
+            }
+            enemyTaps.Clear();
             var p = UnityEngine.InputSystem.Pointer.current;
-            if (p == null || SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
-            if (SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
-
+            if (p == null) return;
             if (p.press.wasPressedThisFrame)
             {
                 tapStart = p.position.ReadValue();
@@ -199,15 +219,18 @@ namespace SeaSick.Combat
                 return;
             }
             if (!p.press.wasReleasedThisFrame || tapStartTime < 0f) return;
-
-            float held = Time.unscaledTime - tapStartTime;
+            FinishEnemyTap(tapStart, p.position.ReadValue(), tapStartTime);
             tapStartTime = -1f;
-            Vector2 end = p.position.ReadValue();
-            float slop = tapMaxMove01 * Mathf.Min(Screen.width, Screen.height);
-            if (held > tapMaxSeconds || (end - tapStart).sqrMagnitude > slop * slop) return;
+        }
 
-            var t = PickAt(tapStart);
-            if (t != null && !ReferenceEquals(t, Locked)) LockOn(t);
+        void FinishEnemyTap(Vector2 start, Vector2 end, float at)
+        {
+            float slop = tapMaxMove01 * Mathf.Min(Screen.width, Screen.height);
+            if (Time.unscaledTime-at > tapMaxSeconds || (end-start).sqrMagnitude > slop*slop || !TapAllowedAt(end)) return;
+            var t = PickAt(start);
+            if (t == null) return;
+            if (ReferenceEquals(t, Locked)) Release();
+            else LockOn(t);
         }
 
         /// The press-down gate of tap-to-lock (input space, origin
@@ -215,7 +238,9 @@ namespace SeaSick.Combat
         /// covers the sea HUD's buttons, the harpoon's fixed button included
         /// -- is that control's, never a lock, even with a ship right
         /// behind it (`WouldLock` true). Public for `HarpoonTapCheck`.
-        public static bool TapAllowedAt(Vector2 screen) => !UIBlocker.Blocked(screen);
+        public static bool TapAllowedAt(Vector2 screen) => !UIBlocker.Blocked(screen)
+            && (!SeaSick.UI.Sheets.QuietSailingHud.Active
+                || !SeaSick.UI.Sheets.QuietSailingHud.SteeringRect.Contains(new Vector2(screen.x, Screen.height-screen.y)));
 
         /// Whether a tap landing at this screen point (input space, the same
         /// convention `PickAt` and `Pointer.position` use) would lock an
@@ -243,7 +268,7 @@ namespace SeaSick.Combat
                 if (t == null || !t.Alive || ReferenceEquals(t, self) || t is PlayerHull || t is IFriendly || t is ILockExempt) continue;
                 if (Distance(t) > breakRange) continue;
                 Vector3 sp = cam.WorldToScreenPoint(t.HitCentre);
-                if (sp.z <= 0f) continue;
+                if (sp.z <= 0f || sp.x < 0f || sp.x > Screen.width || sp.y < 0f || sp.y > Screen.height) continue;
                 Vector3 edge = cam.WorldToScreenPoint(t.HitCentre + cam.transform.right * t.HitRadius);
                 float r = Mathf.Max(minR, Vector2.Distance(sp, edge));
                 float sq = ((Vector2)sp - screen).sqrMagnitude;
@@ -323,6 +348,7 @@ namespace SeaSick.Combat
 
         void OnGUI()
         {
+            if (SeaSick.UI.Sheets.QuietSailingHud.MapOpen) return;
             // Same suppressions as the rest of the sea HUD: the shipyard's
             // modal, the home/pause cards and the land sheet all sit where
             // this button would.

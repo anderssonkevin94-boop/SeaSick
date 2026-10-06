@@ -1732,3 +1732,9 @@ provided file touched are in `art-staging/winding-originals/`. **Kitchen V6 gene
 `check.py` checks the in-session objects) is written but cannot run, because its V4 source
 `kitchen-chunky-lvl1-v4/kitchen-worker-review.blend` is gone; the shipped kit FBX is fixed (562ac008), so this
 only matters if the kitchen is ever regenerated from scratch.
+
+## Quiet sailing HUD and fixed harpoon (2026-10-06)
+
+`RunSailingHudPlay.Batch` (closed editor, Unity `-batchmode -executeMethod`; omit `-quit` and `-nographics`) runs the real Sea scene with an isolated save directory, waits for loading, then exits with the result. It checks straight-forward flight, swept salvage/raider hits, stopped/toggled winch, release/cut/miss, UI pointer tap versus hold, visible enemy selection/release, offscreen rejection, the home-bearing compass projection, phone/desktop control geometry and the live square map. Output: `Logs/sailing-check.txt`, `Logs/sailing-quiet-phone.png`, `Logs/sailing-map-phone.png`, `Logs/sailing-quiet-desktop.png`. The probe disables motion during mechanics assertions; real sailing feel still needs a phone playtest.
+
+This supersedes the earlier phase-one auto-aim/auto-reel/second-tap-cut expectations: `FireOrCut()` is retained for callers but now fires or toggles `IsReeling`; `CutLine()` is the separate hold action (desktop X). Old aim-error probes are historical.

@@ -5,23 +5,9 @@ using UnityEngine.InputSystem;
 
 namespace SeaSick.Ship.Harpoon
 {
-    /// **The bow harpoon, phase 1: hook and reel** (docs/PLAN-harpoon.md).
-    /// Added to the player's ship by `Combat.PlayerHull` (every hull has one
-    /// from the start), it sits on the bow stem outside the slot grid and
-    /// follows the hull through every shipyard refit.
-    ///
-    /// The loop: the nearest harpoonable thing in the bow arc is the target
-    /// (always: the markers are indicators, and the fixed button is the only
-    /// way to fire, 2026-10-04); `FireOrCut` winds up
-    /// and fires a self-leading barb; a bite puts a live line on it, which
-    /// the winch reels on a spring-damper while the tension reads slack →
-    /// taut → strained; held strain snaps it, a second tap cuts it, both cost
-    /// a reload; at the rail it comes aboard through the target's own
-    /// `IOverboardTarget.OnHauled`, so the reward is exactly the sail-over
-    /// one. A load the hold has no room for is kept alongside (`HoldFull`).
-    ///
-    /// The UI (🪝 button, world markers, hints) is `UI/Sheets/SeaHud` and
-    /// `HarpoonMarkers`, reading this class only.
+    /// Fixed forward bow harpoon. Tap fires, then toggles the winch after a
+    /// bite; holding the HUD button cuts the line. Salvage and raiders share
+    /// the existing spring-damper rope, but only salvage comes aboard.
     public class HarpoonGun : MonoBehaviour
     {
         public static HarpoonGun Player { get; private set; }
@@ -37,9 +23,10 @@ namespace SeaSick.Ship.Harpoon
         /// Sailing: not anchored, not ashore, not in the shipyard or a menu
         /// (the same gates as `HelmInput`'s keys).
         public bool Available { get; private set; }
-        public bool CanFire => Available && State == HarpoonState.Ready && Target != null && !pendingShot;
+        public bool CanFire => Available && State == HarpoonState.Ready && !pendingShot;
         /// The gun has work: a valid target in the arc, or the line is out.
-        public bool Demand => LineOut || (Available && Target != null);
+        public bool Demand => LineOut || pendingShot || (Available && Target != null);
+        public bool IsReeling { get; private set; }
         public Transform BowPost => stand;
 
         /// Null once the load is destroyed (boarded, sunk): an interface
@@ -85,8 +72,6 @@ namespace SeaSick.Ship.Harpoon
         // --- targeting ------------------------------------------------------
         readonly List<IHarpoonable> inArc = new List<IHarpoonable>();
         readonly List<float> inArcDist = new List<float>();
-        IHarpoonable trackOf;
-        Vector3 trackLast, targetVel;
 
         // --- crew -----------------------------------------------------------
         HarpoonCrew crew = HarpoonCrew.Captain;
@@ -263,8 +248,8 @@ namespace SeaSick.Ship.Harpoon
 
             if (LineOut) return;   // the line's own target stays the target
             var pick = inArc.Count > 0 ? inArc[0] : null;
-            if (pick != Target) { Target = pick; pendingShot = false; }
-            Track(Target);
+            if (SeaSick.UI.Sheets.CombatHud.Source?.Locked is IHarpoonable locked && Valid(locked)) pick = locked;
+            Target = pick;
         }
 
         static bool Valid(IHarpoonable t) => !Gone(t) && t.CanBeHarpooned;
@@ -280,19 +265,6 @@ namespace SeaSick.Ship.Harpoon
             if (d > HarpoonTuning.range) return false;
             if (d < 0.01f) return true;
             return Vector3.Angle(fwd, to) <= HarpoonTuning.arcHalfDeg;
-        }
-
-        /// The target's own velocity, measured: the lead needs it and the
-        /// targets do not publish one.
-        void Track(IHarpoonable t)
-        {
-            if (t == null) { trackOf = null; targetVel = Vector3.zero; return; }
-            Vector3 p = t.HookPoint;
-            float dt = Time.deltaTime;
-            if (trackOf != t) { trackOf = t; trackLast = p; targetVel = Vector3.zero; return; }
-            Vector3 v = (p - trackLast) / Mathf.Max(1e-4f, dt); v.y = 0f;
-            targetVel = Vector3.Lerp(targetVel, v, 1f - Mathf.Exp(-dt / 0.25f));
-            trackLast = p;
         }
 
         // --- crew -----------------------------------------------------------
@@ -321,21 +293,33 @@ namespace SeaSick.Ship.Harpoon
         void ReadKeys()
         {
             var kb = Keyboard.current;
-            if (kb == null || !kb.fKey.wasPressedThisFrame) return;
+            if (kb == null) return;
+            if (kb.xKey.wasPressedThisFrame && Available) CutLine();
+            if (!kb.fKey.wasPressedThisFrame) return;
             if (SeaSick.CameraRig.IslandCam.Engaged || SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked)
                 return;
             FireOrCut();
         }
 
-        /// **The one button.** Ready with a target: wind up and fire. Line
-        /// out on a load (or the barb in the air): cut it.
+        /// Kept under its original API name for existing input callers.
         public void FireOrCut()
         {
-            if (State == HarpoonState.Hooked || State == HarpoonState.Flying) { Cut(); return; }
+            if (!Available) return;
+            if (State == HarpoonState.Hooked)
+            {
+                IsReeling = !IsReeling;
+                if (!IsReeling) reelVel = 0f;
+                return;
+            }
             if (!CanFire) return;
             pendingShot = true;
             pendingSince = Time.time;
             windup01 = 0f;
+        }
+
+        public void CutLine()
+        {
+            if (Available && LineOut) Cut();
         }
 
         // --- states ---------------------------------------------------------
@@ -343,7 +327,7 @@ namespace SeaSick.Ship.Harpoon
         void TickReady(float dt)
         {
             if (!pendingShot) return;
-            if (!Available || Target == null) { pendingShot = false; return; }
+            if (!Available) { pendingShot = false; return; }
             // A hand still walking to the bow gets a moment; then the captain.
             if (!crew.atGun && Time.time - pendingSince < HarpoonTuning.crewWalkWaitSeconds) return;
             float rate = Mathf.Max(0.05f, Crew.workRate);
@@ -354,29 +338,15 @@ namespace SeaSick.Ship.Harpoon
         void Launch()
         {
             pendingShot = false;
-            hooked = Target;
+            hooked = null;
             flyFrom = MuzzlePos;
-            // Lead: where the hook point will be when a barb at barbSpeed
-            // gets there (three fixed-point passes converge at these speeds).
-            Vector3 p0 = hooked.HookPoint;
-            float speed = Mathf.Max(5f, HarpoonTuning.barbSpeed);
-            float t = Vector3.Distance(flyFrom, p0) / speed;
-            Vector3 aim = p0;
-            for (int i = 0; i < 3; i++)
-            {
-                aim = p0 + targetVel * t;
-                t = Vector3.Distance(flyFrom, aim) / speed;
-            }
-            float err = HarpoonTuning.leadErrorMetres * (1f - Mathf.Clamp01(Crew.accuracy01));
-            if (err > 0f)
-            {
-                Vector2 e = Random.insideUnitCircle * err;
-                aim += new Vector3(e.x, 0f, e.y);
-            }
-            flyTo = aim;
-            flyTime = Mathf.Max(0.05f, t);
+            Vector3 forward = Flat(transform.forward).normalized;
+            if (forward.sqrMagnitude < .01f) forward = Vector3.forward;
+            // The ship aims the barrel. Locking never bends or leads this shot.
+            flyTo = flyFrom + forward * HarpoonTuning.range;
+            flyTime = Mathf.Max(.05f, HarpoonTuning.range / Mathf.Max(5f, HarpoonTuning.barbSpeed));
             flyT = 0f;
-            flyArc = HarpoonTuning.barbArcMetres * Mathf.Clamp01(FlatDistance(flyFrom, aim) / Mathf.Max(1f, HarpoonTuning.range));
+            flyArc = HarpoonTuning.barbArcMetres;
             barb.gameObject.SetActive(true);
             barb.position = flyFrom;
             State = HarpoonState.Flying;
@@ -384,6 +354,7 @@ namespace SeaSick.Ship.Harpoon
 
         void TickFlying(float dt)
         {
+            Vector3 previous = BarbAt(Mathf.Clamp01(flyT / flyTime));
             flyT += dt;
             float s = Mathf.Clamp01(flyT / flyTime);
             Vector3 p = BarbAt(s);
@@ -391,12 +362,23 @@ namespace SeaSick.Ship.Harpoon
             barb.position = p;
             if (ahead.sqrMagnitude > 1e-6f) barb.rotation = Quaternion.LookRotation(ahead);
             line.Draw(MuzzlePos, barbAttach.position, 0f, 0.1f, StemTopWorld);
-            if (s < 1f) return;
-
-            bool bite = Valid(hooked)
-                        && FlatDistance(flyTo, hooked.HookPoint) <= HarpoonTuning.biteRadius;
-            if (bite) Bite();
-            else Miss(flyTo);
+            // Swept water-plane hit test prevents tunnelling at low frame rates.
+            Vector3 segment = Flat(p - previous);
+            float first = float.PositiveInfinity;
+            foreach (var candidate in HarpoonRegistry.All)
+            {
+                if (!Valid(candidate)) continue;
+                float radius = candidate is SeaSick.Combat.EnemyShip enemy
+                    ? enemy.HitRadius : HarpoonTuning.biteRadius;
+                Vector3 offset = Flat(candidate.HookPoint - previous);
+                float t = segment.sqrMagnitude > .0001f
+                    ? Mathf.Clamp01(Vector3.Dot(offset, segment) / segment.sqrMagnitude) : 0f;
+                if ((offset - segment * t).sqrMagnitude > radius * radius || t >= first) continue;
+                first = t;
+                hooked = candidate;
+            }
+            if (hooked != null) { Target = hooked; Bite(); }
+            else if (s >= 1f) Miss(flyTo);
         }
 
         Vector3 BarbAt(float s)
@@ -408,13 +390,15 @@ namespace SeaSick.Ship.Harpoon
 
         void Bite()
         {
+            IsReeling = false;
+            if (hooked is SeaSick.Combat.EnemyShip enemy) enemy.HarpoonHeld = true;
             var ov = hooked as IOverboardTarget;
             if (ov != null) { ov.BeingHauled = true; ov.HaulAnchor = hooked.Transform.position; }
             Vector3 load = Flat(hooked.Transform.position);
             prevDist = Vector3.Distance(Flat(MuzzlePos), load);
             lineLen = prevDist + 0.5f;   // lands with a little slack
             reelVel = 0f;
-            loadVel = targetVel;
+            loadVel = hooked is SeaSick.Combat.EnemyShip vessel ? Flat(vessel.Velocity) : Vector3.zero;
             strainFor = 0f;
             HoldFull = false;
             prevBow = MuzzlePos;
@@ -473,12 +457,11 @@ namespace SeaSick.Ship.Harpoon
         void TickHooked(float dt)
         {
             var ov = hooked as IOverboardTarget;
-            if (Gone(hooked) || (ov != null && ov.Resolved))
+            if (Gone(hooked) || (hooked is SeaSick.Combat.EnemyShip dead && !dead.Alive) || (ov != null && ov.Resolved))
             {
                 // Taken out of our hands (rescued another way, sank): the
                 // line comes home empty, nothing to cost.
-                hooked = null;
-                HoldFull = false;
+                ReleaseLoad();
                 returnFrom = barb.position;
                 returnT = 0f;
                 State = HarpoonState.Returning;
@@ -510,8 +493,10 @@ namespace SeaSick.Ship.Harpoon
             float wantReel = HarpoonTuning.reelSpeed * Mathf.Max(0.05f, Crew.workRate) / Mathf.Sqrt(m)
                 * (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(HarpoonTuning.winchStallStart,
                     Mathf.Max(HarpoonTuning.winchStallStart + 0.01f, HarpoonTuning.strainBand), rawTension01)));
+            if (!IsReeling) wantReel = 0f;
             float ease = Mathf.Max(0.02f, HarpoonTuning.reelEaseSeconds);
-            float minLen = HarpoonTuning.railMetres * 0.5f;
+            float minLen = hooked is SeaSick.Combat.EnemyShip ship
+                ? ship.HitRadius + 2f : HarpoonTuning.railMetres * 0.5f;
 
             int steps = Mathf.Clamp(Mathf.CeilToInt(dt * 120f), 1, 12);
             float h = dt / steps;
@@ -531,7 +516,7 @@ namespace SeaSick.Ship.Harpoon
                 prevDist = d;
                 force = stretch > 0f ? Mathf.Max(0f, k * stretch + c * stretchRate) : 0f;
                 // A slack line never pays out more than a few metres of bight.
-                lineLen = Mathf.Min(lineLen, d + 4f);
+                if (IsReeling) lineLen = Mathf.Min(lineLen, d + 4f);
 
                 loadVel = (loadVel + dir * (force / m) * h) / (1f + drag * h);
                 load += loadVel * h;
@@ -553,7 +538,7 @@ namespace SeaSick.Ship.Harpoon
             float slack = Mathf.Max(0f, lineLen - Vector3.Distance(bow, load));
             DrawHooked(slack);
 
-            if (Vector3.Distance(bow, load) <= HarpoonTuning.railMetres)
+            if (ov != null && Vector3.Distance(bow, load) <= HarpoonTuning.railMetres)
             {
                 if (Fits()) Deliver(ov);
                 else
@@ -582,7 +567,8 @@ namespace SeaSick.Ship.Harpoon
         {
             var tr = hooked.Transform;
             var p = new Vector3(flat.x, tr.position.y, flat.z);
-            tr.position = p;
+            if (hooked is SeaSick.Combat.EnemyShip enemy) enemy.MoveByHarpoon(p);
+            else tr.position = p;
             if (ov != null) { ov.BeingHauled = true; ov.HaulAnchor = p; }
         }
 
@@ -596,6 +582,7 @@ namespace SeaSick.Ship.Harpoon
 
         void Deliver(IOverboardTarget ov)
         {
+            IsReeling = false;
             var who = Crew.hand;
             var load = hooked;
             hooked = null;
@@ -634,6 +621,7 @@ namespace SeaSick.Ship.Harpoon
 
         void StartReload()
         {
+            IsReeling = false;
             barb.gameObject.SetActive(false);
             reloadT = 0f;
             reelVel = 0f;
@@ -643,6 +631,8 @@ namespace SeaSick.Ship.Harpoon
         /// Let the load go where it is; it drifts on its own again.
         void ReleaseLoad()
         {
+            IsReeling = false;
+            if (!Gone(hooked) && hooked is SeaSick.Combat.EnemyShip enemy) enemy.HarpoonHeld = false;
             if (!Gone(hooked) && hooked is IOverboardTarget ov) ov.BeingHauled = false;
             hooked = null;
             HoldFull = false;
@@ -692,25 +682,7 @@ namespace SeaSick.Ship.Harpoon
 
         void TickMount(float dt)
         {
-            Vector3? aimAt = null;
-            if (State == HarpoonState.Flying || State == HarpoonState.Returning || State == HarpoonState.Hooked)
-                aimAt = barb.position;
-            else if (Target != null && Available) aimAt = Target.HookPoint;
-
-            float want = 0f;
-            if (aimAt.HasValue)
-            {
-                Vector3 local = mount.InverseTransformPoint(aimAt.Value);
-                want = Mathf.Clamp(Mathf.Atan2(local.x, local.z) * Mathf.Rad2Deg,
-                    -HarpoonTuning.arcHalfDeg, HarpoonTuning.arcHalfDeg);
-            }
-            float have = swivel.localEulerAngles.y;
-            if (have > 180f) have -= 360f;
-            // Eased into the last few degrees so it settles instead of ticking,
-            // and never faster than the swivel's own rate.
-            float eased = Mathf.LerpAngle(have, want, 1f - Mathf.Exp(-dt / 0.12f));
-            float next = Mathf.MoveTowardsAngle(have, eased, HarpoonTuning.swivelDegPerSec * dt);
-            if (swivel != mount) swivel.localRotation = Quaternion.Euler(0f, next, 0f);
+            if (swivel != mount) swivel.localRotation = Quaternion.identity;
 
             if (drum != null && reelVel > 0.01f)
             {

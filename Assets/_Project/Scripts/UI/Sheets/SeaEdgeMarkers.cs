@@ -136,6 +136,8 @@ namespace SeaSick.UI.Sheets
                 hShip[i] = null;
             }
 
+            if (QuietSailingHud.Active) return;
+
             // The course: set camp, else the way home.
             if (ChartData.TryCourse(out Vector2 target, out _, out float dist) && dist > ArrivedMetres)
                 markers[count++] = new Marker
@@ -201,7 +203,7 @@ namespace SeaSick.UI.Sheets
         {
             if (Event.current.type != EventType.Repaint || count == 0) return;
             // The same suppressions as the other sea HUD pieces (CombatLock).
-            if (!SeaHud.HelmShowing || MidnightLandHud.Active) return;
+            if (!SeaHud.HelmShowing || MidnightLandHud.Active || QuietSailingHud.MapOpen) return;
             if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen) return;
             if (SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
@@ -327,7 +329,7 @@ namespace SeaSick.UI.Sheets
                 GUI.DrawTexture(new Rect(at.x - size * 0.5f, at.y - size * 0.5f, size, size), arrow, ScaleMode.ScaleToFit, true);
                 GUI.matrix = prevMatrix;
 
-                var labelRect = DrawLabel(at, size, band, bottom, m.label, col, m.locked || m.kind == Kind.Kraken);
+                var labelRect = QuietSailingHud.Active ? Rect.zero : DrawLabel(at, size, band, bottom, m.label, col, m.locked || m.kind == Kind.Kraken);
 #if UNITY_EDITOR
                 if (m.kind == Kind.Kraken) { DevKraken("drawn"); DevKrakenBox = box; DevKrakenLabel = labelRect; }
 #endif

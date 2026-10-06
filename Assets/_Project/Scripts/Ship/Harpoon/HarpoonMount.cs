@@ -29,7 +29,10 @@ namespace SeaSick.Ship.Harpoon
             }
             else go = PlaceholderMount(parent);
             go.name = "HarpoonMount";
-            HarpoonLamp.Attach(go);
+            foreach (var light in go.GetComponentsInChildren<Light>(true)) light.enabled = false;
+            foreach (var part in go.GetComponentsInChildren<Transform>(true))
+                if (part.name == "Lamp" || part.name == "Lamp_Light" || part.name == "Lamp_Lens")
+                    part.gameObject.SetActive(false);
             return go;
         }
 

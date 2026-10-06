@@ -101,6 +101,7 @@ namespace SeaSick.Ship.Harpoon
 
         void OnGUI()
         {
+            if (SeaSick.UI.Sheets.QuietSailingHud.MapOpen) return;
             // Drawing only, once a frame, on the repaint.
             if (Event.current.type != EventType.Repaint) return;
             count = 0;
@@ -120,6 +121,13 @@ namespace SeaSick.Ship.Harpoon
             {
                 var t = arc[i];
                 if (t == null || (t is Object o && o == null)) continue;
+                if (SeaSick.UI.Sheets.QuietSailingHud.Active)
+                {
+                    if (t is SeaSick.Combat.EnemyShip) continue; // combat lock owns enemy feedback
+                    Vector3 ahead = Vector3.ProjectOnPlane(gun.transform.forward, Vector3.up).normalized;
+                    Vector3 offset = Vector3.ProjectOnPlane(t.HookPoint-gun.StemTopWorld, Vector3.up);
+                    if (Vector3.Dot(offset,ahead)<0 || Vector3.Cross(offset,ahead).magnitude>HarpoonTuning.biteRadius) continue;
+                }
                 // No ring on the kraken's haul (Kevin 2026-10-04): the rings
                 // covered the crates. The 🪝 button still picks it and names it.
                 if (t is SeaSick.Ship.Overboard.FloatingCargo fc && fc.HarpoonKind == "loot") continue;

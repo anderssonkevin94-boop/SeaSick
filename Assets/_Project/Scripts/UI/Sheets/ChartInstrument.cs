@@ -175,7 +175,7 @@ namespace SeaSick.UI.Sheets
             // **Not on an island** (Kevin, 2026-10-01): lying at one — a camp
             // or a fresh one, anchored, ashore or docked — the dial goes away;
             // it comes back the moment she weighs anchor.
-            bool hidden = ThumbBar.PlacementActive || AtIsland();
+            bool hidden = QuietSailingHud.Active || ThumbBar.PlacementActive || AtIsland();
             root.style.display = hidden ? DisplayStyle.None : DisplayStyle.Flex;
             if (hidden) { ScreenRect = Rect.zero; return; }
 

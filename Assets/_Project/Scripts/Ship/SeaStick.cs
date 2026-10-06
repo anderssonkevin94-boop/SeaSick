@@ -140,7 +140,7 @@ namespace SeaSick.Ship
             // button and a tap on it, 2026-10-04, was steering).
             if (inGrace && (g - thumbPoint).magnitude
                 <= Mathf.Max(0f, SailControlTuning.liftGraceRadius) * ringRadiusPx
-                && !UIBlocker.Blocked(screenPos))
+                && CanStartAt(screenPos))
             {
                 stickId = id;
                 inGrace = false;
@@ -165,6 +165,8 @@ namespace SeaSick.Ship
         /// Public for `HarpoonTapCheck`.
         public static bool CanStartAt(Vector2 screenPos) =>
             screenPos.y <= Screen.height * Mathf.Clamp01(SailControlTuning.zoneTopFrac)
+            && (!SeaSick.UI.Sheets.QuietSailingHud.Active
+                || SeaSick.UI.Sheets.QuietSailingHud.SteeringRect.Contains(new Vector2(screenPos.x, Screen.height-screenPos.y)))
             && !UIBlocker.Blocked(screenPos);
 
         void Move(Vector2 g)
@@ -250,6 +252,13 @@ namespace SeaSick.Ship
         Vector2 DrawCentre(int u)
         {
             float R = ringRadiusPx;
+            if (SeaSick.UI.Sheets.QuietSailingHud.Active)
+            {
+                var bounds = SeaSick.UI.Sheets.QuietSailingHud.SteeringRect;
+                float pad = R + u * .45f;
+                return new Vector2(Mathf.Clamp(anchorPoint.x, bounds.xMin+pad, Mathf.Max(bounds.xMin+pad,bounds.xMax-pad)),
+                    Mathf.Clamp(anchorPoint.y,bounds.yMin+pad,Mathf.Max(bounds.yMin+pad,bounds.yMax-pad)));
+            }
             float m = u * 0.2f;
             float half = R + u * 0.45f;   // the knob can sit on the rim
             float x = Mathf.Clamp(anchorPoint.x, R + m, Mathf.Max(R + m, Screen.width - R - m));

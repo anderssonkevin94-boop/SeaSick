@@ -145,6 +145,7 @@ namespace SeaSick.UI.Sheets
         /// Taps the harpoon button has taken since the domain loaded (for
         /// `HarpoonTapCheck`: did the press reach the button).
         public static int HarpoonTaps { get; private set; }
+        internal static void RecordHarpoonTap() => HarpoonTaps++;
 
         /// Points to screen px: `Screen.dpi / 160`, clamped 1..3, and 1 with
         /// no dpi (the editor) -- the rule `CombatLock.PtPx` uses.
@@ -181,6 +182,7 @@ namespace SeaSick.UI.Sheets
         public static bool Blocks(Vector2 guiPoint)
         {
             if (Time.frameCount - tickFrame > 1) return false;
+            if (QuietSailingHud.Active) return QuietSailingHud.Blocks(guiPoint);
             // Not `HelmRect`: the order strip is information, and the very
             // bottom of the screen is where the thumb starts the stick.
             return TopRect.Contains(guiPoint) || AlertRect.Contains(guiPoint) || BoostRect.Contains(guiPoint)
@@ -217,6 +219,7 @@ namespace SeaSick.UI.Sheets
 
         internal sealed class View
         {
+            readonly QuietSailingHud quiet;
             // --- top bar
             readonly VisualElement top;
             readonly Button holdBtn, crewBtn, menuBtn;
@@ -304,6 +307,7 @@ namespace SeaSick.UI.Sheets
 
             public View(VisualElement root)
             {
+                quiet = new QuietSailingHud(root, OpenHold, TapAlert);
                 var style = Resources.Load<StyleSheet>("UI/SeaHud");
                 if (style != null && !root.styleSheets.Contains(style)) root.styleSheets.Add(style);
 
@@ -564,12 +568,31 @@ namespace SeaSick.UI.Sheets
                 bool sea = anchor != null && SeaSick.Save.GameBoot.Decided && !MidnightLandHud.Active
                            && !ThumbBar.PlacementActive && !SeaSick.UI.CampSiting.Placing
                            && !SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked && !SeaLedger.IsOpen;
-                if (!sea) { Hide(); return; }
+                if (!sea) { Hide(); quiet.Hide(); return; }
 
                 bool lying = anchor.CurrentState == AnchorController.State.Anchored
                              || anchor.CurrentState == AnchorController.State.Ashore;
                 bool sheet = Sheets.Current != null;
                 bool helmOn = !lying && !sheet && motor != null && !SeaSick.CameraRig.IslandCam.Engaged;
+
+                if (helmOn && SeaSick.UI.Menus.GameMenus.Current == SeaSick.UI.Menus.GameMenus.Mode.None)
+                {
+                    Hide();
+                    if (Time.unscaledTime >= nextRefresh)
+                    {
+                        nextRefresh = Time.unscaledTime + .25f;
+                        RefreshAlerts(motor);
+                    }
+                    quiet.Tick(shownKind == AlertKind.Overboard || shownKind == AlertKind.Water
+                        || (shownKind == AlertKind.Hull && alertKey < 50) ? chip.text : "");
+                    TopBarShowing = HelmShowing = true;
+                    TopRect = Rect.MinMaxRect(quiet.MenuRect.xMin, quiet.MenuRect.yMin, quiet.CargoRect.xMax, quiet.CargoRect.yMax);
+                    BoostRect = quiet.BoostRect; HarpoonRect = quiet.HarpoonRect; HarpoonDrawnRect = quiet.HarpoonDrawnRect;
+                    AlertRect = quiet.AlertRect;
+                    HelmRect = Rect.zero; // no status strip occupying the steering area
+                    return;
+                }
+                quiet.Hide();
 
                 // --- geometry (design px -> screen px -> panel units)
                 var safe = Screen.safeArea;

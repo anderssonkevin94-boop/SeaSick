@@ -20,7 +20,7 @@ namespace SeaSick.Combat
     /// radii (Island.RadiusToward, Reef.Radius), so a lookahead and a lateral
     /// shove is both cheaper and more ship-like than a grid — a raider should
     /// bear away from a shoal, not follow waypoints around it.
-    public class EnemyShip : MonoBehaviour, IHittable
+    public class EnemyShip : MonoBehaviour, IHittable, SeaSick.Ship.Harpoon.IHarpoonable
     {
         public static readonly List<EnemyShip> All = new List<EnemyShip>();
 
@@ -274,10 +274,27 @@ namespace SeaSick.Combat
         /// measurement.
         Ocean.OceanProbeRegistry.Handle seaProbe;
 
+        public bool HarpoonHeld { get; set; }
+        public Transform Transform => transform;
+        public Vector3 HookPoint => HitCentre;
+        public string HarpoonLabel => "raider";
+        public bool CanBeHarpooned => Alive && !HarpoonHeld;
+        public float HarpoonMass => 6f;
+        public int HarpoonHoldUnits => 0;
+
+        public void MoveByHarpoon(Vector3 position)
+        {
+            Vector3 before = transform.position;
+            transform.position = position;
+            KeepClear();
+            HoldOffLand(before);
+        }
+
         void OnEnable()
         {
             if (!All.Contains(this)) All.Add(this);
             HitTargets.Register(this);
+            SeaSick.Ship.Harpoon.HarpoonRegistry.Add(this);
             EnsureProbe();
         }
 
@@ -285,6 +302,8 @@ namespace SeaSick.Combat
         {
             All.Remove(this);
             HitTargets.Unregister(this);
+            SeaSick.Ship.Harpoon.HarpoonRegistry.Remove(this);
+            HarpoonHeld = false;
             Ocean.OceanProbeRegistry.Unregister(seaProbe);
             seaProbe = null;
         }
@@ -607,6 +626,8 @@ namespace SeaSick.Combat
                 player = FindFirstObjectByType<ShipMotor>();
                 nextPlayerLookup = Time.unscaledTime + 1f;
             }
+
+            if (HarpoonHeld) { speed = 0f; TryFire(); RideSea(dt); Flash(); return; }
 
             circling = false;
             Vector3 goal = DecideGoal();
@@ -1198,6 +1219,8 @@ namespace SeaSick.Combat
             {
                 diedAt = Time.time;
                 HitTargets.Unregister(this);
+                SeaSick.Ship.Harpoon.HarpoonRegistry.Remove(this);
+                HarpoonHeld = false;
                 Ocean.DynamicWaterSim.Splash(transform.position, 18f, 2.6f);
 
                 // Sunk mid-raid: deliberately NOT a Recall. A recall is an

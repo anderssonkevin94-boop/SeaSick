@@ -223,7 +223,7 @@ namespace SeaSick.UI.Sheets
             public void Tick(VisualElement root)
             {
                 var lk = Source;
-                if (lk == null || !lk.isActiveAndEnabled
+                if (QuietSailingHud.Active || lk == null || !lk.isActiveAndEnabled
                     || SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked
                     || MidnightLandHud.Active || ThumbBar.PlacementActive
                     || SheetHost.FrameOpen || SeaLedger.IsOpen)

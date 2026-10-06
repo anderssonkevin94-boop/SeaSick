@@ -56,7 +56,7 @@ namespace SeaSick.Dev
         /// somebody may want on screen for a whole session, so it lives with
         /// the HUD options rather than with the tuners — it has no knobs, it
         /// only tells you things.
-        bool Showing => show && SeaSick.UI.HudVisibility.Perf;
+        bool Showing => show && SeaSick.UI.HudVisibility.Perf && !SeaSick.UI.Sheets.QuietSailingHud.Active;
 
         [Tooltip("How long the peak frame time and peak pop hold before decaying away, seconds.")]
         [SerializeField] float holdSeconds = 3f;
