@@ -62,6 +62,8 @@ public class SailingHudPlayProbe : MonoBehaviour
     void CheckHud()
     {
         Gate(QuietSailingHud.Active,"quiet HUD active");
+        Gate(SailingCompass.InView(0,0) && !SailingCompass.InView(180,0),"compass shows only forward sector");
+        Gate(Mathf.Abs(SailingCompass.BearingX(15,0,132)-SailingCompass.BearingX(0,0,132)-10)<.01f,"compass bearing spacing is 180-degree scale");
         Gate(Mathf.Approximately(SailingCompass.BearingX(0,0,132),66),"north home aligns with north at centre");
         Gate(SailingCompass.BearingX(0,90,132)<66 && SailingCompass.BearingX(0,270,132)>66,
             "north marker moves with north as ship turns east/west");
