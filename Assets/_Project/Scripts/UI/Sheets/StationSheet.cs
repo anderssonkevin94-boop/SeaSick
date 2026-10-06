@@ -1474,7 +1474,7 @@ namespace SeaSick.UI.Sheets
                 benchValue.text = hand == null ? "no miner"
                     : under ? $"back in {Clock(left)}"
                     : left > 0f ? "walking in"
-                    : hand.Hauling && hand.haulPicked && hand.haulFrom == HaulPlace.Shore ? "bringing stone up"
+                    : hand.Hauling && hand.haulPicked && hand.haulFrom == HaulPlace.Shore ? $"bringing {ResDefs.Label(hand.haulRes)} up"
                     : st.RackFull ? "crate full"
                     : "at the mine";
                 benchLabel.text = "in the mine";

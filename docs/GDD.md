@@ -1084,3 +1084,7 @@ Kevin: *"voyage complete still shows up. I don't want that one there at all. It 
 - Equip produced items through People → villager → Equipment. Swords are one-handed with a shorter reach than spears; both permit shields. Bows occupy both hands and return any shield to storage. Full leather absorbs 40% of incoming damage; full iron absorbs 60%. Frontal shield block chances are 40% wood / 55% iron. These are initial tuning values.
 - Old forge leather orders stop and return unfinished materials; completed armor survives on the output rack. Gear IDs and existing ownership remain save-compatible.
 - Chunky temporary equipment follows the head, torso, legs and hands. Replace visuals using `Resources/Equipment/<item-id>.prefab`: body metres, +Y up, +Z forward; sword origin at the grip; armor origins at attachment centres; pants/boots contain `Left` and `Right` child roots. Never parent to the oversized rig bones.
+
+### Iron ore mining — 2026-10-07
+
+The mine now offers **iron ore** at campfire level II, without a mine upgrade. Select it on the mine's existing recipe list and assign a miner. Each trip produces two ore after 60 seconds of underground work at base speed, delivered to the crate and hauled to storage through the existing mining flow. Stone remains the default (four per trip); both resources are inexhaustible. The forge's Smelter converts two ore into one iron for its weapon and armor recipes. Existing ore IDs, stock and gathering sources are preserved.

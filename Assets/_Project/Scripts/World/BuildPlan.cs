@@ -657,7 +657,7 @@ namespace SeaSick.World
             kind = BuildKind.Mine,
             baseStoneCost = 0,
             label = "mine",
-            blurb = "a miner digs stone out of the hillside; it must stand against a cliff face",
+            blurb = "a miner digs stone or iron ore out of the hillside; it must stand against a cliff face",
             resource = Res.Timber,
             baseCost = 8,
             // The approved shaft (art-staging/mine-shaft-v1/contract.json):

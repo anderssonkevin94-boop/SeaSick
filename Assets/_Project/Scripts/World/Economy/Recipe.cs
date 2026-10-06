@@ -133,6 +133,10 @@ namespace SeaSick.World.Economy
             new Recipe { id = "mine-stone", station = "Mine", makes = Res.Stone, yield = SeaSick.World.BuildPlans.MineLoad,
                 takes = Cost.None, ratePerDay = Cook(SeaSick.World.BuildPlans.MineTripSeconds, SeaSick.World.BuildPlans.MineLoad) },
 
+            // Two ore per trip feed one smelt at the forge. Stone remains the default.
+            new Recipe { id = "mine-ore", station = "Mine", makes = Res.Ore, yield = 2,
+                takes = Cost.None, ratePerDay = Cook(SeaSick.World.BuildPlans.MineTripSeconds, 2), campfireLevel = 2 },
+
             // --- fletcher ---
             new Recipe { id = "arrows", station = "Fletcher", makes = Res.Arrows, yield = 3,
                 takes = Cost.Of(Cost.I(Res.Timber, 1)), ratePerDay = 3f },

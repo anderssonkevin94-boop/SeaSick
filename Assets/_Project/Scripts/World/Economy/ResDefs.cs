@@ -108,8 +108,8 @@ namespace SeaSick.World.Economy
             new ResDef { id = Res.Hide, label = "hide", tier = ResTier.Raw, source = ResSource.Drop, campfireLevel = 1,
                 blurb = "one off every animal a hunter brings home", category = ResCategory.Raw },
             // --- raw, further out ---
-            new ResDef { id = Res.Ore, label = "ore", tier = ResTier.Raw, source = ResSource.Gathered, campfireLevel = 2,
-                blurb = "dark rock with the metal in it, on the far islands", category = ResCategory.Raw },
+            new ResDef { id = Res.Ore, label = "iron ore", tier = ResTier.Raw, source = ResSource.Gathered, campfireLevel = 2,
+                blurb = "mined from a hillside or gathered on far islands; smelted into iron at the forge", category = ResCategory.Raw },
             new ResDef { id = Res.Spice, label = "spice", tier = ResTier.Raw, source = ResSource.Gathered, campfireLevel = 2,
                 blurb = "picked far out; what the last rungs of the ship cost", category = ResCategory.Food },
             new ResDef { id = Res.KrakenInk, label = "kraken ink", tier = ResTier.Raw, source = ResSource.Salvaged, campfireLevel = 1,
