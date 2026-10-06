@@ -173,10 +173,16 @@ namespace SeaSick.Ship
             Vector2 d = g - anchorPoint;
             // GUI y grows down; the stick's +y is UP the screen.
             Vector2 v = new Vector2(d.x, -d.y) / ringRadiusPx;
-            if (v.sqrMagnitude > 1f) v.Normalize();
+            // Speed and rudder are independent orders, not a movement vector.
+            // Normalizing diagonals made full throttle impossible while turning,
+            // and pushing farther could REDUCE one order. Clamp each axis instead.
+            v.x = Mathf.Clamp(v.x, -1f, 1f);
+            v.y = Mathf.Clamp(v.y, -1f, 1f);
             float dz = Mathf.Clamp(SailControlTuning.deadZone, 0f, 0.9f);
             Axes = new Vector2(DeadZone(v.x, dz), DeadZone(v.y, dz));
-            knobOffset = new Vector2(v.x, -v.y) * ringRadiusPx;
+            // Keep the visual knob inside the circular ring; only the drawing
+            // is radial, so it cannot steal throttle or steering authority.
+            knobOffset = Vector2.ClampMagnitude(new Vector2(v.x, -v.y), 1f) * ringRadiusPx;
         }
 
         /// Per-axis dead zone, rescaled so the rim is still 1: a sideways

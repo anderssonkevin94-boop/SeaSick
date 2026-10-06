@@ -62,7 +62,7 @@ namespace SeaSick.Ship
         /// speed curve, faded out by `PivotFadeSpeed01` of top speed, scaled
         /// by the helm like any other turn. 0 = the old "no water on the
         /// blade, no turn".                                         range 0..15
-        public static float pivotTurnDegPerSec = 7f;
+        public static float pivotTurnDegPerSec = 12f;
         /// Fraction of speed lost at the peak yaw rate:
         /// speed x (1 - this x (yawRate / peak)^2).                 range 0..0.6
         public static float turnSpeedBleed = 0.25f;
@@ -122,8 +122,10 @@ namespace SeaSick.Ship
         /// |ThrottleOrder| below this counts as "telegraph at stop" for
         /// `coastDownScale`.
         public const float CoastOrder = 0.02f;
-        /// Fraction of top speed by which the pivot floor has faded out.
-        public const float PivotFadeSpeed01 = 0.25f;
+        /// Keep docking assistance through slow travel, handing over by the
+        /// normal turn curve's peak. The old quarter-speed fade left a weak
+        /// steering band just as the boat began moving (2026-10-06).
+        public const float PivotFadeSpeed01 = PeakAtSpeed01;
 
         /// rad/s the pivot floor gives at `speed01` of top speed: all of
         /// `pivotTurnDegPerSec` at rest, nothing by `PivotFadeSpeed01`.

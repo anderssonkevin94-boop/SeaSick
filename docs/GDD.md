@@ -39,6 +39,16 @@ The meter only ever goes up at sea. Past ~80% they start leaving their post to h
   - Tap crew/station = small contextual order menu (trim, hold, potion, treat).
 - **Input tech:** Unity Input System, touch; pointer simulation in editor.
 
+**2026-10-06 movement tuning (pending phone playtest).** Full thumb travel is
+9% of the screen's shorter side (was 14%). Throttle and rudder clamp independently:
+a diagonal push can reach full ahead and full turn together, and dragging farther
+never reduces either order. The ring's visual knob remains circular. Turn response
+uses exponent 1.15 (was 1.4). Low-speed pivot assistance is 12 degrees/second at
+rest (was 7), fading out by half speed (was quarter speed) on both ship drives;
+cruising turn rates remain unchanged. FeelLab migrates only the three changed
+saved knobs once. Verify short straight/diagonal drags, slow docking turns both
+ways, reverse steering, release-to-coast, and full-speed handling on iPhone.
+
 ## 5. World & setting
 Archipelago explored outward in whichever direction the player chooses — there is no fixed island it radiates from; farther islands = richer resources = longer, harder voyages. **Distance is the difficulty curve**, and it is now *physical*: sea state is regional, so the water itself gets worse the further out you go — a calm shelf close in, lively water in the middle, mountainous seas at the edge.
 

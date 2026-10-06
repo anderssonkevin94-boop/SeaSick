@@ -400,6 +400,14 @@ namespace SeaSick.Dev
                 "JuiceTuning.camRiseSeconds",
                 "JuiceTuning.camLeadSeconds",
             },
+            // 2026-10-06: shorter thumb travel and stronger slow-speed turns.
+            // Drop only these old overrides once; later personal tuning stays.
+            new[]
+            {
+                "SailControlTuning.ringRadiusFrac",
+                "SailControlTuning.turnCurve",
+                "HandlingTuning.pivotTurnDegPerSec",
+            },
         };
         const string RebaseKey = "FeelLab.rebase";
 

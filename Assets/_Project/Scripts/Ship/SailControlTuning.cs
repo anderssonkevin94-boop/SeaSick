@@ -17,7 +17,7 @@ namespace SeaSick.Ship
         public static float zoneTopFrac = 0.55f;
         /// Ring radius, fraction of the screen's shorter side: one radius of
         /// push = full order. Range 0.08..0.25.
-        public static float ringRadiusFrac = 0.14f;
+        public static float ringRadiusFrac = 0.09f;
         /// Each axis, fraction of the ring radius, ignored before it orders
         /// anything (a thumb resting still sails nowhere). Range 0..0.3.
         public static float deadZone = 0.10f;
@@ -30,7 +30,7 @@ namespace SeaSick.Ship
 
         // --- what the stick means (HelmInput) ---
         /// Exponent on the turn axis: above 1 = finer near centre. Range 0.5..3.
-        public static float turnCurve = 1.4f;
+        public static float turnCurve = 1.15f;
         /// Exponent on the speed axis: 1 = speed straight in proportion to
         /// the push (DREDGE). Range 0.5..3.
         public static float throttleCurve = 1.0f;
