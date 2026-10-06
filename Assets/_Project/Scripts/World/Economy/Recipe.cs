@@ -146,6 +146,16 @@ namespace SeaSick.World.Economy
                 takes = Cost.Of(Cost.I(Res.FineBoards, 1), Cost.I(Res.Hide, 1)), ratePerDay = 1f,
                 campfireLevel = 2 },
 
+            new Recipe { id = "WoodShield", station = "Fletcher", makes = "WoodShield", yield = 1,
+                takes = Cost.Of(Cost.I(Res.Boards, 2), Cost.I(Res.Hide, 1)), ratePerDay = 1f },
+            new Recipe { id = "LeatherHelmet", station = "Blacksmith", spot = "Forge", makes = "LeatherHelmet", yield = 1,
+                takes = Cost.Of(Cost.I(Res.Hide, 1)), ratePerDay = 1f },
+            new Recipe { id = "LeatherVest", station = "Blacksmith", spot = "Forge", makes = "LeatherVest", yield = 1,
+                takes = Cost.Of(Cost.I(Res.Hide, 3)), ratePerDay = 1f },
+            new Recipe { id = "LeatherPants", station = "Blacksmith", spot = "Forge", makes = "LeatherPants", yield = 1,
+                takes = Cost.Of(Cost.I(Res.Hide, 2)), ratePerDay = 1f },
+            new Recipe { id = "LeatherBoots", station = "Blacksmith", spot = "Forge", makes = "LeatherBoots", yield = 1,
+                takes = Cost.Of(Cost.I(Res.Hide, 1)), ratePerDay = 1f },
             // --- forge ---
             // The first thing a forge makes needs no ore at all: Kevin's
             // spear is "a wood plank for the shaft and stone or metal for

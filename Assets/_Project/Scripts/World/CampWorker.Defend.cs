@@ -25,6 +25,8 @@ namespace SeaSick.World
     public partial class CampWorker
     {
         float defendJabClock;
+        RaidWalker meleeMark;
+        bool jabLanded;
         /// **Armed for the rest of this raid (2026-09-28).** A hunter caught
         /// out with a kill on his back is `huntArmed` right up until the
         /// drop below -- `ledger.DropCarriedLoadNow` (via `ClearHaul`) zeroes
@@ -42,12 +44,19 @@ namespace SeaSick.World
             var ledger = camp != null ? camp.Ledger : null;
             if (ledger == null) return StopDefending(r, false);
 
+            if(Time.time-r.lastCombatHit<.3f) {
+                acting?.CombatPose(VillagerActing.Mode.HitReact,(Time.time-r.lastCombatHit)/.3f);
+                string weapon = r.defendSpear ?? r.equipment?.mainHand;
+                if (!string.IsNullOrEmpty(weapon)) HunterProps.On(gameObject).Drive(weapon,HunterProps.Pose.Upright);
+                return true;
+            }
             var party = RaidParty.Active;
-            bool raidLive = party != null && party.Camp == camp;
+            bool raidLive = party != null && party.Camp == camp && RaidAlarm.IsActive(camp) && !RaidAlarm.IsHiding(camp) && !r.recovering && !ledger.Underground(r);
             // **Phase 10:** a hand who fetched his own spear out of the
             // store (`Combat.RaidAlarm`/`TickFetchSpear`) is armed the same
             // as the phase-9 dev flag or a hunter caught out with his own.
-            bool armedNow = r.huntArmed || r.armedDefender || !string.IsNullOrEmpty(r.raidSpear);
+            if (RaidAlarm.IsPostedLookout(r)) return StopDefending(r, false);
+            bool armedNow = (r.equipment != null && r.equipment.Armed) || r.huntArmed || r.armedDefender || !string.IsNullOrEmpty(r.raidSpear);
             bool armed = armedNow || defendArmedLatch;
             if (!raidLive || !armed) return StopDefending(r, false);
 
@@ -65,7 +74,8 @@ namespace SeaSick.World
                 // the camp-wide snapshot.
                 // **Bows (2026-09-30):** a bow hunter caught out fights
                 // with his bow (`huntArmed` = the trip went out with it).
-                r.defendSpear = !string.IsNullOrEmpty(r.raidSpear) ? r.raidSpear
+                r.defendSpear = r.equipment != null && r.equipment.Armed ? r.equipment.mainHand
+                    : !string.IsNullOrEmpty(r.raidSpear) ? r.raidSpear
                     : r.huntArmed ? Res.Bow : ledger.SpearInHand();
                 party.MarkDefender(r.name);
                 if (armedNow) defendArmedLatch = true;
@@ -108,6 +118,7 @@ namespace SeaSick.World
                 return true;
             }
 
+            if(meleeMark!=foe) { meleeMark=foe; defendJabClock=0f; jabLanded=false; }
             Vector3 foePos = foe.transform.position;
             float reach = RaidFightTuning.JabReach;
             var props = HunterProps.On(gameObject);
@@ -115,6 +126,7 @@ namespace SeaSick.World
 
             if (!Near(foePos, reach))
             {
+                defendJabClock=0f; jabLanded=false;
                 phase = Phase.Going;
                 acting?.Set(VillagerActing.Mode.None);
                 props.Drive(spear, HunterProps.Pose.Upright);
@@ -124,16 +136,19 @@ namespace SeaSick.World
 
             phase = Phase.Working;
             Face(foePos - transform.position, dt);
-            acting?.Set(VillagerActing.Mode.Bend);
-            props.Drive(spear, HunterProps.Pose.Thrust, foePos + Vector3.up * 1.0f);
-
+            float cycle=Mathf.Max(.3f,RaidFightTuning.JabSeconds);
             defendJabClock += dt;
-            if (defendJabClock >= RaidFightTuning.JabSeconds)
-            {
-                defendJabClock = 0f;
-                float dmg = spear == Res.IronSpear ? RaidFightTuning.IronDamage : RaidFightTuning.StoneDamage;
-                foe.TakeHit(dmg, r);
+            float progress=Mathf.Clamp01(defendJabClock/cycle);
+            acting?.CombatPose(VillagerActing.Mode.SpearAttack,progress);
+            props.Drive(spear, progress>=.3f && progress<.6f ? HunterProps.Pose.Thrust : HunterProps.Pose.Upright, foePos + Vector3.up);
+            if(!jabLanded && progress>=.45f) {
+                jabLanded=true;
+                if(Near(foePos,reach) && VillageDefense.ClearSight(camp,transform.position+Vector3.up,foePos+Vector3.up)) {
+                    float dmg=spear==Res.IronSpear ? RaidFightTuning.IronDamage : RaidFightTuning.StoneDamage;
+                    foe.TakeHit(dmg,r);
+                }
             }
+            if(defendJabClock>=cycle) { defendJabClock=0f; jabLanded=false; }
             return true;
         }
 

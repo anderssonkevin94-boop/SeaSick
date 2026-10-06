@@ -107,6 +107,11 @@ namespace SeaSick.Combat
         /// null. Set by `TakeHit`; re-picked in `TickFight` if he is gone.
         World.OutpostHand fightTarget;
         float hitClock;
+        bool strikeLanded;
+        float hurtUntil;
+        Vector3 previousAt;
+        public Vector3 Velocity { get; private set; }
+        public bool Moving => Velocity.sqrMagnitude>.1f;
         float deadTimer;
 
         public bool Dead => phase == Phase.Dead;
@@ -119,6 +124,7 @@ namespace SeaSick.Combat
             if (Dead || phase == Phase.Fleeing || phase == Phase.Recalled) return;
             if (hp < 0f) hp = HpMax;
             hp -= Mathf.Max(0f, damage);
+            hurtUntil=Time.time+.22f;
             fightTarget = attacker;
             if (hp <= 0f) { Killed(attacker); return; }
             if (phase != Phase.Fighting)
@@ -141,6 +147,7 @@ namespace SeaSick.Combat
             if (Dead || phase == Phase.Fleeing || phase == Phase.Recalled) return;
             if (hp < 0f) hp = HpMax;
             hp -= Mathf.Max(0f, damage);
+            hurtUntil=Time.time+.22f;
             if (hp <= 0f) { Killed(archer); return; }
             if (archer == null || !InsideDefendPerimeterCached(camp)) return;
             fightTarget = archer;
@@ -165,7 +172,7 @@ namespace SeaSick.Combat
             ClearRoute();
             phase = Phase.Dead;
             deadTimer = 0f;
-            transform.rotation = Quaternion.Euler(0f, transform.eulerAngles.y, 90f);
+            // Fall over during TickDead rather than snapping flat.
             Act(World.VillagerActing.Mode.None, null);
             // **Spear wear per kill (death/rescue phase 12).**
             RaidAlarm.WearOnKill(camp, attacker);
@@ -181,8 +188,9 @@ namespace SeaSick.Combat
         void TickDead(float dt)
         {
             deadTimer += dt;
-            float fade = Mathf.Max(0.1f, RaidFightTuning.CorpseFadeSeconds);
-            if (deadTimer > fade * 0.5f)
+            transform.rotation=Quaternion.Euler(0f,transform.eulerAngles.y,Mathf.SmoothStep(0f,90f,deadTimer/.45f));
+            float fade = Mathf.Max(30f, RaidFightTuning.CorpseFadeSeconds);
+            if (deadTimer > fade - 2f)
             {
                 Vector3 p = transform.position;
                 p.y -= dt * 0.5f;
@@ -200,7 +208,7 @@ namespace SeaSick.Combat
         /// to).
         void TickFight(float dt)
         {
-            if (!ValidTarget(fightTarget)) fightTarget = NearestDefender();
+            if (!ValidTarget(fightTarget)) { fightTarget = NearestDefender(); hitClock=0f; strikeLanded=false; }
             if (fightTarget == null) { phase = Phase.ToPile; return; }
 
             Vector3 at = camp.Ledger.HandAt(fightTarget);
@@ -210,25 +218,39 @@ namespace SeaSick.Combat
 
             if (dist > reach)
             {
+                hitClock=0f; strikeLanded=false;
                 Act(World.VillagerActing.Mode.None, null);
                 Walk(at, dt);
                 return;
             }
 
             Face(at - here, dt);
-            Act(World.VillagerActing.Mode.Hammer, null);   // a swing, same idiom as breaching
-            hitClock += dt;
-            if (hitClock >= RaidFightTuning.RaiderHitSeconds)
-            {
-                hitClock = 0f;
-                camp.Ledger.HitDefender(fightTarget, RaidFightTuning.HitsToDown);
+            float cycle=Mathf.Max(.4f,RaidFightTuning.RaiderHitSeconds);
+            hitClock+=dt;
+            Act(World.VillagerActing.Mode.MeleeAttack,null);
+            GetComponent<World.VillagerActing>()?.CombatPose(World.VillagerActing.Mode.MeleeAttack,hitClock/cycle);
+            if(!strikeLanded && hitClock>=cycle*.5f) {
+                strikeLanded=true;
+                bool blocked=false;
+                var body=camp.BodyNamed(fightTarget.name);
+                if(body!=null && fightTarget.equipment?.offHand=="WoodShield") {
+                    var toward=transform.position-body.transform.position; toward.y=0f;
+                    blocked=Vector3.Dot(body.transform.forward,toward.normalized)>.25f && Random.value<.4f;
+                }
+                RaidAlarm.Begin(camp);
+                if(!blocked && dist<=reach && VillageDefense.ClearSight(camp,here+Vector3.up,at+Vector3.up))
+                    camp.Ledger.HitDefender(fightTarget,RaidFightTuning.HitsToDown);
+                ArrowFlight.Puff(at+Vector3.up,blocked ? new Color(.6f,.7f,.8f) : new Color(.55f,.25f,.18f),.35f,3);
             }
+            if(hitClock>=cycle) { hitClock=0f; strikeLanded=false; }
         }
 
         bool ValidTarget(World.OutpostHand h)
         {
             if (h == null || camp?.Ledger?.hands == null || !camp.Ledger.hands.Contains(h)) return false;
-            return h.defending && !h.downed;
+            if(h.downed || h.recovering || h.hiddenInHut || h.sleepHutId!=0 || camp.Ledger.Underground(h)) return false;
+            var body=camp.BodyNamed(h.name);
+            return body!=null && Mathf.Abs(body.transform.position.y-transform.position.y)<2.5f;
         }
 
         /// The nearest hand currently defending this camp, or null.
@@ -237,13 +259,14 @@ namespace SeaSick.Combat
             var hands = camp?.Ledger?.hands;
             if (hands == null) return null;
             World.OutpostHand best = null;
-            float bestD = float.MaxValue;
+            float bestD = 8f*8f;
             Vector3 here = transform.position;
             foreach (var h in hands)
             {
-                if (h == null || !h.defending || h.downed) continue;
+                if (!ValidTarget(h)) continue;
                 float d = Vector3.SqrMagnitude(camp.Ledger.HandAt(h) - here);
-                if (d < bestD) { bestD = d; best = h; }
+                if (d < bestD && VillageDefense.ClearSight(camp,here+Vector3.up,camp.Ledger.HandAt(h)+Vector3.up)
+                    && World.CampPath.For(camp).HasRoute(here,camp.Ledger.HandAt(h),World.CampPath.Walker.Raider)) { bestD = d; best = h; }
             }
             return best;
         }
@@ -352,6 +375,17 @@ namespace SeaSick.Combat
             }
 
             float dt = Time.deltaTime;
+            if(previousAt!=Vector3.zero && dt>0f) Velocity=Vector3.ClampMagnitude((transform.position-previousAt)/dt,6f);
+            previousAt=transform.position;
+            if(!Dead && Time.time<hurtUntil) {
+                Act(World.VillagerActing.Mode.HitReact,null);
+                GetComponent<World.VillagerActing>()?.CombatPose(World.VillagerActing.Mode.HitReact,1f-(hurtUntil-Time.time)/.22f);
+                return;
+            }
+            if(phase==Phase.ToPile || phase==Phase.Taking) {
+                var nearby=NearestDefender();
+                if(nearby!=null) { fightTarget=nearby; hitClock=0f; strikeLanded=false; phase=Phase.Fighting; }
+            }
             switch (phase)
             {
                 case Phase.ToPile:

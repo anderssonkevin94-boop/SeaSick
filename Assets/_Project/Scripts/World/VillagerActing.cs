@@ -50,7 +50,7 @@ namespace SeaSick.World
         /// it used to be (`CodePose`).
         public enum Mode { None, Chop, Saw, Hammer, Hoe, Stir, Carry, Dangle, Land, Bend, Mine, Lookout,
             Forage, Build, PickUp, SetDown, HuntWalk, Hunt, Farm, Smith, Cook, Mill, Quarry, Fletcher, Fisher,
-            Reach, Eat, Crank }
+            Reach, Eat, Crank, SpearAttack, BowAttack, MeleeAttack, DragBody, HitReact }
 
         /// **The code pose a clip mode falls back to** on a rig whose
         /// controller lacks the state (what each job looked like before the
@@ -360,7 +360,7 @@ namespace SeaSick.World
         /// One slot per `Mode`. They hang off THIS object, not a bone, and
         /// are placed in world space every frame (`PoseTool`).
         readonly GameObject[] tools = new GameObject[ModeCount];
-        const int ModeCount = 32;
+        const int ModeCount = 40;
         GameObject carryProp;
         string carryPropFor;
 
@@ -370,6 +370,8 @@ namespace SeaSick.World
         Vector3 velocity;
         bool sampled;
 
+        public float CombatPhase { get; set; }
+        public void CombatPose(Mode mode, float progress) { CombatPhase=Mathf.Clamp01(progress); Set(mode); }
         void LateUpdate() => Step(Time.deltaTime);
 
         /// One frame of acting. Separate from `LateUpdate` so an edit-mode
@@ -1057,6 +1059,25 @@ namespace SeaSick.World
 
             switch (shown)
             {
+                case Mode.SpearAttack:
+                    float jab=CombatPhase<.45f ? CombatPhase/.45f : 1f-(CombatPhase-.45f)/.55f;
+                    armRPitch=-35f-65f*jab; armLPitch=-25f; chestYaw=-18f+30f*jab; chestPitch=12f*jab;
+                    break;
+                case Mode.BowAttack:
+                    armLPitch=-85f; armRPitch=-65f; armRIn=-35f;
+                    chestYaw=-25f; headYaw=20f;
+                    if(CombatPhase>.65f) armRPitch+=35f*(CombatPhase-.65f)/.35f;
+                    break;
+                case Mode.MeleeAttack:
+                    float swing=CombatPhase<.5f ? CombatPhase*2f : (1f-CombatPhase)*2f;
+                    armRPitch=-35f-110f*swing; chestYaw=30f*(1f-2f*CombatPhase); chestPitch=8f;
+                    break;
+                case Mode.DragBody:
+                    armLPitch=30f; armRPitch=30f; chestPitch=-15f; hipsPitch=-8f;
+                    break;
+                case Mode.HitReact:
+                    chestPitch=-22f*Mathf.Sin(CombatPhase*Mathf.PI); headPitch=-12f; armLPitch=-20f; armRPitch=-20f;
+                    break;
                 case Mode.Chop:
                 {
                     // Two-handed, overhead, and the DOWN-stroke is the fast
@@ -1225,7 +1246,13 @@ namespace SeaSick.World
             // +X side. A positive roll about +Z swings a hanging arm toward
             // +X, so the sign of "in" flips with the side the arm is on.
             bool tool = HasTool(shown);
-            if (!tool)
+            if (shown == Mode.SpearAttack || shown == Mode.BowAttack)
+            {
+                // ToolArm resolves mirrored rig names into the actual weapon hand.
+                Turn(ToolArm, shown == Mode.BowAttack ? -85f : armRPitch, 0f, 0f, w);
+                Turn(OffArm, shown == Mode.BowAttack ? armRPitch : armLPitch, 0f, shown == Mode.BowAttack ? 25f : 0f, w);
+            }
+            else if (!tool)
             {
                 Turn(armL, armLPitch, 0f, -armLIn * side, w);
                 Turn(armR, armRPitch, 0f, armRIn * side, w);
@@ -1579,6 +1606,19 @@ namespace SeaSick.World
             Transform arm = ToolArm, off = OffArm;
             GameObject tool = tools[(int)m];
             if (arm == null) { if (tool != null) tool.SetActive(false); return; }
+            if (m == Mode.MeleeAttack) {
+                // Raise, strike down at contact (.5), then recover. The tool
+                // follows the same hand after its pose, never the opposite arm.
+                float pitch = CombatPhase < .3f ? Mathf.Lerp(-35f,-145f,CombatPhase/.3f)
+                    : CombatPhase < .5f ? Mathf.Lerp(-145f,-55f,(CombatPhase-.3f)/.2f)
+                    : Mathf.Lerp(-55f,-35f,(CombatPhase-.5f)/.5f);
+                Turn(arm,pitch,0f,0f,w);
+                Turn(off,-25f,0f,0f,w);
+                var hand = ToolHand;
+                if (tool != null && hand != null)
+                    tool.transform.SetPositionAndRotation(hand.TransformPoint(ToolGripLocal), hand.rotation * ToolGripRot);
+                return;
+            }
 
             float bs = BodyScale;
             Vector3 up = transform.up, down = -up;
@@ -1735,7 +1775,7 @@ namespace SeaSick.World
         }
 
         static bool HasTool(Mode m) =>
-            m == Mode.Chop || m == Mode.Saw || m == Mode.Hammer
+            m == Mode.Chop || m == Mode.Saw || m == Mode.Hammer || m == Mode.MeleeAttack
             || m == Mode.Hoe || m == Mode.Stir || m == Mode.Mine
             // v15 clips holding a tool the game has (README: Build/Smith
             // hammer, Quarry's mallet -> the hammer as its stand-in, Farm
@@ -1954,7 +1994,7 @@ namespace SeaSick.World
 
             // No clip for `Mine` on this rig: the hammer, as before.
             if (m == Mode.Mine && !UsesClip(Mode.Mine)) m = Mode.Hammer;
-            if (m == Mode.Build || m == Mode.Smith || m == Mode.Quarry) m = Mode.Hammer;
+            if (m == Mode.Build || m == Mode.Smith || m == Mode.Quarry || m == Mode.MeleeAttack) m = Mode.Hammer;
             else if (m == Mode.Farm) m = Mode.Hoe;
             else if (m == Mode.Cook) m = Mode.Stir;
             string kit = m == Mode.Hammer ? ToolKit.Hammer : m == Mode.Chop ? ToolKit.Axe

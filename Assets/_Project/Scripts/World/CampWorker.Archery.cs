@@ -33,6 +33,16 @@ namespace SeaSick.World
     {
         float archerClock;
         float towerShotClock;
+        bool archerReleased, towerReleased;
+        RaidWalker archerMark, towerMark;
+        bool HasArrows(OutpostHand h) => h.equipment!=null && h.equipment.mainHand==Res.Bow
+            ? h.equipment.arrows>0 : camp.Ledger.ArrowsHeld;
+        bool SpendShot(OutpostHand h) {
+            if(h.equipment!=null && h.equipment.mainHand==Res.Bow) {
+                if(h.equipment.arrows<=0) return false; h.equipment.arrows--; return true;
+            }
+            return camp.Ledger.SpendArrow();
+        }
         int huntArrowSerial = -1;
 
         /// Height of the bow hand above the feet, body metres, for where an
@@ -51,26 +61,38 @@ namespace SeaSick.World
         {
             var ledger = camp.Ledger;
             var props = HunterProps.On(gameObject);
-            bool dry = !ledger.ArrowsHeld;
+            bool dry = !HasArrows(r);
             r.bowDry = dry;
+            if(dry && r.equipment?.mainHand==Res.Bow && ledger.ArrowsHeld) {
+                var store=CampPiles.StoreBuildingOf(camp);
+                var goal=store!=null ? WorkSpot(camp,store) : camp.CampCentre;
+                phase=Phase.Going; acting?.Set(VillagerActing.Mode.None);
+                if(!Near(goal,1.5f)) Walk(goal,dt);
+                else ledger.ReloadQuiver(r);
+                return true;
+            }
 
             RaidWalker mark = dry ? null : RaiderWithin(party, transform.position, RaidFightTuning.BowRange);
             if (mark != null)
             {
                 Vector3 at = mark.transform.position;
+                // Keep a short shooting distance, but only along walkable routes.
+                if(Vector3.Distance(at,transform.position)<4f) {
+                    Vector3 away=transform.position+(transform.position-at).normalized*3f;
+                    if(CampPath.Reachable(camp,away)) { archerClock=0f; archerReleased=false; phase=Phase.Going; acting?.Set(VillagerActing.Mode.None); Walk(away,dt); return true; }
+                }
+                if(archerMark!=mark) { archerMark=mark; archerClock=0f; archerReleased=false; }
                 phase = Phase.Working;
                 Face(at - transform.position, dt);
-                acting?.Set(VillagerActing.Mode.None);
-                props.Drive(Res.Bow, HunterProps.Pose.Thrust, at + Vector3.up * MarkHeight);
                 archerClock += dt;
-                if (archerClock >= RaidFightTuning.BowShotSeconds)
-                {
-                    archerClock = 0f;
-                    Shoot(r, mark, transform.position + Vector3.up * BowHandHeight * BodyHeightScale, r);
-                }
+                float progress=archerClock/RaidFightTuning.BowShotSeconds;
+                acting?.CombatPose(VillagerActing.Mode.BowAttack,progress);
+                props.Drive(Res.Bow, HunterProps.Pose.Thrust, at + Vector3.up * MarkHeight);
+                if(!archerReleased && progress>=.65f) { archerReleased=true; Shoot(r,mark,transform.position+Vector3.up*BowHandHeight*BodyHeightScale,r); }
+                if(progress>=1f) { archerClock=0f; archerReleased=false; }
                 return true;
             }
-            archerClock = Mathf.Min(archerClock, RaidFightTuning.BowShotSeconds);
+            archerClock = 0f; archerReleased=false; archerMark=null;
 
             // Nobody in range: step toward a raider who is already INSIDE
             // (never out through the wall), else hold the gather point.
@@ -103,32 +125,36 @@ namespace SeaSick.World
         {
             var party = RaidParty.Active;
             var ledger = camp != null ? camp.Ledger : null;
-            if (party == null || party.Camp != camp || ledger == null || !ledger.BowHeld)
+            if (party == null || party.Camp != camp || ledger == null || !RaidAlarm.IsActive(camp) || !(r.equipment?.mainHand == Res.Bow || ledger.BowHeld))
             {
                 r.bowDry = false;
                 return false;
             }
             var props = HunterProps.On(gameObject);
-            bool dry = !ledger.ArrowsHeld;
+            bool dry = !HasArrows(r);
             r.bowDry = dry;
             RaidWalker mark = dry ? null : RaiderWithin(party, deck, RaidFightTuning.LookoutBowRange);
             if (mark == null)
             {
+                towerMark=null; towerShotClock=0f; towerReleased=false;
                 props.Drive(Res.Bow, HunterProps.Pose.Upright);
                 return false;
             }
             Vector3 at = mark.transform.position;
             Face(at - transform.position, dt);
             props.Drive(Res.Bow, HunterProps.Pose.Thrust, at + Vector3.up * MarkHeight);
+            if(towerMark!=mark) { towerMark=mark; towerShotClock=0f; towerReleased=false; }
             towerShotClock += dt;
-            if (towerShotClock >= RaidFightTuning.BowShotSeconds)
+            acting?.CombatPose(VillagerActing.Mode.BowAttack,towerShotClock/RaidFightTuning.BowShotSeconds);
+            if (!towerReleased && towerShotClock >= RaidFightTuning.BowShotSeconds*.65f)
             {
-                towerShotClock = 0f;
+                towerReleased = true;
                 // No attacker: a raider stung from a tower cannot climb it
                 // after him (`RaidWalker.TakeHit` with null re-picks among
                 // the hands actually defending on the ground).
                 Shoot(r, mark, deck + Vector3.up * BowHandHeight * BodyHeightScale, null);
             }
+            if(towerShotClock>=RaidFightTuning.BowShotSeconds) { towerShotClock=0f; towerReleased=false; }
             return true;
         }
 
@@ -139,9 +165,13 @@ namespace SeaSick.World
         void Shoot(OutpostHand r, RaidWalker mark, Vector3 from, OutpostHand attacker)
         {
             var ledger = camp.Ledger;
-            if (!ledger.SpendArrow()) { r.bowDry = true; return; }
-            bool hit = Random.value < RaidFightTuning.BowHitChance;
-            Vector3 aim = mark.transform.position + Vector3.up * MarkHeight;
+            if (!SpendShot(r)) { r.bowDry = true; return; }
+            float distance=Vector3.Distance(from,mark.transform.position);
+            float range=attacker==null ? RaidFightTuning.LookoutBowRange : RaidFightTuning.BowRange;
+            float chance=Mathf.Clamp(RaidFightTuning.BowHitChance+.18f-.35f*Mathf.Clamp01(distance/range)
+                -(mark.Moving ? .10f : 0f) - Mathf.Clamp01(1f-r.mood)*.12f,.15f,.95f);
+            bool hit = Random.value < chance;
+            Vector3 aim = mark.transform.position + mark.Velocity*(distance/RaidFightTuning.ArrowSpeed) + Vector3.up * MarkHeight;
             if (!hit)
             {
                 Vector2 off = Random.insideUnitCircle.normalized * Random.Range(0.6f, MissScatter);
@@ -153,11 +183,14 @@ namespace SeaSick.World
             bool fromTower = attacker == null;
             ArrowFlight.Loose(from, aim, () =>
             {
-                if (!hit || target == null || target.Dead) return;
+                if (!hit || target == null || target.Dead || owner==null) return;
+                // Fixed ballistic aim: a target that changes direction can dodge.
+                if(Vector3.Distance(aim,target.transform.position+Vector3.up*MarkHeight)>1.25f) return;
+                if(!VillageDefense.ClearSight(owner,from,aim)) return;
                 target.TakeArrow(RaidFightTuning.BowDamage, attacker);
                 ArrowFlight.Puff(target.transform.position + Vector3.up * MarkHeight, new Color(0.55f, 0.12f, 0.10f));
-                if (fromTower && target.Dead && owner != null) owner.Ledger?.WearPileBow();
-            }, hit ? mark.transform : null);
+                if (fromTower && r.equipment?.mainHand != Res.Bow && target.Dead && owner != null) owner.Ledger?.WearPileBow();
+            });
         }
 
         /// **The hunt's arrow, flown once per trip** (the kill already spent
@@ -188,7 +221,7 @@ namespace SeaSick.World
                 Vector3 d = w.transform.position - from;
                 d.y = 0f;
                 float sq = d.sqrMagnitude;
-                if (sq <= bestD) { bestD = sq; best = w; }
+                if (sq <= bestD && VillageDefense.ClearSight(party.Camp,from+Vector3.up*1.3f,w.transform.position+Vector3.up)) { bestD = sq; best = w; }
             }
             return best;
         }

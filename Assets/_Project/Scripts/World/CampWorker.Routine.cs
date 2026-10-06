@@ -232,6 +232,7 @@ namespace SeaSick.World
             bedChosen = true;
             bedHut = FindBedHut();
             bedInHut = bedHut != null;
+            if(bedHut!=null && Row!=null) { Row.hasHomeHut=true; Row.homeHutX=bedHut.transform.position.x; Row.homeHutZ=bedHut.transform.position.z; }
         }
 
         /// **The nearest hut with a bed nobody has spoken for**, measured

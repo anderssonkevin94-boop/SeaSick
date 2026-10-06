@@ -59,6 +59,11 @@ namespace SeaSick.World
     [System.Serializable]
     public class OutpostHand
     {
+        public VillagerEquipment equipment = new VillagerEquipment();
+        public bool hasHomeHut;
+        public float homeHutX, homeHutZ;
+        [System.NonSerialized] public float combatDamage;
+        [System.NonSerialized] public float lastCombatHit = -100f;
         public string name;
         public OutpostOrder order = OutpostOrder.Idle;
         /// **Still walking up from the ship, 2026-09-23** -- not saved.
@@ -257,9 +262,8 @@ namespace SeaSick.World
         public bool downed;
         public float downedLeft;
         public string downedCause = "";
-        /// **A rescuer has reached him (phase 2).** The timer is stopped
-        /// for good the moment his rescuer arrives -- set once, never
-        /// cleared except by `Revive`/`Die`. Default false: an old save's
+        /// **A rescuer has reached him.** This tracks the drag, not safety.
+        /// Reset if the rescuer is interrupted. Default false: an old save's
         /// downed hand (there were none before phase 2) reads as
         /// "not reached yet", which just means a rescuer is re-dispatched.
         public bool reached;
@@ -518,7 +522,7 @@ namespace SeaSick.World
                 // order** -- a downed/dragged/recovering hand, or one off
                 // rescuing somebody, is not doing his job right now.
                 if (downed)
-                    return reached ? "down" : "down · " + Mmss(downedLeft);
+                    return (dragged ? "being rescued · " : "down · ") + Mmss(downedLeft);
                 if (recovering) return recoverAtHut ? "recovering in the hut" : "recovering by the fire";
                 if (dragged) return "being carried home";
                 if (!string.IsNullOrEmpty(rescuing))
@@ -992,6 +996,8 @@ namespace SeaSick.World
     [System.Serializable]
     public partial class OutpostLedger
     {
+        public bool hasRaidLanding;
+        public float lastRaidBearing;
         // --- identity --------------------------------------------------------
 
         /// Rounded world position of the camp, in metres.

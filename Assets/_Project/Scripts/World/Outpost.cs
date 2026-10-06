@@ -59,6 +59,7 @@ namespace SeaSick.World
             {
                 var body = o != null ? o.BodyNamed(grave.name) : null;
                 if (body == null) continue;
+                Combat.VillagerCorpse.Leave(body.gameObject);
                 CampWorker.Remove(body);
                 Destroy(body.gameObject);
                 return;
@@ -3084,8 +3085,9 @@ namespace SeaSick.World
         /// raider's walk to `target`: an open `CampPath` route if one exists,
         /// or -- when the straight line is blocked by a wall -- the cheaper
         /// of that route and a straight-ish walk to the nearest breachable
-        /// segment plus `RaidFightTuning.BreachCostMetres`. The cheapest
-        /// candidate wins; the runner-up is returned too, for the dev log.
+        /// segment plus `RaidFightTuning.BreachCostMetres`. Valid candidates
+        /// are weighted toward shorter walks; prefer a different sector from
+        /// the last raid when alternatives exist.
         ///
         /// Run once per raid (`RaidDirector.Consider`, at the moment a raid
         /// is launched), never per frame: at most `LandingCandidates` A*
@@ -3099,14 +3101,22 @@ namespace SeaSick.World
             var map = CampPath.For(this);
             int n = Mathf.Max(4, Combat.RaidFightTuning.LandingCandidates);
             var corners = new List<Vector3>(16);
+            var choices = new List<(Vector3 shore, Vector3 water, float bearing, float cost)>();
+            float offset = Random.Range(0f, 360f / n);
 
             for (int k = 0; k < n; k++)
             {
-                float b = k * (360f / n);
+                float b = offset + k * (360f / n);
                 if (!ShoreAt(from, b, out Vector3 s, out Vector3 w, out _)) continue;
 
                 float legCost = LandingLegCost(map, s, target, corners);
                 if (legCost >= float.MaxValue) continue;
+                // Do not treat an unreachable cliff as a plausible breach.
+                if (map != null && !map.HasRoute(s,target,CampPath.Walker.Raider)) {
+                    var wall=Combat.RaidParty.NearestBreachable(this,s,out _);
+                    if(wall==null || !map.HasRoute(s,Combat.RaidWalker.OutsidePoint(wall,this),CampPath.Walker.Raider)) continue;
+                }
+                choices.Add((s,w,b,legCost));
 
                 if (legCost < cost)
                 {
@@ -3116,7 +3126,18 @@ namespace SeaSick.World
                 else if (legCost < runnerUp) runnerUp = legCost;
             }
 
-            return cost < float.MaxValue;
+            if(choices.Count==0) return false;
+            bool alternate=ledger!=null && ledger.hasRaidLanding && choices.Exists(c => Mathf.Abs(Mathf.DeltaAngle(c.bearing,ledger.lastRaidBearing))>=65f);
+            float total=0f;
+            foreach(var c in choices) if(!alternate || Mathf.Abs(Mathf.DeltaAngle(c.bearing,ledger.lastRaidBearing))>=65f) total+=1f/Mathf.Max(10f,c.cost);
+            float pick=Random.value*total;
+            foreach(var c in choices) {
+                if(alternate && Mathf.Abs(Mathf.DeltaAngle(c.bearing,ledger.lastRaidBearing))<65f) continue;
+                shore=c.shore; water=c.water; bearing=c.bearing; cost=c.cost;
+                pick-=1f/Mathf.Max(10f,c.cost); if(pick<=0f) break;
+            }
+            if(ledger!=null) { ledger.hasRaidLanding=true; ledger.lastRaidBearing=bearing; }
+            return true;
         }
 
         /// A raider's cost from `from` to `to`: the real route length when

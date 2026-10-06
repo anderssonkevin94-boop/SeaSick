@@ -42,11 +42,12 @@ namespace SeaSick.UI
             if (incoming != null && !incoming.Beached)
             {
                 if (!SeaSick.Combat.RaidDirector.WarnedOf(outpost)) return;
-                text = "the lookout: RAIDERS making for the beach";
+                text = "RAIDERS spotted making for the beach";
                 phase = 1;
             }
             else if (SeaSick.Combat.RaidParty.Active != null && SeaSick.Combat.RaidParty.Active.Camp == outpost)
             {
+                if (!SeaSick.Combat.RaidAlarm.IsActive(outpost)) return;
                 var party = SeaSick.Combat.RaidParty.Active;
                 live = true;
                 (defending, hiding, spearsLeft) = SeaSick.Combat.RaidAlarm.Counts(outpost);

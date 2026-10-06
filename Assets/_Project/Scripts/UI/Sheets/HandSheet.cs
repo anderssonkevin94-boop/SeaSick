@@ -296,7 +296,7 @@ namespace SeaSick.UI.Sheets
         int perPage = 9, page;
 
         // actions
-        Button stand, back;
+        Button stand, back, rescue;
 
         public VisualElement Build()
         {
@@ -357,6 +357,10 @@ namespace SeaSick.UI.Sheets
             col.Add(chips);
 
             // --- jobs
+            rescue = new Button(() => { ShowToast(L != null && L.OrderRescue(Hand) ? "Rescuer dispatched" : "No rescue needed or nobody available"); }) { text = "Rescue · send someone to drag them home" };
+            rescue.AddToClassList("st-btn"); rescue.style.minHeight=48; col.Add(rescue);
+            var equip = new Button(() => Sheets.Open(new EquipmentSheet(outpost, who))) { text = "Equipment · weapons and armor" };
+            equip.AddToClassList("st-btn"); equip.style.minHeight = 48; col.Add(equip);
             var eye = Box("hs-eye-row");
             eye.Add(StationPage.Text("JOBS", "st-eyebrow"));
             jobsEm = Text("hs-eye-em");
@@ -444,6 +448,7 @@ namespace SeaSick.UI.Sheets
 
             FillHeader(l, h);
             if (root == null) return;
+            if (rescue != null) rescue.style.display = h.downed ? DisplayStyle.Flex : DisplayStyle.None;
             FillNow(l, h);
             FillChips(l, h);
             FillJobs(l, h);

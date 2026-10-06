@@ -127,6 +127,16 @@ namespace SeaSick.World.Economy
             new ResDef { id = Res.FineBoards, label = "fine boards", tier = ResTier.Treated, source = ResSource.Made, campfireLevel = 2,
                 blurb = "boards cut true on an iron saw", category = ResCategory.Material },
 
+            new ResDef { id = "WoodShield", label = "wooden shield", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 1,
+                blurb = "Villager defense equipment", category = ResCategory.Armor },
+            new ResDef { id = "LeatherHelmet", label = "leather helmet", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 1,
+                blurb = "Villager defense equipment", category = ResCategory.Armor },
+            new ResDef { id = "LeatherVest", label = "leather vest", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 1,
+                blurb = "Villager defense equipment", category = ResCategory.Armor },
+            new ResDef { id = "LeatherPants", label = "leather pants", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 1,
+                blurb = "Villager defense equipment", category = ResCategory.Armor },
+            new ResDef { id = "LeatherBoots", label = "leather boots", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 1,
+                blurb = "Villager defense equipment", category = ResCategory.Armor },
             // --- items ---
             // --- dishes (food rework, 2026-09-27; fill values in `FoodBook`) ---
             new ResDef { id = Res.BakedPotato, label = "baked potato", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 1,

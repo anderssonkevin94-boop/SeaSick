@@ -27,7 +27,7 @@ namespace SeaSick.Combat
         {
             public float watchedFor;
             public bool raidedThisVisit;
-            public bool warned;
+            public float nextSightCheck;
             public bool forced; // dev `ForceRaid` skips the fire-level gate
             public string lastResult;
             public float lastResultAt = -999f;
@@ -46,6 +46,12 @@ namespace SeaSick.Combat
             if (camp == null) return;
             var st = StateFor(camp);
             st.watchedFor += dt;
+            if (Time.time >= st.nextSightCheck) {
+                st.nextSightCheck = Time.time + .25f;
+                var incoming = Incoming(camp);
+                if (incoming != null) VillageDefense.DetectIncoming(camp, incoming);
+                else if (RaidParty.Active == null || RaidParty.Active.Camp != camp) RaidAlarm.End(camp);
+            }
 
             if (camp.Ledger != null && camp.Ledger.CampfireLevel < RaidsFromFireLevel && !st.forced) return;
             if (st.raidedThisVisit || camp.Ledger == null || camp.Ledger.Total <= 0) return;
@@ -63,7 +69,7 @@ namespace SeaSick.Combat
             Vector3 target = camp.RaidTarget();
             bool haveLanding = camp.BestLanding(camp.CampCentre, target,
                 out Vector3 shore, out Vector3 water, out float bearing, out float cost, out float runnerUp);
-            if (!haveLanding && !camp.ShoreNear(camp.CampCentre, out shore, out water)) return;
+            if (!haveLanding) return; // Never fall back to a beach with no usable land route.
 
             if (haveLanding)
                 Debug.Log($"[RaidDirector] {camp.name}: landing at bearing {bearing:0}°, " +
@@ -71,9 +77,7 @@ namespace SeaSick.Combat
 
             ship.BeginRaid(new RaidSite { camp = camp, water = water, shore = shore });
             st.raidedThisVisit = true;
-            // A manned lookout means the camp saw them coming, whatever
-            // happens next -- see `RaidBanner`'s "the lookout" line.
-            st.warned = camp.Ledger.Guard >= 1f;
+            // The warning is raised by actual sight, not tower ownership.
         }
 
         /// The ship has sailed off -- forget this visit so the next one gets
@@ -108,7 +112,7 @@ namespace SeaSick.Combat
 
         /// Did a manned watchtower spot this visit's raider coming?
         public static bool WarnedOf(World.Outpost camp) =>
-            states.TryGetValue(camp, out var st) && st.warned;
+            RaidAlarm.IsActive(camp);
 
         /// `RaidParty` calls this once, when a raid ends, so the banner has
         /// something to say after the ship and the party are both gone.

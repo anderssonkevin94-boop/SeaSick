@@ -38,7 +38,7 @@ namespace SeaSick.UI.Sheets
             text = null;
             if (camp == null) return false;
             var party = SeaSick.Combat.RaidParty.Active;
-            if (party != null && party.Camp == camp)
+            if (party != null && party.Camp == camp && SeaSick.Combat.RaidAlarm.IsActive(camp))
             {
                 text = $"RAID · {party.Ashore} ashore";
                 return true;

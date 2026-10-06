@@ -93,7 +93,9 @@ namespace SeaSick.World
     [RequireComponent(typeof(Crew.CrewAgent))]
     public partial class CampWorker : MonoBehaviour
     {
+        float downFall;
         Outpost camp;
+        public Outpost Camp => camp;
         Crew.CrewAgent agent;
         VillagerActing acting;
 
@@ -227,6 +229,7 @@ namespace SeaSick.World
             w.camp = outpost;
             w.agent = hand;
             w.acting = VillagerActing.On(hand);
+            if (hand.GetComponent<EquipmentVisuals>() == null) hand.gameObject.AddComponent<EquipmentVisuals>();
             hand.Puppeted = true;
 
             if (fresh)
@@ -617,6 +620,7 @@ namespace SeaSick.World
             // that happens mid-down just reapplies it once the body ticks.
             if (r.downed)
             {
+                acting?.Set(VillagerActing.Mode.None);
                 if (phase != Phase.Downed)
                 {
                     // **Empty-handed on the ground (2026-10-03, honest
@@ -635,8 +639,10 @@ namespace SeaSick.World
                     Vector3 p = transform.position;
                     p.y = WorkerPad.Foot(p, camp.GroundAt(p));
                     transform.position = p;
-                    transform.rotation = Quaternion.Euler(0f, transform.eulerAngles.y, 90f);
+                    downFall=0f;
                 }
+                downFall+=dt;
+                transform.rotation=Quaternion.Euler(0f,transform.eulerAngles.y,Mathf.SmoothStep(0f,90f,downFall/.45f));
                 return;
             }
             if (phase == Phase.Downed)
@@ -645,6 +651,13 @@ namespace SeaSick.World
                 phase = Phase.Resting;
                 transform.rotation = Quaternion.Euler(0f, transform.eulerAngles.y, 0f);
                 wait = 0f;
+            }
+
+            if(r.recovering) {
+                phase=Phase.Resting;
+                acting?.Set(VillagerActing.Mode.None);
+                if(r.recoverAtHut && !bodyHidden) HideBody(r);
+                return;
             }
 
             // **Never under the ground (2026-09-30).** Something outside the

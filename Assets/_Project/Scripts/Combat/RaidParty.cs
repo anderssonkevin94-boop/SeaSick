@@ -127,7 +127,7 @@ namespace SeaSick.Combat
             // Kevin, 2026-09-22: a posted lookout with arrows looses a
             // volley as the party wades in -- two arrows drop one raider
             // before he reaches the beach, and a party of none never lands.
-            int loosed = ledger != null ? ledger.LookoutVolley() : 0;
+            int loosed = 0; // Visible arrows replace the old invisible landing kills.
             int size = Mathf.Max(0, partySize - loosed / 2);
             if (size == 0) { Destroy(go); return null; }
 
@@ -163,7 +163,7 @@ namespace SeaSick.Combat
             // **The alarm** (death/rescue phase 10, 2026-09-28): the party
             // is ashore, so every hand at the camp stops what it was doing
             // -- drops its load, arms up from the store or runs to hide.
-            RaidAlarm.Begin(party.Camp);
+            // The first villager to see a raider raises the shared alarm.
             // **Phase 9 safety net:** a raid-fight tally is never saved
             // (`OutpostHand.raidHitsTaken`), so it should already read 0 --
             // this only guards a hand who was mid-tally when the LAST raid
@@ -171,7 +171,7 @@ namespace SeaSick.Combat
             // clean `Recall`.
             if (party.Camp.Ledger?.hands != null)
                 foreach (var h in party.Camp.Ledger.hands)
-                    if (h != null) h.raidHitsTaken = 0;
+                    if (h != null) { h.raidHitsTaken = 0; h.combatDamage = 0f; }
 
             Active = party;
             return party;
@@ -324,8 +324,10 @@ namespace SeaSick.Combat
                 World.Life.Lives.Log(name, World.Life.LifeEvents.DefendedCamp, Camp.Ledger.CampLabel);
         }
 
+        float nextDetection;
         void Update()
         {
+            if (Time.time >= nextDetection && !ended) { nextDetection=Time.time+.25f; VillageDefense.Detect(this); }
             elapsed += Time.deltaTime;
 
             if (Ship == null || !Ship.Alive)

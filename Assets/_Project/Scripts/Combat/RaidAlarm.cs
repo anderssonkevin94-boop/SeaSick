@@ -58,6 +58,7 @@ namespace SeaSick.Combat
             var ledger = camp != null ? camp.Ledger : null;
             if (ledger == null || ledger.hands == null) return;
             var st = StateFor(camp);
+            if (st.active) return;
             st.active = true;
             st.hideAllOverride = false;
             st.hidForNoSpear = 0;
@@ -71,9 +72,10 @@ namespace SeaSick.Combat
             foreach (var h in ledger.hands)
             {
                 if (h == null) continue;
-                if (h.downed || h.recovering || h.dragged || h.pouting
+                if (h.downed || h.recovering || h.dragged || (h.pouting && h.equipment?.Armed != true)
                     || !string.IsNullOrEmpty(h.rescuing)) continue;   // keep doing that
-                if (IsPostedLookout(h)) { h.raidLookout = true; continue; }   // stays put, keeps shooting
+                if (IsPostedLookout(h)) { h.raidLookout = true; ledger.ReloadQuiver(h); continue; }   // stays put, keeps shooting
+                if (h.equipment != null && h.equipment.Armed) { h.pouting=false; h.poutLeft=0f; ledger.ReloadQuiver(h); continue; }
                 if (h.huntArmed) continue;   // straight to the fight, own spear
                 // Down a mine (2026-10-05): already hidden; he finishes his
                 // dig and comes up as normal.
@@ -164,7 +166,7 @@ namespace SeaSick.Combat
         /// holding an actual store spear (`raidSpear` set) is touched here.
         public static void WearOnKill(World.Outpost camp, World.OutpostHand attacker)
         {
-            if (attacker == null || string.IsNullOrEmpty(attacker.raidSpear)) return;
+            if (attacker == null || (attacker.equipment != null && attacker.equipment.Armed) || string.IsNullOrEmpty(attacker.raidSpear)) return;
             attacker.raidSpearWear += World.Economy.Techs.SpearWear(attacker.raidSpear);
             if (attacker.raidSpearWear < 1f - 1e-4f) return;
 
@@ -254,6 +256,7 @@ namespace SeaSick.Combat
                     if (h == null || !(h.hidingHut || h.hidingCrouch)) continue;
                     h.hidingHut = false;
                     h.hidingCrouch = false;
+                    if (h.equipment != null && h.equipment.Armed) continue;
                     if (!string.IsNullOrEmpty(h.raidSpear)) continue;   // already armed -- TickDefend takes it from here
                     if (available > 0) { h.fetchingSpear = true; available--; }
                     else AssignHide(camp, h);
@@ -318,7 +321,7 @@ namespace SeaSick.Combat
             return Mathf.Max(0, ledger.StoreCountOf(World.Res.Bow) - lookouts);
         }
 
-        static bool IsPostedLookout(World.OutpostHand h) =>
+        public static bool IsPostedLookout(World.OutpostHand h) =>
             h.order == World.OutpostOrder.Work && h.target == World.OutpostLedger.WatchtowerId;
 
         static Vector3 StorePoint(World.Outpost camp)

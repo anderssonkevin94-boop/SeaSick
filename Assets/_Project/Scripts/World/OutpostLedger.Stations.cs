@@ -995,6 +995,7 @@ namespace SeaSick.World
         public bool RemoveHand(OutpostHand h)
         {
             if (h == null || hands == null) return false;
+            ReleaseEquipment(h, false);
             if (h.Hauling) DepositHaul(h, true);
             // **And off every plot he held (2026-09-28).** The site ladder's
             // per-hand books (`workSite`, the stall guard) are keyed by the
@@ -1080,7 +1081,7 @@ namespace SeaSick.World
             // `hitsToDown` starts fresh if he is ever downed again.
             h.defending = false;
             h.defendSpear = null;
-            h.raidHitsTaken = 0;
+            h.raidHitsTaken = 0; h.combatDamage=0f;
             Life.Lives.Log(h.name, Life.LifeEvents.Downed, CampLabel);
             return true;
         }
@@ -1095,7 +1096,9 @@ namespace SeaSick.World
         {
             if (h == null || hands == null || !hands.Contains(h) || h.downed) return false;
             h.raidHitsTaken++;
-            if (h.raidHitsTaken < Mathf.Max(1, hitsToDown)) return false;
+            h.combatDamage += 1f - (h.equipment?.Protection ?? 0f);
+            h.lastCombatHit=Time.time;
+            if (h.combatDamage < Mathf.Max(1, hitsToDown)) return false;
             Down(h, "Raid");
             return true;
         }
@@ -1172,6 +1175,7 @@ namespace SeaSick.World
             // leaves the books -- see the class doc: nothing vanishes.
             DropCarriedLoad(h);
             ClearRescuerOf(h);
+            ReleaseEquipment(h, true);
             RemoveHand(h);
             // **No grief pout (2026-10-02, second pass).** A death used to
             // send every survivor to the fire for half a day; Kevin: *"you
@@ -1187,15 +1191,14 @@ namespace SeaSick.World
         /// catch-up run -- never from `Step`'s game-day quanta, which is
         /// how an away camp and a paused menu both leave a downed hand
         /// exactly as they found him (D2: "nobody dies while I'm away").
-        /// **Stopped for good once his rescuer reaches him** (`reached`,
-        /// phase 2) -- from then on the drag itself decides his fate, not
-        /// this clock.
+        /// Bleeding continues during the drag. Only arrival at a hut clears
+        /// downed and stops this clock (2026-10-06).
         public void TickDowned(float realDeltaSeconds)
         {
             if (hands == null || realDeltaSeconds <= 0f) return;
             // Copy first: `Die` mutates `hands`, which this loop is walking.
             downedScratch.Clear();
-            foreach (var h in hands) if (h != null && h.downed && !h.reached) downedScratch.Add(h);
+            foreach (var h in hands) if (h != null && h.downed) downedScratch.Add(h);
             foreach (var h in downedScratch)
             {
                 h.downedLeft -= realDeltaSeconds;
@@ -1234,11 +1237,13 @@ namespace SeaSick.World
             foreach (var down in hands)
             {
                 // A reached hand whose rescuer vanished (recalled, downed
-                // himself) is sent a new one; his timer stays stopped.
+                // himself) is sent a new one; his timer continues.
                 if (down == null || !down.downed) continue;
                 bool has = false;
                 foreach (var o in hands) if (o != null && o.rescuing == down.name) { has = true; break; }
                 if (has) continue;
+                down.reached=false; down.dragged=false;
+                if (SeaSick.Combat.VillageDefense.ThreatNear(this,HandAt(down))) continue;
 
                 OutpostHand best = null;
                 bool bestIdle = false;
@@ -1246,7 +1251,10 @@ namespace SeaSick.World
                 Vector3 at = HandAt(down);
                 foreach (var o in hands)
                 {
-                    if (o == null || o == down || o.Busy) continue;
+                    if (o == null || o == down || o.downed || o.recovering || o.dragged || !string.IsNullOrEmpty(o.rescuing)) continue;
+                    if (Underground(o) || SeaSick.Combat.RaidAlarm.IsPostedLookout(o)) continue;
+                    if(o.defending && SeaSick.Combat.VillageDefense.ThreatNear(this,HandAt(o),12f)) continue;
+                    if(SeaSick.Combat.VillageDefense.ThreatNear(this,HandAt(o))) continue;
                     bool idle = o.order == OutpostOrder.Idle;
                     float d = Vector3.SqrMagnitude(HandAt(o) - at);
                     if (best == null || (idle && !bestIdle) || (idle == bestIdle && d < bestDist))
@@ -1259,6 +1267,8 @@ namespace SeaSick.World
                 // carrying a picked load drops it where he stands first").
                 DropCarriedLoad(best);
                 best.rescuing = down.name;
+                best.defending=false; best.alarmed=false; best.fetchingSpear=false;
+                best.hidingHut=false; best.hidingCrouch=false;
             }
         }
 

@@ -76,6 +76,7 @@ namespace SeaSick.World
             // or dawn would; the routine sends him back to bed normally
             // once this rescue ends.
             if (asleep || lyingByFire) WakeBody(r);
+            if(bodyHidden) RevealBody(r);
 
             acting?.Set(VillagerActing.Mode.None);
 
@@ -84,24 +85,27 @@ namespace SeaSick.World
                 r.draggingNow = false;
                 phase = Phase.Going;
                 Vector3 target = ledger.HandAt(down);
-                if (!Walk(target, dt)) return true;
-                // **Reached: the downed timer is stopped for good** (the
-                // ledger's own `TickDowned` skips a hand once `reached`).
+                Walk(target, dt);
+                if (!Near(target, 1.5f)) return true;
+                // Reached is pickup, not safety: the timer runs until the hut.
                 down.reached = true;
                 down.dragged = true;
                 return true;
             }
 
-            // Dragging: walk together to the hut door (or the fire).
+            // Dragging: walk together to the assigned hut door.
             // **Routed, not a straight `MoveTowards` (2026-09-28).** Kevin
             // saw pairs dragged straight through palisades, up cliffs and
             // into buildings -- the same wall/slope guards every other
             // errand gets (`CampPath`/`Walkability`) now carry the rescuer
             // too, the downed body just riding a pace behind him.
             r.draggingNow = true;
-            Vector3 goal = RescueGoal(out bool atHut);
+            acting?.Set(VillagerActing.Mode.DragBody);
+            Vector3 goal = RescueGoal(down, out bool atHut);
+            if (!atHut) { r.bodyBlocked="Needs a hut for rescue"; return true; }
             phase = Phase.Coming;
-            if (!Walk(goal, dt))
+            Walk(goal, dt);
+            if (!Near(goal, 1.5f))
             {
                 ledger.BodyAt(r, transform.position);
                 DragDownedBodyAlong(down, ledger);
@@ -110,6 +114,8 @@ namespace SeaSick.World
 
             // Arrived: lay him down to recover.
             ledger.BodyAt(r, transform.position);
+            down.downedLeft=0f;
+            down.alarmed=down.fetchingSpear=down.hidingHut=down.hidingCrouch=false;
             down.downed = false;
             down.reached = false;
             down.dragged = false;
@@ -142,24 +148,21 @@ namespace SeaSick.World
                 }
         }
 
-        /// The hut door nearest the camp centre, or the fire if no hut
-        /// stands. Astra's markers via `WorkSpot`, the same call every
-        /// other errand to a building uses.
-        Vector3 RescueGoal(out bool atHut)
+        /// Prefer the saved home hut, otherwise assign the closest hut.
+        /// No hut means no recovery; being picked up does not stop bleeding.
+        Vector3 RescueGoal(OutpostHand down, out bool atHut)
         {
-            var built = camp.Built;
-            if (built != null)
-                for (int i = 0; i < built.Count; i++)
-                {
-                    var b = built[i];
-                    if (b != null && b.Id == BuildPlans.Hut.id)
-                    {
-                        atHut = true;
-                        return WorkSpot(camp, b);
-                    }
-                }
-            atHut = false;
-            return camp.CampCentre;
+            Building best=null; float distance=float.MaxValue;
+            foreach(var b in camp.Built) {
+                if(b==null || b.Id!=BuildPlans.Hut.id) continue;
+                if(down.hasHomeHut && Vector2.Distance(new Vector2(b.transform.position.x,b.transform.position.z),new Vector2(down.homeHutX,down.homeHutZ))<1f) { best=b; break; }
+                float d=(b.transform.position-camp.Ledger.HandAt(down)).sqrMagnitude;
+                if(d<distance) { best=b; distance=d; }
+            }
+            atHut=best!=null;
+            if(best==null) return transform.position;
+            down.hasHomeHut=true; down.homeHutX=best.transform.position.x; down.homeHutZ=best.transform.position.z;
+            return WorkSpot(camp,best);
         }
     }
 }
